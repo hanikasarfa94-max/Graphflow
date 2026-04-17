@@ -13,7 +13,7 @@ CANONICAL_TEXT = (
 
 @pytest.mark.asyncio
 async def test_api_intake_creates_project(api_env):
-    client, _maker, _bus = api_env
+    client, _maker, _bus, _agent = api_env
     r = await client.post(
         "/api/intake/message",
         json={"text": CANONICAL_TEXT, "source_event_id": "api-evt-1"},
@@ -30,7 +30,7 @@ async def test_api_intake_creates_project(api_env):
 
 @pytest.mark.asyncio
 async def test_api_intake_dedup_returns_same_project(api_env):
-    client, _, _ = api_env
+    client, _, _, _ = api_env
     r1 = await client.post(
         "/api/intake/message",
         json={"text": "first call", "source_event_id": "api-dup-1"},
@@ -50,7 +50,7 @@ async def test_api_intake_dedup_returns_same_project(api_env):
 
 @pytest.mark.asyncio
 async def test_api_intake_autogenerates_source_event_id(api_env):
-    client, _, _ = api_env
+    client, _, _, _ = api_env
     r1 = await client.post("/api/intake/message", json={"text": "first message"})
     r2 = await client.post("/api/intake/message", json={"text": "second message"})
     # No explicit source_event_id → each call generates a unique one → two projects.
@@ -60,7 +60,7 @@ async def test_api_intake_autogenerates_source_event_id(api_env):
 
 @pytest.mark.asyncio
 async def test_api_intake_rejects_empty_text(api_env):
-    client, _, _ = api_env
+    client, _, _, _ = api_env
     r = await client.post("/api/intake/message", json={"text": ""})
     assert r.status_code == 422
     assert r.json()["code"] == "validation_error"
@@ -68,7 +68,7 @@ async def test_api_intake_rejects_empty_text(api_env):
 
 @pytest.mark.asyncio
 async def test_feishu_webhook_creates_project(api_env):
-    client, _, _ = api_env
+    client, _, _, _ = api_env
     r = await client.post(
         "/api/intake/feishu/webhook",
         json={
@@ -87,7 +87,7 @@ async def test_feishu_webhook_creates_project(api_env):
 
 @pytest.mark.asyncio
 async def test_feishu_webhook_dedup_on_event_id(api_env):
-    client, _, _ = api_env
+    client, _, _, _ = api_env
     payload = {"event_id": "fs-dup-1", "message_text": "hello"}
     r1 = await client.post("/api/intake/feishu/webhook", json=payload)
     r2 = await client.post("/api/intake/feishu/webhook", json=payload)
@@ -99,7 +99,7 @@ async def test_feishu_webhook_dedup_on_event_id(api_env):
 @pytest.mark.asyncio
 async def test_api_and_feishu_produce_identical_domain_shape(api_env):
     """AC: API path and Feishu path produce the same domain result."""
-    client, _, _ = api_env
+    client, _, _, _ = api_env
     r_api = await client.post(
         "/api/intake/message",
         json={"text": CANONICAL_TEXT, "source_event_id": "parity-api"},
@@ -122,7 +122,7 @@ async def test_api_and_feishu_produce_identical_domain_shape(api_env):
 
 @pytest.mark.asyncio
 async def test_intake_emits_event_with_trace_id(api_env):
-    client, maker, _ = api_env
+    client, maker, _, _ = api_env
     r = await client.post(
         "/api/intake/message",
         json={"text": "event emission test", "source_event_id": "evt-emit-1"},
@@ -141,7 +141,7 @@ async def test_intake_emits_event_with_trace_id(api_env):
 @pytest.mark.asyncio
 async def test_intake_emits_event_on_dedup_too(api_env):
     """Observers should see every attempt — dedup path still emits."""
-    client, maker, _ = api_env
+    client, maker, _, _ = api_env
     payload = {"text": "dup emit", "source_event_id": "evt-emit-dup"}
     await client.post("/api/intake/message", json=payload)
     await client.post("/api/intake/message", json=payload)

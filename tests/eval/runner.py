@@ -173,7 +173,7 @@ async def run_requirement(concurrency: int = 2) -> AgentSummary:
     async def run_one(f: Fixture) -> CaseResult:
         async with sem:
             try:
-                parsed, result = await agent.parse(f.input)
+                outcome = await agent.parse(f.input)
             except Exception as e:
                 _log.exception(
                     "eval case raised",
@@ -185,7 +185,13 @@ async def run_requirement(concurrency: int = 2) -> AgentSummary:
                     passed=False,
                     failures=[f"agent raised: {type(e).__name__}: {e}"],
                 )
+            parsed = outcome.parsed
+            result = outcome.result
             failures = score_requirement(parsed, f.expected)
+            # A manual_review outcome is always a fail at the eval layer,
+            # even if the placeholder happens to satisfy the constraints.
+            if outcome.outcome == "manual_review":
+                failures.insert(0, f"manual_review after {outcome.attempts} attempts")
             case = CaseResult(
                 fixture_id=f.id,
                 category=f.category,
@@ -204,10 +210,13 @@ async def run_requirement(concurrency: int = 2) -> AgentSummary:
                     "fixture_id": f.id,
                     "category": f.category,
                     "passed": case.passed,
+                    "outcome": outcome.outcome,
+                    "attempts": outcome.attempts,
                     "failure_count": len(failures),
                     "latency_ms": result.latency_ms,
                     "prompt_tokens": result.prompt_tokens,
                     "completion_tokens": result.completion_tokens,
+                    "cache_read_tokens": result.cache_read_tokens,
                 },
             )
             return case

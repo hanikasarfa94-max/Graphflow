@@ -6,8 +6,19 @@ from .db import (
     get_session,
     session_scope,
 )
-from .orm import EventRow, IntakeEventRow, ProjectRow, RequirementRow
-from .repositories import DuplicateIntakeError, EventRepository, IntakeRepository
+from .orm import (
+    AgentRunLogRow,
+    EventRow,
+    IntakeEventRow,
+    ProjectRow,
+    RequirementRow,
+)
+from .repositories import (
+    AgentRunLogRepository,
+    DuplicateIntakeError,
+    EventRepository,
+    IntakeRepository,
+)
 
 __all__ = [
     "Base",
@@ -17,10 +28,12 @@ __all__ = [
     "session_scope",
     "create_all",
     "drop_all",
+    "AgentRunLogRow",
     "EventRow",
     "IntakeEventRow",
     "ProjectRow",
     "RequirementRow",
+    "AgentRunLogRepository",
     "IntakeRepository",
     "EventRepository",
     "DuplicateIntakeError",

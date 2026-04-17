@@ -18,3 +18,4 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/workgraph_agents"]
+# prompts/ lives inside the package tree so it ships automatically.

@@ -20,6 +20,9 @@ class Requirement(BaseModel):
     id: str
     project_id: str
     raw_text: str = Field(min_length=1)
+    parsed_json: dict | None = None
+    parse_outcome: str | None = None
+    parsed_at: datetime | None = None
     created_at: datetime
 
 

@@ -16,10 +16,14 @@ single end-to-end contract that proves the demo path works end-to-end.
 
 from __future__ import annotations
 
+import os
+
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 
+from workgraph_agents import RequirementAgent
+from workgraph_agents.testing import StubRequirementAgent
 from workgraph_domain import EventBus
 from workgraph_persistence import (
     EventRepository,
@@ -40,13 +44,12 @@ CANONICAL_REQUIREMENT_TEXT = (
 )
 
 
-@pytest_asyncio.fixture
-async def canonical_env():
+async def _make_env(agent):
     engine = build_engine("sqlite+aiosqlite:///:memory:")
     await create_all(engine)
     maker = build_sessionmaker(engine)
     bus = EventBus(maker)
-    service = IntakeService(maker, bus)
+    service = IntakeService(maker, bus, agent=agent)
 
     app.state.engine = engine
     app.state.sessionmaker = maker
@@ -54,10 +57,34 @@ async def canonical_env():
     app.state.intake_service = service
 
     transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as client:
+    client = AsyncClient(transport=transport, base_url="http://test")
+    return client, maker, engine
+
+
+@pytest_asyncio.fixture
+async def canonical_env():
+    """Phase 2 plumbing tests — stub agent, no network."""
+    client, maker, engine = await _make_env(StubRequirementAgent())
+    async with client:
         yield client, maker
     await drop_all(engine)
     await engine.dispose()
+
+
+@pytest_asyncio.fixture
+async def canonical_env_live():
+    """Phase 3+ E2E — real RequirementAgent against DeepSeek."""
+    client, maker, engine = await _make_env(RequirementAgent())
+    async with client:
+        yield client, maker
+    await drop_all(engine)
+    await engine.dispose()
+
+
+skip_if_no_key = pytest.mark.skipif(
+    not os.environ.get("DEEPSEEK_API_KEY"),
+    reason="DEEPSEEK_API_KEY not set — live canonical E2E requires DeepSeek",
+)
 
 
 # ---------- Phase 2 assertions --------------------------------------------
@@ -158,5 +185,53 @@ async def test_canonical_dedup_on_both_paths(canonical_env):
     assert f2.json()["deduplicated"] is True
 
 
-# ---------- Phase 3+ assertions land below as phases ship -----------------
-# (Intentionally empty for Phase 2. Phase 3 appends parser assertions here.)
+# ---------- Phase 3 assertions — live Requirement Agent --------------------
+# Marked `eval` so default `uv run pytest` skips them; CI + devs opt in with
+# `-m eval`. Decision 3B: canonical fixture asserts 4 scope items, deadline,
+# confidence >0.7 on the real agent against DeepSeek.
+
+
+@pytest.mark.eval
+@skip_if_no_key
+@pytest.mark.asyncio
+async def test_canonical_requirement_parse_phase3(canonical_env_live):
+    client, maker = canonical_env_live
+    trace_id = "trace-canonical-phase3"
+
+    resp = await client.post(
+        "/api/intake/message",
+        json={
+            "text": CANONICAL_REQUIREMENT_TEXT,
+            "source_event_id": "canonical-phase3-1",
+        },
+        headers={"x-trace-id": trace_id},
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    req = body["requirement"]
+
+    # Parse landed on the requirement row.
+    assert req["parse_outcome"] == "ok"
+    assert req["parsed_at"] is not None
+    parsed = req["parsed_json"]
+    assert parsed is not None
+
+    # Core Phase 3 AC (3B):
+    scope = parsed["scope_items"]
+    assert len(scope) >= 4, f"expected >=4 scope items, got {len(scope)}: {scope}"
+    scope_lower = " ".join(s.lower() for s in scope)
+    for must_mention in ("invitation", "phone", "export", "conversion"):
+        assert must_mention in scope_lower, (
+            f"scope missing {must_mention!r}: {scope}"
+        )
+    assert parsed["deadline"] is not None
+    assert parsed["confidence"] > 0.7
+
+    # requirement.parsed event emitted with the right trace_id.
+    async with session_scope(maker) as session:
+        events = await EventRepository(session).list_by_name("requirement.parsed")
+    assert len(events) == 1
+    assert events[0].trace_id == trace_id
+    assert events[0].payload["project_id"] == body["project"]["id"]
+    assert events[0].payload["outcome"] == "ok"
+    assert events[0].payload["scope_count"] == len(scope)

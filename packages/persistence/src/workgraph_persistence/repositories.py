@@ -6,7 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .orm import EventRow, IntakeEventRow, ProjectRow, RequirementRow
+from .orm import AgentRunLogRow, EventRow, IntakeEventRow, ProjectRow, RequirementRow
 
 
 class DuplicateIntakeError(Exception):
@@ -91,4 +91,52 @@ class EventRepository:
 
     async def list_by_name(self, name: str) -> list[EventRow]:
         stmt = select(EventRow).where(EventRow.name == name).order_by(EventRow.created_at)
+        return list((await self._session.execute(stmt)).scalars().all())
+
+
+class AgentRunLogRepository:
+    """Writes one row per LLM agent call — decision 2C2."""
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def append(
+        self,
+        *,
+        agent: str,
+        prompt_version: str,
+        outcome: str,
+        attempts: int,
+        latency_ms: int,
+        prompt_tokens: int,
+        completion_tokens: int,
+        cache_read_tokens: int,
+        project_id: str | None = None,
+        trace_id: str | None = None,
+        error: str | None = None,
+    ) -> AgentRunLogRow:
+        row = AgentRunLogRow(
+            id=_new_id(),
+            agent=agent,
+            prompt_version=prompt_version,
+            project_id=project_id,
+            trace_id=trace_id,
+            outcome=outcome,
+            attempts=attempts,
+            latency_ms=latency_ms,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            cache_read_tokens=cache_read_tokens,
+            error=error,
+        )
+        self._session.add(row)
+        await self._session.flush()
+        return row
+
+    async def list_for_agent(self, agent: str) -> list[AgentRunLogRow]:
+        stmt = (
+            select(AgentRunLogRow)
+            .where(AgentRunLogRow.agent == agent)
+            .order_by(AgentRunLogRow.created_at)
+        )
         return list((await self._session.execute(stmt)).scalars().all())

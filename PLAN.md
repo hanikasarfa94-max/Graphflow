@@ -283,7 +283,19 @@ Convert raw requirement text into structured workflow objects.
 ### Status
 - [ ] not started
 - [ ] in progress
-- [ ] completed
+- [x] completed
+
+**Delivered (2026-04-17):**
+- Engineered prompt at `packages/agents/src/workgraph_agents/prompts/requirement/v1.md`. Scope-extraction rules, 5-band confidence rubric, degenerate-input signals, contradiction-surfacing rules, solution-framing detection. Bumped `PROMPT_VERSION = "2026-04-17.phase3.v1"`.
+- `LLMClient.complete_structured()` — schema-aware recovery ladder (2C4). JSON mode → validation-error reprompt → validation-error reprompt → `ParseFailure`. `RequirementAgent.parse` catches `ParseFailure`, returns `ParseOutcome(outcome="manual_review", ...)` with a structured placeholder. Never 500.
+- `LLMResult.cache_read_tokens` — provider-agnostic cache-hit extraction. DeepSeek auto-cache hits visible on warm calls (960-1024 tokens cached, validating 4A).
+- `AgentRunLogRow` + `AgentRunLogRepository` — per-call observability (2C2): agent, prompt_version, outcome, attempts, latency, tokens, cache_read_tokens, error.
+- `RequirementRow` gained `parsed_json`, `parse_outcome`, `parsed_at` columns.
+- `IntakeService` now parses inline: after create, invokes agent, persists parse + writes agent_run_log, emits `requirement.parsed` event with trace_id. Dedup hits skip re-parsing.
+- `workgraph_agents.testing.StubRequirementAgent` — deterministic test double; injected by default into the `api_env` fixture so unit tests never hit DeepSeek.
+- Fault-injection tests (`apps/api/tests/test_intake_fault_injection.py`) — malformed-LLM simulation proves manual_review degrades gracefully, writes agent_run_log, emits event.
+- Canonical E2E extended (3B): `test_canonical_requirement_parse_phase3` (live, eval-marked) asserts ≥4 scope items including `invitation`, `phone`, `export`, `conversion`; deadline present; confidence > 0.7; `requirement.parsed` event emitted with trace_id.
+- **Eval pass rate: 12/12 = 100.0%** — beats 80% AC floor and the Phase 2.5 baseline of 66.67% by 33.33pp. New baseline saved.
 
 ---
 
