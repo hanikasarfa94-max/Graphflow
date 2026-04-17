@@ -21,6 +21,10 @@ class Settings(BaseSettings):
     api_host: str = "127.0.0.1"
     api_port: int = 8000
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
+    database_url: str = Field(
+        default="sqlite+aiosqlite:///./data/workgraph.sqlite",
+        description="SQLAlchemy async URL. Swap to postgres+asyncpg for prod.",
+    )
 
 
 def load_settings() -> Settings:

@@ -1,1 +1,4 @@
-"""Domain entities and state transitions — wired in Phase 5."""
+from .events import EventBus
+from .models import IntakeResult, Project, Requirement
+
+__all__ = ["EventBus", "IntakeResult", "Project", "Requirement"]

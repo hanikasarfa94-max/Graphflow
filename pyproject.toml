@@ -11,6 +11,7 @@ members = [
     "apps/worker",
     "packages/schemas",
     "packages/observability",
+    "packages/persistence",
     "packages/domain",
     "packages/agents",
     "packages/orchestrator",
@@ -20,6 +21,7 @@ members = [
 [tool.uv.sources]
 workgraph-schemas = { workspace = true }
 workgraph-observability = { workspace = true }
+workgraph-persistence = { workspace = true }
 workgraph-domain = { workspace = true }
 workgraph-agents = { workspace = true }
 workgraph-orchestrator = { workspace = true }
@@ -40,6 +42,7 @@ line-length = 100
 target-version = "py311"
 
 [tool.pytest.ini_options]
-testpaths = ["apps", "packages"]
+testpaths = ["apps", "packages", "tests"]
 asyncio_mode = "auto"
 addopts = "--import-mode=importlib"
+python_files = ["test_*.py", "canonical_*.py"]

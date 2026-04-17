@@ -34,5 +34,11 @@ Thumbs.db
 /uv-cache/
 /bun-cache/
 
+# SQLite dev DB
+data/*.sqlite
+data/*.sqlite-journal
+data/*.sqlite-wal
+data/*.sqlite-shm
+
 # uv lock (commit once stable; ignore during flux)
 # uv.lock

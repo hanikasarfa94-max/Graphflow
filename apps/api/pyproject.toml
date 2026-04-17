@@ -9,6 +9,7 @@ dependencies = [
     "pydantic-settings>=2.6",
     "workgraph-schemas",
     "workgraph-observability",
+    "workgraph-persistence",
     "workgraph-domain",
     "workgraph-agents",
     "workgraph-orchestrator",

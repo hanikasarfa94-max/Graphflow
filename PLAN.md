@@ -141,6 +141,13 @@ Create a runnable repository skeleton with the correct module boundaries.
 
 ## Phase 2 — Requirement Intake
 
+**Status:** ✅ Complete (2026-04-17). 34/34 tests green across unit + integration + canonical E2E. API path and Feishu webhook both route through `IntakeService.receive()` → identical `IntakeResult` shape. Dedup enforced via `UniqueConstraint(source, source_event_id)`; race-safe via IntegrityError fallback. `intake.received` events persisted with trace_id on every attempt (including dedup). EventBus is the Phase 12 Inngest swap point.
+
+**Deferred to later phases:**
+- Real Inngest dashboard visibility (Phase 12 swap per decision 1A)
+- Real Feishu SDK signature verification (Phase 7)
+- UTC timezone normalization on SQLite read-back (cosmetic; fixes itself under Postgres at Phase 5)
+
 ### Objective
 Allow raw requirement input to enter the system and create a project.
 

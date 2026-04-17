@@ -1,37 +1,85 @@
 from __future__ import annotations
 
 import logging
+from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from workgraph_domain import EventBus
 from workgraph_observability import (
     bind_trace_id,
     configure_logging,
     new_trace_id,
 )
+from workgraph_persistence import (
+    build_engine,
+    build_sessionmaker,
+    create_all,
+)
 from workgraph_schemas import ApiError, ApiErrorCode
 
+from workgraph_api.routers import intake as intake_router
+from workgraph_api.services import IntakeService
 from workgraph_api.settings import load_settings
 
 settings = load_settings()
 configure_logging(settings.log_level)
 _log = logging.getLogger("workgraph.api")
 
-app = FastAPI(title="WorkGraph API", version="0.1.0")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Ensure the sqlite data directory exists before the engine opens a file handle.
+    if settings.database_url.startswith("sqlite"):
+        _ensure_sqlite_parent(settings.database_url)
+
+    engine = build_engine(settings.database_url)
+    await create_all(engine)
+    sessionmaker = build_sessionmaker(engine)
+    event_bus = EventBus(sessionmaker)
+
+    app.state.engine = engine
+    app.state.sessionmaker = sessionmaker
+    app.state.event_bus = event_bus
+    app.state.intake_service = IntakeService(sessionmaker, event_bus)
+    _log.info("api boot ok", extra={"database_url": _sanitize(settings.database_url)})
+    try:
+        yield
+    finally:
+        await engine.dispose()
+        _log.info("api shutdown ok")
+
+
+def _ensure_sqlite_parent(url: str) -> None:
+    # sqlite+aiosqlite:///./data/workgraph.sqlite  → ./data/workgraph.sqlite
+    _, _, path = url.partition(":///")
+    if not path:
+        return
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
+
+
+def _sanitize(url: str) -> str:
+    # Strip credentials for log visibility.
+    if "@" in url:
+        scheme, rest = url.split("://", 1)
+        _, host = rest.split("@", 1)
+        return f"{scheme}://***@{host}"
+    return url
+
+
+app = FastAPI(title="WorkGraph API", version="0.1.0", lifespan=lifespan)
+app.include_router(intake_router.router)
 
 
 @app.middleware("http")
 async def trace_id_middleware(request: Request, call_next):
     trace_id = request.headers.get("x-trace-id") or new_trace_id()
     bind_trace_id(trace_id)
-    try:
-        response = await call_next(request)
-    finally:
-        # Expose the trace id so clients can correlate.
-        pass
+    response = await call_next(request)
     response.headers["x-trace-id"] = trace_id
     return response
 

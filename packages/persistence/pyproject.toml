@@ -1,12 +1,13 @@
 [project]
-name = "workgraph-domain"
+name = "workgraph-persistence"
 version = "0.1.0"
-description = "Domain entities and state transitions (graph-native, per decision 1E)."
+description = "WorkGraph — SQLAlchemy 2 async engine, ORM rows, Alembic migrations."
 requires-python = ">=3.11,<3.13"
 dependencies = [
+    "sqlalchemy>=2.0.35",
+    "aiosqlite>=0.20",
     "pydantic>=2.8",
     "workgraph-observability",
-    "workgraph-persistence",
 ]
 
 [build-system]
@@ -14,4 +15,4 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/workgraph_domain"]
+packages = ["src/workgraph_persistence"]
