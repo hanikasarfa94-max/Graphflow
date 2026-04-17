@@ -1,0 +1,45 @@
+[project]
+name = "workgraph-ai"
+version = "0.1.0"
+description = "WorkGraph AI — coordination as a graph, not a document."
+requires-python = ">=3.11,<3.13"
+dependencies = []
+
+[tool.uv.workspace]
+members = [
+    "apps/api",
+    "apps/worker",
+    "packages/schemas",
+    "packages/observability",
+    "packages/domain",
+    "packages/agents",
+    "packages/orchestrator",
+    "packages/feishu_adapter",
+]
+
+[tool.uv.sources]
+workgraph-schemas = { workspace = true }
+workgraph-observability = { workspace = true }
+workgraph-domain = { workspace = true }
+workgraph-agents = { workspace = true }
+workgraph-orchestrator = { workspace = true }
+workgraph-feishu-adapter = { workspace = true }
+workgraph-api = { workspace = true }
+workgraph-worker = { workspace = true }
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "pytest-asyncio>=0.24",
+    "httpx>=0.28",
+    "ruff>=0.8",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.pytest.ini_options]
+testpaths = ["apps", "packages"]
+asyncio_mode = "auto"
+addopts = "--import-mode=importlib"

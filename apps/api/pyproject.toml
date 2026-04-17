@@ -1,0 +1,23 @@
+[project]
+name = "workgraph-api"
+version = "0.1.0"
+description = "WorkGraph AI — FastAPI backend."
+requires-python = ">=3.11,<3.13"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
+    "pydantic-settings>=2.6",
+    "workgraph-schemas",
+    "workgraph-observability",
+    "workgraph-domain",
+    "workgraph-agents",
+    "workgraph-orchestrator",
+    "workgraph-feishu-adapter",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/workgraph_api"]

@@ -1,0 +1,35 @@
+/* WorkGraph design tokens — per /plan-design-review decision 4A.
+   General Sans + JetBrains Mono get loaded in Phase 11 via @font-face.
+   For Phase 1 skeleton we define the tokens as CSS vars only. */
+
+:root {
+  --wg-surface: #fafaf7;
+  --wg-ink: #1a1a1a;
+  --wg-ink-soft: #555;
+  --wg-accent: #c0471e;
+  --wg-line: #e6e3db;
+
+  --wg-radius: 6px;
+  --wg-dot: 4px;
+
+  --wg-font-sans:
+    "General Sans", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --wg-font-mono:
+    "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: var(--wg-surface);
+  color: var(--wg-ink);
+  font-family: var(--wg-font-sans);
+  font-weight: 400;
+  font-size: 15px;
+  line-height: 1.55;
+}
