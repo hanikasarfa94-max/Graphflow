@@ -1,0 +1,9 @@
+id: short-vague
+category: edge
+notes: "Too vague to parse confidently. Agent should surface that via low confidence + open questions."
+input: "We need a thing for the marketing team."
+expected:
+  min_scope_items: 0
+  max_scope_items: 3
+  min_open_questions: 2
+  max_confidence: 0.6

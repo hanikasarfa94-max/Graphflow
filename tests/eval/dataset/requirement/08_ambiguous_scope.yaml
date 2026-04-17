@@ -1,0 +1,11 @@
+id: ambiguous-scope
+category: edge
+notes: "Input with 'maybe X, could be Y' language. Open questions must call out the ambiguity."
+input: |
+  We want to add some analytics to the product. Maybe funnel charts,
+  could also be cohort retention. Possibly user segmentation too, TBD.
+expected:
+  min_scope_items: 1
+  max_scope_items: 4
+  min_open_questions: 2
+  max_confidence: 0.55

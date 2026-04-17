@@ -1,0 +1,14 @@
+id: adv-contradictory
+category: adversarial
+notes: "Self-contradictory input. Open_questions must surface the contradiction."
+input: |
+  Build a fully automated lead qualification system that requires no
+  human review, but every lead must be approved by the sales manager
+  before being contacted. Ship by Friday.
+expected:
+  min_scope_items: 1
+  max_scope_items: 5
+  deadline_not_null: true
+  deadline_contains_any: ["friday"]
+  min_open_questions: 1
+  max_confidence: 0.65

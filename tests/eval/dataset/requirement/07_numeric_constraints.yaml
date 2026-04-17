@@ -1,0 +1,13 @@
+id: numeric-constraints
+category: edge
+notes: "Input with budget + scale constraints. These should surface as open_questions or scope items, not be lost."
+input: |
+  Build a lightweight survey tool for up to 500 concurrent respondents,
+  budget under 10k RMB/month in infra costs. Needed by end of May.
+expected:
+  min_scope_items: 1
+  max_scope_items: 4
+  deadline_not_null: true
+  deadline_contains_any: ["may", "end of may"]
+  min_open_questions: 1
+  min_confidence: 0.5

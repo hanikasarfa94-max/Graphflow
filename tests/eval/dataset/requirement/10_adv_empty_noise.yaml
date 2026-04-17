@@ -1,0 +1,9 @@
+id: adv-empty-noise
+category: adversarial
+notes: "Chat-noise input. Agent must NOT hallucinate scope — low confidence + ask what the user wants."
+input: "@channel hey team, fyi tmrw? thx 🙏"
+expected:
+  min_scope_items: 0
+  max_scope_items: 2
+  min_open_questions: 2
+  max_confidence: 0.35

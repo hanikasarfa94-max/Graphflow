@@ -1,0 +1,12 @@
+id: deadline-only
+category: edge
+notes: "Hard deadline but fuzzy scope. Deadline field should capture the date; open_questions should probe scope."
+input: |
+  We need to ship something for the Q2 board meeting on May 15.
+  Exec team hasn't confirmed the exact features yet.
+expected:
+  max_scope_items: 4
+  deadline_not_null: true
+  deadline_contains_any: ["may 15", "q2", "5/15", "2026-05-15"]
+  min_open_questions: 2
+  max_confidence: 0.6

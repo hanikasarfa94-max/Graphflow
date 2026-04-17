@@ -223,7 +223,17 @@ Build the LLM quality ruler before any agent ships. You cannot measure regressio
 ### Status
 - [ ] not started
 - [ ] in progress
-- [ ] completed
+- [x] completed
+
+**Delivered (2026-04-17):**
+- `packages/agents` workspace: `LLMClient` (DeepSeek via OpenAI-compat, transient-error retry with exponential backoff), baseline `RequirementAgent` at prompt version `2026-04-17.phase2_5.v1`.
+- 12 YAML fixtures in `tests/eval/dataset/requirement/` (canonical + edge + anti-pattern + adversarial).
+- `tests/eval/runner.py` — fixture loader, constraint scorer, async concurrency, CLI (`--save-baseline`, `--fail-under`, `--fail-drift`).
+- `tests/eval/test_requirement_eval.py` — pytest wrapper, `@pytest.mark.eval`, opt-in via `-m eval`.
+- `tests/eval/baselines.json` — committed baseline: **8/12 = 66.67%** from minimal prompt; Phase 3 raises to ≥80%.
+- `.github/workflows/eval.yml` — gates PRs that touch `packages/agents/**` or `tests/eval/**` on no-regression vs baseline.
+- Root `conftest.py` loads `.env` so `DEEPSEEK_API_KEY` is visible at collection time.
+- Structured per-case logs emit agent, prompt_version, fixture_id, passed, latency_ms, token counts (2C2).
 
 ---
 

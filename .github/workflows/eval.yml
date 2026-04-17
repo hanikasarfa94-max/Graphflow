@@ -1,0 +1,53 @@
+name: eval
+
+on:
+  pull_request:
+    paths:
+      - "packages/agents/**"
+      - "tests/eval/**"
+      - ".github/workflows/eval.yml"
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: eval-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  requirement:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+      DEEPSEEK_BASE_URL: https://api.deepseek.com
+      DEEPSEEK_MODEL: deepseek-chat
+      WORKGRAPH_LOG_LEVEL: INFO
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
+
+      - name: Install workspace
+        run: uv sync --all-packages --dev
+
+      - name: Gate — fail fast if API key missing
+        run: |
+          if [ -z "$DEEPSEEK_API_KEY" ]; then
+            echo "::error::DEEPSEEK_API_KEY secret not set in repo settings"
+            exit 1
+          fi
+
+      - name: Run eval suite (opt-in marker)
+        run: uv run pytest -m eval -v
+
+      - name: Emit summary on failure
+        if: failure()
+        run: uv run python -m tests.eval.runner --fail-under 0 --fail-drift -1 || true

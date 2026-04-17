@@ -1,0 +1,11 @@
+id: adv-two-requirements
+category: adversarial
+notes: "Two unrelated requirements fused into one message. Agent should flag this via open_questions."
+input: |
+  We need to redesign the checkout flow to reduce cart abandonment.
+  Also, the mobile app login page is broken on iOS 17, needs a hotfix today.
+expected:
+  min_scope_items: 2
+  max_scope_items: 6
+  min_open_questions: 1
+  min_confidence: 0.5

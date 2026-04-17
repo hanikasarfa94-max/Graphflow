@@ -1,0 +1,20 @@
+id: canonical-event-registration
+category: canonical
+notes: "From prompt-contracts §16.1 — the golden-path fixture every agent phase must keep green."
+input: |
+  We need to launch an event registration page next week.
+  It needs invitation code validation, phone number validation,
+  admin export, and conversion tracking.
+expected:
+  goal_contains_any: ["event registration", "registration page", "event"]
+  min_scope_items: 3
+  max_scope_items: 6
+  scope_must_mention_any:
+    - ["invitation code", "invite code", "invitation"]
+    - ["phone", "phone number"]
+    - ["admin export", "export"]
+    - ["conversion", "conversion tracking", "tracking"]
+  deadline_not_null: true
+  deadline_contains_any: ["week", "next week"]
+  min_open_questions: 1
+  min_confidence: 0.7

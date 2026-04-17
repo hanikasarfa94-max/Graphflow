@@ -1,0 +1,20 @@
+id: long-multi-deliverable
+category: edge
+notes: "Long input with many distinct deliverables — scope list should enumerate cleanly."
+input: |
+  We're building an internal onboarding portal for new hires. Features needed:
+  single sign-on via Feishu, document upload with e-signature, task checklist
+  per role, manager dashboard, reminders by Feishu message, i18n for English
+  and Chinese, and audit log export. Target GA in 6 weeks.
+expected:
+  min_scope_items: 5
+  max_scope_items: 10
+  scope_must_mention_any:
+    - ["sso", "sign-on", "single sign-on"]
+    - ["document upload", "e-signature", "signature"]
+    - ["checklist", "task"]
+    - ["dashboard", "manager dashboard"]
+    - ["i18n", "internationalization", "chinese", "english"]
+  deadline_not_null: true
+  deadline_contains_any: ["6 weeks", "ga", "six weeks"]
+  min_confidence: 0.7

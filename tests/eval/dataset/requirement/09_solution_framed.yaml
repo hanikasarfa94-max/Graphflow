@@ -1,0 +1,11 @@
+id: solution-framed
+category: anti-pattern
+notes: "Input frames a technical solution. Parse the intent but flag the missing user goal."
+input: |
+  Build a REST API in Go with Postgres, Redis cache, Prometheus metrics,
+  and Grafana dashboards. Deploy on Kubernetes with Helm charts.
+expected:
+  min_scope_items: 2
+  max_scope_items: 8
+  min_open_questions: 1
+  max_confidence: 0.7

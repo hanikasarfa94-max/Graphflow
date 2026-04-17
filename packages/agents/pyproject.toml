@@ -3,7 +3,14 @@ name = "workgraph-agents"
 version = "0.1.0"
 description = "LLM prompt runners with schema-validated output (wired in Phase 3+)."
 requires-python = ">=3.11,<3.13"
-dependencies = []
+dependencies = [
+    "openai>=1.55",
+    "pydantic>=2.8",
+    "pydantic-settings>=2.6",
+    "pyyaml>=6.0",
+    "workgraph-observability",
+    "workgraph-schemas",
+]
 
 [build-system]
 requires = ["hatchling"]

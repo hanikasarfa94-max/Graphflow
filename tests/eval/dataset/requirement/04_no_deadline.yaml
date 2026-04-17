@@ -1,0 +1,12 @@
+id: no-deadline
+category: edge
+notes: "Scope but no time reference. Agent must leave deadline null, not hallucinate one."
+input: |
+  Our customer portal needs a support ticket submission form with file
+  attachments, a status page showing ticket progress, and email
+  notifications on status change.
+expected:
+  min_scope_items: 2
+  max_scope_items: 5
+  deadline_is_null: true
+  min_confidence: 0.6

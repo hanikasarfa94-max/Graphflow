@@ -1,0 +1,16 @@
+id: bilingual-chinese
+category: edge
+notes: "Feishu-native context: Chinese + English mix. Agent must parse without failing."
+input: |
+  需要做一个客户反馈收集页面，下周上线。Must support anonymous submission,
+  admin dashboard for triage, and export to Excel. Tracking code集成 GA4.
+expected:
+  min_scope_items: 3
+  max_scope_items: 6
+  scope_must_mention_any:
+    - ["anonymous", "feedback"]
+    - ["dashboard", "triage"]
+    - ["export", "excel"]
+    - ["ga4", "tracking", "google analytics"]
+  deadline_not_null: true
+  min_confidence: 0.6
