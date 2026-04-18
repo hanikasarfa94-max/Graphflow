@@ -1,21 +1,58 @@
 /* WorkGraph design tokens — per /plan-design-review decision 4A.
-   General Sans + JetBrains Mono get loaded in Phase 11 via @font-face.
-   For Phase 1 skeleton we define the tokens as CSS vars only. */
+   Type: General Sans (UI), JetBrains Mono (graph labels, IDs, code).
+   Surface: warm off-white. Accent: single terracotta. No purple/indigo. */
+
+@import url("https://api.fontshare.com/v2/css?f[]=general-sans@400,600&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&display=swap");
 
 :root {
+  /* Surface + ink */
   --wg-surface: #fafaf7;
+  --wg-surface-raised: #ffffff;
+  --wg-surface-sunk: #f3f0e8;
   --wg-ink: #1a1a1a;
-  --wg-ink-soft: #555;
-  --wg-accent: #c0471e;
-  --wg-line: #e6e3db;
+  --wg-ink-soft: #5a5a5a;
+  --wg-ink-faint: #9a9a95;
 
+  /* Single accent — terracotta. No blue-to-purple anything. */
+  --wg-accent: #c0471e;
+  --wg-accent-soft: rgba(192, 71, 30, 0.08);
+  --wg-accent-ring: rgba(192, 71, 30, 0.24);
+
+  /* Checkpoint / manual_review state — calm amber, NOT red. */
+  --wg-amber: #b5802b;
+  --wg-amber-soft: rgba(181, 128, 43, 0.1);
+
+  /* Success — muted sage, used sparingly. */
+  --wg-ok: #4d7a4a;
+
+  /* Hairlines + dividers. */
+  --wg-line: #e6e3db;
+  --wg-line-soft: #efede6;
+
+  /* Geometry. */
   --wg-radius: 6px;
+  --wg-radius-sm: 4px;
   --wg-dot: 4px;
 
+  /* Spacing scale (4px base). */
+  --wg-s-1: 4px;
+  --wg-s-2: 8px;
+  --wg-s-3: 12px;
+  --wg-s-4: 16px;
+  --wg-s-5: 24px;
+  --wg-s-6: 32px;
+  --wg-s-7: 48px;
+
+  /* Type stack. No Inter/Roboto/Arial fallback in production. */
   --wg-font-sans:
     "General Sans", ui-sans-serif, system-ui, -apple-system, sans-serif;
   --wg-font-mono:
     "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+
+  /* Motion. Short + linear-ish; no bouncy springs. */
+  --wg-motion-fast: 120ms ease-out;
+  --wg-motion-base: 200ms ease-out;
 }
 
 * {
@@ -32,4 +69,106 @@ body {
   font-weight: 400;
   font-size: 15px;
   line-height: 1.55;
+}
+
+/* Dot motif — 4px filled circle, used at graph nodes, bullets, status. */
+.wg-dot {
+  display: inline-block;
+  width: var(--wg-dot);
+  height: var(--wg-dot);
+  border-radius: 50%;
+  background: var(--wg-accent);
+}
+
+/* Pulse — used on the active graph node during agent runs. */
+@keyframes wg-pulse {
+  0% {
+    box-shadow: 0 0 0 0 var(--wg-accent-ring);
+  }
+  70% {
+    box-shadow: 0 0 0 6px rgba(192, 71, 30, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(192, 71, 30, 0);
+  }
+}
+
+.wg-pulse {
+  animation: wg-pulse 1.6s ease-out infinite;
+}
+
+/* Fade-in for graph nodes entering the scene. */
+@keyframes wg-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.wg-fade-in {
+  animation: wg-fade-in 360ms ease-out both;
+}
+
+/* Flow-dash — animates dashed edges so work feels in-flight. */
+@keyframes wg-dash-flow {
+  to {
+    stroke-dashoffset: -12;
+  }
+}
+
+.wg-edge-flow {
+  stroke-dasharray: 4 4;
+  animation: wg-dash-flow 1.2s linear infinite;
+}
+
+/* Stroke-draw — used to sketch the canonical graph preview on mount. */
+@keyframes wg-stroke-draw {
+  from {
+    stroke-dashoffset: var(--wg-draw-len, 200);
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+/* React Flow edge animation — upgrade the default blue stroke to our accent
+   and keep the animated dash flowing at a pace that doesn't distract. */
+.react-flow__edge-path {
+  stroke: var(--wg-ink-faint);
+  stroke-width: 1.5;
+}
+.react-flow__edge.animated .react-flow__edge-path {
+  stroke: var(--wg-accent);
+  stroke-dasharray: 5 5;
+  animation: wg-dash-flow 0.9s linear infinite;
+}
+
+/* Nodes fade in when the graph first paints — makes the arrival feel
+   composed, not a flashbulb. */
+.react-flow__node {
+  animation: wg-fade-in 320ms ease-out both;
+  transition:
+    box-shadow 200ms ease-out,
+    transform 200ms ease-out;
+}
+.react-flow__node:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+  transform: translateY(-1px);
+}
+
+/* Scrollbar — charcoal, not default chrome. */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--wg-line);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--wg-ink-faint);
 }
