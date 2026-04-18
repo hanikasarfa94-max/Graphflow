@@ -1,0 +1,23 @@
+id: chit-chat-none
+category: chit_chat
+notes: "Pure social chit-chat should classify as `none` — never add noise to the graph."
+input:
+  message: "morning team, grabbing coffee, brb"
+  author:
+    username: alice
+    display_name: Alice
+  project:
+    title: "Event Registration Launch"
+    goal: "Ship an event registration page in one week."
+    deliverables:
+      - {id: "del-signup", title: "Sign-up page", kind: "ui"}
+      - {id: "del-admin", title: "Admin export", kind: "feature"}
+    tasks:
+      - {id: "task-001", title: "Build signup form", assignee_role: "frontend"}
+      - {id: "task-002", title: "Wire invite-code validation", assignee_role: "backend"}
+    risks: []
+  recent_messages: []
+expected:
+  kind: "none"
+  proposal_is_null: true
+  max_confidence: 0.85

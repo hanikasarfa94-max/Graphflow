@@ -1,0 +1,24 @@
+id: question-about-deliverable-tag
+category: tag
+notes: "A direct question about a known deliverable should produce a `tag` suggestion pointing at it."
+input:
+  message: "quick question, who is working on the admin export page right now?"
+  author:
+    username: bob
+    display_name: Bob
+  project:
+    title: "Event Registration Launch"
+    goal: "Ship an event registration page in one week."
+    deliverables:
+      - {id: "del-signup", title: "Sign-up page", kind: "ui"}
+      - {id: "del-admin", title: "Admin export", kind: "feature"}
+    tasks:
+      - {id: "task-001", title: "Build signup form", assignee_role: "frontend"}
+      - {id: "task-002", title: "Admin export endpoint", assignee_role: "backend"}
+    risks: []
+  recent_messages: []
+expected:
+  kind: "tag"
+  proposal_is_null: true
+  targets_any_of: ["del-admin", "task-002"]
+  min_confidence: 0.5

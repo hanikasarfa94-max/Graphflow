@@ -1,0 +1,23 @@
+id: decision-mark-task-done
+category: decision
+notes: "Completion declaration should propose mark_task_done on the relevant task."
+input:
+  message: "Signup form is shipped and merged to main. Calling it done on my end."
+  author:
+    username: eve
+    display_name: Eve
+  project:
+    title: "Event Registration Launch"
+    goal: "Ship an event registration page in one week."
+    deliverables:
+      - {id: "del-signup", title: "Sign-up page", kind: "ui"}
+    tasks:
+      - {id: "task-001", title: "Build signup form", assignee_role: "frontend"}
+      - {id: "task-002", title: "Wire invite-code validation", assignee_role: "backend"}
+    risks: []
+  recent_messages: []
+expected:
+  kind: "decision"
+  proposal_action_any_of: ["mark_task_done", "other"]
+  proposal_target_any_of: ["task-001"]
+  min_confidence: 0.5

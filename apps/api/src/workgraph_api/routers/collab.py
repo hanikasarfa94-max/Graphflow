@@ -1,0 +1,313 @@
+"""Phase 7'' collab endpoints: assignments, comments, notifications, IM.
+
+All routes require a signed-in user. Assignments and comments require
+project membership (the task/deliverable/risk row scopes the project).
+IM post + suggestion accept also require membership.
+"""
+from __future__ import annotations
+
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from pydantic import BaseModel, ConfigDict, Field
+from sqlalchemy import select
+
+from workgraph_persistence import (
+    DeliverableRow,
+    ProjectRow,
+    RiskRow,
+    TaskRow,
+    session_scope,
+)
+
+from workgraph_api.deps import require_user
+from workgraph_api.services import (
+    AssignmentService,
+    AuthenticatedUser,
+    CommentService,
+    ConflictService,
+    IMService,
+    MessageService,
+    NotificationService,
+    ProjectService,
+)
+
+router = APIRouter(prefix="/api", tags=["collab"])
+
+
+class AssignRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    user_id: str | None = None
+
+
+class CommentRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    body: str = Field(min_length=1, max_length=4000)
+    parent_comment_id: str | None = None
+
+
+class MessageRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    body: str = Field(min_length=1, max_length=4000)
+
+
+async def _project_from_task(sessionmaker, task_id: str) -> str | None:
+    async with session_scope(sessionmaker) as session:
+        task = (
+            await session.execute(select(TaskRow).where(TaskRow.id == task_id))
+        ).scalar_one_or_none()
+        return task.project_id if task else None
+
+
+async def _project_from_target(
+    sessionmaker, target_kind: str, target_id: str
+) -> str | None:
+    async with session_scope(sessionmaker) as session:
+        if target_kind == "task":
+            row = (
+                await session.execute(select(TaskRow).where(TaskRow.id == target_id))
+            ).scalar_one_or_none()
+        elif target_kind == "deliverable":
+            row = (
+                await session.execute(
+                    select(DeliverableRow).where(DeliverableRow.id == target_id)
+                )
+            ).scalar_one_or_none()
+        elif target_kind == "risk":
+            row = (
+                await session.execute(select(RiskRow).where(RiskRow.id == target_id))
+            ).scalar_one_or_none()
+        else:
+            return None
+        return row.project_id if row else None
+
+
+# ---- Assignments ---------------------------------------------------------
+
+
+@router.post("/tasks/{task_id}/assignment")
+async def set_assignment(
+    task_id: str,
+    body: AssignRequest,
+    request: Request,
+    user: AuthenticatedUser = Depends(require_user),
+):
+    project_id = await _project_from_task(request.app.state.sessionmaker, task_id)
+    if project_id is None:
+        raise HTTPException(status_code=404, detail="task not found")
+    project_service: ProjectService = request.app.state.project_service
+    if not await project_service.is_member(project_id=project_id, user_id=user.id):
+        raise HTTPException(status_code=403, detail="not a project member")
+
+    service: AssignmentService = request.app.state.assignment_service
+    result = await service.set_assignment(
+        task_id=task_id, user_id=body.user_id, actor_id=user.id
+    )
+    if not result.get("ok"):
+        raise HTTPException(status_code=404, detail=result.get("error", "assignment_failed"))
+    # Ownership change can clear missing_owner conflicts; recheck in
+    # background so the banner count stays honest.
+    from workgraph_observability import get_trace_id
+
+    conflict_service: ConflictService = request.app.state.conflict_service
+    conflict_service.kick_recheck(project_id, trace_id=get_trace_id())
+    return result
+
+
+@router.get("/projects/{project_id}/assignments")
+async def list_assignments(
+    project_id: str,
+    request: Request,
+    user: AuthenticatedUser = Depends(require_user),
+):
+    project_service: ProjectService = request.app.state.project_service
+    if not await project_service.is_member(project_id=project_id, user_id=user.id):
+        raise HTTPException(status_code=403, detail="not a project member")
+    service: AssignmentService = request.app.state.assignment_service
+    return await service.list_for_project(project_id)
+
+
+# ---- Comments ------------------------------------------------------------
+
+
+@router.post("/{target_kind}/{target_id}/comments")
+async def post_comment(
+    target_kind: str,
+    target_id: str,
+    body: CommentRequest,
+    request: Request,
+    user: AuthenticatedUser = Depends(require_user),
+):
+    if target_kind not in {"tasks", "deliverables", "risks"}:
+        raise HTTPException(status_code=404, detail="unsupported target kind")
+    singular = {"tasks": "task", "deliverables": "deliverable", "risks": "risk"}[target_kind]
+    project_id = await _project_from_target(
+        request.app.state.sessionmaker, singular, target_id
+    )
+    if project_id is None:
+        raise HTTPException(status_code=404, detail=f"{singular} not found")
+    project_service: ProjectService = request.app.state.project_service
+    if not await project_service.is_member(project_id=project_id, user_id=user.id):
+        raise HTTPException(status_code=403, detail="not a project member")
+
+    service: CommentService = request.app.state.comment_service
+    result = await service.post(
+        author_id=user.id,
+        target_kind=singular,
+        target_id=target_id,
+        body=body.body,
+        project_id_hint=project_id,
+        parent_comment_id=body.parent_comment_id,
+    )
+    if not result.get("ok"):
+        raise HTTPException(status_code=404, detail=result.get("error", "comment_failed"))
+    return result
+
+
+@router.get("/{target_kind}/{target_id}/comments")
+async def list_comments(
+    target_kind: str,
+    target_id: str,
+    request: Request,
+    user: AuthenticatedUser = Depends(require_user),
+):
+    if target_kind not in {"tasks", "deliverables", "risks"}:
+        raise HTTPException(status_code=404, detail="unsupported target kind")
+    singular = {"tasks": "task", "deliverables": "deliverable", "risks": "risk"}[target_kind]
+    project_id = await _project_from_target(
+        request.app.state.sessionmaker, singular, target_id
+    )
+    if project_id is None:
+        raise HTTPException(status_code=404, detail=f"{singular} not found")
+    project_service: ProjectService = request.app.state.project_service
+    if not await project_service.is_member(project_id=project_id, user_id=user.id):
+        raise HTTPException(status_code=403, detail="not a project member")
+    service: CommentService = request.app.state.comment_service
+    return await service.list_for_target(singular, target_id)
+
+
+# ---- Notifications -------------------------------------------------------
+
+
+@router.get("/notifications")
+async def list_notifications(
+    request: Request,
+    unread_only: bool = Query(default=False),
+    limit: int = Query(default=50, ge=1, le=200),
+    user: AuthenticatedUser = Depends(require_user),
+):
+    service: NotificationService = request.app.state.notification_service
+    items = await service.list_for_user(user.id, unread_only=unread_only, limit=limit)
+    unread = await service.unread_count(user.id)
+    return {"items": items, "unread_count": unread}
+
+
+@router.post("/notifications/{notification_id}/read")
+async def mark_notification_read(
+    notification_id: str,
+    request: Request,
+    user: AuthenticatedUser = Depends(require_user),
+):
+    service: NotificationService = request.app.state.notification_service
+    ok = await service.mark_read(notification_id, user.id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="notification not found")
+    return {"ok": True}
+
+
+@router.post("/notifications/read_all")
+async def mark_all_notifications_read(
+    request: Request, user: AuthenticatedUser = Depends(require_user)
+):
+    service: NotificationService = request.app.state.notification_service
+    count = await service.mark_all_read(user.id)
+    return {"ok": True, "marked": count}
+
+
+# ---- Messages + IM -------------------------------------------------------
+
+
+@router.post("/projects/{project_id}/messages")
+async def post_message(
+    project_id: str,
+    body: MessageRequest,
+    request: Request,
+    user: AuthenticatedUser = Depends(require_user),
+):
+    project_service: ProjectService = request.app.state.project_service
+    if not await project_service.is_member(project_id=project_id, user_id=user.id):
+        raise HTTPException(status_code=403, detail="not a project member")
+    service: IMService = request.app.state.im_service
+    result = await service.post_message(
+        project_id=project_id, author_id=user.id, body=body.body
+    )
+    if not result.get("ok"):
+        if result.get("error") == "rate_limited":
+            raise HTTPException(status_code=429, detail="rate_limited")
+        raise HTTPException(status_code=400, detail=result.get("error", "post_failed"))
+    return result
+
+
+@router.get("/projects/{project_id}/messages")
+async def list_messages(
+    project_id: str,
+    request: Request,
+    limit: int = Query(default=100, ge=1, le=500),
+    user: AuthenticatedUser = Depends(require_user),
+):
+    project_service: ProjectService = request.app.state.project_service
+    if not await project_service.is_member(project_id=project_id, user_id=user.id):
+        raise HTTPException(status_code=403, detail="not a project member")
+    message_service: MessageService = request.app.state.message_service
+    im_service: IMService = request.app.state.im_service
+    messages = await message_service.list_recent(project_id, limit=limit)
+    suggestions = await im_service.list_for_project(project_id, limit=limit)
+    by_message: dict[str, dict] = {s["message_id"]: s for s in suggestions}
+    for m in messages:
+        m["suggestion"] = by_message.get(m["id"])
+    return {"messages": messages}
+
+
+@router.post("/im_suggestions/{suggestion_id}/accept")
+async def accept_suggestion(
+    suggestion_id: str,
+    request: Request,
+    user: AuthenticatedUser = Depends(require_user),
+):
+    service: IMService = request.app.state.im_service
+    payload = await service.get_suggestion(suggestion_id)
+    if payload is None:
+        raise HTTPException(status_code=404, detail="suggestion not found")
+    project_service: ProjectService = request.app.state.project_service
+    if not await project_service.is_member(
+        project_id=payload["project_id"], user_id=user.id
+    ):
+        raise HTTPException(status_code=403, detail="not a project member")
+    result = await service.accept(suggestion_id=suggestion_id, actor_id=user.id)
+    if not result.get("ok"):
+        raise HTTPException(
+            status_code=409, detail=result.get("error", "accept_failed")
+        )
+    return result
+
+
+@router.post("/im_suggestions/{suggestion_id}/dismiss")
+async def dismiss_suggestion(
+    suggestion_id: str,
+    request: Request,
+    user: AuthenticatedUser = Depends(require_user),
+):
+    service: IMService = request.app.state.im_service
+    payload = await service.get_suggestion(suggestion_id)
+    if payload is None:
+        raise HTTPException(status_code=404, detail="suggestion not found")
+    project_service: ProjectService = request.app.state.project_service
+    if not await project_service.is_member(
+        project_id=payload["project_id"], user_id=user.id
+    ):
+        raise HTTPException(status_code=403, detail="not a project member")
+    result = await service.dismiss(suggestion_id=suggestion_id, actor_id=user.id)
+    if not result.get("ok"):
+        raise HTTPException(status_code=409, detail=result.get("error", "dismiss_failed"))
+    return result

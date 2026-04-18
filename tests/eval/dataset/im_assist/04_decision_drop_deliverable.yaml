@@ -1,0 +1,24 @@
+id: decision-drop-deliverable
+category: decision
+notes: "An explicit scope-cut decision should produce a `decision` suggestion proposing drop_deliverable."
+input:
+  message: "We are cutting the admin export from the first release. Team agreed on the call, let's focus on signup."
+  author:
+    username: dave
+    display_name: Dave
+  project:
+    title: "Event Registration Launch"
+    goal: "Ship an event registration page in one week."
+    deliverables:
+      - {id: "del-signup", title: "Sign-up page", kind: "ui"}
+      - {id: "del-admin", title: "Admin export", kind: "feature"}
+    tasks:
+      - {id: "task-001", title: "Build signup form", assignee_role: "frontend"}
+      - {id: "task-002", title: "Admin export endpoint", assignee_role: "backend"}
+    risks: []
+  recent_messages: []
+expected:
+  kind: "decision"
+  proposal_action: "drop_deliverable"
+  proposal_target_any_of: ["del-admin"]
+  min_confidence: 0.6

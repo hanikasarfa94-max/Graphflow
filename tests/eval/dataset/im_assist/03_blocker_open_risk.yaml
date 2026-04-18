@@ -1,0 +1,21 @@
+id: blocker-opens-risk
+category: blocker
+notes: "A clear blocker statement must produce a `blocker` suggestion with an open_risk proposal."
+input:
+  message: "I'm blocked on the SDK rollout — production keys still not issued, can't move forward."
+  author:
+    username: carol
+    display_name: Carol
+  project:
+    title: "Mobile SDK Rollout"
+    goal: "Ship mobile SDK v1 to production."
+    deliverables:
+      - {id: "del-sdk", title: "SDK v1 release", kind: "package"}
+    tasks:
+      - {id: "task-010", title: "Integrate production keys", assignee_role: "backend"}
+    risks: []
+  recent_messages: []
+expected:
+  kind: "blocker"
+  proposal_action: "open_risk"
+  min_confidence: 0.6

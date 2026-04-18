@@ -1,0 +1,40 @@
+# Keep the build context small. Dockerfiles still explicitly COPY what
+# they need — this list cuts network transfer and cache invalidation.
+
+# Python build artefacts.
+**/__pycache__/
+**/*.pyc
+**/.pytest_cache/
+**/.ruff_cache/
+**/.mypy_cache/
+
+# Node artefacts — each Dockerfile installs its own deps from lockfile.
+**/node_modules/
+**/.next/
+**/dist/
+**/build/
+
+# Dev + IDE state.
+.git
+.gitignore
+.env
+.env.local
+.venv/
+.claude/
+.gstack/
+.vscode/
+.idea/
+
+# Local data + logs.
+data/
+*.log
+*.sqlite
+*.db
+
+# Docs + eval state that doesn't belong in a runtime image.
+docs/
+tests/eval/results/
+AGENT.md
+README.md
+PLAN.md
+design-doc-*.md

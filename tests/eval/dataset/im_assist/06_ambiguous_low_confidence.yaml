@@ -1,0 +1,23 @@
+id: ambiguous-low-confidence
+category: ambiguous
+notes: "Vague, hedging message that does not clearly declare a decision, blocker, or tag. Should either classify as `none` or emit a low-confidence tag, never a decision proposal."
+input:
+  message: "hmm not sure about the direction here, might need to rethink this one"
+  author:
+    username: frank
+    display_name: Frank
+  project:
+    title: "Event Registration Launch"
+    goal: "Ship an event registration page in one week."
+    deliverables:
+      - {id: "del-signup", title: "Sign-up page", kind: "ui"}
+      - {id: "del-admin", title: "Admin export", kind: "feature"}
+    tasks:
+      - {id: "task-001", title: "Build signup form", assignee_role: "frontend"}
+      - {id: "task-002", title: "Admin export endpoint", assignee_role: "backend"}
+    risks: []
+  recent_messages: []
+expected:
+  kind_any_of: ["none", "tag"]
+  proposal_is_null: true
+  max_confidence: 0.7
