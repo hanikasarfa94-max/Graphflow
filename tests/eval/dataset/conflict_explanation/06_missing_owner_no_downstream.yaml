@@ -1,0 +1,33 @@
+id: missing-owner-no-downstream
+category: missing_owner
+notes: "Low-stakes missing owner — task has a role but no downstream. Severity rule fires as medium. Reviewer may bump to low. Options should be lighter (defer, accept, assign when capacity opens) rather than urgent escalation."
+input:
+  rule: "missing_owner"
+  severity: "medium"
+  detail:
+    task_id: "t-copy"
+    task_title: "Draft release note copy"
+    assignee_role: "marketing"
+    has_downstream: false
+    downstream_count: 0
+  project:
+    id: "p-launch"
+    title: "Feature launch comms"
+    goal: "Coordinate messaging for feature X launch"
+    deliverables:
+      - {id: "d-comms", title: "Launch comms kit", kind: "doc"}
+    tasks:
+      - {id: "t-copy", title: "Draft release note copy", estimate_hours: 4, assignee_role: "marketing", deliverable_id: "d-comms"}
+      - {id: "t-blog", title: "Publish launch blog post", estimate_hours: 6, assignee_role: "marketing", deliverable_id: "d-comms"}
+    risks: []
+    milestones: []
+    constraints: []
+  targets: ["t-copy"]
+expected:
+  severity_review_any_of: ["low", "medium"]
+  min_options: 2
+  max_options: 4
+  summary_mentions_any_of:
+    - ["release note", "copy", "marketing", "owner", "assignee", "unassigned"]
+  options_mention_any_of:
+    - ["assign", "defer", "accept", "skip", "route", "reassign", "delay", "owner", "reach"]

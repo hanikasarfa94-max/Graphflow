@@ -1,0 +1,35 @@
+id: deadline-vs-scope-overflow
+category: deadline_vs_scope
+notes: "Classic scope overflow — 320 hours of open work, 1-week deadline. High severity. Agent must produce at least 2 options with distinct trade-offs."
+input:
+  rule: "deadline_vs_scope"
+  severity: "high"
+  detail:
+    total_hours: 320
+    threshold_hours: 240
+    sprint_hours: 160
+    deadline_contents: ["ship in 1 week"]
+    unsized_task_count: 0
+  project:
+    id: "p-sig"
+    title: "Event signup page"
+    goal: "Launch event signup page in one week"
+    deliverables:
+      - {id: "d-signup", title: "Signup form", kind: "feature"}
+      - {id: "d-admin", title: "Admin export", kind: "feature"}
+      - {id: "d-invite", title: "Invite-code gate", kind: "feature"}
+    tasks: []
+    risks: []
+    milestones:
+      - {id: "m-demo", title: "Demo", target_date: "2026-04-24"}
+    constraints:
+      - {id: "c-deadline", kind: "deadline", content: "ship in 1 week"}
+  targets: ["c-deadline", "m-demo"]
+expected:
+  severity_review_any_of: ["medium", "high", "critical"]
+  min_options: 2
+  max_options: 4
+  summary_mentions_any_of:
+    - ["320", "hours", "scope", "deadline", "week"]
+  options_mention_any_of:
+    - ["cut", "defer", "drop", "extend", "push", "split", "reduce"]

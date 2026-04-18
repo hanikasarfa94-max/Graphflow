@@ -1,0 +1,44 @@
+id: deadline-unsized-tasks
+category: deadline_vs_scope
+notes: "Medium severity — deadline exists but many tasks are unsized, so true scope is unknown. Agent should push toward estimating before committing, not raw cuts."
+input:
+  rule: "deadline_vs_scope"
+  severity: "medium"
+  detail:
+    total_hours: 80
+    threshold_hours: 240
+    sprint_hours: 160
+    deadline_contents: ["launch before Q3 kickoff"]
+    unsized_task_count: 6
+  project:
+    id: "p-dash"
+    title: "Internal analytics dashboard"
+    goal: "Launch internal analytics dashboard before Q3 kickoff"
+    deliverables:
+      - {id: "d-dash", title: "Analytics dashboard", kind: "feature"}
+    tasks:
+      - {id: "t-spec", title: "Write metric spec", estimate_hours: 8, assignee_role: "pm", deliverable_id: "d-dash"}
+      - {id: "t-schema", title: "Design warehouse schema", estimate_hours: 16, assignee_role: "data", deliverable_id: "d-dash"}
+      - {id: "t-etl", title: "Set up ETL pipeline", estimate_hours: 24, assignee_role: "data", deliverable_id: "d-dash"}
+      - {id: "t-api", title: "Dashboard query API", estimate_hours: 16, assignee_role: "backend", deliverable_id: "d-dash"}
+      - {id: "t-charts", title: "Chart components", estimate_hours: 16, assignee_role: "frontend", deliverable_id: "d-dash"}
+      - {id: "t-filters", title: "Filter UI", estimate_hours: 0, assignee_role: "frontend", deliverable_id: "d-dash"}
+      - {id: "t-auth", title: "Role-based access", estimate_hours: 0, assignee_role: "backend", deliverable_id: "d-dash"}
+      - {id: "t-export", title: "CSV export", estimate_hours: 0, assignee_role: "frontend", deliverable_id: "d-dash"}
+      - {id: "t-alerts", title: "Threshold alerts", estimate_hours: 0, assignee_role: "backend", deliverable_id: "d-dash"}
+      - {id: "t-docs", title: "User guide", estimate_hours: 0, assignee_role: "docs", deliverable_id: "d-dash"}
+      - {id: "t-qa", title: "QA pass", estimate_hours: 0, assignee_role: "qa", deliverable_id: "d-dash"}
+    risks: []
+    milestones:
+      - {id: "m-q3", title: "Q3 kickoff", target_date: "2026-07-01"}
+    constraints:
+      - {id: "c-deadline", kind: "deadline", content: "launch before Q3 kickoff"}
+  targets: ["c-deadline", "m-q3"]
+expected:
+  severity_review_any_of: ["low", "medium", "high"]
+  min_options: 2
+  max_options: 4
+  summary_mentions_any_of:
+    - ["unsized", "estimate", "size", "unknown", "scope", "6", "task"]
+  options_mention_any_of:
+    - ["estimate", "size", "break", "split", "scope", "defer", "cut", "spike", "timebox"]

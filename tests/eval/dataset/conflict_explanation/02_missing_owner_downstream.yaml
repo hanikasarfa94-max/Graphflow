@@ -1,0 +1,36 @@
+id: missing-owner-with-downstream
+category: missing_owner
+notes: "A task has a specific role but no assignee, and 4 downstream tasks depend on it. Expect high severity review and options that include assigning someone."
+input:
+  rule: "missing_owner"
+  severity: "high"
+  detail:
+    task_id: "t-design"
+    task_title: "Design error states"
+    assignee_role: "design"
+    has_downstream: true
+    downstream_count: 4
+  project:
+    id: "p-mob"
+    title: "Mobile onboarding"
+    goal: "Ship v1 mobile onboarding by end of month"
+    deliverables:
+      - {id: "d-onboard", title: "Onboarding flow", kind: "feature"}
+    tasks:
+      - {id: "t-design", title: "Design error states", estimate_hours: 12, assignee_role: "design", deliverable_id: "d-onboard"}
+      - {id: "t-fe-1", title: "Wire up error UI", estimate_hours: 8, assignee_role: "frontend", deliverable_id: "d-onboard"}
+      - {id: "t-qa-1", title: "QA error states", estimate_hours: 6, assignee_role: "qa", deliverable_id: "d-onboard"}
+      - {id: "t-fe-2", title: "Polish error animations", estimate_hours: 6, assignee_role: "frontend", deliverable_id: "d-onboard"}
+      - {id: "t-qa-2", title: "Regression suite", estimate_hours: 10, assignee_role: "qa", deliverable_id: "d-onboard"}
+    risks: []
+    milestones: []
+    constraints: []
+  targets: ["t-design"]
+expected:
+  severity_review_any_of: ["medium", "high", "critical"]
+  min_options: 2
+  max_options: 4
+  summary_mentions_any_of:
+    - ["error states", "design", "owner", "assignee", "unassigned"]
+  options_mention_any_of:
+    - ["assign", "reassign", "route", "owner", "pair", "skip", "defer", "accept", "delay"]

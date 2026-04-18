@@ -1,0 +1,38 @@
+id: blocked-downstream-critical
+category: blocked_downstream
+notes: "Upstream task has 5 live descendants. Critical severity. Agent should recognize the fan-out and propose splitting, parallelizing, or accepting the risk with a clear trade-off."
+input:
+  rule: "blocked_downstream"
+  severity: "critical"
+  detail:
+    task_id: "t-api"
+    task_title: "Design public API schema"
+    descendant_count: 5
+    descendant_ids: ["t-sdk", "t-fe", "t-docs", "t-qa", "t-release"]
+  project:
+    id: "p-api"
+    title: "Public API v2 launch"
+    goal: "Ship v2 public API with SDK, docs, and sample apps"
+    deliverables:
+      - {id: "d-api", title: "Public API v2", kind: "service"}
+      - {id: "d-sdk", title: "TypeScript SDK", kind: "package"}
+      - {id: "d-docs", title: "Developer docs", kind: "doc"}
+    tasks:
+      - {id: "t-api", title: "Design public API schema", estimate_hours: 32, assignee_role: "backend", deliverable_id: "d-api"}
+      - {id: "t-sdk", title: "Generate SDK from schema", estimate_hours: 16, assignee_role: "backend", deliverable_id: "d-sdk"}
+      - {id: "t-fe", title: "Wire SDK into dashboard", estimate_hours: 20, assignee_role: "frontend", deliverable_id: "d-api"}
+      - {id: "t-docs", title: "Write API reference docs", estimate_hours: 12, assignee_role: "docs", deliverable_id: "d-docs"}
+      - {id: "t-qa", title: "API contract tests", estimate_hours: 10, assignee_role: "qa", deliverable_id: "d-api"}
+      - {id: "t-release", title: "API v2 cutover", estimate_hours: 6, assignee_role: "pm", deliverable_id: "d-api"}
+    risks: []
+    milestones: []
+    constraints: []
+  targets: ["t-api", "t-sdk", "t-fe", "t-docs", "t-qa", "t-release"]
+expected:
+  severity_review_any_of: ["high", "critical"]
+  min_options: 2
+  max_options: 4
+  summary_mentions_any_of:
+    - ["API", "schema", "block", "downstream", "descendant", "5", "fan"]
+  options_mention_any_of:
+    - ["split", "parallel", "freeze", "draft", "stub", "accept", "prioritize", "expedite", "pair", "reassign"]

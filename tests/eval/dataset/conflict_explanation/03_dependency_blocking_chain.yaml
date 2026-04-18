@@ -1,0 +1,38 @@
+id: dependency-blocking-chain
+category: dependency_blocking
+notes: "High-severity risk anchored to an upstream task that fans out to 3 downstream tasks. Agent should acknowledge the chain and propose resolution around unblocking or rerouting."
+input:
+  rule: "dependency_blocking"
+  severity: "high"
+  detail:
+    risk_id: "r-sdk"
+    risk_title: "Production keys not issued"
+    risk_severity: "high"
+    upstream_task_id: "t-sdk-int"
+    upstream_task_title: "Integrate production SDK"
+    downstream_task_ids: ["t-fe", "t-qa", "t-release"]
+    chain_length: 3
+  project:
+    id: "p-sdk"
+    title: "Mobile SDK rollout"
+    goal: "Ship mobile SDK v1 to production"
+    deliverables:
+      - {id: "d-sdk", title: "SDK v1 release", kind: "package"}
+    tasks:
+      - {id: "t-sdk-int", title: "Integrate production SDK", estimate_hours: 24, assignee_role: "backend", deliverable_id: "d-sdk"}
+      - {id: "t-fe", title: "Wire SDK into mobile app", estimate_hours: 16, assignee_role: "frontend", deliverable_id: "d-sdk"}
+      - {id: "t-qa", title: "Run integration QA", estimate_hours: 12, assignee_role: "qa", deliverable_id: "d-sdk"}
+      - {id: "t-release", title: "App store submission", estimate_hours: 8, assignee_role: "pm", deliverable_id: "d-sdk"}
+    risks:
+      - {id: "r-sdk", title: "Production keys not issued", severity: "high"}
+    milestones: []
+    constraints: []
+  targets: ["r-sdk", "t-sdk-int", "t-fe", "t-qa", "t-release"]
+expected:
+  severity_review_any_of: ["medium", "high", "critical"]
+  min_options: 2
+  max_options: 4
+  summary_mentions_any_of:
+    - ["SDK", "keys", "block", "upstream", "downstream", "chain", "production"]
+  options_mention_any_of:
+    - ["escalate", "unblock", "key", "stub", "mock", "route", "reorder", "parallelize", "reassign", "accept"]
