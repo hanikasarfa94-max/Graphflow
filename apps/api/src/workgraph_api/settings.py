@@ -25,6 +25,18 @@ class Settings(BaseSettings):
         default="sqlite+aiosqlite:///./data/workgraph.sqlite",
         description="SQLAlchemy async URL. Swap to postgres+asyncpg for prod.",
     )
+    redis_url: str | None = Field(
+        default=None,
+        description="Optional Redis URL (redis://host:port/0). Enables multi-node WS fanout.",
+    )
+    use_stubs: bool = Field(
+        default=False,
+        description=(
+            "Wire every LLM agent to deterministic stubs instead of DeepSeek. "
+            "Use for demo-day and local UI work — the canonical flow runs "
+            "in under a second and costs nothing."
+        ),
+    )
 
 
 def load_settings() -> Settings:

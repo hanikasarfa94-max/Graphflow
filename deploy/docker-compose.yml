@@ -1,0 +1,92 @@
+# WorkGraph AI — single-node docker-compose for the Aliyun VPS deployment.
+# Run from repo root: `docker compose -f deploy/docker-compose.yml up -d`.
+#
+# The browser talks only to nginx on :80/:443. Nginx proxies / to web:3000
+# and /api, /ws to api:8000. Redis is the multi-node WS fanout — in a
+# single-node deployment it is still useful for persistence + restart
+# survival of the pub/sub channel (see CollabHub.start).
+
+name: workgraph
+
+services:
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--save", "60", "1"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  api:
+    build:
+      context: ..
+      dockerfile: apps/api/Dockerfile
+    restart: unless-stopped
+    environment:
+      WORKGRAPH_ENV: ${WORKGRAPH_ENV:-prod}
+      WORKGRAPH_DATABASE_URL: ${WORKGRAPH_DATABASE_URL:-sqlite+aiosqlite:////data/workgraph.db}
+      WORKGRAPH_REDIS_URL: redis://redis:6379/0
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      WORKGRAPH_LOG_LEVEL: ${WORKGRAPH_LOG_LEVEL:-INFO}
+    volumes:
+      - api-data:/data
+    depends_on:
+      redis:
+        condition: service_healthy
+    expose:
+      - "8000"
+
+  web:
+    build:
+      context: ..
+      dockerfile: apps/web/Dockerfile
+    restart: unless-stopped
+    environment:
+      # The web container talks to the api container over the compose
+      # network. The browser never sees this URL — it hits nginx on 80/443.
+      WORKGRAPH_API_BASE: http://api:8000
+    depends_on:
+      - api
+    expose:
+      - "3000"
+
+  nginx:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./nginx/certs:/etc/nginx/certs:ro
+      - certbot-webroot:/var/www/certbot:ro
+    depends_on:
+      - api
+      - web
+
+  # Issue + renew Let's Encrypt certs via the webroot plugin. Bring this
+  # service up manually the first time: `docker compose run --rm certbot ...`
+  # After issuance, symlink /etc/nginx/certs/fullchain.pem and privkey.pem
+  # to the issued files and reload nginx.
+  certbot:
+    image: certbot/certbot:latest
+    restart: "no"
+    volumes:
+      - ./nginx/certs:/etc/letsencrypt
+      - certbot-webroot:/var/www/certbot
+    entrypoint: /bin/sh -c
+    command: >-
+      "trap exit TERM;
+       while :;
+       do certbot renew --webroot -w /var/www/certbot --quiet;
+          sleep 12h & wait $${!};
+       done"
+
+volumes:
+  api-data:
+  redis-data:
+  certbot-webroot:

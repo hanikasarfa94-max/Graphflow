@@ -341,7 +341,17 @@ Ask only the minimum useful questions required to unblock planning.
 ### Status
 - [ ] not started
 - [ ] in progress
-- [ ] completed
+- [x] completed
+
+### Delivered (2026-04-17)
+- **Versioned schema** — `RequirementRow.version` + `UniqueConstraint(project_id, version)`, `ClarificationQuestionRow` with `(requirement_id, position)` uniqueness. Old rows never mutated (decision 1E).
+- **ClarificationAgent** — `packages/agents/src/workgraph_agents/clarification.py` + `prompts/clarification/v1.md` (prompt_version `2026-04-17.phase4.v1`). 3-question cap enforced at Pydantic layer; overflow sorted by blocking level.
+- **ClarificationService** — `POST /api/projects/{id}/clarify` (generate, idempotent) + `POST /api/projects/{id}/clarify-reply` (answer + v+1 promotion with fresh re-parse). `GET /api/projects/{id}/stage` returns graph-derived stage.
+- **Graph-native stage** — `workgraph_persistence/stage.py` exposes `project_stage(session, project_id)`. No `current_stage` column exists; regression test `test_no_current_stage_column_is_written` greps the source to prove it (1E).
+- **Recovery ladder** — wedged-LLM fault-injection test (`test_clarification_fault_injection.py`) verifies never-500 + `manual_review` + `agent_run_log` + `clarification.generated` event with outcome=manual_review (2C4).
+- **Events** — `clarification.generated`, `clarification.answered`, and `requirement.parsed` (source=`clarification-reply`) carry project_id, requirement_version, counts. `agent_run_log` rows for both agents include prompt_version + attempts + token counts + cache_read_tokens (2C2).
+- **Eval + baseline** — 10 YAML fixtures (canonical, ambiguous, contradiction, clear, bilingual-cn, solution-framed, missing-approver, fused, noise, permission-gap). First live run: **10/10 = 100%**, baseline committed. Cache hits observed on 8/10 (640 tokens cached) — 4A prompt caching validated on DeepSeek (4A).
+- **Canonical E2E** — Phase 4 block `test_canonical_clarification_loop_phase4` runs intake → /clarify → loop through all questions → v+1 promotion → stage assertions. Live pass in ~26s against DeepSeek (3B).
 
 ---
 
@@ -386,7 +396,19 @@ Create stable internal workflow state from parsed and clarified input.
 ### Status
 - [ ] not started
 - [ ] in progress
-- [ ] completed
+- [x] completed
+
+### Delivered (2026-04-17)
+- **Graph schema** — `GoalRow`, `DeliverableRow`, `ConstraintRow`, `RiskRow` share a `_GraphEntityBase` mixin (id, sort_order, status, created_at) and CASCADE-FK to both projects + requirements. Each entity is bound to a specific requirement version, so v+1 rebuilds append a new graph without mutating v1's.
+- **ProjectGraphRepository** — `append_for_requirement` is idempotent per requirement_id (second call returns the existing rows). `list_all` / `list_goals` / `list_deliverables` / `list_constraints` / `list_risks` / `has_entities` cover read + stage integration.
+- **GraphBuilderService** — deterministic projection from `ParsedRequirement`: `goal → 1 Goal`, `scope_items[i] → 1 Deliverable` (kind=feature), `deadline → 1 Constraint` (kind=deadline, severity=high). Risks left empty until later phases can generate them with signal. No second LLM call — keeps Phase 5 eval surface zero and latency sub-10ms.
+- **Inline wiring** — intake.receive calls build_for_requirement after `requirement.parsed` fires; clarify-reply.answer does the same after v+1 promotion. `source` payload disambiguates "intake" vs "clarification-reply". `manual_review` parse_outcome is auto-skipped with `outcome=skipped, reason=no-parse`.
+- **Graph-native stage (1E enforced)** — `project_stage()` now reads graph entity counts. `ready_for_planning` requires `goals>0 AND deliverables>0`; parse-ok without graph becomes the transient `graph_building` stage. `graph_counts` exposed in `StageInfo` for UI/observability. Regression grep test still passes — no `current_stage` column writes anywhere in the tree.
+- **GET /api/projects/{id}/graph** — returns the full graph for the latest requirement version. Separate router (`routers/graph.py`).
+- **Events** — `graph.built` with `{project_id, requirement_id, requirement_version, outcome, source, goal_count, deliverable_count, constraint_count, risk_count}` and ContextVar-bound trace_id. `outcome=skipped` for no-parse, `outcome=ok` for real builds.
+- **Unit tests** — 11 new tests in `apps/api/tests/test_graph.py`: deterministic projection, deadline-constraint emission, manual_review skip, event counts, idempotence, v+1 history preserved, v2 graph.built firing, stage=ready_for_planning requires entities, stage=graph_building when parse-only, /graph endpoint shape, 404 on unknown project. Full API suite: 38/38 green.
+- **Canonical E2E** — Phase 5 block `test_canonical_graph_init_phase5` (live, @eval): intake → GET /graph asserts ≥4 deliverables (invitation/phone/export/conversion), exactly 1 goal, 1 deadline constraint (severity=high), 0 risks; /stage returns ready_for_planning with graph_counts; graph.built event has trace_id + matching counts.
+- **Prompt-contract alignment** — Deliverable.kind vocabulary (feature|api|doc|report|other) and Constraint.kind (deadline|scope|resource|technical|permission|other) match §6.3; Risk severity enum reserved for Phase 8 planning to populate.
 
 ---
 
@@ -436,11 +458,128 @@ Generate a usable delivery plan from confirmed requirement state.
 ### Status
 - [ ] not started
 - [ ] in progress
+- [x] completed
+
+### Delivered (2026-04-17)
+- `PlanningAgent` at `packages/agents/src/workgraph_agents/planning.py`, prompt at `packages/agents/src/workgraph_agents/prompts/planning/v1.md` (PROMPT_VERSION `2026-04-17.phase6.v1`). Pydantic schemas `PlannedTask`, `PlannedDependency` (with `from`/`to` aliases), `PlannedMilestone`, `PlannedRisk`, `ParsedPlan` — all `extra="forbid"`, unique-ref validator on tasks. Recovery ladder matches RequirementAgent/ClarificationAgent: JSON mode → 3-attempt reprompt → empty-plan `manual_review`.
+- ORM rows `TaskRow`, `TaskDependencyRow`, `MilestoneRow` in `packages/persistence/src/workgraph_persistence/orm.py`; `TaskRow`+`MilestoneRow` share `_GraphEntityBase`. Unique constraints on `(requirement_id, sort_order)` for tasks + milestones and `(requirement_id, from_task_id, to_task_id)` for deps.
+- `PlanRepository` (`append_plan`, `has_plan`, `list_all`) — idempotent per requirement version; maps local task `ref` → generated id for dep/milestone resolution. Callers force a rebuild by promoting the requirement version (same model as Phase 5 graph).
+- `PlanningService` at `apps/api/src/workgraph_api/services/planning.py`: loads graph → shapes agent input → validates (`_validate_plan`) → persists → appends new risks (dedup by title) → writes `agent_run_log` → emits `planning.produced`. Validation covers orphan-task, uncovered-deliverable, unknown-task-ref, self-loop, duplicate-edge, and Kahn-based cycle detection. `PlanValidationError` downgrades to `manual_review` with a non-500 response; `NotReadyForPlanning` surfaces as 409 when no deliverables exist.
+- Routers `POST /api/projects/{id}/plan` and `GET /api/projects/{id}/plan` at `apps/api/src/workgraph_api/routers/plan.py`, wired through `deps.get_planning_service`, `main.app.state.planning_service`, and the conftest fixture (now a 6-tuple exposing `plan_agent`).
+- Stage derivation extended: `stage.py` adds `"planned"` and a `plan_counts` dict to `StageInfo`. Stage flips to `planned` once a task row exists on the latest requirement.
+- Tests: 16 unit tests at `apps/api/tests/test_plan.py` (happy-path DAG, idempotence, persistence, stage flip, events, agent_run_log, orphan/cycle/unknown-ref/dangling-dep validation manual_review paths, risks-append, 409 on manual_review parse, 404 on unknown project, GET /plan shape, v2 gets its own plan slot). Fault-injection at `apps/api/tests/test_plan_fault_injection.py` — wedged LLM degrades to `manual_review` with `attempts=3`, zero rows persisted, `planning.produced` event still emits.
+- Eval harness: 6 fixtures at `tests/eval/dataset/planning/*.yaml` covering canonical + b2b + mobile + infra + small-scope + Feishu-integration. `score_planning` + `run_planning` added to `tests/eval/runner.py` with Kahn cycle check, longest-path critical-path detection, required_mentions, every_deliverable_covered. Pytest wrapper at `tests/eval/test_planning_eval.py`. Baseline seeded at `tests/eval/baselines.json` (`planning.pass_rate=0.8333`, note flagged for live re-baseline before merge).
+- Canonical E2E: `test_canonical_plan_phase6` in `tests/e2e/canonical_event_registration.py` asserts ≥6 tasks, backend+frontend+OTP presence, valid DAG, critical path mentions OTP/invitation, every deliverable covered, stage=planned, `planning.produced` with `trace_id` and matching counts, idempotence on second call.
+- Full test suite: 71 passing (0 regressions on Phase 2–5 tests).
+
+### Deferred to Phase 6.5 / later
+- Prompt caching p50 <1.5s warm assertion (4A) — deferred until live DeepSeek eval run establishes warm/cold numbers; prompt structure is cache-friendly (system message stable across calls).
+- Live-baseline commit for planning eval — placeholder baseline seeded; first `DEEPSEEK_API_KEY`-backed run should save a real `pass_rate`.
+
+---
+
+## Phase 7' — AI Surface (web UI for the intake → plan loop)
+
+### Objective
+Make the AI core demoable in a browser. Every backend flow delivered in Phases 2–6 should be exercisable by a non-technical user through the web app, deployed on the Aliyun VPS over HTTPS.
+
+### Scope
+- Next.js app at `apps/web` — project list, intake, graph viz, plan DAG, clarify panel, live event stream.
+- Mock auth (username + password, self-register; session cookie). No SSO, no email verification.
+- Deploy: docker-compose on Aliyun VPS — nginx (TLS via certbot) → Next.js + FastAPI + Postgres + Redis.
+
+### Tasks
+- Scaffold `apps/web` pages: `/login`, `/projects`, `/projects/[id]/graph`, `/projects/[id]/plan`, `/projects/[id]/clarify`, `/projects/[id]/events`.
+- Mock auth: `UserRow` ORM, `POST /api/auth/register` (username + bcrypt pwd), `POST /api/auth/login` (issues httpOnly session cookie), `GET /api/auth/me`. No password reset, no email confirmation.
+- Intake page: textarea + submit → calls `/api/intake/message`, then redirects to project page.
+- Graph view: renders goals/deliverables/constraints/risks as grouped cards. Updates on `graph.built` event.
+- Plan DAG: renders tasks + dependencies as a DAG (React Flow or `dagre-d3`). Nodes colored by `assignee_role`, edges show critical path. Updates on `planning.produced`.
+- Clarify panel: lists unanswered questions, accepts answers inline, shows the v+1 requirement after all answered.
+- Live event stream: `GET /api/events/stream` (SSE) tails the `events` table filtered by `project_id`; UI shows trace_id + event name + payload summary.
+- Dockerfile for API and for web (standalone Next.js build). `docker-compose.yml` wires API + web + Postgres + Redis. nginx config with certbot sidecar.
+- CI build: multi-arch image (linux/amd64) pushed to a registry (or tarball shipped via scp).
+
+### Acceptance Criteria
+- every Phase 2–6 flow reachable from the browser — no manual `curl` needed for demo.
+- mock auth: self-register → login → session cookie → protected routes return 401 without cookie; logout clears cookie.
+- graph view renders ≥4 deliverables for the canonical requirement, shows deadline constraint badge.
+- plan DAG renders ≥6 tasks with dependency edges, no edge crossings for the canonical scenario; backend/frontend/OTP tasks visually distinct.
+- clarify panel: answering every question promotes requirement to v2 and re-renders graph + plan.
+- SSE stream pushes `intake.received`, `graph.built`, `planning.produced` within 500ms of the backend event write.
+- HTTPS deploy accessible at a public URL served from the Aliyun VPS; nginx forwards `/api/*` to the Python API and `/*` to Next.js.
+- unit + integration tests exist and pass (auth flows, session middleware, SSE stream closes cleanly on disconnect) (2C1).
+- `auth.registered` / `auth.login` events with `trace_id` (2C2).
+- fault-injection test: SSE client disconnect mid-stream doesn't leak server resources; measured via tracked-connection count (2C4).
+- canonical E2E extended: Playwright run of the full flow (register → intake → clarify all → plan → see DAG) (3B).
+
+### Validation
+- Playwright E2E on the canonical scenario: fresh browser, register a user, drop in canonical requirement text, answer clarifications, verify plan DAG renders ≥6 tasks.
+- Multi-tab smoke (same user): change in one tab (answer a clarification) appears in the other via SSE inside 1s.
+- Deploy rehearsal: full `docker-compose up --build` on the VPS, HTTPS reachable from a browser, TLS cert valid.
+
+### Status
+- [ ] not started
+- [ ] in progress
 - [ ] completed
 
 ---
 
-## Phase 7 — Feishu State Sync
+## Phase 7'' — Collab Primitives + AI-Enhanced IM
+
+### Objective
+Make the project multi-user collaborative with realtime sync, and ship a lightweight project-scoped IM that the AI pre-processes so communication surfaces decisions, blockers, and scope changes back into the graph.
+
+### Scope
+- Realtime sync: WebSocket + Redis pub/sub. Any state change (intake, clarify answer, plan write, assignment, comment, message) fan-outs to all connected clients of the affected project.
+- Assignments: Tasks and Deliverables can be assigned to User rows. Unassign + reassign both supported.
+- Comments: threaded comments on Tasks, Deliverables, and Risks. Markdown body, author, created_at.
+- Notifications: in-app bell (unread count + list). Triggered by: assigned to task, mentioned in comment, message in a project the user is a member of.
+- IM: per-project chat room. Plain text + markdown, no files/images. Message history persisted.
+- **AI-IM pre-processor** (new agent, `IMAssistAgent`): on every inbound message, classifies — (a) chit-chat (ignore), (b) question (surface the asker + tag the relevant task/deliverable), (c) decision (propose a graph update the team can accept), (d) blocker (open a risk or flag a task). AI output is a side-channel suggestion, never auto-applied.
+- Project membership: explicit Project ↔ User join. Creator auto-joins; can invite by username.
+
+### Tasks
+- `UserRow`, `ProjectMemberRow`, `AssignmentRow`, `CommentRow`, `MessageRow`, `NotificationRow`, `IMSuggestionRow` in persistence.
+- `AssignmentService`, `CommentService`, `MessageService`, `NotificationService`.
+- WebSocket endpoint `/ws/projects/{id}` — auth via session cookie, subscribes the connection to a Redis channel keyed by `project_id`. Every service that mutates state publishes a delta to the Redis channel.
+- Broadcast protocol: `{type: "graph" | "plan" | "assignment" | "comment" | "message" | "suggestion" | "notification", payload: {...}}` — clients reducer-merge into local state.
+- `IMAssistAgent` at `packages/agents/src/workgraph_agents/im_assist.py`, prompt at `packages/agents/src/workgraph_agents/prompts/im_assist/v1.md`. Same recovery ladder as other agents. Input: message text + project graph snapshot + plan snapshot. Output: `IMSuggestion { kind: "none" | "tag" | "decision" | "blocker", targets: [task_ids/deliverable_ids], proposal?: {...}, confidence }`.
+- UI: project detail adds an IM pane (fixed right sidebar), an assignment column on task cards, a comments drawer per task/deliverable/risk, and a notifications bell in the top nav.
+- Rate limiting on WS: max 10 messages/sec per user per project; beyond that, drop + warn.
+- Presence: show who else is viewing the project (green dot + avatar).
+
+### Acceptance Criteria
+- two browsers logged in as different users, both on the same project: user A answers a clarification → user B's clarify panel updates within 500ms; user A plans → user B's DAG redraws within 500ms; user A assigns task to user B → user B's notification bell increments within 500ms.
+- comment on a task persists, is visible to all members, and triggers a notification for the task's assignee (if any) and for mentioned users (`@username`).
+- IM messages persist and stream to all current project members; reconnecting pulls the last 100 messages.
+- AI-IM pre-processor runs on every message that is ≥5 words; produces an `IMSuggestion` row with kind + confidence; UI renders a subtle "Claude suggests: ..." chip next to the message with accept/dismiss actions.
+- accepting a `decision`-kind suggestion triggers the graph update (e.g., marks a deliverable `dropped`, updates a constraint) — never auto-applied.
+- accepting a `blocker`-kind suggestion opens a Risk row with the message text as content.
+- mock auth still works end-to-end with session cookies carried through WebSocket upgrade.
+- WS graceful handling: server restart → clients auto-reconnect with backoff; disconnect is reflected in presence within 2s.
+- unit + integration tests exist and pass (assignment CRUD, comment threading, notification dedup, WS auth, WS broadcast, IM suggestion accept/dismiss) (2C1).
+- `assignment.changed` / `comment.posted` / `message.posted` / `im_suggestion.produced` events with `trace_id` (2C2).
+- IMAssistAgent eval suite passes ≥80% via Phase 2.5 harness — 6+ fixtures covering chit-chat, question, decision, blocker (3A).
+- LLM failure recovery on IMAssistAgent: JSON mode → 3-attempt reprompt → `manual_review` (suggestion kind=`none`, never blocks the message). Fault-injection test (2C4).
+- prompt caching enabled on IMAssistAgent; cache-hit assertion + p50 <800ms warm (conservative — IM is user-visible) (4A).
+- prompts stored at `packages/agents/prompts/im_assist/v<N>.md` (2C3).
+- canonical E2E extended: Playwright two-browser scenario — user A and user B chat, a decision message triggers a suggestion, user B accepts, graph update lands in both views (3B).
+
+### Validation
+- Two-tab Playwright run: create project in tab A, invite user B, open tab B, both tabs stay in sync through intake → clarify → plan → assignment → comment → chat.
+- Message fault-tolerance: send 20 messages/sec from a scripted client, verify rate limiter trims to 10/sec and no messages dropped on the persisted side up to the limit.
+- IM suggestion smoke: seed 4 canonical messages (1 chit-chat, 1 question, 1 decision, 1 blocker); assert agent classifies each correctly; verify UI renders each suggestion kind; verify accept actions mutate the graph as specified.
+
+### Status
+- [ ] not started
+- [ ] in progress
+- [ ] completed
+
+---
+
+## Phase 7 — Feishu State Sync (superseded, deferred post-competition)
+
+> **2026-04-17 pivot:** replaced by Phase 7' + 7''. Build a custom web surface + lightweight collab platform (no OA / license mgmt) instead of adapting to the Feishu Base/Docs/Messages API. Feishu pain was real (tenant provisioning 1–4 weeks for non-mainland accounts, Base/Docs/Messages SDK quirks, rate limits) and Feishu's core collab primitives are reproducible without its enterprise moat. Keep this phase as reference — revisit post-competition if Feishu-native distribution becomes a commercial priority.
 
 ### Objective
 Make the workflow visible in Feishu.
@@ -483,9 +622,7 @@ Make the workflow visible in Feishu.
 - run canonical E2E fixture; Phase 7 assertions pass
 
 ### Status
-- [ ] not started
-- [ ] in progress
-- [ ] completed
+- [x] superseded by Phase 7' + 7'' (2026-04-17)
 
 ---
 
@@ -533,7 +670,7 @@ Detect delivery conflicts before humans need a meeting.
 ### Status
 - [ ] not started
 - [ ] in progress
-- [ ] completed
+- [x] completed
 
 ---
 
@@ -576,7 +713,7 @@ Allow humans to resolve critical tradeoffs and update workflow state.
 ### Status
 - [ ] not started
 - [ ] in progress
-- [ ] completed
+- [x] completed
 
 ---
 
@@ -625,7 +762,7 @@ Generate final delivery output based on current approved project state.
 ### Status
 - [ ] not started
 - [ ] in progress
-- [ ] completed
+- [x] completed
 
 ---
 
@@ -743,7 +880,7 @@ When an agent raises `manual_review` (per 2C4), canvas shows a calm amber card (
 ### Status
 - [ ] not started
 - [ ] in progress
-- [ ] completed
+- [x] completed
 
 ---
 
@@ -786,7 +923,14 @@ This phase shrinks per 2C2. Per-phase observability, retry, and LLM failure reco
 ### Status
 - [ ] not started
 - [ ] in progress
-- [ ] completed
+- [x] completed (scoped down — Inngest migration deferred as out-of-scope infra
+  change; everything else landed: `agent_run_log` now wired across all six LLM
+  services (requirement, clarification, planning, conflict_explanation,
+  delivery, im_assist) with trace_id from middleware; `GET
+  /api/observability/{health,agents,trace/{id}}` aggregation endpoints; `/health`
+  web panel with rolling window buttons + per-agent cards; 1E guardrail test
+  pre-existing and green; `apps/api/tests/test_observability.py` covers wiring
+  + all three endpoints)
 
 ---
 
@@ -830,7 +974,15 @@ Make the demo deterministic and competition-ready.
 ### Status
 - [ ] not started
 - [ ] in progress
-- [ ] completed
+- [x] completed
+
+### Landed (2026-04-18)
+- Canonical Python E2E fixture at `apps/api/tests/test_canonical_event_registration.py` — drives register → intake → clarification (all questions answered → v+1) → plan → conflict recheck → decision → delivery. With stub agents, runs in ~0.4s per case (5 cases in ~1.6s total); 90s demo-day budget asserted inside the test.
+- Reusable seed walker at `apps/api/src/workgraph_api/demo_seed.py` — the shared canonical-walk helper backing both the Python E2E and the demo seed endpoint. Returns a `SeedResult` with project_id, requirement_version, clarification_ids, conflict_id, decision_id, delivery_id, delivery_trace_id, completed_scope_items, elapsed_seconds.
+- `POST /api/demo/seed` at `apps/api/src/workgraph_api/routers/demo.py` — dev/staging-only endpoint that drives a fresh canonical project in one call via an internal ASGI client. Returns the SeedResult shape. Hard-gated to 404 when `WORKGRAPH_ENV=prod`, tested via `test_demo_seed_endpoint_is_disabled_in_prod`.
+- Playwright demo-lock spec at `apps/web/tests/e2e/demo-lock.spec.ts` — POSTs the seed endpoint then walks overview → graph → delivery → health dashboard, asserting seeded state renders without further interaction. 90s Playwright budget (separate from the per-demo 7-minute live-demo budget).
+- Feishu-mirror fallback (1H): deferred per memory decision 2026-04-17 — canonical demo runs on the internal console surface only; no live Feishu integration tested.
+- Full API suite: 108 passing across every phase test file (excluding known-flaky test_collab.py); zero regressions from Phase 12 → 13 wiring.
 
 ---
 
