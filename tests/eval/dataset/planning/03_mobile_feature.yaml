@@ -1,0 +1,22 @@
+id: mobile-feature-push
+category: mobile
+notes: "Push notification feature on existing mobile app — native + backend work."
+input:
+  goal: "Add push notifications for order status changes"
+  deliverables:
+    - { id: "D1", title: "push token registration", kind: "feature" }
+    - { id: "D2", title: "status change notification", kind: "feature" }
+    - { id: "D3", title: "user preference opt-out", kind: "feature" }
+  constraints:
+    - { id: "C1", kind: "platform", content: "iOS and Android", severity: "medium" }
+  existing_risks:
+    - { title: "FCM quota limits", content: "Previous projects hit FCM rate limits", severity: "medium" }
+expected:
+  min_tasks: 5
+  max_tasks: 10
+  required_mentions:
+    - ["backend", "api"]
+    - ["mobile", "ios", "android", "client"]
+    - ["fcm", "apns", "push", "notification"]
+  forbid_cycle: true
+  every_deliverable_covered: true

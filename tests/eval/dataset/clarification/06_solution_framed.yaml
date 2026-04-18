@@ -1,0 +1,22 @@
+id: solution-framed
+category: solution-framed
+notes: "User asked for a Redis migration but not what business outcome it unblocks."
+input:
+  raw_text: |
+    Move our session store from Postgres to Redis. Use AWS ElastiCache.
+  parsed:
+    goal: "Move session store from Postgres to Redis on AWS ElastiCache"
+    scope_items:
+      - "migrate session store off Postgres"
+      - "stand up AWS ElastiCache Redis"
+    deadline: null
+    open_questions:
+      - "What business outcome is this unblocking (latency, cost, scale)?"
+    confidence: 0.55
+expected:
+  min_questions: 1
+  max_questions: 3
+  any_question_mentions:
+    - ["why", "outcome", "motivation", "goal", "problem", "latency", "scale"]
+  forbid_patterns:
+    - "anything else"

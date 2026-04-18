@@ -1,0 +1,21 @@
+id: internal-tooling-dashboard
+category: b2b
+notes: "Internal ops dashboard — no external integrations, backend-heavy."
+input:
+  goal: "Build an internal ops dashboard for refund workflows"
+  deliverables:
+    - { id: "D1", title: "refund search", kind: "feature" }
+    - { id: "D2", title: "refund approval queue", kind: "feature" }
+    - { id: "D3", title: "audit log export", kind: "feature" }
+  constraints:
+    - { id: "C1", kind: "access", content: "Ops team only; SSO required", severity: "high" }
+  existing_risks: []
+expected:
+  min_tasks: 5
+  max_tasks: 10
+  required_mentions:
+    - ["backend", "api", "server"]
+    - ["frontend", "dashboard", "ui"]
+    - ["auth", "sso", "permission"]
+  forbid_cycle: true
+  every_deliverable_covered: true

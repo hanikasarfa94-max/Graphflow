@@ -1,0 +1,25 @@
+id: ambiguous-scope
+category: ambiguous
+notes: "Scope mentions 'export' without specifying what; clarifier should probe."
+input:
+  raw_text: |
+    Build a dashboard that shows weekly usage. Need export and filter
+    capability. Launch by end of Q2.
+  parsed:
+    goal: "Build a weekly usage dashboard"
+    scope_items:
+      - "weekly usage dashboard"
+      - "export capability"
+      - "filter capability"
+    deadline: "end of Q2"
+    open_questions:
+      - "What data granularity should the export support?"
+      - "Which fields should be filterable?"
+    confidence: 0.6
+expected:
+  min_questions: 1
+  max_questions: 3
+  any_question_mentions:
+    - ["export", "format", "csv", "xlsx", "file", "data"]
+  forbid_patterns:
+    - "anything else"

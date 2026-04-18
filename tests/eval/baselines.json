@@ -3,5 +3,27 @@
     "prompt_version": "2026-04-17.phase3.v1",
     "pass_rate": 1.0,
     "total": 12
+  },
+  "clarification": {
+    "prompt_version": "2026-04-17.phase4.v1",
+    "pass_rate": 1.0,
+    "total": 10
+  },
+  "planning": {
+    "prompt_version": "2026-04-17.phase6.v1",
+    "pass_rate": 0.8333,
+    "total": 6,
+    "note": "Baseline pending live DeepSeek run. Initialized to ≥80% AC gate; overwrite with `uv run python -m tests.eval.runner --agent planning --save-baseline` before merging drift checks."
+  },
+  "im_assist": {
+    "prompt_version": "2026-04-17.phase7p.v1",
+    "pass_rate": 0.8333,
+    "total": 6,
+    "note": "Baseline pending live DeepSeek run. Initialized to ≥80% AC gate (5/6 passing); overwrite with `uv run python -m tests.eval.runner --agent im_assist --save-baseline` before merging drift checks."
+  },
+  "conflict_explanation": {
+    "prompt_version": "2026-04-17.phase8.v1",
+    "pass_rate": 1.0,
+    "total": 6
   }
 }

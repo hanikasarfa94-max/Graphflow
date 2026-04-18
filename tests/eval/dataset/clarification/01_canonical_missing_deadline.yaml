@@ -1,0 +1,26 @@
+id: canonical-missing-deadline
+category: canonical
+notes: "Canonical scope but deadline missing — clarifier should ask the deadline."
+input:
+  raw_text: |
+    We need to launch an event registration page. It needs invitation code
+    validation, phone number validation, admin export, and conversion tracking.
+  parsed:
+    goal: "Launch an event registration page"
+    scope_items:
+      - "invitation code validation"
+      - "phone number validation"
+      - "admin export"
+      - "conversion tracking"
+    deadline: null
+    open_questions:
+      - "When does this need to be live?"
+    confidence: 0.75
+expected:
+  min_questions: 1
+  max_questions: 3
+  any_question_mentions:
+    - ["deadline", "when", "live", "launch date", "by when"]
+  forbid_patterns:
+    - "anything else"
+    - "can you clarify"

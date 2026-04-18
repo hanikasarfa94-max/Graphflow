@@ -1,0 +1,20 @@
+id: bilingual-cn
+category: bilingual
+notes: "Chinese input, missing approver and launch audience."
+input:
+  raw_text: |
+    我们要在 5 月初上线一个会员签到活动页面,支持扫码签到和积分发放。
+  parsed:
+    goal: "上线一个会员签到活动页面"
+    scope_items:
+      - "扫码签到"
+      - "积分发放"
+    deadline: "5 月初"
+    open_questions:
+      - "签到规则如何定义?"
+    confidence: 0.7
+expected:
+  min_questions: 1
+  max_questions: 3
+  forbid_patterns:
+    - "anything else"

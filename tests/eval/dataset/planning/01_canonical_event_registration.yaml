@@ -1,0 +1,25 @@
+id: canonical-event-registration
+category: canonical
+notes: "Canonical competition scenario — registration page with OTP, admin export, tracking."
+input:
+  goal: "Launch an event registration page"
+  deliverables:
+    - { id: "D-INVITE", title: "invitation code validation", kind: "feature" }
+    - { id: "D-PHONE", title: "phone number validation", kind: "feature" }
+    - { id: "D-EXPORT", title: "admin export", kind: "feature" }
+    - { id: "D-TRACKING", title: "conversion tracking", kind: "feature" }
+  constraints:
+    - { id: "C1", kind: "deadline", content: "Launch by 2026-05-01", severity: "high" }
+  existing_risks: []
+expected:
+  min_tasks: 6
+  max_tasks: 12
+  required_mentions:
+    - ["backend", "api", "server"]
+    - ["frontend", "ui", "page", "form"]
+    - ["otp", "sms", "verification", "code"]
+  forbid_cycle: true
+  every_deliverable_covered: true
+  critical_path_any_of:
+    - ["otp", "sms", "phone"]
+    - ["invitation", "code validation"]

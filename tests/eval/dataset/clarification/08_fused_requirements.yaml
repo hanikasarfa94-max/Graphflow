@@ -1,0 +1,23 @@
+id: fused-requirements
+category: fused
+notes: "Two unrelated deliverables in one request — clarifier should ask about split."
+input:
+  raw_text: |
+    Build a mobile push notification system and also redesign the signup form
+    for conversion optimization.
+  parsed:
+    goal: "Deliver push notifications and a redesigned signup form"
+    scope_items:
+      - "mobile push notification system"
+      - "signup form redesign for conversion"
+    deadline: null
+    open_questions:
+      - "Should these ship as one project or separate initiatives?"
+    confidence: 0.5
+expected:
+  min_questions: 1
+  max_questions: 3
+  any_question_mentions:
+    - ["separate", "split", "one project", "two projects", "priority", "scope"]
+  forbid_patterns:
+    - "anything else"

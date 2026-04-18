@@ -1,0 +1,19 @@
+id: small-scope-tight-deadline
+category: small
+notes: "Tight 2-deliverable scope — plan should stay lean but still hit min task count."
+input:
+  goal: "Add email subscription preference to user profile"
+  deliverables:
+    - { id: "D1", title: "user preference form", kind: "feature" }
+    - { id: "D2", title: "unsubscribe link in emails", kind: "feature" }
+  constraints:
+    - { id: "C1", kind: "deadline", content: "Ship in 2 weeks", severity: "medium" }
+  existing_risks: []
+expected:
+  min_tasks: 3
+  max_tasks: 7
+  required_mentions:
+    - ["backend", "api"]
+    - ["frontend", "form", "ui"]
+  forbid_cycle: true
+  every_deliverable_covered: true

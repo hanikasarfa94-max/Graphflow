@@ -1,0 +1,23 @@
+id: data-migration-project
+category: infra
+notes: "Data migration project — staged rollout, backend-dominant."
+input:
+  goal: "Migrate customer records from legacy MySQL to Postgres"
+  deliverables:
+    - { id: "D1", title: "schema translation tool", kind: "tool" }
+    - { id: "D2", title: "dual-write adapter", kind: "integration" }
+    - { id: "D3", title: "cutover runbook", kind: "doc" }
+  constraints:
+    - { id: "C1", kind: "downtime", content: "Max 30 minutes downtime", severity: "high" }
+    - { id: "C2", kind: "data-loss", content: "Zero data loss required", severity: "high" }
+  existing_risks:
+    - { title: "Schema drift", content: "Legacy schema has undocumented triggers", severity: "high" }
+expected:
+  min_tasks: 6
+  max_tasks: 12
+  required_mentions:
+    - ["backend", "migration", "script"]
+    - ["postgres", "database", "db"]
+    - ["test", "validation", "verify", "dry-run"]
+  forbid_cycle: true
+  every_deliverable_covered: true

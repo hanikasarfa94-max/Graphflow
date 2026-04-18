@@ -1,0 +1,22 @@
+id: feishu-integration-adapter
+category: integration
+notes: "Feishu integration adapter — requires token mgmt, webhook, and bot messaging."
+input:
+  goal: "Integrate with Feishu for project-sync notifications"
+  deliverables:
+    - { id: "D1", title: "oauth token mgmt for Feishu app", kind: "integration" }
+    - { id: "D2", title: "webhook receiver for Feishu events", kind: "integration" }
+    - { id: "D3", title: "bot-card message renderer", kind: "feature" }
+  constraints:
+    - { id: "C1", kind: "api-limit", content: "Feishu API 200 rpm per tenant", severity: "medium" }
+  existing_risks:
+    - { title: "Feishu API schema drift", content: "Feishu endpoints change without notice", severity: "medium" }
+expected:
+  min_tasks: 5
+  max_tasks: 12
+  required_mentions:
+    - ["backend", "api", "server"]
+    - ["oauth", "token", "auth"]
+    - ["webhook", "event"]
+  forbid_cycle: true
+  every_deliverable_covered: true

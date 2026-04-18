@@ -9,14 +9,19 @@ from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from workgraph_agents import RequirementAgent
 from workgraph_domain import EventBus, IntakeResult, Project, Requirement
+from workgraph_observability import get_trace_id
 from workgraph_persistence import (
     AgentRunLogRepository,
     DuplicateIntakeError,
     IntakeRepository,
     ProjectRow,
+    RequirementRepository,
     RequirementRow,
     session_scope,
 )
+
+from .graph_builder import GraphBuilderService
+from .project import ProjectService
 
 _log = logging.getLogger("workgraph.api.intake")
 
@@ -36,10 +41,16 @@ class IntakeService:
         sessionmaker: async_sessionmaker,
         event_bus: EventBus,
         agent: RequirementAgent | None = None,
+        graph_builder: GraphBuilderService | None = None,
+        project_service: ProjectService | None = None,
     ) -> None:
         self._sessionmaker = sessionmaker
         self._event_bus = event_bus
         self._agent = agent or RequirementAgent()
+        self._graph_builder = graph_builder or GraphBuilderService(
+            sessionmaker, event_bus
+        )
+        self._project_service = project_service
 
     async def receive(
         self,
@@ -49,6 +60,7 @@ class IntakeService:
         title: str,
         raw_text: str,
         payload: dict[str, Any],
+        creator_user_id: str | None = None,
     ) -> IntakeResult:
         # 1) Create (or hit dedup) atomically.
         async with session_scope(self._sessionmaker) as session:
@@ -76,13 +88,16 @@ class IntakeService:
                         select(ProjectRow).where(ProjectRow.id == dup.existing_project_id)
                     )
                 ).scalar_one()
-                requirement_row = (
-                    await session.execute(
-                        select(RequirementRow).where(
-                            RequirementRow.project_id == dup.existing_project_id
-                        )
-                    )
-                ).scalar_one()
+                # Dedup: return the LATEST requirement version for the project,
+                # not whichever row happens to come first. Clarification-reply
+                # promotes v1 → v2+, so a naive fetch would return stale parse.
+                requirement_row = await RequirementRepository(
+                    session
+                ).latest_for_project(dup.existing_project_id)
+                assert requirement_row is not None, (
+                    f"dedup hit for project {dup.existing_project_id!r} "
+                    "but no RequirementRow exists"
+                )
                 deduped = True
 
             project = Project.model_validate(project_row)
@@ -101,6 +116,13 @@ class IntakeService:
                 "deduplicated": deduped,
             },
         )
+
+        # Bind the authenticated creator so they auto-join the project and
+        # can see it in /projects. Idempotent — dedup path is safe.
+        if creator_user_id is not None and self._project_service is not None:
+            await self._project_service.bind_creator(
+                project_id=project_id, user_id=creator_user_id
+            )
 
         # 2) On dedup, don't re-parse — the first intake already wrote parsed_json.
         if deduped:
@@ -130,7 +152,7 @@ class IntakeService:
                 agent="requirement",
                 prompt_version=self._agent.prompt_version,
                 project_id=project_id,
-                trace_id=None,  # ContextVar-fed trace_id arrives in Phase 4+
+                trace_id=get_trace_id(),
                 outcome=outcome.outcome,
                 attempts=outcome.attempts,
                 latency_ms=outcome.result.latency_ms,
@@ -155,6 +177,17 @@ class IntakeService:
                 "scope_count": len(outcome.parsed.scope_items),
                 "deadline": outcome.parsed.deadline,
             },
+        )
+
+        # 6) Phase 5 — project parsed requirement onto graph entities.
+        # Skipped automatically if outcome == manual_review.
+        await self._graph_builder.build_for_requirement(
+            project_id=project_id,
+            requirement_id=requirement_id,
+            requirement_version=refreshed.version,
+            parsed=outcome.parsed,
+            parse_outcome=outcome.outcome,
+            source="intake",
         )
 
         return IntakeResult(

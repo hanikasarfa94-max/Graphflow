@@ -19,10 +19,30 @@ class Requirement(BaseModel):
 
     id: str
     project_id: str
+    version: int = 1
     raw_text: str = Field(min_length=1)
     parsed_json: dict | None = None
     parse_outcome: str | None = None
     parsed_at: datetime | None = None
+    created_at: datetime
+
+
+class ClarificationQuestion(BaseModel):
+    """One outstanding clarification attached to a requirement version.
+
+    `answer` is null until the user replies. The Clarification stage ends
+    when every question attached to the latest requirement has an answer
+    (see workgraph_persistence.stage.project_stage — decision 1E).
+    """
+
+    model_config = ConfigDict(from_attributes=True, extra="forbid")
+
+    id: str
+    requirement_id: str
+    position: int
+    question: str = Field(min_length=1)
+    answer: str | None = None
+    answered_at: datetime | None = None
     created_at: datetime
 
 

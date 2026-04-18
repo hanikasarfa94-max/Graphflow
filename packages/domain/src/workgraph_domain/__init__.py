@@ -1,4 +1,10 @@
 from .events import EventBus
-from .models import IntakeResult, Project, Requirement
+from .models import ClarificationQuestion, IntakeResult, Project, Requirement
 
-__all__ = ["EventBus", "IntakeResult", "Project", "Requirement"]
+__all__ = [
+    "EventBus",
+    "ClarificationQuestion",
+    "IntakeResult",
+    "Project",
+    "Requirement",
+]

@@ -39,6 +39,14 @@ data/*.sqlite
 data/*.sqlite-journal
 data/*.sqlite-wal
 data/*.sqlite-shm
+apps/web/data/*.sqlite
+apps/web/data/*.sqlite-journal
+apps/web/data/*.sqlite-wal
+apps/web/data/*.sqlite-shm
+
+# Playwright run artifacts
+apps/web/test-results/
+apps/web/playwright-report/
 
 # uv lock (commit once stable; ignore during flux)
 # uv.lock

@@ -1,0 +1,21 @@
+id: permission-gap
+category: permissions
+notes: "Admin action mentioned without permission scope."
+input:
+  raw_text: |
+    Add an admin button that lets the support team refund any order.
+  parsed:
+    goal: "Enable support-team refunds via an admin action"
+    scope_items:
+      - "admin refund button"
+    deadline: null
+    open_questions:
+      - "Which roles can issue refunds, with what monetary cap?"
+    confidence: 0.5
+expected:
+  min_questions: 1
+  max_questions: 3
+  any_question_mentions:
+    - ["role", "permission", "cap", "limit", "who", "approval", "audit"]
+  forbid_patterns:
+    - "anything else"

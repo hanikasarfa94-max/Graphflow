@@ -8,8 +8,8 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from workgraph_domain import IntakeResult
 
-from workgraph_api.deps import get_intake_service
-from workgraph_api.services import IntakeService
+from workgraph_api.deps import get_intake_service, maybe_user
+from workgraph_api.services import AuthenticatedUser, IntakeService
 
 router = APIRouter(prefix="/api/intake", tags=["intake"])
 
@@ -39,6 +39,7 @@ class ApiIntakeRequest(BaseModel):
 async def post_message(
     body: ApiIntakeRequest,
     service: IntakeService = Depends(get_intake_service),
+    user: AuthenticatedUser | None = Depends(maybe_user),
 ) -> IntakeResult:
     source_event_id = body.source_event_id or f"api-{uuid4().hex}"
     return await service.receive(
@@ -47,6 +48,7 @@ async def post_message(
         title=body.title or _default_title(body.text),
         raw_text=body.text,
         payload={"text": body.text, "title": body.title},
+        creator_user_id=user.id if user else None,
     )
 
 

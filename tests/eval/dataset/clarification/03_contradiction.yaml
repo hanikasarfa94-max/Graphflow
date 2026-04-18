@@ -1,0 +1,24 @@
+id: contradiction
+category: contradiction
+notes: "Input contains a contradiction — clarifier MUST name it in a question."
+input:
+  raw_text: |
+    We need a fully automated signup flow. Every lead must be manually
+    approved by the sales team before activation.
+  parsed:
+    goal: "Ship an automated signup flow"
+    scope_items:
+      - "automated signup flow"
+      - "manual lead approval by sales"
+    deadline: null
+    open_questions:
+      - "Is the intent fully automated signup, or is a manual approval step required?"
+    confidence: 0.45
+expected:
+  min_questions: 1
+  max_questions: 3
+  any_question_mentions:
+    - ["automated", "manual", "approval", "contradiction", "both", "conflict"]
+  has_high_blocking: true
+  forbid_patterns:
+    - "anything else"

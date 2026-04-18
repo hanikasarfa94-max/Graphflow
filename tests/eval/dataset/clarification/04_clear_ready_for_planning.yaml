@@ -1,0 +1,24 @@
+id: clear-ready-for-planning
+category: clear
+notes: "Clear, well-scoped request — clarifier should return 0-1 question at most."
+input:
+  raw_text: |
+    Ship a public RSS feed for the blog at /feed.xml by next Friday (2026-04-24).
+    Include only published posts from the last 90 days, title + slug + published_at,
+    UTF-8, Atom 1.0 format.
+  parsed:
+    goal: "Ship a public Atom RSS feed for the blog"
+    scope_items:
+      - "public Atom 1.0 feed at /feed.xml"
+      - "published posts from last 90 days"
+      - "include title, slug, published_at"
+      - "UTF-8 encoding"
+    deadline: "2026-04-24"
+    open_questions: []
+    confidence: 0.9
+expected:
+  min_questions: 0
+  max_questions: 1
+  forbid_patterns:
+    - "anything else"
+    - "can you clarify"

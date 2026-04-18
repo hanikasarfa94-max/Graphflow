@@ -1,0 +1,20 @@
+id: vague-noise
+category: noise
+notes: "Chat noise parse; clarifier must ask concrete questions to recover scope."
+input:
+  raw_text: "fyi we should prob look at the onboarding thing by Fri, thx"
+  parsed:
+    goal: "Look at onboarding"
+    scope_items: []
+    deadline: "Fri"
+    open_questions:
+      - "What specific aspect of onboarding needs attention?"
+    confidence: 0.25
+expected:
+  min_questions: 2
+  max_questions: 3
+  any_question_mentions:
+    - ["what", "which", "specific", "onboarding", "problem"]
+  has_high_blocking: true
+  forbid_patterns:
+    - "anything else"

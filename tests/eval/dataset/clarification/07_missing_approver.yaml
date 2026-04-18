@@ -1,0 +1,22 @@
+id: missing-approver
+category: missing-owner
+notes: "Launch request from a PM without saying who signs off."
+input:
+  raw_text: |
+    Please ship the new pricing page by end of month. Replace the old one entirely.
+  parsed:
+    goal: "Ship a new pricing page by end of month"
+    scope_items:
+      - "new pricing page"
+      - "retire old pricing page"
+    deadline: "end of month"
+    open_questions:
+      - "Who approves final copy and pricing tiers?"
+    confidence: 0.65
+expected:
+  min_questions: 1
+  max_questions: 3
+  any_question_mentions:
+    - ["approve", "approver", "owner", "sign off", "pricing", "legal"]
+  forbid_patterns:
+    - "anything else"
