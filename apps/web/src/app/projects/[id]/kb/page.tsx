@@ -7,7 +7,7 @@
 // top for debugging. Successful responses pass items to <KbList>, which
 // owns the search/filter interactivity from the client.
 
-import { getTranslations } from "next-intl/server";
+import { getLocale, getTranslations } from "next-intl/server";
 
 import { KbList } from "@/components/kb/KbList";
 import { ApiError, type KbItem } from "@/lib/api";
@@ -23,15 +23,23 @@ export default async function KbPage({
   const { id } = await params;
   await requireUser(`/projects/${id}/kb`);
   const t = await getTranslations();
+  const locale = await getLocale();
 
   let items: KbItem[] = [];
   let backendMissing = false;
   let errorMessage: string | null = null;
   try {
     const res = await serverFetch<{ items: KbItem[] }>(
-      `/api/projects/${id}/kb?limit=50`,
+      `/api/projects/${id}/kb?limit=100`,
     );
-    items = res.items ?? [];
+    // Wiki pages are ingested twice (EN + ZH) with lang:en / lang:zh tags
+    // so the same page shows in the viewer's language only. Non-wiki items
+    // (membrane ingests, pasted docs) pass through untouched.
+    const localeTag = `lang:${locale}`;
+    items = (res.items ?? []).filter((item) => {
+      if (item.source_kind !== "wiki") return true;
+      return (item.tags ?? []).includes(localeTag);
+    });
   } catch (err) {
     if (err instanceof ApiError && err.status === 404) {
       backendMissing = true;

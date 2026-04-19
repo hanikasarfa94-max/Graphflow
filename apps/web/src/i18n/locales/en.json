@@ -406,6 +406,9 @@
     "noProjects": "No projects yet",
     "dms": "Direct messages",
     "noDms": "No direct messages yet",
+    "newDm": "+ Message a teammate",
+    "noTeammates": "No teammates to message",
+    "loading": "Loading…",
     "routedInbox": "Routed inbox",
     "profile": "Profile",
     "signOut": "Sign out",
@@ -424,6 +427,35 @@
       "detail_tasks": "Tasks",
       "detail_risks": "Risks",
       "detail_decisions": "Decisions"
+    }
+  },
+  "detail": {
+    "tasks": {
+      "title": "Tasks",
+      "empty": "No tasks yet.",
+      "col": {
+        "title": "Title",
+        "assignee": "Assignee",
+        "status": "Status",
+        "milestone": "Milestone",
+        "deliverable": "Deliverable",
+        "effort": "Effort",
+        "deps": "Deps"
+      }
+    },
+    "risks": {
+      "title": "Risks",
+      "empty": "No risks tracked.",
+      "col": {
+        "title": "Title",
+        "severity": "Severity",
+        "status": "Status"
+      }
+    },
+    "decisions": {
+      "title": "Decisions",
+      "empty": "No decisions crystallized yet.",
+      "viewLineage": "View lineage"
     }
   },
   "inbox": {
@@ -486,7 +518,7 @@
     "cancelEdit": "Cancel",
     "editNote": "Edits are local only in v1 — they won't persist across reloads.",
     "manualReview": "This render hit a manual-review fallback. Expect gaps.",
-    "unknownSlug": "Unknown render slug. Expected `postmortem` or `handoff:<user_id>`.",
+    "unknownSlug": "Unknown render slug. Expected `postmortem` or `handoff:user_id`.",
     "postmortem": {
       "title": "Postmortem",
       "noData": "No postmortem available yet — kick off a decision to populate lineage."

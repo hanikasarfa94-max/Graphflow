@@ -1452,15 +1452,24 @@ class StreamRepository:
     ) -> StreamRow | None:
         """Phase L — the one personal stream a user has inside a project.
 
-        Unique in (project_id, owner_user_id, type='personal') by construction
-        (backfill + creator hooks are idempotent via this lookup).
+        Expected unique in (project_id, owner_user_id, type='personal'), but
+        no DB-level UNIQUE constraint enforces it yet and race conditions
+        during seeding have produced duplicates in the wild. Use `.first()`
+        instead of `scalar_one_or_none()` so the API can't throw
+        `MultipleResultsFound` on degraded data — prefer the oldest row for
+        stability.
         """
-        stmt = select(StreamRow).where(
-            StreamRow.project_id == project_id,
-            StreamRow.owner_user_id == user_id,
-            StreamRow.type == "personal",
+        stmt = (
+            select(StreamRow)
+            .where(
+                StreamRow.project_id == project_id,
+                StreamRow.owner_user_id == user_id,
+                StreamRow.type == "personal",
+            )
+            .order_by(StreamRow.created_at)
+            .limit(1)
         )
-        return (await self._session.execute(stmt)).scalar_one_or_none()
+        return (await self._session.execute(stmt)).scalars().first()
 
     async def find_dm_between(
         self, user_a: str, user_b: str

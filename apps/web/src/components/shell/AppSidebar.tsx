@@ -28,6 +28,7 @@ import { useState, type CSSProperties } from "react";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import type { User } from "@/lib/api";
 
+import { NewDMPicker } from "./NewDMPicker";
 import { RoutedInboxBadge } from "./RoutedInboxBadge";
 import type { ShellDM, ShellProject } from "./AppShellClient";
 
@@ -95,9 +96,10 @@ function ProjectNode({
   pathname: string | null;
   t: ReturnType<typeof useTranslations>;
 }) {
-  const [open, setOpen] = useState(() =>
-    pathname?.startsWith(`/projects/${project.id}`) ?? false,
-  );
+  // Default-expand every project so the Team room + KB + Status are
+  // visible without requiring an extra click. Small teams typically have
+  // 1–3 projects; always-expanded reads better than hidden chat rooms.
+  const [open, setOpen] = useState(true);
   const [rendersOpen, setRendersOpen] = useState(false);
   const [detailOpen, setDetailOpen] = useState(false);
 
@@ -436,6 +438,7 @@ export function AppSidebar({
 
         {/* Direct messages */}
         <div style={sectionLabel}>{t("shell.dms")}</div>
+        <NewDMPicker projects={projects} currentUserId={user.id} />
         {dms.length === 0 ? (
           <div
             style={{

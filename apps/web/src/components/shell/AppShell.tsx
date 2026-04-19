@@ -11,7 +11,7 @@
 // level `requireUser` keeps ownership of redirects. This lets the root
 // layout wrap the WHOLE app without breaking /login's own render.
 
-import { cookies, headers } from "next/headers";
+import { cookies } from "next/headers";
 
 import type {
   ProjectSummary,
@@ -69,46 +69,21 @@ async function fetchInboxCount(cookieHeader: string): Promise<number> {
   return data.signals.length;
 }
 
-// A set of pathname prefixes for which we render plain children with no
-// shell chrome. Keep this list small — the normal default is "show shell".
-const PLAIN_PREFIXES = [
-  "/login",
-  "/register",
-];
-
-function isPlainRoute(pathname: string | null): boolean {
-  if (!pathname) return true; // on edge where we can't detect, err safe
-  return PLAIN_PREFIXES.some(
-    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
-  );
-}
-
 export async function AppShell({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const [cookieStore, hdrs] = await Promise.all([cookies(), headers()]);
+  const cookieStore = await cookies();
   const cookieHeader = cookieStore.toString();
 
-  // Next.js doesn't expose the in-flight pathname in headers() by
-  // default, but middleware / next rewrites typically forward it via
-  // x-next-pathname or x-pathname. Fall back to x-invoke-path which
-  // Next sets internally during App Router rendering.
-  const pathname =
-    hdrs.get("x-next-pathname") ??
-    hdrs.get("x-pathname") ??
-    hdrs.get("x-invoke-path") ??
-    hdrs.get("next-url") ??
-    null;
-
-  if (isPlainRoute(pathname)) {
-    return <>{children}</>;
-  }
-
-  // Try to load the session. If the request is unauth'd (public home
-  // page, etc.), render plain children and let page-level requireUser
-  // issue the redirect on its own.
+  // Single source of truth for "show shell or plain children": the
+  // session cookie. If the user isn't authed — which covers /login,
+  // /register, and any first-hit to an authed route before redirect
+  // — we render plain children and let page-level `requireUser` handle
+  // the redirect. If authed, we render the shell regardless of route.
+  // (Next.js 15 doesn't expose the in-flight pathname via headers()
+  // reliably, so we don't try to pathname-gate here.)
   const user = await fetchSession(cookieHeader);
   if (!user) {
     return <>{children}</>;

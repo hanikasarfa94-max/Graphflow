@@ -1,13 +1,19 @@
-import Link from "next/link";
-
 import { requireUser, serverFetch } from "@/lib/auth";
 import type { ProjectState } from "@/lib/api";
 
-import { NotificationBell } from "./NotificationBell";
-import { ProjectNav } from "./ProjectNav";
-
 export const dynamic = "force-dynamic";
 
+// Phase Q — project layout is deliberately minimal.
+//
+// Navigation (Home / projects / team room / status / KB / renders / DMs)
+// lives in the global AppSidebar. Notifications live in the sidebar's
+// routed-inbox badge. The old in-page breadcrumb + h1 + sub-nav ate
+// ~175px at the top of every chat view; gone.
+//
+// We keep a thin title strip so the user knows which project they're in
+// when glancing at the main pane (redundant with sidebar highlighting,
+// but useful when scrolled deep or sharing a screenshot). The project
+// counts are rendered here in a tiny line — one glance, no chrome.
 export default async function ProjectLayout({
   params,
   children,
@@ -18,63 +24,59 @@ export default async function ProjectLayout({
   const { id } = await params;
   await requireUser(`/projects/${id}`);
   let state: ProjectState | null = null;
-  let errorMessage: string | null = null;
   try {
     state = await serverFetch<ProjectState>(`/api/projects/${id}/state`);
-  } catch (e) {
-    errorMessage = e instanceof Error ? e.message : "failed to load project";
+  } catch {
+    state = null;
   }
 
   return (
-    <div style={{ maxWidth: 1200, margin: "0 auto", padding: "32px 24px" }}>
-      <header
-        style={{
-          marginBottom: 20,
-          display: "flex",
-          alignItems: "flex-start",
-          justifyContent: "space-between",
-          gap: 16,
-        }}
-      >
-        <div>
-          <div
+    <div
+      style={{
+        maxWidth: 1200,
+        margin: "0 auto",
+        padding: "14px 20px",
+      }}
+    >
+      {state ? (
+        <div
+          style={{
+            display: "flex",
+            alignItems: "baseline",
+            gap: 12,
+            marginBottom: 10,
+            paddingBottom: 8,
+            borderBottom: "1px solid var(--wg-line)",
+          }}
+        >
+          <h1
             style={{
-              fontSize: 12,
-              fontFamily: "var(--wg-font-mono)",
-              color: "var(--wg-ink-soft)",
+              fontSize: 14,
+              fontWeight: 600,
+              margin: 0,
+              color: "var(--wg-ink)",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
             }}
+            title={state.project.title}
           >
-            <Link
-              href="/projects"
-              style={{ color: "var(--wg-ink-soft)", textDecoration: "none" }}
-            >
-              ← projects
-            </Link>
-          </div>
-          <h1 style={{ fontSize: 24, fontWeight: 600, margin: "6px 0 2px" }}>
-            {state?.project.title ?? (errorMessage ? "Unavailable" : "Loading…")}
+            {state.project.title}
           </h1>
-          <div
+          <span
             style={{
-              fontSize: 12,
+              fontSize: 11,
               fontFamily: "var(--wg-font-mono)",
-              color: "var(--wg-ink-soft)",
+              color: "var(--wg-ink-faint)",
+              whiteSpace: "nowrap",
             }}
           >
-            {state
-              ? `${state.graph.deliverables.length} deliverables · ${state.plan.tasks.length} tasks · v${state.requirement_version}`
-              : errorMessage ?? ""}
-          </div>
+            {state.plan.tasks.length} tasks · {state.graph.deliverables.length}{" "}
+            deliverables · v{state.requirement_version}
+          </span>
         </div>
-        <NotificationBell projectId={id} />
-      </header>
-
-      <ProjectNav
-        projectId={id}
-        conflictBadge={state?.conflict_summary?.open ?? 0}
-      />
-
-      <div style={{ marginTop: 24 }}>{children}</div>
+      ) : null}
+      {children}
     </div>
   );
 }

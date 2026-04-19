@@ -406,6 +406,9 @@
     "noProjects": "暂无项目",
     "dms": "私信",
     "noDms": "暂无私信",
+    "newDm": "+ 给同事发消息",
+    "noTeammates": "没有可私信的同事",
+    "loading": "加载中…",
     "routedInbox": "路由收件箱",
     "profile": "个人资料",
     "signOut": "退出登录",
@@ -424,6 +427,35 @@
       "detail_tasks": "任务",
       "detail_risks": "风险",
       "detail_decisions": "决策"
+    }
+  },
+  "detail": {
+    "tasks": {
+      "title": "任务",
+      "empty": "暂无任务。",
+      "col": {
+        "title": "标题",
+        "assignee": "负责人",
+        "status": "状态",
+        "milestone": "里程碑",
+        "deliverable": "交付物",
+        "effort": "工作量",
+        "deps": "依赖"
+      }
+    },
+    "risks": {
+      "title": "风险",
+      "empty": "暂无风险记录。",
+      "col": {
+        "title": "标题",
+        "severity": "严重度",
+        "status": "状态"
+      }
+    },
+    "decisions": {
+      "title": "决策",
+      "empty": "尚未生成决策。",
+      "viewLineage": "查看来龙去脉"
     }
   },
   "inbox": {
@@ -486,7 +518,7 @@
     "cancelEdit": "取消",
     "editNote": "v1 编辑仅本地生效,刷新后不会保留。",
     "manualReview": "该渲染触发了人工复核兜底,内容可能缺失。",
-    "unknownSlug": "未知的渲染标识符,期望 `postmortem` 或 `handoff:<user_id>`。",
+    "unknownSlug": "未知的渲染标识符,期望 `postmortem` 或 `handoff:user_id`。",
     "postmortem": {
       "title": "项目复盘",
       "noData": "尚未生成复盘——先记录一个决策以激活链路。"

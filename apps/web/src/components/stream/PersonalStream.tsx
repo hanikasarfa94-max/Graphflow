@@ -369,12 +369,22 @@ export function PersonalStream({ projectId, currentUserId, members }: Props) {
 
     try {
       const res = await postPersonalMessage(projectId, body);
-      // Replace optimistic row with the real id from the server.
-      setMessages((prev) =>
-        prev.map((m) =>
+      // Replace optimistic row with the real id from the server. Also
+      // drop any row that already has the real id — the WS frame may
+      // have landed during the POST round-trip, in which case mapping
+      // without removing the duplicate would leave two rows with the
+      // same id (React key warning + visual duplicate).
+      setMessages((prev) => {
+        const serverRowAlreadyPresent = prev.some(
+          (m) => m.id === res.message_id,
+        );
+        if (serverRowAlreadyPresent) {
+          return prev.filter((m) => m.id !== optimisticId);
+        }
+        return prev.map((m) =>
           m.id === optimisticId ? { ...m, id: res.message_id } : m,
-        ),
-      );
+        );
+      });
       // If the backend shipped a synchronous edge response, insert it so
       // the user sees it immediately — polling will reconcile. The edge
       // response kind is the EdgeAgent response kind ("answer" / "clarify"
@@ -408,7 +418,13 @@ export function PersonalStream({ projectId, currentUserId, members }: Props) {
                 }
               : {}),
           };
-          setMessages((prev) => [...prev, edge]);
+          // Must dedup: the WS `message` frame for this same server-side
+          // row may have ALREADY landed (edge_response.reply_message_id
+          // is the real persisted id, and the backend broadcasts the
+          // stream frame during post_system_message before the POST
+          // response unwinds). Plain [...prev, edge] was producing
+          // duplicate React keys when that race hit.
+          setMessages((prev) => mergeMessages(prev, [edge]));
         }
       }
       // Trigger a refresh so poll-lag doesn't delay the server-truth.
@@ -582,37 +598,17 @@ export function PersonalStream({ projectId, currentUserId, members }: Props) {
     <div
       style={{
         display: "grid",
-        gridTemplateRows: "auto 1fr auto",
-        height: "calc(100vh - 260px)",
+        gridTemplateRows: "1fr auto",
+        height: "calc(100vh - 100px)",
         minHeight: 520,
         background: "#fff",
         border: "1px solid var(--wg-line)",
         borderRadius: "var(--wg-radius)",
       }}
     >
-      {/* Stream header — subtitle establishes that this is the personal thread */}
-      <div
-        style={{
-          padding: "10px 14px",
-          borderBottom: "1px solid var(--wg-line)",
-          background: "var(--wg-surface)",
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          fontFamily: "var(--wg-font-mono)",
-          fontSize: 12,
-          color: "var(--wg-ink-soft)",
-        }}
-      >
-        <span>
-          <strong style={{ color: "var(--wg-ink)" }}>{t("title")}</strong>
-          {" · "}
-          <span>{t("subtitle")}</span>
-        </span>
-        <span data-testid="personal-stream-count">
-          {messages.length} {tStream("messageCount")}
-        </span>
-      </div>
+      {/* Phase Q — removed inline stream header. Sidebar + project strip
+          already identify the context; count is visible as scrollbar +
+          empty-state. Reclaims ~45px of vertical chrome. */}
 
       {/* Timeline */}
       <div

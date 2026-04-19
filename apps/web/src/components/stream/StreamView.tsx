@@ -342,7 +342,7 @@ export function StreamView({ projectId, currentUserId, members, streamId }: Prop
         gridTemplateRows: hasMemberStrip
           ? "auto auto 1fr auto"
           : "auto 1fr auto",
-        height: "calc(100vh - 200px)",
+        height: "calc(100vh - 100px)",
         minHeight: 520,
         background: "#fff",
         border: "1px solid var(--wg-line)",
