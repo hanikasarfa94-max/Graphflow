@@ -1,7 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useTranslations } from "next-intl";
 import { useRouter, useSearchParams } from "next/navigation";
+import { useState } from "react";
+
+import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 
 type Mode = "login" | "register";
 
@@ -9,6 +12,7 @@ export function LoginForm() {
   const router = useRouter();
   const search = useSearchParams();
   const next = search.get("next") ?? "/projects";
+  const t = useTranslations();
 
   const [mode, setMode] = useState<Mode>("login");
   const [username, setUsername] = useState("");
@@ -41,7 +45,7 @@ export function LoginForm() {
       router.push(next);
       router.refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "network error");
+      setError(err instanceof Error ? err.message : t("errors.network"));
     } finally {
       setPending(false);
     }
@@ -55,6 +59,8 @@ export function LoginForm() {
         justifyContent: "center",
         minHeight: "100vh",
         padding: 24,
+        flexDirection: "column",
+        gap: 16,
       }}
     >
       <form
@@ -87,11 +93,12 @@ export function LoginForm() {
               verticalAlign: "middle",
             }}
           />
-          WorkGraph — {mode === "login" ? "sign in" : "create account"}
+          {t("brand.name")} —{" "}
+          {mode === "login" ? t("login.heading") : t("login.registerHeading")}
         </div>
 
         <Field
-          label="Username"
+          label={t("placeholders.username")}
           value={username}
           onChange={setUsername}
           required
@@ -101,13 +108,13 @@ export function LoginForm() {
         />
         {mode === "register" && (
           <Field
-            label="Display name"
+            label={t("placeholders.displayName")}
             value={displayName}
             onChange={setDisplayName}
           />
         )}
         <Field
-          label="Password"
+          label={t("placeholders.password")}
           type="password"
           value={password}
           onChange={setPassword}
@@ -146,7 +153,11 @@ export function LoginForm() {
             opacity: pending ? 0.7 : 1,
           }}
         >
-          {pending ? "…" : mode === "login" ? "Sign in" : "Register"}
+          {pending
+            ? "…"
+            : mode === "login"
+              ? t("login.submitLogin")
+              : t("login.submitRegister")}
         </button>
 
         <button
@@ -166,11 +177,11 @@ export function LoginForm() {
             cursor: "pointer",
           }}
         >
-          {mode === "login"
-            ? "No account? Create one."
-            : "Have an account? Sign in."}
+          {mode === "login" ? t("login.toRegister") : t("login.toLogin")}
         </button>
       </form>
+
+      <LanguageSwitcher />
     </main>
   );
 }

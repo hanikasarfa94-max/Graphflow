@@ -127,7 +127,13 @@ export interface ProjectState {
     answer: string | null;
   }[];
   assignments: Record<string, unknown>[];
-  members: { user_id: string; username: string; display_name: string; role: string }[];
+  members: {
+    user_id: string;
+    username: string;
+    display_name: string;
+    role: string;
+    license_tier?: "full" | "task_scoped" | "observer";
+  }[];
   conflicts: Conflict[];
   conflict_summary: ConflictSummary;
   decisions: Decision[];
@@ -169,7 +175,7 @@ export interface ConflictSummary {
 
 export interface Decision {
   id: string;
-  conflict_id: string;
+  conflict_id: string | null;
   project_id: string;
   resolver_id: string | null;
   option_index: number | null;
@@ -178,8 +184,154 @@ export interface Decision {
   apply_actions: Record<string, unknown>[];
   apply_outcome: "pending" | "ok" | "partial" | "failed" | "advisory";
   apply_detail: Record<string, unknown>;
+  source_suggestion_id: string | null;
   created_at: string | null;
   applied_at: string | null;
+}
+
+// ---------- IM suggestions ----------
+
+export interface IMSuggestionProposal {
+  action: string;
+  summary: string;
+  detail: Record<string, unknown>;
+}
+
+export interface IMSuggestion {
+  id: string;
+  message_id: string;
+  project_id: string;
+  kind: "none" | "tag" | "decision" | "blocker";
+  confidence: number;
+  targets: string[];
+  proposal: IMSuggestionProposal | null;
+  reasoning: string;
+  status: "pending" | "accepted" | "dismissed" | "countered" | "escalated";
+  created_at: string;
+  resolved_at: string | null;
+  counter_of_id: string | null;
+  decision_id: string | null;
+  escalation_state: "requested" | null;
+}
+
+export interface IMMessage {
+  id: string;
+  project_id: string;
+  author_id: string;
+  author_username?: string;
+  author_display_name?: string;
+  body: string;
+  created_at: string;
+  suggestion?: IMSuggestion | null;
+}
+
+export interface CounterSuggestionResponse {
+  original_suggestion: IMSuggestion;
+  new_message: IMMessage;
+  new_suggestion: IMSuggestion | null;
+}
+
+export function counterSuggestion(
+  suggestionId: string,
+  text: string,
+): Promise<CounterSuggestionResponse> {
+  return api<CounterSuggestionResponse>(
+    `/api/im_suggestions/${suggestionId}/counter`,
+    { method: "POST", body: { text } },
+  );
+}
+
+export function escalateSuggestion(
+  suggestionId: string,
+): Promise<IMSuggestion> {
+  return api<IMSuggestion>(
+    `/api/im_suggestions/${suggestionId}/escalate`,
+    { method: "POST" },
+  );
+}
+
+export function acceptSuggestion(suggestionId: string): Promise<unknown> {
+  return api(`/api/im_suggestions/${suggestionId}/accept`, { method: "POST" });
+}
+
+export function dismissSuggestion(suggestionId: string): Promise<unknown> {
+  return api(`/api/im_suggestions/${suggestionId}/dismiss`, { method: "POST" });
+}
+
+// ---------- Streams (Phase B) ----------
+
+export interface StreamMemberSummary {
+  user_id: string;
+  username: string;
+  display_name: string;
+  role_in_stream: string;
+}
+
+export interface StreamSummary {
+  id: string;
+  type: "project" | "dm";
+  project_id: string | null;
+  members: StreamMemberSummary[];
+  last_activity_at: string | null;
+  created_at: string | null;
+  unread_count: number;
+}
+
+export function listStreams(baseUrl?: string): Promise<{ streams: StreamSummary[] }> {
+  return api<{ streams: StreamSummary[] }>(`/api/streams`, { baseUrl });
+}
+
+export function markStreamRead(streamId: string): Promise<unknown> {
+  return api(`/api/streams/${streamId}/read`, { method: "POST" });
+}
+
+// Create-or-get the canonical 1:1 DM stream between the authed user and
+// `otherUserId`. Backend dedups by sorted member pair, so repeated calls
+// return the same stream. Response mirrors StreamSummary under `stream`.
+export interface CreateDMResponse {
+  ok: boolean;
+  created: boolean;
+  stream: StreamSummary;
+}
+
+export function createDMStream(
+  otherUserId: string,
+): Promise<CreateDMResponse> {
+  return api<CreateDMResponse>(`/api/streams/dm`, {
+    method: "POST",
+    body: { other_user_id: otherUserId },
+  });
+}
+
+// ---------- Home-specific helpers (Phase F) ----------
+
+// Fetch the most recent messages for a project along with their attached
+// suggestions. Used by the home page to derive pending signals without a
+// dedicated /api/users/me/pending endpoint.
+export function listProjectMessages(
+  projectId: string,
+  baseUrl?: string,
+): Promise<{ messages: IMMessage[] }> {
+  return api<{ messages: IMMessage[] }>(
+    `/api/projects/${projectId}/messages?limit=200`,
+    { baseUrl },
+  );
+}
+
+// A "pending signal" for the home page. Phase F §1: derived client-side
+// by scanning suggestions across all project streams the viewer belongs
+// to and filtering status === 'pending' whose `targets` list references
+// the viewer. Since targets are free-form strings from IMAssist we match
+// generously against user_id, username, and display_name.
+export interface PendingSignal {
+  suggestion_id: string;
+  message_id: string;
+  project_id: string;
+  project_title: string;
+  summary: string;
+  kind: IMSuggestion["kind"];
+  created_at: string;
+  jump_href: string;
 }
 
 export interface DeliveryCompletedItem {
@@ -250,4 +402,512 @@ export interface EventRow {
   trace_id: string | null;
   payload: Record<string, unknown>;
   created_at: string;
+}
+
+// ---------- Personal stream (Phase N) ----------
+
+// Messages posted into a user's personal project stream. The backend
+// tags structured turns with `kind` and optionally `linked_id` so the
+// renderer can polymorphically dispatch to rich cards (route proposal,
+// routed inbound, routed reply, edge answer/clarify). Unknown kinds
+// must render as plain text for forward-compat.
+export type PersonalMessageKind =
+  | "text"
+  | "edge-answer"
+  | "edge-clarify"
+  | "edge-thinking"
+  | "edge-route-proposal"
+  | "edge-route-confirmed"
+  | "edge-reply-frame"
+  | "edge-tool-call"
+  | "edge-tool-result"
+  | "routed-inbound"
+  | "routed-reply"
+  | "routed-dm-log"
+  | "drift-alert"
+  | "membrane-signal"
+  | string;
+
+// Raw shape from the backend's route-proposal marker (see personal.py
+// `_parse_route_proposal` + `_encode_route_proposal_body`).
+export interface PersonalRouteTarget {
+  user_id: string;
+  username?: string;
+  display_name: string;
+  rationale?: string;
+}
+
+export interface PersonalRouteProposalMetadata {
+  framing: string;
+  targets: PersonalRouteTarget[];
+  background: Array<{
+    source: string;
+    snippet: string;
+    reference_id?: string | null;
+  }>;
+  status: string;
+}
+
+export interface PersonalMessage {
+  id: string;
+  stream_id: string;
+  project_id: string | null;
+  author_id: string;
+  author_username?: string | null;
+  author_display_name?: string | null;
+  body: string;
+  kind: PersonalMessageKind;
+  linked_id: string | null;
+  created_at: string;
+  // Present on edge-route-proposal messages — backend parses the marker
+  // server-side. The body has already had the marker stripped.
+  route_proposal?: PersonalRouteProposalMetadata;
+}
+
+// edge_response.kind uses the EdgeAgent response kinds (not the stored
+// message kinds). We normalise to PersonalMessageKind when inserting
+// optimistic cards. See personal.py PersonalStreamService.post.
+export type EdgeResponseKind =
+  | "silence"
+  | "answer"
+  | "clarify"
+  | "route_proposal";
+
+export interface PersonalPostResponse {
+  ok: boolean;
+  message_id: string;
+  edge_response:
+    | {
+        kind: EdgeResponseKind;
+        body: string | null;
+        reply_message_id?: string;
+        route_proposal_id?: string;
+        targets?: PersonalRouteTarget[];
+      }
+    | null;
+}
+
+// Convert an EdgeAgent response kind into the stored stream-message kind.
+export function edgeKindToMessageKind(
+  kind: EdgeResponseKind,
+): PersonalMessageKind | null {
+  if (kind === "answer") return "edge-answer";
+  if (kind === "clarify") return "edge-clarify";
+  if (kind === "route_proposal") return "edge-route-proposal";
+  return null; // silence → no card
+}
+
+export function postPersonalMessage(
+  projectId: string,
+  body: string,
+): Promise<PersonalPostResponse> {
+  return api<PersonalPostResponse>(`/api/personal/${projectId}/post`, {
+    method: "POST",
+    body: { body },
+  });
+}
+
+export function listPersonalMessages(
+  projectId: string,
+): Promise<{ stream_id: string; messages: PersonalMessage[] }> {
+  return api<{ stream_id: string; messages: PersonalMessage[] }>(
+    `/api/personal/${projectId}/messages`,
+  );
+}
+
+export interface ConfirmRouteResponse {
+  ok: boolean;
+  signal_id: string;
+}
+
+export function confirmRouteProposal(
+  proposalId: string,
+  targetUserId: string,
+): Promise<ConfirmRouteResponse> {
+  return api<ConfirmRouteResponse>(
+    `/api/personal/route/${proposalId}/confirm`,
+    {
+      method: "POST",
+      body: { target_user_id: targetUserId },
+    },
+  );
+}
+
+// ---------- Pre-commit rehearsal (vision.md §5.3) ----------
+//
+// Debounced keystroke call to /api/personal/{id}/preview. Returns the
+// EdgeAgent classification the draft *would* produce, without persisting
+// anything. The frontend renders this above the composer so users see
+// how their message will be classified (answer / clarify / route) and
+// can reframe before committing.
+
+// silent_preview: draft too short for a real classification; the card
+// should render nothing. Other kinds mirror EdgeResponseKind.
+export type RehearsalKind =
+  | "silent_preview"
+  | "silence"
+  | "answer"
+  | "clarify"
+  | "route_proposal";
+
+export interface RehearsalPreview {
+  kind: RehearsalKind;
+  body?: string | null;
+  reasoning?: string;
+  targets?: PersonalRouteTarget[];
+}
+
+export interface PreviewResponse {
+  ok: boolean;
+  preview: RehearsalPreview;
+}
+
+export async function previewPersonalMessage(
+  projectId: string,
+  body: string,
+  signal?: AbortSignal,
+): Promise<PreviewResponse> {
+  return api<PreviewResponse>(`/api/personal/${projectId}/preview`, {
+    method: "POST",
+    body: { body },
+    signal,
+  });
+}
+
+// ---------- Routing signals (Phase L) ----------
+
+export interface RoutingBackgroundSnippet {
+  source: string;
+  snippet: string;
+  reference_id?: string | null;
+}
+
+export interface RoutingOption {
+  id: string;
+  label: string;
+  kind: string;
+  background: string;
+  reason: string;
+  tradeoff: string;
+  weight: number;
+}
+
+export interface RoutingSignal {
+  id: string;
+  trace_id: string | null;
+  source_user_id: string;
+  target_user_id: string;
+  source_stream_id: string;
+  target_stream_id: string;
+  project_id: string;
+  framing: string;
+  background: RoutingBackgroundSnippet[];
+  options: RoutingOption[];
+  status: "pending" | "replied" | "accepted" | "declined" | "expired";
+  reply: {
+    option_id?: string | null;
+    custom_text?: string | null;
+    picked_label?: string | null;
+    replied_at?: string | null;
+  } | null;
+  created_at: string | null;
+  responded_at: string | null;
+}
+
+export function getRoutingSignal(
+  signalId: string,
+): Promise<{ ok: boolean; signal: RoutingSignal }> {
+  return api<{ ok: boolean; signal: RoutingSignal }>(
+    `/api/routing/${signalId}`,
+  );
+}
+
+export interface RoutingReplyResponse {
+  ok: boolean;
+  signal: RoutingSignal;
+}
+
+export function replyRoutingSignal(
+  signalId: string,
+  params: { option_id?: string; custom_text?: string },
+): Promise<RoutingReplyResponse> {
+  return api<RoutingReplyResponse>(`/api/routing/${signalId}/reply`, {
+    method: "POST",
+    body: params,
+  });
+}
+
+// ---------- Routing inbox / outbox (Phase Q — sidebar drawer) ----------
+//
+// Phase Q corrects the routed-inbound pattern: inbound signals no longer
+// interrupt the personal stream. They surface as a badge in the global
+// sidebar, resolved via a right-slide drawer. These helpers back the
+// sidebar badge count + the drawer list.
+
+export interface RoutingInboxResponse {
+  signals: RoutingSignal[];
+}
+
+export function listRoutedInbox(
+  params: {
+    status?: "pending" | "replied" | "accepted" | "declined" | "expired";
+    limit?: number;
+  } = {},
+  baseUrl?: string,
+): Promise<RoutingInboxResponse> {
+  const qs: string[] = [];
+  if (params.status) qs.push(`status=${encodeURIComponent(params.status)}`);
+  if (params.limit) qs.push(`limit=${params.limit}`);
+  const q = qs.length ? `?${qs.join("&")}` : "";
+  return api<RoutingInboxResponse>(`/api/routing/inbox${q}`, { baseUrl });
+}
+
+export function listRoutedOutbox(
+  params: {
+    status?: "pending" | "replied" | "accepted" | "declined" | "expired";
+    limit?: number;
+  } = {},
+  baseUrl?: string,
+): Promise<RoutingInboxResponse> {
+  const qs: string[] = [];
+  if (params.status) qs.push(`status=${encodeURIComponent(params.status)}`);
+  if (params.limit) qs.push(`limit=${params.limit}`);
+  const q = qs.length ? `?${qs.join("&")}` : "";
+  return api<RoutingInboxResponse>(`/api/routing/outbox${q}`, { baseUrl });
+}
+
+// Counter-back: source user replies to a target's reply by dispatching a
+// new routed signal back to the same target. For v1 we reuse
+// /api/routing/dispatch. The `framing` argument carries the source-side
+// follow-up framing. We stamp the parent signal id into a background
+// snippet so the target can visually trace the chain until the backend
+// exposes a parent_signal_id column.
+export interface CounterBackParams {
+  target_user_id: string;
+  project_id: string;
+  framing: string;
+  parent_signal_id?: string;
+}
+
+export function dispatchCounterBack(
+  params: CounterBackParams,
+): Promise<{ ok: boolean; signal_id: string }> {
+  const background = params.parent_signal_id
+    ? [
+        {
+          source: "routing",
+          snippet: `Counter-back to signal ${params.parent_signal_id}`,
+          reference_id: params.parent_signal_id,
+        },
+      ]
+    : [];
+  return api<{ ok: boolean; signal_id: string }>(`/api/routing/dispatch`, {
+    method: "POST",
+    body: {
+      target_user_id: params.target_user_id,
+      project_id: params.project_id,
+      framing: params.framing,
+      background,
+      options: [],
+    },
+  });
+}
+
+// Fallback parser for the `<route-proposal>{...}</route-proposal>` body
+// marker. The backend already strips + parses this into `route_proposal`
+// metadata; this helper exists so a missing-metadata payload (older API
+// build, partial response) still produces a usable card.
+export function parseRouteProposalFromBody(
+  body: string,
+): PersonalRouteProposalMetadata | null {
+  const match = body.match(
+    /<route-proposal>\s*(\{[\s\S]*?\})\s*<\/route-proposal>/,
+  );
+  if (!match) return null;
+  try {
+    const parsed = JSON.parse(match[1]) as {
+      framing?: string;
+      targets?: Array<{
+        user_id?: string;
+        username?: string;
+        display_name?: string;
+        rationale?: string;
+      }>;
+      background?: PersonalRouteProposalMetadata["background"];
+      status?: string;
+    };
+    const targets = (parsed.targets ?? [])
+      .filter(
+        (t): t is PersonalRouteTarget =>
+          typeof t.user_id === "string" &&
+          typeof t.display_name === "string",
+      )
+      .map((t) => ({
+        user_id: t.user_id,
+        username: t.username,
+        display_name: t.display_name,
+        rationale: t.rationale,
+      }));
+    return {
+      framing: parsed.framing ?? "",
+      targets,
+      background: parsed.background ?? [],
+      status: parsed.status ?? "pending",
+    };
+  } catch {
+    return null;
+  }
+}
+
+// Strip the route-proposal marker — backend pre-strips but we keep this
+// as a safety net for cached/raw bodies.
+export function stripRouteProposalMarker(body: string): string {
+  return body
+    .replace(/<route-proposal>[\s\S]*?<\/route-proposal>/g, "")
+    .trim();
+}
+
+// ---------- Rendered artifacts (Phase R) ----------
+
+export interface RenderedSection {
+  heading: string;
+  body_markdown: string;
+}
+
+export interface PostmortemDocShape {
+  title: string;
+  one_line_summary: string;
+  sections: RenderedSection[];
+}
+
+export interface HandoffDocShape {
+  title: string;
+  sections: RenderedSection[];
+}
+
+export interface RenderedArtifact<TDoc> {
+  kind: "postmortem" | "handoff";
+  project_id: string;
+  user_id: string | null;
+  doc: TDoc;
+  generated_at: string;
+  prompt_version: string | null;
+  outcome: "ok" | "retry" | "manual_review";
+  attempts: number;
+  error: string | null;
+}
+
+export type PostmortemRender = RenderedArtifact<PostmortemDocShape>;
+export type HandoffRender = RenderedArtifact<HandoffDocShape>;
+
+export function getPostmortemRender(
+  projectId: string,
+  baseUrl?: string,
+): Promise<PostmortemRender> {
+  return api<PostmortemRender>(
+    `/api/projects/${projectId}/renders/postmortem`,
+    { baseUrl },
+  );
+}
+
+export function regeneratePostmortemRender(
+  projectId: string,
+): Promise<PostmortemRender> {
+  return api<PostmortemRender>(
+    `/api/projects/${projectId}/renders/postmortem/regenerate`,
+    { method: "POST" },
+  );
+}
+
+export function getHandoffRender(
+  projectId: string,
+  userId: string,
+  baseUrl?: string,
+): Promise<HandoffRender> {
+  return api<HandoffRender>(
+    `/api/projects/${projectId}/renders/handoff/${userId}`,
+    { baseUrl },
+  );
+}
+
+export function regenerateHandoffRender(
+  projectId: string,
+  userId: string,
+): Promise<HandoffRender> {
+  return api<HandoffRender>(
+    `/api/projects/${projectId}/renders/handoff/${userId}/regenerate`,
+    { method: "POST" },
+  );
+}
+
+// ---------- Knowledge base (Phase Q.6) ----------
+//
+// Browseable KB surface. Backend endpoints:
+//   GET /api/projects/{id}/kb               → list (optional query/source_kind/limit)
+//   GET /api/projects/{id}/kb/{item_id}     → single item + raw_content
+//
+// The KB corpus is primarily LLM-facing (routing, retrieval, citations),
+// but per `docs/north-star.md` §Q.6 the user-facing browse/search page
+// ships in v1 so humans can audit what the edge LLM is grounded on. The
+// listing endpoint may 404 while Phase Q-A is in flight — callers must
+// catch `ApiError` with `status === 404` and render a "coming soon" state
+// rather than propagating the failure.
+
+export type KbItemStatus = "pending-review" | "approved" | "rejected" | "routed";
+
+export interface KbItem {
+  id: string;
+  source_kind: string;
+  source_identifier: string | null;
+  summary: string;
+  tags: string[];
+  status: KbItemStatus;
+  created_at: string;
+  ingested_by_user_id: string | null;
+  ingested_by_username?: string;
+}
+
+export interface KbItemDetail extends KbItem {
+  raw_content: string;
+  classification_json?: Record<string, unknown> | null;
+}
+
+export interface KbListParams {
+  query?: string;
+  source_kind?: string;
+  limit?: number;
+}
+
+function buildKbQuery(params?: KbListParams): string {
+  if (!params) return "";
+  const q = new URLSearchParams();
+  if (params.query && params.query.trim()) q.set("query", params.query.trim());
+  if (params.source_kind && params.source_kind !== "all") {
+    q.set("source_kind", params.source_kind);
+  }
+  if (params.limit) q.set("limit", String(params.limit));
+  const s = q.toString();
+  return s ? `?${s}` : "";
+}
+
+export function listProjectKb(
+  projectId: string,
+  params?: KbListParams,
+  baseUrl?: string,
+): Promise<{ items: KbItem[] }> {
+  return api<{ items: KbItem[] }>(
+    `/api/projects/${projectId}/kb${buildKbQuery(params)}`,
+    { baseUrl },
+  );
+}
+
+export function getKbItem(
+  projectId: string,
+  itemId: string,
+  baseUrl?: string,
+): Promise<KbItemDetail> {
+  return api<KbItemDetail>(
+    `/api/projects/${projectId}/kb/${itemId}`,
+    { baseUrl },
+  );
 }

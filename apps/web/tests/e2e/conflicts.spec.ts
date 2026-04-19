@@ -40,7 +40,7 @@ test.describe("conflicts tab + decision loop", () => {
     // Click through to the Conflicts tab.
     await page.getByRole("link", { name: /Conflicts/ }).click();
     await expect(page).toHaveURL(
-      new RegExp(`/projects/${projectId}/conflicts$`),
+      new RegExp(`/projects/${projectId}/detail/conflicts$`),
     );
 
     // WebSocket status flips to `open` once hub connects.

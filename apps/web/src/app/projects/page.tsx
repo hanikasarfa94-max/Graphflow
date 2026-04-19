@@ -1,5 +1,7 @@
+import { getTranslations } from "next-intl/server";
 import Link from "next/link";
 
+import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import type { ProjectSummary } from "@/lib/api";
 import { requireUser, serverFetch } from "@/lib/auth";
 
@@ -10,6 +12,7 @@ export const dynamic = "force-dynamic";
 export default async function ProjectsPage() {
   const user = await requireUser("/projects");
   const projects = await serverFetch<ProjectSummary[]>("/api/projects");
+  const t = await getTranslations();
 
   return (
     <main style={{ maxWidth: 860, margin: "0 auto", padding: "56px 24px" }}>
@@ -41,10 +44,10 @@ export default async function ProjectsPage() {
                 verticalAlign: "middle",
               }}
             />
-            WorkGraph
+            {t("brand.name")}
           </div>
           <h1 style={{ fontSize: 28, fontWeight: 600, margin: "8px 0 0" }}>
-            Projects
+            {t("projects.heading")}
           </h1>
         </div>
         <div
@@ -52,9 +55,15 @@ export default async function ProjectsPage() {
             fontSize: 12,
             fontFamily: "var(--wg-font-mono)",
             color: "var(--wg-ink-soft)",
+            display: "flex",
+            alignItems: "center",
+            gap: 12,
           }}
         >
-          signed in as {user.display_name}
+          <LanguageSwitcher />
+          <span>
+            {t("projects.signedInAs", { name: user.display_name })}
+          </span>
           <form
             action="/api/auth/logout"
             method="POST"
@@ -63,7 +72,6 @@ export default async function ProjectsPage() {
             <button
               type="submit"
               style={{
-                marginLeft: 10,
                 background: "transparent",
                 border: "none",
                 color: "var(--wg-accent)",
@@ -72,7 +80,7 @@ export default async function ProjectsPage() {
                 fontFamily: "var(--wg-font-mono)",
               }}
             >
-              sign out
+              {t("nav.signOut")}
             </button>
           </form>
         </div>
@@ -90,7 +98,7 @@ export default async function ProjectsPage() {
             fontSize: 14,
           }}
         >
-          No projects yet. Post the first intake message above to kick one off.
+          {t("projects.empty")}
         </div>
       ) : (
         <ul

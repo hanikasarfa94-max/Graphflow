@@ -67,13 +67,13 @@ test.describe("phase 13 — canonical demo seed + UI lock", () => {
     await expect(page.getByText(/deliverables/i).first()).toBeVisible();
 
     // --- graph tab: the planned tasks render -------------------------
-    await page.goto(`/projects/${projectId}/graph`);
+    await page.goto(`/projects/${projectId}/detail/graph`);
     await expect(page.locator(".react-flow")).toBeVisible({
       timeout: 15_000,
     });
 
     // --- delivery tab: the shipped summary renders -------------------
-    await page.goto(`/projects/${projectId}/delivery`);
+    await page.goto(`/projects/${projectId}/detail/delivery`);
     await expect(page.getByTestId("delivery-latest")).toBeVisible({
       timeout: 15_000,
     });

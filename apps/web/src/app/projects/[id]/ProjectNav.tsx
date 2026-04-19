@@ -3,15 +3,20 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-const TABS = [
-  { slug: "", label: "Overview" },
-  { slug: "graph", label: "Graph" },
-  { slug: "plan", label: "Plan" },
-  { slug: "conflicts", label: "Conflicts" },
-  { slug: "delivery", label: "Delivery" },
-  { slug: "clarify", label: "Clarify" },
-  { slug: "im", label: "Chat" },
-  { slug: "events", label: "Events" },
+const PRIMARY_TABS = [
+  { slug: "", label: "Stream" },
+  { slug: "status", label: "Status" },
+  { slug: "settings", label: "Settings" },
+];
+
+const AUDIT_TABS = [
+  { slug: "detail/graph", label: "Graph" },
+  { slug: "detail/plan", label: "Plan" },
+  { slug: "detail/clarify", label: "Clarify" },
+  { slug: "detail/conflicts", label: "Conflicts" },
+  { slug: "detail/events", label: "Events" },
+  { slug: "detail/delivery", label: "Delivery" },
+  { slug: "detail/im", label: "IM" },
 ];
 
 export function ProjectNav({
@@ -23,16 +28,19 @@ export function ProjectNav({
 }) {
   const pathname = usePathname();
 
+  const isAuditActive = pathname?.includes(`/projects/${projectId}/detail/`);
+
   return (
     <nav
       style={{
         display: "flex",
         gap: 4,
+        alignItems: "center",
         borderBottom: "1px solid var(--wg-line)",
       }}
       aria-label="project sections"
     >
-      {TABS.map((t) => {
+      {PRIMARY_TABS.map((t) => {
         const href = t.slug
           ? `/projects/${projectId}/${t.slug}`
           : `/projects/${projectId}`;
@@ -41,7 +49,7 @@ export function ProjectNav({
           (t.slug === "" && pathname === `/projects/${projectId}`);
         return (
           <Link
-            key={t.slug}
+            key={t.slug || "stream"}
             href={href}
             aria-current={active ? "page" : undefined}
             style={{
@@ -60,27 +68,116 @@ export function ProjectNav({
             }}
           >
             {t.label}
-            {t.slug === "conflicts" && conflictBadge && conflictBadge > 0 ? (
-              <span
-                aria-label={`${conflictBadge} open conflicts`}
-                style={{
-                  background: "var(--wg-accent)",
-                  color: "#fff",
-                  fontFamily: "var(--wg-font-mono)",
-                  fontSize: 11,
-                  fontWeight: 600,
-                  padding: "1px 7px",
-                  borderRadius: 10,
-                  minWidth: 18,
-                  textAlign: "center",
-                }}
-              >
-                {conflictBadge}
-              </span>
-            ) : null}
           </Link>
         );
       })}
+
+      <details
+        style={{
+          marginLeft: "auto",
+          position: "relative",
+          marginBottom: -1,
+        }}
+      >
+        <summary
+          style={{
+            padding: "10px 14px",
+            fontSize: 13,
+            cursor: "pointer",
+            listStyle: "none",
+            color: isAuditActive ? "var(--wg-ink)" : "var(--wg-ink-soft)",
+            fontFamily: "var(--wg-font-mono)",
+            borderBottom: isAuditActive
+              ? "2px solid var(--wg-accent)"
+              : "2px solid transparent",
+            fontWeight: isAuditActive ? 600 : 400,
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 6,
+          }}
+        >
+          Audit
+          {conflictBadge && conflictBadge > 0 ? (
+            <span
+              aria-label={`${conflictBadge} open conflicts`}
+              style={{
+                background: "var(--wg-accent)",
+                color: "#fff",
+                fontFamily: "var(--wg-font-mono)",
+                fontSize: 11,
+                fontWeight: 600,
+                padding: "1px 7px",
+                borderRadius: 10,
+                minWidth: 18,
+                textAlign: "center",
+              }}
+            >
+              {conflictBadge}
+            </span>
+          ) : null}
+        </summary>
+        <div
+          style={{
+            position: "absolute",
+            top: "calc(100% + 4px)",
+            right: 0,
+            background: "#fff",
+            border: "1px solid var(--wg-line)",
+            borderRadius: "var(--wg-radius)",
+            boxShadow: "0 4px 16px rgba(0,0,0,0.06)",
+            minWidth: 180,
+            padding: 4,
+            zIndex: 20,
+            display: "grid",
+          }}
+        >
+          {AUDIT_TABS.map((t) => {
+            const href = `/projects/${projectId}/${t.slug}`;
+            const active = pathname === href;
+            return (
+              <Link
+                key={t.slug}
+                href={href}
+                aria-current={active ? "page" : undefined}
+                style={{
+                  padding: "8px 12px",
+                  fontSize: 13,
+                  textDecoration: "none",
+                  color: active ? "var(--wg-ink)" : "var(--wg-ink-soft)",
+                  fontWeight: active ? 600 : 400,
+                  borderRadius: "var(--wg-radius)",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: 6,
+                }}
+              >
+                <span>{t.label}</span>
+                {t.slug === "detail/conflicts" &&
+                conflictBadge &&
+                conflictBadge > 0 ? (
+                  <span
+                    aria-label={`${conflictBadge} open conflicts`}
+                    style={{
+                      background: "var(--wg-accent)",
+                      color: "#fff",
+                      fontFamily: "var(--wg-font-mono)",
+                      fontSize: 11,
+                      fontWeight: 600,
+                      padding: "1px 7px",
+                      borderRadius: 10,
+                      minWidth: 18,
+                      textAlign: "center",
+                    }}
+                  >
+                    {conflictBadge}
+                  </span>
+                ) : null}
+              </Link>
+            );
+          })}
+        </div>
+      </details>
     </nav>
   );
 }

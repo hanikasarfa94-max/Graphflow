@@ -37,7 +37,7 @@ test.describe("canonical single-user flow", () => {
 
     // Graph tab — React Flow renders nodes as .react-flow__node.
     await page.getByRole("link", { name: "Graph" }).click();
-    await expect(page).toHaveURL(new RegExp(`/projects/${projectId}/graph$`));
+    await expect(page).toHaveURL(new RegExp(`/projects/${projectId}/detail/graph$`));
     // If the agent stack produced graph entities, nodes should render.
     // The canvas might be empty if running with a stubbed agent — accept
     // either state, but the canvas itself must be mounted.
@@ -46,7 +46,7 @@ test.describe("canonical single-user flow", () => {
 
     // Events tab — SSE connects. Status dot flips to `open`.
     await page.getByRole("link", { name: "Events" }).click();
-    await expect(page).toHaveURL(new RegExp(`/projects/${projectId}/events$`));
+    await expect(page).toHaveURL(new RegExp(`/projects/${projectId}/detail/events$`));
     // Status dot flips through connecting → open once SSE lands.
     await expect(page.getByTestId("sse-status")).toHaveText("open", {
       timeout: 15_000,

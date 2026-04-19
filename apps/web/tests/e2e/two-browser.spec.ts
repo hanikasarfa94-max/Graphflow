@@ -44,7 +44,7 @@ test.describe("two-browser realtime fanout", () => {
     // B opens the chat tab in a separate browser context.
     const ctxB = await browser.newContext();
     const pageB = await ctxB.newPage();
-    await loginViaUi(pageB, userB, `/projects/${projectId}/im`);
+    await loginViaUi(pageB, userB, `/projects/${projectId}/detail/im`);
 
     // Wait for B's WebSocket to land (status dot flips to `open`).
     await expect(pageB.getByTestId("ws-status")).toHaveText("open", {
@@ -52,7 +52,7 @@ test.describe("two-browser realtime fanout", () => {
     });
 
     // A navigates to the chat tab and sends a message.
-    await pageA.goto(`/projects/${projectId}/im`);
+    await pageA.goto(`/projects/${projectId}/detail/im`);
     await expect(pageA.getByTestId("ws-status")).toHaveText("open", {
       timeout: 15_000,
     });

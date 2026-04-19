@@ -19,7 +19,7 @@ test.describe("delivery tab", () => {
     const planRes = await request.post(`/api/projects/${projectId}/plan`);
     expect(planRes.ok(), `plan failed ${planRes.status()}`).toBeTruthy();
 
-    await page.goto(`/projects/${projectId}/delivery`);
+    await page.goto(`/projects/${projectId}/detail/delivery`);
     await expect(page.getByTestId("delivery-pane")).toBeVisible();
     await expect(page.getByTestId("delivery-empty")).toBeVisible();
 

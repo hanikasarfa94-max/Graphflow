@@ -1,0 +1,527 @@
+{
+  "brand": {
+    "name": "WorkGraph",
+    "tagline": "Coordination as a graph, not a document."
+  },
+  "nav": {
+    "home": "Home",
+    "projects": "Projects",
+    "streams": "Streams",
+    "status": "Status",
+    "settings": "Settings",
+    "audit": "Audit",
+    "profile": "Profile",
+    "signOut": "Sign out",
+    "signIn": "Sign in",
+    "register": "Register"
+  },
+  "buttons": {
+    "send": "Send",
+    "cancel": "Cancel",
+    "save": "Save",
+    "create": "Create",
+    "delete": "Delete",
+    "accept": "Accept",
+    "counter": "Counter",
+    "dismiss": "Dismiss",
+    "escalate": "Escalate",
+    "submit": "Submit",
+    "retry": "Retry",
+    "close": "Close",
+    "confirm": "Confirm",
+    "edit": "Edit",
+    "viewLineage": "View lineage",
+    "newProject": "New project",
+    "newMessage": "New message",
+    "openProjects": "Open projects",
+    "runDemo": "Run canonical demo"
+  },
+  "placeholders": {
+    "username": "Username",
+    "password": "Password",
+    "email": "Email",
+    "message": "Type a message…",
+    "search": "Search",
+    "displayName": "Display name",
+    "projectName": "Project name",
+    "projectDescription": "Describe what you're building (one sentence)"
+  },
+  "states": {
+    "loading": "Loading…",
+    "saving": "Saving…",
+    "sending": "Sending…",
+    "noPending": "No pending signals",
+    "noProjects": "No projects yet",
+    "online": "Online",
+    "away": "Away",
+    "offline": "Offline",
+    "pending": "Pending",
+    "accepted": "Accepted",
+    "declined": "Declined",
+    "resolved": "Resolved",
+    "empty": "Nothing here yet"
+  },
+  "login": {
+    "heading": "Sign in",
+    "registerHeading": "Create account",
+    "toRegister": "No account? Create one.",
+    "toLogin": "Have an account? Sign in.",
+    "submitLogin": "Sign in",
+    "submitRegister": "Register"
+  },
+  "errors": {
+    "invalidCredentials": "Invalid username or password",
+    "required": "Required",
+    "network": "Network error — check the API is running",
+    "unknown": "Something went wrong",
+    "demoFailed": "Demo start failed",
+    "demoNoProject": "Demo started but no project id returned"
+  },
+  "landing": {
+    "title1": "Coordination as a graph,",
+    "title2": "not a document.",
+    "subtitle": "Turn a single message into a coordinated team plan. Every stage is a node, every handoff is an edge, and every decision is on the record.",
+    "canonicalFlow": "Canonical flow",
+    "starting": "Starting…",
+    "footerLine1": "Five stages. One graph.",
+    "footerLine2": "Every decision on the record.",
+    "features": {
+      "whatYouType": {
+        "title": "What you type",
+        "body": "One message. Say what you want, no form required."
+      },
+      "whatWeDo": {
+        "title": "What we do",
+        "body": "Specialist agents parse, clarify, plan, and hand off — orchestrated as a graph, not a doc."
+      },
+      "whatYouGet": {
+        "title": "What you get",
+        "body": "A live plan with owners, a conflict log with decisions, and a delivery summary when it ships."
+      }
+    },
+    "stages": {
+      "intake": "Intake",
+      "intakeHint": "message → requirement",
+      "clarify": "Clarify",
+      "clarifyHint": "open questions",
+      "plan": "Plan",
+      "planHint": "tasks + owners",
+      "decide": "Decide",
+      "decideHint": "conflicts resolved",
+      "deliver": "Deliver",
+      "deliverHint": "summary + handoff"
+    }
+  },
+  "projects": {
+    "heading": "Projects",
+    "signedInAs": "signed in as {name}",
+    "empty": "No projects yet. Post the first intake message above to kick one off.",
+    "roleLabel": "role"
+  },
+  "language": {
+    "switcher": "Language",
+    "english": "English",
+    "chinese": "中文"
+  },
+  "home": {
+    "welcome": "Welcome, {name}",
+    "signedInAs": "signed in as {name}",
+    "pending": {
+      "title": "Needs your response",
+      "empty": "No pending signals",
+      "jumpToTurn": "Jump to turn →",
+      "showMore": "Show {count} more",
+      "fromProject": "in {project}"
+    },
+    "approvals": {
+      "title": "Gated approvals",
+      "empty": "No gated approvals waiting on you",
+      "placeholderNote": "Admin approver routing ships in v2 — nothing routed to you yet."
+    },
+    "active": {
+      "title": "You're working on",
+      "upstream": "From decision:",
+      "downstream": "Unblocks:",
+      "adjacent": "Near you:",
+      "status": "Status:",
+      "age": "Age:",
+      "llmOffer": "Refresh status or rehearse your next step…",
+      "llmSendLabel": "Nudge my edge LLM",
+      "caughtUp": "All caught up",
+      "caughtUpLastCrystallization": "Last crystallization: {time}",
+      "caughtUpNoHistory": "No crystallizations yet — kick one off from a project stream.",
+      "lastDecisionFallback": "Last decision in {project}: {summary} — {time}",
+      "noActiveTask": "No active task — pick a project to start one.",
+      "noDownstream": "nothing yet",
+      "noAdjacent": "no one else in flight"
+    },
+    "projects": {
+      "title": "Your projects",
+      "empty": "You're not a member of any project yet. Start one below.",
+      "newButton": "+ New project"
+    },
+    "dms": {
+      "title": "Messages",
+      "empty": "No direct messages yet.",
+      "noLastMessage": "(no messages yet)",
+      "newButton": "+ New message"
+    },
+    "unread": {
+      "count": "{count} unread"
+    },
+    "newProject": {
+      "title": "New project",
+      "titleLabel": "Project title",
+      "titlePlaceholder": "e.g., Stellar Drift launch",
+      "descriptionLabel": "First requirement (optional)",
+      "descriptionPlaceholder": "Describe what you're building — the edge LLM will parse this as the first requirement.",
+      "inviteLabel": "Invite members (optional)",
+      "invitePlaceholder": "Comma-separated usernames, e.g. raj, aiko, diego",
+      "submit": "Create project",
+      "submitting": "Creating…",
+      "cancel": "Cancel",
+      "errorCreate": "Couldn't create project",
+      "errorInvite": "Created, but some invites failed:"
+    }
+  },
+  "stream": {
+    "loading": "Loading stream…",
+    "empty": "No messages yet — kick things off below.",
+    "messageCount": "messages",
+    "newMessagesBelow": "new messages",
+    "viewLineage": "View lineage",
+    "counterNote": "↳ counter to earlier suggestion",
+    "composer": {
+      "placeholder": "Message the team…"
+    },
+    "counter": {
+      "placeholder": "Write your counter framing…"
+    },
+    "proposal": {
+      "label": "Proposed",
+      "references": "References"
+    },
+    "decision": {
+      "recorded": "⚡ Decision recorded"
+    },
+    "attribution": {
+      "edge": "edge",
+      "clarifier": "clarifier",
+      "decision": "decision",
+      "blocker": "blocker",
+      "member": "member"
+    },
+    "actions": {
+      "accept": "Accept",
+      "counter": "Counter",
+      "dismiss": "Dismiss",
+      "escalate": "Escalate",
+      "send": "Send",
+      "sendCounter": "Send counter",
+      "cancel": "Cancel",
+      "react": "React"
+    },
+    "status": {
+      "accepted": "suggestion accepted",
+      "dismissed": "suggestion dismissed",
+      "countered": "countered",
+      "escalated": "escalated — awaiting sync",
+      "awaitingSync": "Awaiting sync"
+    },
+    "presence": {
+      "online": "Online",
+      "away": "Away",
+      "offline": "Offline"
+    }
+  },
+  "status": {
+    "title": "Project status",
+    "lastRefreshed": "Last refreshed {time}",
+    "members": {
+      "title": "Team",
+      "empty": "No members yet",
+      "observer": "Observer",
+      "roleLabel": "role"
+    },
+    "tasks": {
+      "title": "Active tasks",
+      "empty": "No active tasks",
+      "columnTitle": "Task",
+      "columnOwner": "Owner",
+      "columnStatus": "Status",
+      "columnAge": "Age",
+      "unassigned": "Unassigned"
+    },
+    "risks": {
+      "title": "Open risks",
+      "empty": "No open risks",
+      "columnTitle": "Risk",
+      "columnSeverity": "Severity",
+      "columnOwner": "Owner",
+      "columnAge": "Age",
+      "severity": {
+        "low": "Low",
+        "medium": "Medium",
+        "high": "High",
+        "critical": "Critical"
+      }
+    },
+    "decisions": {
+      "title": "Recent decisions",
+      "empty": "No decisions yet",
+      "fromIm": "from IM",
+      "viewLineage": "View lineage"
+    },
+    "artifacts": {
+      "title": "External artifacts",
+      "empty": "No git commits or docs linked yet"
+    },
+    "age": {
+      "justNow": "just now",
+      "minutes": "{n}m",
+      "hours": "{n}h",
+      "days": "{n}d",
+      "unknown": "—"
+    },
+    "renderTriggers": {
+      "title": "Generate documents",
+      "postmortem": {
+        "heading": "📝 Postmortem",
+        "description": "Generate a project-wide postmortem from graph state.",
+        "generate": "Generate postmortem",
+        "view": "View",
+        "regenerate": "Regenerate",
+        "lastGenerated": "Last generated {time}"
+      },
+      "handoff": {
+        "heading": "🤝 Handoff docs",
+        "description": "Generate a role-summary handoff document for a teammate from graph history.",
+        "generate": "Generate handoff doc",
+        "empty": "No other teammates in this project yet."
+      }
+    }
+  },
+  "kb": {
+    "title": "Knowledge base",
+    "search": "Search KB…",
+    "empty": "No items match your query.",
+    "notAvailable": "Knowledge base will be available soon.",
+    "filters": {
+      "all": "All",
+      "git": "Git",
+      "steam": "Steam",
+      "rss": "RSS",
+      "user-drop": "User drops"
+    },
+    "item": {
+      "back": "← Back to KB",
+      "source": "Source",
+      "ingestedBy": "Ingested by",
+      "classification": "Classification",
+      "status": "Status"
+    }
+  },
+  "personal": {
+    "title": "My thread",
+    "subtitle": "You + your edge agent, scoped to this project",
+    "loading": "Loading your thread…",
+    "empty": "Ask your edge agent anything — it knows this project's graph, recent decisions, and who to route to.",
+    "tabs": {
+      "myThread": "🧠 My thread",
+      "teamRoom": "👥 Team room",
+      "dms": "💬 DMs"
+    },
+    "dms": {
+      "menuLabel": "Direct message a teammate",
+      "messagePerson": "Message {name}",
+      "empty": "No teammates to DM yet."
+    },
+    "composer": {
+      "placeholder": "Talk to your edge agent…",
+      "send": "Send"
+    },
+    "edge": {
+      "attribution": "🧠 Edge",
+      "answer": "answer",
+      "clarify": "clarifying question",
+      "thinking": "thinking",
+      "unknown": "edge"
+    },
+    "routeProposal": {
+      "header": "🧠 Edge — routing proposal",
+      "ask": "Ask {name}",
+      "asking": "Asking {name}…",
+      "confirmed": "✓ Asked {name}",
+      "dismiss": "Don't ask, dismiss",
+      "dismissed": "· Dismissed",
+      "noTargets": "(no targets surfaced — type a follow-up to redirect)"
+    },
+    "inbound": {
+      "from": "{name} asked (via edge)",
+      "inlineLine": "New routed question from {name}",
+      "openDrawer": "Open",
+      "framing": "Framing",
+      "background": "Background",
+      "showBackground": "Show background ({n})",
+      "hideBackground": "Hide background",
+      "options": "Options",
+      "weight": "Weight",
+      "reason": "Reason",
+      "tradeoff": "Bargain",
+      "pickThis": "Pick this",
+      "customReply": "Reply custom",
+      "customPlaceholder": "Or reply in your own words…",
+      "sendCustom": "Send",
+      "replied": "✓ Replied: {label}",
+      "repliedCustom": "✓ Replied: {snippet}",
+      "loading": "Loading routed inbound…",
+      "loadFailed": "Couldn't load routed signal"
+    },
+    "reply": {
+      "header": "🧠 Edge — {name} replied",
+      "acceptAction": "Accept",
+      "counterBackAction": "Counter back",
+      "escalateAction": "Escalate",
+      "replyCustomAction": "Reply custom",
+      "cancel": "Cancel",
+      "send": "Send",
+      "sending": "Sending…",
+      "counterPlaceholder": "What extra info / framing do they need?",
+      "customPlaceholder": "Your follow-up…",
+      "customFramingPrefix": "Follow-up:",
+      "acceptPrefill": "Accepted {name}'s reply: {snippet} ",
+      "escalatePrefill": "Escalating {name}'s reply for sync — ",
+      "counterSentPrefill": "↳ Countered back to {name}. ",
+      "acceptedLocal": "Accepted — loop closed locally",
+      "viewInDM": "View full thread in DM →"
+    },
+    "followUp": "Follow up…",
+    "followUpPrefix": "Re: "
+  },
+  "shell": {
+    "sidebar": "Sidebar",
+    "nav": "Navigation",
+    "home": "Home",
+    "projects": "Projects",
+    "noProjects": "No projects yet",
+    "dms": "Direct messages",
+    "noDms": "No direct messages yet",
+    "routedInbox": "Routed inbox",
+    "profile": "Profile",
+    "signOut": "Sign out",
+    "collapse": "Collapse",
+    "project": {
+      "myThread": "My thread",
+      "teamRoom": "Team room",
+      "status": "Status",
+      "kb": "KB",
+      "renders": "Renders",
+      "renders_postmortem": "Postmortem",
+      "renders_handoff": "Handoff",
+      "detail": "Detail",
+      "detail_graph": "Graph",
+      "detail_plan": "Plan",
+      "detail_tasks": "Tasks",
+      "detail_risks": "Risks",
+      "detail_decisions": "Decisions"
+    }
+  },
+  "inbox": {
+    "eyebrow": "Routed signals",
+    "drawerTitle": "Routed inbox",
+    "close": "Close",
+    "loading": "Loading routed inbox…",
+    "noPending": "No routed questions waiting on you.",
+    "openDrawer": "Open routed inbox",
+    "openDrawerN": "Open routed inbox ({n} pending)",
+    "newRoutedFrom": "New routed question from {name}",
+    "pendingLabel": "Pending",
+    "repliedLabel": "Replied"
+  },
+  "tool": {
+    "calling": "Calling skill",
+    "result": "Result",
+    "resultOk": "ok",
+    "resultCount": "{n} results",
+    "error": "error",
+    "expand": "Expand",
+    "collapse": "Collapse"
+  },
+  "rehearsal": {
+    "thinking": "thinking…",
+    "silent": "",
+    "answer": "Edge would answer:",
+    "clarify": "Edge would ask back:",
+    "routeProposal": "Edge would propose routing to <strong>{name}</strong>: <em>{rationale}</em>",
+    "devilsAdvocate": "Devil's advocate:",
+    "cooldown": "preview cooldown — keep typing",
+    "sendAsIs": "Send as-is"
+  },
+  "drift": {
+    "alertTitle": "Drift alert",
+    "driftingFrom": "Drifting from",
+    "whatChanged": "What changed",
+    "suggestedNext": "Suggested next step",
+    "discussWithEdge": "Discuss with edge",
+    "severity": {
+      "low": "Low",
+      "medium": "Medium",
+      "high": "High"
+    }
+  },
+  "membrane": {
+    "attribution": "Edge · membrane",
+    "ambient": "ambient",
+    "routedAs": "Edge routed this to you as {tag}",
+    "viewSource": "View source"
+  },
+  "render": {
+    "loading": "Generating document…",
+    "loadFailed": "Couldn't load this render. Try regenerating or check you're a project member.",
+    "generatedAt": "Generated {time}",
+    "regenerate": "Regenerate",
+    "regenerating": "Regenerating…",
+    "editSection": "Lightly edit",
+    "saveSection": "Save edit",
+    "cancelEdit": "Cancel",
+    "editNote": "Edits are local only in v1 — they won't persist across reloads.",
+    "manualReview": "This render hit a manual-review fallback. Expect gaps.",
+    "unknownSlug": "Unknown render slug. Expected `postmortem` or `handoff:<user_id>`.",
+    "postmortem": {
+      "title": "Postmortem",
+      "noData": "No postmortem available yet — kick off a decision to populate lineage."
+    },
+    "handoff": {
+      "title": "Handoff",
+      "noData": "No handoff available yet."
+    },
+    "sections": {
+      "whatHappened": "What happened",
+      "keyDecisions": "Key decisions (lineage)",
+      "whatWeGotRight": "What we got right",
+      "whatDrifted": "What drifted",
+      "lessons": "Lessons",
+      "myRole": "Role summary",
+      "myTasks": "Active tasks I own",
+      "myDecisions": "Recurring decisions I make",
+      "myRelationships": "Key relationships",
+      "myOpenItems": "Open items / pending routings",
+      "myStyle": "Style notes (how I reply to common asks)"
+    }
+  },
+  "dm": {
+    "title": "Direct message",
+    "with": "With {name}",
+    "empty": "No messages yet. Say hi.",
+    "composer": {
+      "placeholder": "Message {name}…"
+    },
+    "messagePerson": "Message",
+    "notFound": "Stream not found or you don't have access.",
+    "backend": {
+      "heading": "Preview only",
+      "body": "DM delivery is stubbed in v1 — messages render locally but aren't persisted. Backend endpoints /api/streams/'{id}'/messages and /ws/streams/'{id}' are not wired yet."
+    },
+    "members": "Members"
+  }
+}

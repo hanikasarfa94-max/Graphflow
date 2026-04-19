@@ -1,0 +1,527 @@
+{
+  "brand": {
+    "name": "WorkGraph",
+    "tagline": "协作是一张图,而不是一份文档。"
+  },
+  "nav": {
+    "home": "首页",
+    "projects": "项目",
+    "streams": "会话",
+    "status": "状态",
+    "settings": "设置",
+    "audit": "审计",
+    "profile": "个人资料",
+    "signOut": "退出登录",
+    "signIn": "登录",
+    "register": "注册"
+  },
+  "buttons": {
+    "send": "发送",
+    "cancel": "取消",
+    "save": "保存",
+    "create": "创建",
+    "delete": "删除",
+    "accept": "接受",
+    "counter": "反提",
+    "dismiss": "忽略",
+    "escalate": "上报",
+    "submit": "提交",
+    "retry": "重试",
+    "close": "关闭",
+    "confirm": "确认",
+    "edit": "编辑",
+    "viewLineage": "查看来龙去脉",
+    "newProject": "新建项目",
+    "newMessage": "新建会话",
+    "openProjects": "打开项目",
+    "runDemo": "运行示例流程"
+  },
+  "placeholders": {
+    "username": "用户名",
+    "password": "密码",
+    "email": "邮箱",
+    "message": "输入消息…",
+    "search": "搜索",
+    "displayName": "昵称",
+    "projectName": "项目名称",
+    "projectDescription": "一句话描述你在做的事"
+  },
+  "states": {
+    "loading": "加载中…",
+    "saving": "保存中…",
+    "sending": "发送中…",
+    "noPending": "暂无待处理信号",
+    "noProjects": "暂无项目",
+    "online": "在线",
+    "away": "离开",
+    "offline": "离线",
+    "pending": "待处理",
+    "accepted": "已接受",
+    "declined": "已拒绝",
+    "resolved": "已解决",
+    "empty": "这里还什么都没有"
+  },
+  "login": {
+    "heading": "登录",
+    "registerHeading": "创建账号",
+    "toRegister": "还没有账号?立即创建。",
+    "toLogin": "已有账号?直接登录。",
+    "submitLogin": "登录",
+    "submitRegister": "注册"
+  },
+  "errors": {
+    "invalidCredentials": "用户名或密码错误",
+    "required": "必填项",
+    "network": "网络错误 — 请确认后端服务已启动",
+    "unknown": "出了点问题",
+    "demoFailed": "示例启动失败",
+    "demoNoProject": "示例已启动,但未返回项目 ID"
+  },
+  "landing": {
+    "title1": "协作是一张图,",
+    "title2": "而不是一份文档。",
+    "subtitle": "把一条消息变成全队协同的计划。每个阶段都是节点,每次交接都是边,每个决策都留档在册。",
+    "canonicalFlow": "标准流程",
+    "starting": "启动中…",
+    "footerLine1": "五个阶段,一张图。",
+    "footerLine2": "所有决策,有迹可循。",
+    "features": {
+      "whatYouType": {
+        "title": "你输入",
+        "body": "一条消息。说清楚想做什么,不需要填表单。"
+      },
+      "whatWeDo": {
+        "title": "我们处理",
+        "body": "多个专职智能体负责解析、澄清、排期、交接 —— 以图的方式编排,而不是文档。"
+      },
+      "whatYouGet": {
+        "title": "你得到",
+        "body": "一份有负责人的实时计划、一份有决策的冲突记录,以及交付时的总结。"
+      }
+    },
+    "stages": {
+      "intake": "接收",
+      "intakeHint": "消息 → 需求",
+      "clarify": "澄清",
+      "clarifyHint": "待回答的问题",
+      "plan": "规划",
+      "planHint": "任务 + 负责人",
+      "decide": "决策",
+      "decideHint": "冲突落定",
+      "deliver": "交付",
+      "deliverHint": "总结 + 交接"
+    }
+  },
+  "projects": {
+    "heading": "项目",
+    "signedInAs": "当前账号:{name}",
+    "empty": "还没有项目。在上方发出第一条需求消息即可开启。",
+    "roleLabel": "角色"
+  },
+  "language": {
+    "switcher": "语言",
+    "english": "English",
+    "chinese": "中文"
+  },
+  "home": {
+    "welcome": "欢迎,{name}",
+    "signedInAs": "当前账号:{name}",
+    "pending": {
+      "title": "需要你回应",
+      "empty": "暂无待处理事项",
+      "jumpToTurn": "跳到对话 →",
+      "showMore": "再看 {count} 条",
+      "fromProject": "来自 {project}"
+    },
+    "approvals": {
+      "title": "待你审批",
+      "empty": "暂无等待你审批的事项",
+      "placeholderNote": "管理员审批路由将在 v2 上线 —— 目前尚无路由到你的事项。"
+    },
+    "active": {
+      "title": "你正在处理",
+      "upstream": "源于决策:",
+      "downstream": "解锁:",
+      "adjacent": "相邻成员:",
+      "status": "状态:",
+      "age": "持续:",
+      "llmOffer": "刷新状态或推演下一步…",
+      "llmSendLabel": "通知我的边缘 LLM",
+      "caughtUp": "全部完成",
+      "caughtUpLastCrystallization": "最近的决策:{time}",
+      "caughtUpNoHistory": "还没有结晶的决策 —— 在项目流中发起一个吧。",
+      "lastDecisionFallback": "{project} 的最新决策:{summary} —— {time}",
+      "noActiveTask": "暂无进行中的任务 —— 选一个项目开始吧。",
+      "noDownstream": "暂无",
+      "noAdjacent": "目前没有其他人"
+    },
+    "projects": {
+      "title": "你的项目",
+      "empty": "你还没有加入任何项目,在下方新建一个吧。",
+      "newButton": "+ 新建项目"
+    },
+    "dms": {
+      "title": "消息",
+      "empty": "暂无私信。",
+      "noLastMessage": "(还没有消息)",
+      "newButton": "+ 新建会话"
+    },
+    "unread": {
+      "count": "{count} 条未读"
+    },
+    "newProject": {
+      "title": "新建项目",
+      "titleLabel": "项目名称",
+      "titlePlaceholder": "例如:Stellar Drift 发布",
+      "descriptionLabel": "第一条需求(可选)",
+      "descriptionPlaceholder": "一句话描述你在做的事 —— 边缘 LLM 会把它解析为首条需求。",
+      "inviteLabel": "邀请成员(可选)",
+      "invitePlaceholder": "用逗号分隔的用户名,例如:raj, aiko, diego",
+      "submit": "创建项目",
+      "submitting": "正在创建…",
+      "cancel": "取消",
+      "errorCreate": "创建项目失败",
+      "errorInvite": "项目已创建,但部分邀请失败:"
+    }
+  },
+  "stream": {
+    "loading": "正在加载会话…",
+    "empty": "还没有消息 —— 在下方开始吧。",
+    "messageCount": "条消息",
+    "newMessagesBelow": "有新消息",
+    "viewLineage": "查看来龙去脉",
+    "counterNote": "↳ 反提较早的建议",
+    "composer": {
+      "placeholder": "向团队发消息…"
+    },
+    "counter": {
+      "placeholder": "写下你的反提框架…"
+    },
+    "proposal": {
+      "label": "建议",
+      "references": "涉及"
+    },
+    "decision": {
+      "recorded": "⚡ 已生成决策"
+    },
+    "attribution": {
+      "edge": "边缘",
+      "clarifier": "澄清员",
+      "decision": "决策",
+      "blocker": "阻塞",
+      "member": "成员"
+    },
+    "actions": {
+      "accept": "接受",
+      "counter": "反提",
+      "dismiss": "忽略",
+      "escalate": "上报",
+      "send": "发送",
+      "sendCounter": "发送反提",
+      "cancel": "取消",
+      "react": "表情"
+    },
+    "status": {
+      "accepted": "建议已接受",
+      "dismissed": "建议已忽略",
+      "countered": "已被反提",
+      "escalated": "已上报 —— 等待同步",
+      "awaitingSync": "等待同步"
+    },
+    "presence": {
+      "online": "在线",
+      "away": "离开",
+      "offline": "离线"
+    }
+  },
+  "status": {
+    "title": "项目状态",
+    "lastRefreshed": "最后刷新 {time}",
+    "members": {
+      "title": "团队",
+      "empty": "暂无成员",
+      "observer": "观察者",
+      "roleLabel": "角色"
+    },
+    "tasks": {
+      "title": "进行中的任务",
+      "empty": "暂无进行中的任务",
+      "columnTitle": "任务",
+      "columnOwner": "负责人",
+      "columnStatus": "状态",
+      "columnAge": "时长",
+      "unassigned": "未分配"
+    },
+    "risks": {
+      "title": "未解决的风险",
+      "empty": "暂无未解决的风险",
+      "columnTitle": "风险",
+      "columnSeverity": "严重度",
+      "columnOwner": "负责人",
+      "columnAge": "时长",
+      "severity": {
+        "low": "低",
+        "medium": "中",
+        "high": "高",
+        "critical": "严重"
+      }
+    },
+    "decisions": {
+      "title": "最近的决策",
+      "empty": "暂无决策",
+      "fromIm": "来自会话",
+      "viewLineage": "查看来龙去脉"
+    },
+    "artifacts": {
+      "title": "外部产物",
+      "empty": "尚未关联任何 git 提交或文档"
+    },
+    "age": {
+      "justNow": "刚刚",
+      "minutes": "{n} 分钟",
+      "hours": "{n} 小时",
+      "days": "{n} 天",
+      "unknown": "—"
+    },
+    "renderTriggers": {
+      "title": "生成文档",
+      "postmortem": {
+        "heading": "📝 项目复盘",
+        "description": "基于图谱状态生成一份全项目复盘。",
+        "generate": "生成复盘",
+        "view": "查看",
+        "regenerate": "重新生成",
+        "lastGenerated": "上次生成:{time}"
+      },
+      "handoff": {
+        "heading": "🤝 交接文档",
+        "description": "基于图谱历史为某位同事生成角色概述交接文档。",
+        "generate": "生成交接文档",
+        "empty": "这个项目还没有其他成员。"
+      }
+    }
+  },
+  "kb": {
+    "title": "知识库",
+    "search": "搜索知识库…",
+    "empty": "没有匹配的条目。",
+    "notAvailable": "知识库即将上线。",
+    "filters": {
+      "all": "全部",
+      "git": "Git",
+      "steam": "Steam",
+      "rss": "RSS",
+      "user-drop": "手动投递"
+    },
+    "item": {
+      "back": "← 返回知识库",
+      "source": "来源",
+      "ingestedBy": "录入者",
+      "classification": "分类",
+      "status": "状态"
+    }
+  },
+  "personal": {
+    "title": "我的会话",
+    "subtitle": "你与你的 Edge 智能体,聚焦在这个项目",
+    "loading": "加载你的会话中…",
+    "empty": "向你的 Edge 智能体提问 —— 它了解这个项目的图谱、近期决策,以及该转给谁。",
+    "tabs": {
+      "myThread": "🧠 我的会话",
+      "teamRoom": "👥 团队会议室",
+      "dms": "💬 私信"
+    },
+    "dms": {
+      "menuLabel": "私信某位成员",
+      "messagePerson": "私信 {name}",
+      "empty": "暂无可私信的成员。"
+    },
+    "composer": {
+      "placeholder": "与你的 Edge 智能体交谈…",
+      "send": "发送"
+    },
+    "edge": {
+      "attribution": "🧠 Edge",
+      "answer": "回答",
+      "clarify": "澄清提问",
+      "thinking": "思考中",
+      "unknown": "边缘"
+    },
+    "routeProposal": {
+      "header": "🧠 Edge —— 路由建议",
+      "ask": "询问 {name}",
+      "asking": "正在询问 {name}…",
+      "confirmed": "✓ 已询问 {name}",
+      "dismiss": "不询问,忽略",
+      "dismissed": "· 已忽略",
+      "noTargets": "(尚未识别出合适的人选 —— 输入一条跟进以重新定向)"
+    },
+    "inbound": {
+      "from": "{name} 通过 Edge 询问",
+      "inlineLine": "来自 {name} 的新路由询问",
+      "openDrawer": "打开",
+      "framing": "概述",
+      "background": "背景",
+      "showBackground": "展开背景({n})",
+      "hideBackground": "收起背景",
+      "options": "选项",
+      "weight": "权重",
+      "reason": "原因",
+      "tradeoff": "代价",
+      "pickThis": "选这个",
+      "customReply": "自定义回复",
+      "customPlaceholder": "或者用你自己的话回复…",
+      "sendCustom": "发送",
+      "replied": "✓ 已回复:{label}",
+      "repliedCustom": "✓ 已回复:{snippet}",
+      "loading": "正在加载路由询问…",
+      "loadFailed": "路由信号加载失败"
+    },
+    "reply": {
+      "header": "🧠 Edge —— {name} 已回复",
+      "acceptAction": "接受",
+      "counterBackAction": "反提回去",
+      "escalateAction": "上报",
+      "replyCustomAction": "自定义回复",
+      "cancel": "取消",
+      "send": "发送",
+      "sending": "发送中…",
+      "counterPlaceholder": "对方还需要哪些信息或换一个框架?",
+      "customPlaceholder": "你的跟进…",
+      "customFramingPrefix": "跟进:",
+      "acceptPrefill": "已接受 {name} 的回复:{snippet} ",
+      "escalatePrefill": "正在就 {name} 的回复申请同步 —— ",
+      "counterSentPrefill": "↳ 已反提回 {name}。",
+      "acceptedLocal": "已接受 —— 本地回路已闭合",
+      "viewInDM": "在私信中查看完整线程 →"
+    },
+    "followUp": "追问…",
+    "followUpPrefix": "Re:"
+  },
+  "shell": {
+    "sidebar": "侧边栏",
+    "nav": "导航",
+    "home": "首页",
+    "projects": "项目",
+    "noProjects": "暂无项目",
+    "dms": "私信",
+    "noDms": "暂无私信",
+    "routedInbox": "路由收件箱",
+    "profile": "个人资料",
+    "signOut": "退出登录",
+    "collapse": "收起",
+    "project": {
+      "myThread": "我的会话",
+      "teamRoom": "团队会议室",
+      "status": "状态",
+      "kb": "知识库",
+      "renders": "渲染文档",
+      "renders_postmortem": "项目复盘",
+      "renders_handoff": "交接文档",
+      "detail": "审计视图",
+      "detail_graph": "图谱",
+      "detail_plan": "计划",
+      "detail_tasks": "任务",
+      "detail_risks": "风险",
+      "detail_decisions": "决策"
+    }
+  },
+  "inbox": {
+    "eyebrow": "路由信号",
+    "drawerTitle": "路由收件箱",
+    "close": "关闭",
+    "loading": "正在加载路由收件箱…",
+    "noPending": "暂无等待你回复的路由询问。",
+    "openDrawer": "打开路由收件箱",
+    "openDrawerN": "打开路由收件箱(还有 {n} 条待处理)",
+    "newRoutedFrom": "来自 {name} 的新路由询问",
+    "pendingLabel": "待处理",
+    "repliedLabel": "已回复"
+  },
+  "tool": {
+    "calling": "调用技能",
+    "result": "结果",
+    "resultOk": "成功",
+    "resultCount": "{n} 条结果",
+    "error": "错误",
+    "expand": "展开",
+    "collapse": "收起"
+  },
+  "rehearsal": {
+    "thinking": "推演中…",
+    "silent": "",
+    "answer": "Edge 会这样回答:",
+    "clarify": "Edge 会这样反问:",
+    "routeProposal": "Edge 建议转给 <strong>{name}</strong>:<em>{rationale}</em>",
+    "devilsAdvocate": "反向质疑:",
+    "cooldown": "预览冷却中 —— 继续输入",
+    "sendAsIs": "原样发送"
+  },
+  "drift": {
+    "alertTitle": "偏航提醒",
+    "driftingFrom": "偏离自",
+    "whatChanged": "变化点",
+    "suggestedNext": "建议下一步",
+    "discussWithEdge": "与 Edge 讨论",
+    "severity": {
+      "low": "低",
+      "medium": "中",
+      "high": "高"
+    }
+  },
+  "membrane": {
+    "attribution": "Edge · 膜感知",
+    "ambient": "环境信号",
+    "routedAs": "Edge 将该外部信号作为 {tag} 路由给你",
+    "viewSource": "查看来源"
+  },
+  "render": {
+    "loading": "正在生成文档……",
+    "loadFailed": "无法加载该渲染,请尝试重新生成,或确认你是项目成员。",
+    "generatedAt": "生成于 {time}",
+    "regenerate": "重新生成",
+    "regenerating": "重新生成中……",
+    "editSection": "轻度编辑",
+    "saveSection": "保存",
+    "cancelEdit": "取消",
+    "editNote": "v1 编辑仅本地生效,刷新后不会保留。",
+    "manualReview": "该渲染触发了人工复核兜底,内容可能缺失。",
+    "unknownSlug": "未知的渲染标识符,期望 `postmortem` 或 `handoff:<user_id>`。",
+    "postmortem": {
+      "title": "项目复盘",
+      "noData": "尚未生成复盘——先记录一个决策以激活链路。"
+    },
+    "handoff": {
+      "title": "交接文档",
+      "noData": "尚未生成交接文档。"
+    },
+    "sections": {
+      "whatHappened": "发生了什么",
+      "keyDecisions": "关键决策(链路)",
+      "whatWeGotRight": "做对的事",
+      "whatDrifted": "偏移之处",
+      "lessons": "经验",
+      "myRole": "角色概述",
+      "myTasks": "我负责的活动任务",
+      "myDecisions": "我常做的决策",
+      "myRelationships": "关键关系",
+      "myOpenItems": "待处理事项与路由",
+      "myStyle": "回复常见询问的风格"
+    }
+  },
+  "dm": {
+    "title": "私信",
+    "with": "与 {name}",
+    "empty": "还没有消息,打个招呼吧。",
+    "composer": {
+      "placeholder": "发消息给 {name}…"
+    },
+    "messagePerson": "发消息",
+    "notFound": "找不到会话,或你没有访问权限。",
+    "backend": {
+      "heading": "预览模式",
+      "body": "v1 的私信投递仅为本地演示,消息不会持久化。后端尚未开通 /api/streams/'{id}'/messages 与 /ws/streams/'{id}'。"
+    },
+    "members": "成员"
+  }
+}

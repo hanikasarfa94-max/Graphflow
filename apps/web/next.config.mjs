@@ -1,3 +1,9 @@
+import createNextIntlPlugin from "next-intl/plugin";
+
+// Point the plugin at our request config. We use cookie-based locale
+// resolution (no URL prefix) — see src/i18n/request.ts.
+const withNextIntl = createNextIntlPlugin("./src/i18n/request.ts");
+
 /** @type {import('next').NextConfig} */
 // Proxy /api/* and /ws/* to the FastAPI backend so the browser talks to one
 // origin. Same-origin keeps session cookies simple and sidesteps CORS for
@@ -18,4 +24,4 @@ const nextConfig = {
   },
 };
 
-export default nextConfig;
+export default withNextIntl(nextConfig);

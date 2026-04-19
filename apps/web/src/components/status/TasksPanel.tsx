@@ -1,0 +1,191 @@
+import { getTranslations } from "next-intl/server";
+
+import type { ProjectState } from "@/lib/api";
+
+import { ageSecondsFrom, formatAge } from "./age";
+import { EmptyState, Panel } from "./Panel";
+
+type Task = ProjectState["plan"]["tasks"][number];
+type Member = ProjectState["members"][number];
+type Assignment = {
+  task_id?: string;
+  user_id?: string;
+  active?: boolean;
+  created_at?: string;
+};
+
+// Terminal statuses — anything not in this set counts as "active".
+// Matches what PlanRepository / UI use elsewhere (done = complete,
+// cancelled = explicitly killed).
+const TERMINAL_STATUSES = new Set(["done", "cancelled", "archived"]);
+
+function statusColor(status: string): string {
+  switch (status) {
+    case "done":
+      return "#dcf1dc";
+    case "in_progress":
+      return "#fff3d9";
+    case "blocked":
+      return "#fdecec";
+    default:
+      return "var(--wg-surface)";
+  }
+}
+
+export async function TasksPanel({
+  tasks,
+  assignments,
+  members,
+}: {
+  tasks: Task[];
+  assignments: Record<string, unknown>[];
+  members: Member[];
+}) {
+  const t = await getTranslations();
+  const now = new Date();
+
+  const memberById = new Map(members.map((m) => [m.user_id, m]));
+  const assignmentByTask = new Map<string, Assignment>();
+  for (const raw of assignments ?? []) {
+    const a = raw as Assignment;
+    if (a?.task_id && a?.active !== false) {
+      assignmentByTask.set(a.task_id, a);
+    }
+  }
+
+  const active = tasks
+    .filter((task) => !TERMINAL_STATUSES.has(task.status))
+    .map((task) => {
+      const assignment = assignmentByTask.get(task.id);
+      const owner = assignment?.user_id
+        ? memberById.get(assignment.user_id)
+        : undefined;
+      const ownerLabel = owner
+        ? owner.display_name || owner.username
+        : task.assignee_role && task.assignee_role !== "unknown"
+          ? `${t("status.members.roleLabel")}: ${task.assignee_role}`
+          : t("status.tasks.unassigned");
+      // TaskRow doesn't expose created_at in /state today — fall back to
+      // the assignment's created_at as a pragmatic age signal.
+      const ageSeconds = ageSecondsFrom(assignment?.created_at, now);
+      return { task, ownerLabel, ageSeconds };
+    })
+    .sort((a, b) => {
+      // Oldest in-flight first. null ages sort last so unknown ages don't
+      // dominate the top of the table.
+      const aSec = a.ageSeconds ?? -1;
+      const bSec = b.ageSeconds ?? -1;
+      return bSec - aSec;
+    });
+
+  return (
+    <Panel
+      title={t("status.tasks.title")}
+      subtitle={active.length > 0 ? String(active.length) : undefined}
+    >
+      {active.length === 0 ? (
+        <EmptyState>{t("status.tasks.empty")}</EmptyState>
+      ) : (
+        <div style={{ overflowX: "auto" }}>
+          <table
+            style={{
+              width: "100%",
+              borderCollapse: "collapse",
+              fontSize: 13,
+            }}
+          >
+            <thead>
+              <tr
+                style={{
+                  borderBottom: "1px solid var(--wg-line)",
+                  textAlign: "left",
+                }}
+              >
+                <Th>{t("status.tasks.columnTitle")}</Th>
+                <Th>{t("status.tasks.columnOwner")}</Th>
+                <Th>{t("status.tasks.columnStatus")}</Th>
+                <Th style={{ textAlign: "right" }}>
+                  {t("status.tasks.columnAge")}
+                </Th>
+              </tr>
+            </thead>
+            <tbody>
+              {active.map(({ task, ownerLabel, ageSeconds }) => (
+                <tr
+                  key={task.id}
+                  style={{ borderBottom: "1px solid var(--wg-line)" }}
+                >
+                  <Td>
+                    <div style={{ fontWeight: 600 }}>{task.title}</div>
+                  </Td>
+                  <Td style={{ color: "var(--wg-ink-soft)" }}>{ownerLabel}</Td>
+                  <Td>
+                    <span
+                      style={{
+                        padding: "2px 8px",
+                        borderRadius: 999,
+                        background: statusColor(task.status),
+                        fontSize: 11,
+                        fontFamily: "var(--wg-font-mono)",
+                      }}
+                    >
+                      {task.status}
+                    </span>
+                  </Td>
+                  <Td
+                    style={{
+                      textAlign: "right",
+                      fontFamily: "var(--wg-font-mono)",
+                      color: "var(--wg-ink-soft)",
+                      fontSize: 12,
+                    }}
+                  >
+                    {formatAge(ageSeconds, t)}
+                  </Td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </Panel>
+  );
+}
+
+function Th({
+  children,
+  style,
+}: {
+  children?: React.ReactNode;
+  style?: React.CSSProperties;
+}) {
+  return (
+    <th
+      style={{
+        padding: "8px 10px",
+        fontSize: 11,
+        letterSpacing: "0.04em",
+        textTransform: "uppercase",
+        color: "var(--wg-ink-soft)",
+        fontWeight: 600,
+        ...style,
+      }}
+    >
+      {children}
+    </th>
+  );
+}
+
+function Td({
+  children,
+  style,
+}: {
+  children: React.ReactNode;
+  style?: React.CSSProperties;
+}) {
+  return (
+    <td style={{ padding: "8px 10px", verticalAlign: "top", ...style }}>
+      {children}
+    </td>
+  );
+}
