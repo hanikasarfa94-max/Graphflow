@@ -44,9 +44,9 @@ ZH_YAML = MOCK / "pages.zh-CN.yaml"
 DB_URL = f"sqlite+aiosqlite:///{REPO / 'data' / 'workgraph.sqlite'}"
 
 
-async def _first_project_id(session: AsyncSession) -> str | None:
-    row = (await session.execute(select(ProjectRow))).scalars().first()
-    return row.id if row else None
+async def _all_project_ids(session: AsyncSession) -> list[str]:
+    rows = (await session.execute(select(ProjectRow))).scalars().all()
+    return [r.id for r in rows]
 
 
 async def _user_by_username(session: AsyncSession, username: str) -> UserRow | None:
@@ -121,48 +121,44 @@ async def main() -> int:
     zh_pages = yaml.safe_load(ZH_YAML.read_text(encoding="utf-8"))["pages"]
 
     async with sessionmaker() as session:
-        project_id = await _first_project_id(session)
-        if project_id is None:
+        project_ids = await _all_project_ids(session)
+        if not project_ids:
             print("[FAIL] no project in DB — seed Moonshot first.")
             return 1
 
-        existing = await _existing_source_ids(session, project_id)
-
-        inserted_en = 0
-        inserted_zh = 0
-        for page in en_pages:
-            sid = f"{page['page_id']}::en"
-            if sid in existing:
-                continue
-            await _insert_page(
-                session, project_id=project_id, page=page, language="en"
+        results: list[dict] = []
+        for project_id in project_ids:
+            existing = await _existing_source_ids(session, project_id)
+            inserted_en = 0
+            inserted_zh = 0
+            for page in en_pages:
+                if f"{page['page_id']}::en" in existing:
+                    continue
+                await _insert_page(
+                    session, project_id=project_id, page=page, language="en"
+                )
+                inserted_en += 1
+            for page in zh_pages:
+                if f"{page['page_id']}::zh" in existing:
+                    continue
+                await _insert_page(
+                    session, project_id=project_id, page=page, language="zh"
+                )
+                inserted_zh += 1
+            results.append(
+                {
+                    "project_id": project_id,
+                    "inserted_en": inserted_en,
+                    "inserted_zh": inserted_zh,
+                    "skipped": len(existing),
+                }
             )
-            inserted_en += 1
-        for page in zh_pages:
-            sid = f"{page['page_id']}::zh"
-            if sid in existing:
-                continue
-            await _insert_page(
-                session, project_id=project_id, page=page, language="zh"
-            )
-            inserted_zh += 1
 
         await session.commit()
 
     await engine.dispose()
-    print(f"[OK] seeded wiki: +{inserted_en} en, +{inserted_zh} zh into project {project_id}")
-    print(
-        json.dumps(
-            {
-                "en_total": len(en_pages),
-                "zh_total": len(zh_pages),
-                "inserted_en": inserted_en,
-                "inserted_zh": inserted_zh,
-                "skipped_existing": len(existing),
-            },
-            indent=2,
-        )
-    )
+    print(f"[OK] seeded wiki across {len(project_ids)} project(s)")
+    print(json.dumps(results, indent=2))
     return 0
 
 
