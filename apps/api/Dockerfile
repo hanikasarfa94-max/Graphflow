@@ -54,6 +54,12 @@ COPY --from=builder /app/.venv /app/.venv
 COPY --from=builder /app/apps/api/src /app/apps/api/src
 COPY --from=builder /app/packages /app/packages
 
+# Seed scripts + mock-data fixtures are baked in so
+# `docker compose exec api uv run python scripts/demo/seed_moonshot.py`
+# works out of the box in production.
+COPY scripts /app/scripts
+COPY workgraph-mock-data-v2 /app/workgraph-mock-data-v2
+
 RUN useradd --system --uid 1000 workgraph \
     && chown -R workgraph:workgraph /app
 USER workgraph

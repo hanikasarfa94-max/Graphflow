@@ -57,3 +57,4 @@ apps/api/data/
 
 # Mock data lives as its own repo (standalone per workgraph-mock-data-v2/README.md)
 workgraph-mock-data-v2/
+workgraph.tar.gz

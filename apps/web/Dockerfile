@@ -4,14 +4,16 @@
 
 FROM oven/bun:1.3-slim AS deps
 WORKDIR /app
-COPY apps/web/package.json apps/web/bun.lock ./
+# .npmrc carries the China registry mirror so pulls work fast from CN;
+# safe to include on non-CN builds (npmmirror mirrors npm upstream).
+COPY apps/web/package.json apps/web/bun.lock apps/web/.npmrc ./
 RUN bun install --frozen-lockfile
 
 FROM oven/bun:1.3-slim AS builder
 WORKDIR /app
 ENV NEXT_TELEMETRY_DISABLED=1
 COPY --from=deps /app/node_modules ./node_modules
-COPY apps/web/package.json apps/web/bun.lock apps/web/tsconfig.json apps/web/next.config.mjs apps/web/next-env.d.ts ./
+COPY apps/web/package.json apps/web/bun.lock apps/web/.npmrc apps/web/tsconfig.json apps/web/next.config.mjs apps/web/next-env.d.ts ./
 COPY apps/web/src ./src
 RUN bun run build
 

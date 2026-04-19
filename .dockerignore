@@ -37,4 +37,11 @@ tests/eval/results/
 AGENT.md
 README.md
 PLAN.md
+PLAN-v2.md
 design-doc-*.md
+
+# Mock-data repo is baked INTO the api image (not excluded); keep its .git out though
+workgraph-mock-data-v2/.git/
+
+# API-side local data
+apps/api/data/
