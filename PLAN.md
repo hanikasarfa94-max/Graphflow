@@ -1,3 +1,17 @@
+> ⚠️ **ARCHIVED 2026-04-18 — SUPERSEDED BY [`PLAN-v2.md`](PLAN-v2.md) AND [`docs/north-star.md`](docs/north-star.md).**
+>
+> Phases 1–13 in this plan are done (or superseded). Phase 11's "messages view /
+> tables view / conflict card view" directive is explicitly retracted — that
+> surface contradicts current product direction. Phase 7'/7'' backend signal chain
+> remains correct and live. Phases 8/9 "Conflict Detection" and "Decision Resolution"
+> as user-facing panes are superseded; backend agents stay, outputs route to the
+> stream as in-stream cards.
+>
+> For current build sequencing, read `PLAN-v2.md`. For product intent, read
+> `docs/north-star.md`.
+
+---
+
 # PLAN.md
 
 Current implementation plan for **WorkGraph AI**.

@@ -1,3 +1,15 @@
+> ⚠️ **ARCHIVED 2026-04-18 — SUPERSEDED BY [`docs/north-star.md`](docs/north-star.md).**
+>
+> This document reflects the MVP-era "delivery engine" framing (Phases 1–13). Specific
+> guidance here — panel-based web surface, "Conflict Center", stage-driven flow,
+> "do not build custom UI platform" — contradicts current product direction.
+>
+> For all current product / build guidance, read `docs/north-star.md` (operational)
+> and `docs/vision.md` (depth). Treat this file as historical record of how the MVP
+> was built. Do not read as current spec.
+
+---
+
 # AGENTS.md
 
 Repository operating instructions for coding agents working on **WorkGraph AI**.

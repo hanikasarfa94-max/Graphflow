@@ -1,3 +1,16 @@
+> ⚠️ **ARCHIVED 2026-04-18 — SUPERSEDED BY [`docs/north-star.md`](north-star.md).**
+>
+> This spec reflects the MVP-era "delivery engine" framing. Specific instructions
+> here — "Conflict Center" (§19.6 area / line 804), stage-driven workflow,
+> pane-based web surface, role-based routing — are NOT current product direction.
+> The agent contracts (ClarificationAgent, ConflictExplanationAgent, etc.) and
+> backend schemas remain correct for reference.
+>
+> For all current product / build guidance, read `docs/north-star.md` (operational)
+> and `docs/vision.md` (depth). Treat this file as historical record.
+
+---
+
 # WorkGraph AI — Development Specification
 Version: 1.0  
 Status: Build-ready MVP spec  

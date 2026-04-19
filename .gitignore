@@ -50,3 +50,7 @@ apps/web/playwright-report/
 
 # uv lock (commit once stable; ignore during flux)
 # uv.lock
+.gstack/
+
+# Local dev SQLite (API reseeds from scripts/demo)
+apps/api/data/
