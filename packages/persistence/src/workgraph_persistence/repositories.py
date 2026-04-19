@@ -21,6 +21,7 @@ from .orm import (
     GoalRow,
     IMSuggestionRow,
     IntakeEventRow,
+    MembraneSignalRow,
     MessageRow,
     MilestoneRow,
     NotificationRow,
@@ -28,7 +29,10 @@ from .orm import (
     ProjectRow,
     RequirementRow,
     RiskRow,
+    RoutedSignalRow,
     SessionRow,
+    StreamMemberRow,
+    StreamRow,
     TaskDependencyRow,
     TaskRow,
     UserRow,
@@ -641,6 +645,38 @@ class UserRepository:
         stmt = select(UserRow).order_by(UserRow.created_at).limit(limit)
         return list((await self._session.execute(stmt)).scalars().all())
 
+    async def update_profile(
+        self,
+        user_id: str,
+        *,
+        declared_abilities: list[str] | None = None,
+        role_hints: list[str] | None = None,
+        signal_tally: dict[str, int] | None = None,
+        display_language: str | None = None,
+    ) -> UserRow | None:
+        """Partial update of response-profile fields + display_language.
+
+        None values mean "leave untouched" — the router translates an
+        unset key into None. Keys present with empty lists clear that key.
+        Per north-star §"Profile as first-class primitive", profile is a
+        JSON dict so callers shape their own keys; we merge at the top level.
+        """
+        row = await self.get(user_id)
+        if row is None:
+            return None
+        profile = dict(row.profile or {})
+        if declared_abilities is not None:
+            profile["declared_abilities"] = list(declared_abilities)
+        if role_hints is not None:
+            profile["role_hints"] = list(role_hints)
+        if signal_tally is not None:
+            profile["signal_tally"] = dict(signal_tally)
+        row.profile = profile
+        if display_language is not None:
+            row.display_language = display_language
+        await self._session.flush()
+        return row
+
 
 class SessionRepository:
     def __init__(self, session: AsyncSession) -> None:
@@ -836,10 +872,23 @@ class MessageRepository:
         self._session = session
 
     async def append(
-        self, *, project_id: str, author_id: str, body: str
+        self,
+        *,
+        project_id: str | None,
+        author_id: str,
+        body: str,
+        stream_id: str | None = None,
+        kind: str = "text",
+        linked_id: str | None = None,
     ) -> MessageRow:
         row = MessageRow(
-            id=_new_id(), project_id=project_id, author_id=author_id, body=body
+            id=_new_id(),
+            project_id=project_id,
+            author_id=author_id,
+            body=body,
+            stream_id=stream_id,
+            kind=kind,
+            linked_id=linked_id,
         )
         self._session.add(row)
         await self._session.flush()
@@ -851,6 +900,19 @@ class MessageRepository:
         stmt = (
             select(MessageRow)
             .where(MessageRow.project_id == project_id)
+            .order_by(MessageRow.created_at.desc())
+            .limit(limit)
+        )
+        rows = list((await self._session.execute(stmt)).scalars().all())
+        rows.reverse()
+        return rows
+
+    async def list_for_stream(
+        self, stream_id: str, limit: int = 100
+    ) -> list[MessageRow]:
+        stmt = (
+            select(MessageRow)
+            .where(MessageRow.stream_id == stream_id)
             .order_by(MessageRow.created_at.desc())
             .limit(limit)
         )
@@ -876,6 +938,7 @@ class IMSuggestionRepository:
         prompt_version: str | None,
         outcome: str,
         attempts: int,
+        counter_of_id: str | None = None,
     ) -> IMSuggestionRow:
         row = IMSuggestionRow(
             id=_new_id(),
@@ -889,6 +952,7 @@ class IMSuggestionRepository:
             prompt_version=prompt_version,
             outcome=outcome,
             attempts=attempts,
+            counter_of_id=counter_of_id,
         )
         self._session.add(row)
         await self._session.flush()
@@ -900,6 +964,10 @@ class IMSuggestionRepository:
                 select(IMSuggestionRow).where(IMSuggestionRow.id == suggestion_id)
             )
         ).scalar_one_or_none()
+
+    # Alias kept for plan-doc fidelity; callers use either name.
+    async def get_by_id(self, suggestion_id: str) -> IMSuggestionRow | None:
+        return await self.get(suggestion_id)
 
     async def get_for_message(self, message_id: str) -> IMSuggestionRow | None:
         return (
@@ -916,6 +984,32 @@ class IMSuggestionRepository:
             return None
         row.status = status
         row.resolved_at = datetime.now(timezone.utc)
+        await self._session.flush()
+        return row
+
+    async def mark_countered(self, suggestion_id: str) -> IMSuggestionRow | None:
+        """Flip `status` to 'countered' + stamp resolved_at — signal-chain."""
+        return await self.resolve(suggestion_id, "countered")
+
+    async def mark_escalated(self, suggestion_id: str) -> IMSuggestionRow | None:
+        """Flip `status` to 'escalated', set escalation_state='requested'."""
+        row = await self.get(suggestion_id)
+        if row is None:
+            return None
+        row.status = "escalated"
+        row.escalation_state = "requested"
+        row.resolved_at = datetime.now(timezone.utc)
+        await self._session.flush()
+        return row
+
+    async def set_decision_id(
+        self, suggestion_id: str, decision_id: str
+    ) -> IMSuggestionRow | None:
+        """Link the suggestion to the DecisionRow that crystallized from it."""
+        row = await self.get(suggestion_id)
+        if row is None:
+            return None
+        row.decision_id = decision_id
         await self._session.flush()
         return row
 
@@ -1159,7 +1253,7 @@ class DecisionRepository:
     async def create(
         self,
         *,
-        conflict_id: str,
+        conflict_id: str | None,
         project_id: str,
         resolver_id: str,
         option_index: int | None,
@@ -1167,7 +1261,17 @@ class DecisionRepository:
         rationale: str,
         apply_actions: list,
         trace_id: str | None = None,
+        source_suggestion_id: str | None = None,
+        apply_outcome: str = "pending",
+        apply_detail: dict | None = None,
     ) -> DecisionRow:
+        """Persist a decision.
+
+        `conflict_id` is now optional because IM-originated decisions crystallize
+        from a suggestion directly (vision §6, signal-chain). In that case the
+        caller passes `source_suggestion_id` instead. `apply_outcome`/`apply_detail`
+        can be set at create-time for synchronous crystallization.
+        """
         row = DecisionRow(
             id=_new_id(),
             conflict_id=conflict_id,
@@ -1177,9 +1281,10 @@ class DecisionRepository:
             custom_text=custom_text,
             rationale=rationale,
             apply_actions=apply_actions,
-            apply_outcome="pending",
-            apply_detail={},
+            apply_outcome=apply_outcome,
+            apply_detail=apply_detail or {},
             trace_id=trace_id,
+            source_suggestion_id=source_suggestion_id,
         )
         self._session.add(row)
         await self._session.flush()
@@ -1297,4 +1402,464 @@ class DeliverySummaryRepository:
             .order_by(DeliverySummaryRow.created_at.desc())
             .limit(limit)
         )
+        return list((await self._session.execute(stmt)).scalars().all())
+
+
+# ---- Phase B (v2) — stream repositories ---------------------------------
+
+
+class StreamRepository:
+    """Stream CRUD. Project streams are created once per project via boot
+    backfill; DM streams are created on-demand with 1:1 dedup.
+    """
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def create(
+        self,
+        *,
+        type: str,
+        project_id: str | None = None,
+        owner_user_id: str | None = None,
+    ) -> StreamRow:
+        row = StreamRow(
+            id=_new_id(),
+            type=type,
+            project_id=project_id,
+            owner_user_id=owner_user_id,
+        )
+        self._session.add(row)
+        await self._session.flush()
+        return row
+
+    async def get(self, stream_id: str) -> StreamRow | None:
+        return (
+            await self._session.execute(
+                select(StreamRow).where(StreamRow.id == stream_id)
+            )
+        ).scalar_one_or_none()
+
+    async def get_for_project(self, project_id: str) -> StreamRow | None:
+        stmt = select(StreamRow).where(
+            StreamRow.project_id == project_id,
+            StreamRow.type == "project",
+        )
+        return (await self._session.execute(stmt)).scalar_one_or_none()
+
+    async def get_personal_for_user_in_project(
+        self, *, user_id: str, project_id: str
+    ) -> StreamRow | None:
+        """Phase L — the one personal stream a user has inside a project.
+
+        Unique in (project_id, owner_user_id, type='personal') by construction
+        (backfill + creator hooks are idempotent via this lookup).
+        """
+        stmt = select(StreamRow).where(
+            StreamRow.project_id == project_id,
+            StreamRow.owner_user_id == user_id,
+            StreamRow.type == "personal",
+        )
+        return (await self._session.execute(stmt)).scalar_one_or_none()
+
+    async def find_dm_between(
+        self, user_a: str, user_b: str
+    ) -> StreamRow | None:
+        """Find the canonical DM stream between two users.
+
+        Dedup key is the set of member user_ids — any DM stream whose
+        members == {user_a, user_b} counts. We scan via StreamMemberRow
+        rather than storing a composite key because 1:1 DMs are the only
+        case in v1 (group streams are v2).
+        """
+        a_streams = (
+            await self._session.execute(
+                select(StreamMemberRow.stream_id).where(
+                    StreamMemberRow.user_id == user_a
+                )
+            )
+        ).scalars().all()
+        if not a_streams:
+            return None
+        stmt = select(StreamRow).where(
+            StreamRow.id.in_(list(a_streams)),
+            StreamRow.type == "dm",
+        )
+        candidates = list((await self._session.execute(stmt)).scalars().all())
+        for stream in candidates:
+            members = (
+                await self._session.execute(
+                    select(StreamMemberRow.user_id).where(
+                        StreamMemberRow.stream_id == stream.id
+                    )
+                )
+            ).scalars().all()
+            if set(members) == {user_a, user_b}:
+                return stream
+        return None
+
+    async def list_for_user(self, user_id: str) -> list[StreamRow]:
+        """Streams the user belongs to, sorted by last_activity_at desc."""
+        stmt = (
+            select(StreamRow)
+            .join(StreamMemberRow, StreamMemberRow.stream_id == StreamRow.id)
+            .where(StreamMemberRow.user_id == user_id)
+            .order_by(StreamRow.last_activity_at.desc())
+        )
+        return list((await self._session.execute(stmt)).scalars().all())
+
+    async def touch_activity(self, stream_id: str) -> StreamRow | None:
+        row = await self.get(stream_id)
+        if row is None:
+            return None
+        row.last_activity_at = datetime.now(timezone.utc)
+        await self._session.flush()
+        return row
+
+
+class StreamMemberRepository:
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def add(
+        self,
+        *,
+        stream_id: str,
+        user_id: str,
+        role_in_stream: str = "member",
+    ) -> StreamMemberRow:
+        existing = (
+            await self._session.execute(
+                select(StreamMemberRow).where(
+                    StreamMemberRow.stream_id == stream_id,
+                    StreamMemberRow.user_id == user_id,
+                )
+            )
+        ).scalar_one_or_none()
+        if existing is not None:
+            return existing
+        row = StreamMemberRow(
+            id=_new_id(),
+            stream_id=stream_id,
+            user_id=user_id,
+            role_in_stream=role_in_stream,
+        )
+        self._session.add(row)
+        try:
+            await self._session.flush()
+        except IntegrityError:
+            await self._session.rollback()
+            return (
+                await self._session.execute(
+                    select(StreamMemberRow).where(
+                        StreamMemberRow.stream_id == stream_id,
+                        StreamMemberRow.user_id == user_id,
+                    )
+                )
+            ).scalar_one()
+        return row
+
+    async def list_for_stream(self, stream_id: str) -> list[StreamMemberRow]:
+        stmt = (
+            select(StreamMemberRow)
+            .where(StreamMemberRow.stream_id == stream_id)
+            .order_by(StreamMemberRow.joined_at)
+        )
+        return list((await self._session.execute(stmt)).scalars().all())
+
+    async def is_member(self, stream_id: str, user_id: str) -> bool:
+        row = (
+            await self._session.execute(
+                select(StreamMemberRow).where(
+                    StreamMemberRow.stream_id == stream_id,
+                    StreamMemberRow.user_id == user_id,
+                )
+            )
+        ).scalar_one_or_none()
+        return row is not None
+
+    async def get_member(
+        self, stream_id: str, user_id: str
+    ) -> StreamMemberRow | None:
+        return (
+            await self._session.execute(
+                select(StreamMemberRow).where(
+                    StreamMemberRow.stream_id == stream_id,
+                    StreamMemberRow.user_id == user_id,
+                )
+            )
+        ).scalar_one_or_none()
+
+    async def mark_read(
+        self, *, stream_id: str, user_id: str
+    ) -> StreamMemberRow | None:
+        row = await self.get_member(stream_id, user_id)
+        if row is None:
+            return None
+        row.last_read_at = datetime.now(timezone.utc)
+        await self._session.flush()
+        return row
+
+    async def unread_count(
+        self, *, stream_id: str, user_id: str
+    ) -> int:
+        """Count messages in the stream authored strictly after my
+        last_read_at. If last_read_at is null (never read), every message
+        counts; but we don't count my own messages as unread-to-me.
+        """
+        member = await self.get_member(stream_id, user_id)
+        if member is None:
+            return 0
+        stmt = select(MessageRow.id).where(MessageRow.stream_id == stream_id)
+        if member.last_read_at is not None:
+            stmt = stmt.where(MessageRow.created_at > member.last_read_at)
+        stmt = stmt.where(MessageRow.author_id != user_id)
+        rows = (await self._session.execute(stmt)).scalars().all()
+        return len(list(rows))
+
+
+# ---- Phase L — routed signal repository ---------------------------------
+
+
+class RoutedSignalRepository:
+    """Phase L — persistence for cross-user sub-agent routed signals.
+
+    North-star §"Routing primitive (data model)". A signal is created when
+    RoutingService.dispatch runs; it stores the source's framing, the
+    background snippets, the rich option set the target's edge-agent will
+    render, and ultimately the target's reply. Status transitions:
+      pending → replied → (accepted | declined | expired)
+    """
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def create(
+        self,
+        *,
+        source_user_id: str,
+        target_user_id: str,
+        source_stream_id: str,
+        target_stream_id: str,
+        framing: str,
+        background: list,
+        options: list,
+        project_id: str | None = None,
+        trace_id: str | None = None,
+    ) -> RoutedSignalRow:
+        row = RoutedSignalRow(
+            id=_new_id(),
+            trace_id=trace_id,
+            source_user_id=source_user_id,
+            target_user_id=target_user_id,
+            source_stream_id=source_stream_id,
+            target_stream_id=target_stream_id,
+            project_id=project_id,
+            framing=framing,
+            background_json=list(background or []),
+            options_json=list(options or []),
+            status="pending",
+            reply_json=None,
+        )
+        self._session.add(row)
+        await self._session.flush()
+        return row
+
+    async def get(self, signal_id: str) -> RoutedSignalRow | None:
+        return (
+            await self._session.execute(
+                select(RoutedSignalRow).where(RoutedSignalRow.id == signal_id)
+            )
+        ).scalar_one_or_none()
+
+    async def list_for_user(
+        self,
+        user_id: str,
+        *,
+        kind: str,
+        status: str | None = None,
+        limit: int = 100,
+    ) -> list[RoutedSignalRow]:
+        """`kind` in {'inbound', 'outbound'}. Optional `status` filter."""
+        if kind == "inbound":
+            stmt = select(RoutedSignalRow).where(
+                RoutedSignalRow.target_user_id == user_id
+            )
+        elif kind == "outbound":
+            stmt = select(RoutedSignalRow).where(
+                RoutedSignalRow.source_user_id == user_id
+            )
+        else:
+            raise ValueError(f"kind must be 'inbound' or 'outbound', got {kind!r}")
+        if status is not None:
+            stmt = stmt.where(RoutedSignalRow.status == status)
+        stmt = stmt.order_by(RoutedSignalRow.created_at.desc()).limit(limit)
+        return list((await self._session.execute(stmt)).scalars().all())
+
+    async def list_for_dm(
+        self, user_a_id: str, user_b_id: str, *, limit: int = 100
+    ) -> list[RoutedSignalRow]:
+        """Routed signals in either direction between two users."""
+        stmt = (
+            select(RoutedSignalRow)
+            .where(
+                (
+                    (RoutedSignalRow.source_user_id == user_a_id)
+                    & (RoutedSignalRow.target_user_id == user_b_id)
+                )
+                | (
+                    (RoutedSignalRow.source_user_id == user_b_id)
+                    & (RoutedSignalRow.target_user_id == user_a_id)
+                )
+            )
+            .order_by(RoutedSignalRow.created_at.desc())
+            .limit(limit)
+        )
+        return list((await self._session.execute(stmt)).scalars().all())
+
+    async def mark_replied(
+        self,
+        signal_id: str,
+        *,
+        option_id: str | None,
+        custom_text: str | None,
+    ) -> RoutedSignalRow | None:
+        """Record target's reply + flip status to 'replied'. Idempotent: a
+        second reply overwrites the first — v1 routing is not a multi-turn
+        conversation, so latest-reply-wins is acceptable.
+        """
+        row = await self.get(signal_id)
+        if row is None:
+            return None
+        now = datetime.now(timezone.utc)
+        row.status = "replied"
+        row.reply_json = {
+            "option_id": option_id,
+            "custom_text": custom_text,
+            "responded_at": now.isoformat(),
+        }
+        row.responded_at = now
+        await self._session.flush()
+        return row
+
+
+# ---- Phase D — membrane signal repository -------------------------------
+
+
+class MembraneSignalRepository:
+    """Phase D — persistence for membrane-ingested external signals.
+
+    Vision §5.12 (Membranes). Dedup key is (project_id, source_identifier).
+    Re-ingesting the same URL / commit hash / forum post returns the
+    existing row; the caller never double-classifies.
+
+    Status transitions: pending-review → (approved | rejected | routed).
+    `rejected` rows stay as audit history, never routed.
+    """
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def find_by_source(
+        self, *, project_id: str | None, source_identifier: str
+    ) -> MembraneSignalRow | None:
+        stmt = select(MembraneSignalRow).where(
+            MembraneSignalRow.source_identifier == source_identifier,
+        )
+        # NULL-safe project scope match — project-scoped dedup only collides
+        # with rows from the same project_id value (including null↔null).
+        if project_id is None:
+            stmt = stmt.where(MembraneSignalRow.project_id.is_(None))
+        else:
+            stmt = stmt.where(MembraneSignalRow.project_id == project_id)
+        return (await self._session.execute(stmt)).scalar_one_or_none()
+
+    async def create(
+        self,
+        *,
+        project_id: str | None,
+        source_kind: str,
+        source_identifier: str,
+        raw_content: str,
+        ingested_by_user_id: str | None = None,
+        trace_id: str | None = None,
+    ) -> MembraneSignalRow:
+        row = MembraneSignalRow(
+            id=_new_id(),
+            project_id=project_id,
+            source_kind=source_kind,
+            source_identifier=source_identifier,
+            raw_content=raw_content,
+            ingested_by_user_id=ingested_by_user_id,
+            classification_json={},
+            status="pending-review",
+            trace_id=trace_id,
+        )
+        self._session.add(row)
+        try:
+            await self._session.flush()
+        except IntegrityError:
+            # Race: another request wrote the same (project_id, source_identifier)
+            # between find + flush. Return the existing row instead of exploding.
+            await self._session.rollback()
+            fresh = await self.find_by_source(
+                project_id=project_id, source_identifier=source_identifier
+            )
+            if fresh is not None:
+                return fresh
+            raise
+        return row
+
+    async def get(self, signal_id: str) -> MembraneSignalRow | None:
+        return (
+            await self._session.execute(
+                select(MembraneSignalRow).where(MembraneSignalRow.id == signal_id)
+            )
+        ).scalar_one_or_none()
+
+    async def set_classification(
+        self,
+        signal_id: str,
+        *,
+        classification: dict,
+        status: str,
+    ) -> MembraneSignalRow | None:
+        row = await self.get(signal_id)
+        if row is None:
+            return None
+        row.classification_json = dict(classification)
+        row.status = status
+        await self._session.flush()
+        return row
+
+    async def mark_status(
+        self,
+        signal_id: str,
+        *,
+        status: str,
+        approved_by_user_id: str | None = None,
+    ) -> MembraneSignalRow | None:
+        row = await self.get(signal_id)
+        if row is None:
+            return None
+        row.status = status
+        if approved_by_user_id is not None:
+            row.approved_by_user_id = approved_by_user_id
+            row.approved_at = datetime.now(timezone.utc)
+        await self._session.flush()
+        return row
+
+    async def list_for_project(
+        self,
+        project_id: str,
+        *,
+        status: str | None = None,
+        limit: int = 100,
+    ) -> list[MembraneSignalRow]:
+        stmt = select(MembraneSignalRow).where(
+            MembraneSignalRow.project_id == project_id
+        )
+        if status is not None:
+            stmt = stmt.where(MembraneSignalRow.status == status)
+        stmt = stmt.order_by(MembraneSignalRow.created_at.desc()).limit(limit)
         return list((await self._session.execute(stmt)).scalars().all())

@@ -351,6 +351,10 @@ class UserRow(Base):
     Phase 7' ships without SSO / email verification / password reset. The
     hash is pbkdf2-sha256 with a per-user salt — stdlib-only, strong enough
     for the competition demo surface.
+
+    Phase B (v2): `profile` carries response-profile fields (declared_abilities,
+    role_hints, signal_tally) per north-star "Profile as first-class
+    primitive". `display_language` drives per-user UI chrome localization.
     """
 
     __tablename__ = "users"
@@ -360,6 +364,14 @@ class UserRow(Base):
     display_name: Mapped[str] = mapped_column(String(128), default="")
     password_hash: Mapped[str] = mapped_column(String(256))
     password_salt: Mapped[str] = mapped_column(String(64))
+    # Response profile (north-star §"Profile as first-class primitive"). Keys:
+    #   declared_abilities: list[str] — self-declared at onboarding
+    #   role_hints: list[str] — nudges from assigned role / management
+    #   signal_tally: dict[str, int] — rolling-window counts of observed emissions
+    # v1 stores the shape; signal_tally wire-up is v2.
+    profile: Mapped[dict] = mapped_column(JSON, default=dict)
+    # ISO-639-1 code; 'en' | 'zh' in v1. Per-user chrome language.
+    display_language: Mapped[str] = mapped_column(String(8), default="en")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 
 
@@ -380,7 +392,13 @@ class SessionRow(Base):
 
 
 class ProjectMemberRow(Base):
-    """Explicit project ↔ user join. Creator auto-joins at project create."""
+    """Explicit project ↔ user join. Creator auto-joins at project create.
+
+    Phase B (v2): `license_tier` scopes member capability per north-star §"Scoped
+    license model". `observer` cannot mutate project state (message post,
+    accept/counter/escalate). `task_scoped` is stored in v1 but enforcement
+    (restrict writes to assigned tasks only) lands in v2.
+    """
 
     __tablename__ = "project_members"
     __table_args__ = (
@@ -395,6 +413,8 @@ class ProjectMemberRow(Base):
         ForeignKey("users.id", ondelete="CASCADE"), index=True
     )
     role: Mapped[str] = mapped_column(String(32), default="member")
+    # 'full' | 'task_scoped' | 'observer'. v1 enforces 'observer' only.
+    license_tier: Mapped[str] = mapped_column(String(16), default="full")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 
 
@@ -446,18 +466,44 @@ class CommentRow(Base):
 
 
 class MessageRow(Base):
-    """Per-project IM message. Plain text or markdown, no attachments."""
+    """Per-stream IM message. Plain text or markdown, no attachments.
+
+    Phase B (v2): messages attach to a `stream_id`; `project_id` stays populated
+    for project streams (denormalized for fast queries) and is null for DM
+    streams. The dev-boot backfill helper fills `stream_id` on any re-seeded
+    messages by project_id lookup.
+
+    Phase L: `kind` + `linked_id` let the frontend render sub-agent routing
+    cards without parsing the body. Chosen over a body-marker string
+    (`[[routed-signal:id]]`) because structured columns are cheaper to
+    filter (e.g. inbox queries) and don't break when body is localized.
+    `kind` values in v1:
+      * 'text'            — default human / edge turn (body is the payload)
+      * 'routed-inbound'  — target's personal stream received a routing ask
+      * 'routed-reply'    — source's personal stream received the reply
+      * 'routed-dm-log'   — DM mirror summary of a routed flow
+    `linked_id` points at `routed_signals.id` when kind starts with 'routed-'.
+    """
 
     __tablename__ = "messages"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    project_id: Mapped[str] = mapped_column(
-        ForeignKey("projects.id", ondelete="CASCADE"), index=True
+    project_id: Mapped[str | None] = mapped_column(
+        ForeignKey("projects.id", ondelete="CASCADE"), index=True, nullable=True
+    )
+    stream_id: Mapped[str | None] = mapped_column(
+        ForeignKey("streams.id", ondelete="CASCADE"), index=True, nullable=True
     )
     author_id: Mapped[str] = mapped_column(
         ForeignKey("users.id", ondelete="CASCADE"), index=True
     )
     body: Mapped[str] = mapped_column(String)
+    # Phase L — see class docstring for allowed values.
+    kind: Mapped[str] = mapped_column(String(16), default="text")
+    # Phase L — opaque FK-shape id linking to the driver row; for 'routed-*'
+    # kinds this references routed_signals.id. Kept as plain String so the
+    # column generalizes to other card kinds without a table-specific FK.
+    linked_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 
 
@@ -465,8 +511,10 @@ class IMSuggestionRow(Base):
     """AI-IM pre-processor output bound to a source message.
 
     kind ∈ {none, tag, decision, blocker}. `status` transitions from
-    "pending" → "accepted" / "dismissed". Accepting a decision-kind triggers
-    a graph mutation; blocker-kind opens a RiskRow.
+    "pending" → "accepted" / "dismissed" / "countered" / "escalated".
+    Accepting a decision-kind triggers a graph mutation; blocker-kind
+    opens a RiskRow; countered spawns a new suggestion whose
+    `counter_of_id` points back; escalated flips `escalation_state`.
     """
 
     __tablename__ = "im_suggestions"
@@ -487,6 +535,25 @@ class IMSuggestionRow(Base):
     prompt_version: Mapped[str | None] = mapped_column(String(64), nullable=True)
     outcome: Mapped[str] = mapped_column(String(32), default="ok")
     attempts: Mapped[int] = mapped_column(default=1)
+    # Signal-chain primitives (vision §6). All nullable so existing rows keep
+    # validating and the counter/escalate/crystallize flows stay opt-in.
+    counter_of_id: Mapped[str | None] = mapped_column(
+        ForeignKey("im_suggestions.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    decision_id: Mapped[str | None] = mapped_column(
+        ForeignKey(
+            "decisions.id",
+            ondelete="SET NULL",
+            use_alter=True,
+            name="fk_im_suggestion_decision",
+        ),
+        nullable=True,
+        index=True,
+    )
+    # "requested" or null. v0 is just a flag — no meeting scheduled.
+    escalation_state: Mapped[str | None] = mapped_column(String(16), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
     resolved_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
@@ -589,8 +656,17 @@ class DecisionRow(Base):
     __tablename__ = "decisions"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    conflict_id: Mapped[str] = mapped_column(
-        ForeignKey("conflicts.id", ondelete="CASCADE"), index=True
+    # Nullable because signal-chain crystallization creates decisions from
+    # IM suggestions without a pre-existing conflict (vision §6).
+    conflict_id: Mapped[str | None] = mapped_column(
+        ForeignKey("conflicts.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    # Back-pointer for IM-originated decisions. Nullable because
+    # conflict-originated decisions have no source suggestion.
+    source_suggestion_id: Mapped[str | None] = mapped_column(
+        ForeignKey("im_suggestions.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
     )
     project_id: Mapped[str] = mapped_column(
         ForeignKey("projects.id", ondelete="CASCADE"), index=True
@@ -643,4 +719,226 @@ class DeliverySummaryRow(Base):
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_utcnow
+    )
+
+
+# ---- Phase B (v2) — stream primitive ------------------------------------
+#
+# North-star §"Streams as the unifying primitive": one renderer, everywhere.
+# A stream has membership, an optional project anchor, and a type. Project
+# streams mirror existing ProjectRow membership (backfilled on boot); DM
+# streams are 1:1 ad-hoc, deduped by sorted member pair.
+
+
+class StreamRow(Base):
+    """Unifying conversation container.
+
+    Types in v1 (post-Phase L):
+      * 'project'  — team room, one per project, all project members
+      * 'personal' — private (user ↔ their edge-agent), project-anchored,
+                     owner_user_id set; primary surface per north-star
+                     §"Sub-agent and routing architecture"
+      * 'dm'       — 1:1 between two users, no project anchor
+
+    `last_activity_at` is bumped on every new message so GET /api/streams
+    can order by recency without scanning messages.
+
+    `owner_user_id` is populated only for personal streams (the human who
+    owns the sub-agent conversation). Null for project / dm.
+    """
+
+    __tablename__ = "streams"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    # 'project' | 'personal' | 'dm' in v1. 'group' + 'rehearsal' come in v2.
+    type: Mapped[str] = mapped_column(String(16))
+    project_id: Mapped[str | None] = mapped_column(
+        ForeignKey("projects.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    # Phase L: owner of a personal stream (user whose sub-agent converses
+    # here). Null for type in {'project', 'dm'}.
+    owner_user_id: Mapped[str | None] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, onupdate=_utcnow
+    )
+    last_activity_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow
+    )
+
+
+class StreamMemberRow(Base):
+    """Stream ↔ user join. For project streams, mirrors ProjectMemberRow at
+    boot-time backfill; for DM streams, holds exactly two rows.
+
+    `last_read_at` powers the unread_count computation on GET /api/streams
+    (messages authored after my last_read_at == unread for me).
+    """
+
+    __tablename__ = "stream_members"
+    __table_args__ = (
+        UniqueConstraint("stream_id", "user_id", name="uq_stream_member"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    stream_id: Mapped[str] = mapped_column(
+        ForeignKey("streams.id", ondelete="CASCADE"), index=True
+    )
+    user_id: Mapped[str] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    # 'member' | 'admin' | 'observer'. Mirrors ProjectMemberRow.license_tier
+    # shape but scoped to stream capability (e.g., observer cannot post).
+    role_in_stream: Mapped[str] = mapped_column(String(16), default="member")
+    joined_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow
+    )
+    last_read_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+
+# ---- Phase L — sub-agent routing primitive ------------------------------
+#
+# North-star §"Sub-agent and routing architecture": Maya's edge-agent routes
+# a framed signal to Raj's edge-agent via the parent-agent hub. The signal
+# carries Maya's framing, background snippets, and a rich option set Raj
+# picks from. One row per routed flow; status transitions pending →
+# replied → (accepted | declined | expired).
+
+
+class MembraneSignalRow(Base):
+    """Phase D — external signal ingested through a project's membrane.
+
+    Vision §5.12 (Membranes): external content (git commits/PRs, steam
+    reviews, rss posts, webhooks, user-dropped links) flows through a
+    security-gated classification pipeline before it can influence routing
+    or trigger any graph activity.
+
+    `status` lifecycle:
+      * `pending-review` — default on ingest; MembraneAgent hasn't written
+        its classification yet, or the classifier flagged the content for
+        human review.
+      * `approved` — human approver cleared a flagged signal.
+      * `rejected` — human approver rejected the signal. It stays on the
+        audit log but is never routed.
+      * `routed` — auto-approved (confidence ≥ 0.7, no injection flag) and
+        the service has posted membrane-signal messages into each proposed
+        target's personal stream.
+
+    Dedup key is (project_id, source_identifier). Re-ingesting the same
+    URL / commit hash / forum post returns the existing row. `raw_content`
+    is trimmed at ingest to the first 4000 chars — the LLM prompt never
+    sees unbounded external text, which is the first injection guardrail.
+    """
+
+    __tablename__ = "membrane_signals"
+    __table_args__ = (
+        UniqueConstraint(
+            "project_id", "source_identifier", name="uq_membrane_signal_source"
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    # Nullable because vision §5.12 allows org-level signals that don't
+    # attach to a single project. v1 always sets project_id; the nullable
+    # schema keeps v2 org-level ingestion non-breaking.
+    project_id: Mapped[str | None] = mapped_column(
+        ForeignKey("projects.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    # 'git-commit' | 'git-pr' | 'steam-review' | 'steam-forum' | 'rss'
+    # | 'user-drop' | 'webhook'
+    source_kind: Mapped[str] = mapped_column(String(32), index=True)
+    # URL, commit hash, forum post id — whatever the source uses to
+    # uniquely identify the artifact. Paired with project_id for dedup.
+    source_identifier: Mapped[str] = mapped_column(String(512))
+    # Trimmed to first 4000 chars at ingest — keeps prompt cost bounded
+    # AND limits the surface area for prompt-injection. See vision §5.12.
+    raw_content: Mapped[str] = mapped_column(String)
+    # Set when a project member drops a link; null for agent pulls /
+    # webhook payloads. v1 only ingests via user-drop or simulated
+    # webhook, so this is usually populated.
+    ingested_by_user_id: Mapped[str | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    # MembraneAgent output shape (Pydantic dumps into here). Keys:
+    #   is_relevant: bool
+    #   tags: list[str]
+    #   summary: str  (<=200 chars)
+    #   proposed_target_user_ids: list[str]
+    #   proposed_action: "route-to-members" | "ambient-log" | "flag-for-review"
+    #   confidence: float (0-1)
+    #   safety_notes: str
+    classification_json: Mapped[dict] = mapped_column(JSON, default=dict)
+    # See class docstring for allowed values. Defaults to 'pending-review'
+    # per vision §5.12 security boundary — NOTHING is routed until either
+    # auto-approval (confidence threshold + no injection flag) or a human
+    # admin approves it explicitly.
+    status: Mapped[str] = mapped_column(
+        String(16), default="pending-review", index=True
+    )
+    approved_by_user_id: Mapped[str | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    approved_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    trace_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow
+    )
+
+
+class RoutedSignalRow(Base):
+    """Sub-agent-mediated cross-user signal.
+
+    Created when source's edge-agent dispatches an ask to target's edge-agent.
+    The source and target both have personal streams in the same project;
+    dispatch posts a 'routed-inbound' message into target's personal stream
+    and mirrors a summary into their DM. On reply, a 'routed-reply' message
+    lands in source's personal stream.
+
+    `background_json` shape:
+      list of {source: 'graph'|'kb'|'history', snippet: str, reference_id?: str}
+    `options_json` shape (post-Phase-L option design):
+      list of {id, label, kind, background, reason, tradeoff, weight(0-1)}
+    `reply_json` shape (once target replies):
+      {option_id?: str, custom_text?: str, responded_at: iso8601}
+    """
+
+    __tablename__ = "routed_signals"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    trace_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    source_user_id: Mapped[str] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    target_user_id: Mapped[str] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    source_stream_id: Mapped[str] = mapped_column(
+        ForeignKey("streams.id", ondelete="CASCADE"), index=True
+    )
+    target_stream_id: Mapped[str] = mapped_column(
+        ForeignKey("streams.id", ondelete="CASCADE"), index=True
+    )
+    # Null allowed in theory (cross-project routing is a v2 thought); in v1
+    # callers always pass a project_id and service enforces same-project.
+    project_id: Mapped[str | None] = mapped_column(
+        ForeignKey("projects.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    framing: Mapped[str] = mapped_column(String(4000))
+    background_json: Mapped[list] = mapped_column(JSON, default=list)
+    options_json: Mapped[list] = mapped_column(JSON, default=list)
+    status: Mapped[str] = mapped_column(String(16), default="pending", index=True)
+    reply_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow
+    )
+    responded_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
     )
