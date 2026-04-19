@@ -25,6 +25,8 @@ from workgraph_observability import get_trace_id
 from workgraph_persistence import (
     AgentRunLogRepository,
     ConstraintRow,
+    DecisionRepository,
+    DecisionRow,
     DeliverableRow,
     IMSuggestionRepository,
     IMSuggestionRow,
@@ -35,6 +37,7 @@ from workgraph_persistence import (
     ProjectRow,
     RequirementRepository,
     RiskRow,
+    StreamRepository,
     TaskRow,
     UserRepository,
     session_scope,
@@ -264,8 +267,33 @@ class IMService:
             "status": row.status,
             "outcome": row.outcome,
             "attempts": row.attempts,
+            "counter_of_id": row.counter_of_id,
+            "decision_id": row.decision_id,
+            "escalation_state": row.escalation_state,
             "created_at": row.created_at.isoformat(),
             "resolved_at": row.resolved_at.isoformat() if row.resolved_at else None,
+        }
+
+    def _decision_payload(self, row: DecisionRow) -> dict[str, Any]:
+        """Mirror DecisionService._decision_payload so WS frames stay identical.
+
+        Local to IMService so the crystallization path doesn't need to reach
+        into DecisionService internals, which would create a reverse import.
+        """
+        return {
+            "id": row.id,
+            "conflict_id": row.conflict_id,
+            "source_suggestion_id": row.source_suggestion_id,
+            "project_id": row.project_id,
+            "resolver_id": row.resolver_id,
+            "option_index": row.option_index,
+            "custom_text": row.custom_text,
+            "rationale": row.rationale,
+            "apply_actions": row.apply_actions or [],
+            "apply_outcome": row.apply_outcome,
+            "apply_detail": row.apply_detail or {},
+            "created_at": row.created_at.isoformat() if row.created_at else None,
+            "applied_at": row.applied_at.isoformat() if row.applied_at else None,
         }
 
     async def get_suggestion(self, suggestion_id: str) -> dict | None:
@@ -278,10 +306,18 @@ class IMService:
     async def list_for_project(
         self, project_id: str, *, limit: int = 100
     ) -> list[dict]:
+        """Suggestions attached to team-room messages only.
+
+        Post-Phase-L: same leak concern as MessageService.list_recent —
+        suggestions tied to personal-stream messages must not surface
+        in the team-room view. Scope to the project's team-room stream.
+        """
         async with session_scope(self._sessionmaker) as session:
-            # Tied to messages, so we read via message iteration.
-            messages = await MessageRepository(session).list_recent(
-                project_id, limit=limit
+            team_stream = await StreamRepository(session).get_for_project(project_id)
+            if team_stream is None:
+                return []
+            messages = await MessageRepository(session).list_for_stream(
+                team_stream.id, limit=limit
             )
             suggestions: list[IMSuggestionRow] = []
             for m in messages:
@@ -304,7 +340,46 @@ class IMService:
                 return {"ok": False, "error": "already_resolved"}
 
             project_id = row.project_id
+            kind = row.kind
+            confidence = row.confidence
             applied = await self._apply_proposal(session, row)
+
+            # Signal-chain crystallization (vision §6): when a high-confidence
+            # decision-kind suggestion is accepted, persist a DecisionRow that
+            # links back to the suggestion. "apply_outcome" mirrors whether
+            # the associated graph mutation actually landed.
+            decision_payload: dict[str, Any] | None = None
+            if kind == "decision" and confidence >= 0.6:
+                proposal = row.proposal or {}
+                action = (
+                    proposal.get("action") if isinstance(proposal, dict) else None
+                )
+                detail = (
+                    proposal.get("detail", {}) if isinstance(proposal, dict) else {}
+                )
+                crystallize_outcome = (
+                    "ok" if applied.get("graph_touched") else "advisory"
+                )
+                decision_row = await DecisionRepository(session).create(
+                    conflict_id=None,
+                    project_id=project_id,
+                    resolver_id=actor_id,
+                    option_index=None,
+                    custom_text=None,
+                    rationale=row.reasoning or "",
+                    apply_actions=[{"kind": action, "detail": detail}],
+                    source_suggestion_id=suggestion_id,
+                    apply_outcome=crystallize_outcome,
+                    apply_detail={"applied": applied},
+                )
+                # applied_at mirrors create_at since crystallization is synchronous.
+                decision_row.applied_at = datetime.now(timezone.utc)
+                await IMSuggestionRepository(session).set_decision_id(
+                    suggestion_id, decision_row.id
+                )
+                # Refresh the decision row inside the session so applied_at
+                # shows up in the payload.
+                decision_payload = self._decision_payload(decision_row)
 
             await IMSuggestionRepository(session).resolve(suggestion_id, "accepted")
             refreshed = await IMSuggestionRepository(session).get(suggestion_id)
@@ -325,11 +400,29 @@ class IMService:
                 project_id,
                 {"type": "suggestion", "payload": payload},
             )
+        if decision_payload is not None:
+            await self._event_bus.emit(
+                "decision.crystallized",
+                {
+                    "decision_id": decision_payload["id"],
+                    "source_suggestion_id": suggestion_id,
+                    "project_id": project_id,
+                    "resolver": actor_id,
+                },
+            )
+            await self._hub.publish(
+                project_id, {"type": "decision", "payload": decision_payload}
+            )
         if applied.get("graph_touched"):
             await self._hub.publish(
                 project_id, {"type": "graph", "payload": {"reason": "im_accept"}}
             )
-        return {"ok": True, "applied": applied, "suggestion": payload}
+        return {
+            "ok": True,
+            "applied": applied,
+            "suggestion": payload,
+            "decision": decision_payload,
+        }
 
     async def dismiss(self, *, suggestion_id: str, actor_id: str) -> dict:
         async with session_scope(self._sessionmaker) as session:
@@ -348,6 +441,199 @@ class IMService:
                 "suggestion_id": suggestion_id,
                 "status": "dismissed",
                 "actor_id": actor_id,
+                "project_id": project_id,
+            },
+        )
+        if payload is not None:
+            await self._hub.publish(
+                project_id, {"type": "suggestion", "payload": payload}
+            )
+        return {"ok": True, "suggestion": payload}
+
+    async def counter(
+        self, *, suggestion_id: str, text: str, user_id: str
+    ) -> dict:
+        """Signal-chain counter (vision §6 step 4).
+
+        Original suggestion flips to `countered`; the counterer's framing is
+        persisted as a fresh MessageRow authored by user_id; IMAssist runs on
+        the new message (synchronously, unlike post_message which fires-and-
+        forgets, so the route response can include the new suggestion); the
+        new suggestion's `counter_of_id` points back at the original.
+        """
+        async with session_scope(self._sessionmaker) as session:
+            original = await IMSuggestionRepository(session).get(suggestion_id)
+            if original is None:
+                return {"ok": False, "error": "suggestion_not_found"}
+            if original.status != "pending":
+                return {"ok": False, "error": "already_resolved"}
+            project_id = original.project_id
+
+            # Flip the original + capture its post-flip payload for the WS
+            # fanout and the HTTP response.
+            await IMSuggestionRepository(session).mark_countered(suggestion_id)
+            refreshed_original = await IMSuggestionRepository(session).get(
+                suggestion_id
+            )
+            original_payload = (
+                self._suggestion_payload(refreshed_original)
+                if refreshed_original
+                else None
+            )
+
+        # Post the counter message through the existing MessageService so
+        # member notifications + rate-limit + broadcast stay consistent.
+        post_result = await self._messages.post(
+            project_id=project_id, author_id=user_id, body=text
+        )
+        if not post_result.get("ok"):
+            # Roll back the status flip? The signal chain treats the counter
+            # as atomic with the status change — but we chose to flip first
+            # so concurrent writers see the countered state quickly. If
+            # message post fails (rate-limit), the status flip persists and
+            # the caller can retry with a fresh message. Flag it.
+            return {"ok": False, "error": post_result.get("error", "message_post_failed")}
+
+        new_message_id = post_result["id"]
+        new_suggestion_payload: dict[str, Any] | None = None
+
+        # Classify synchronously (instead of fire-and-forget) so the caller
+        # can include the new suggestion in the response body. Word-count
+        # gate mirrors post_message.
+        if _word_count(text) >= MIN_WORDS_FOR_CLASSIFICATION:
+            try:
+                project_snapshot, _, recent_msgs = await self._project_snapshot(
+                    project_id
+                )
+                async with session_scope(self._sessionmaker) as session:
+                    user = await UserRepository(session).get(user_id)
+                    author_payload = (
+                        {
+                            "id": user.id,
+                            "username": user.username,
+                            "display_name": user.display_name,
+                        }
+                        if user is not None
+                        else {"id": user_id}
+                    )
+                outcome = await self._agent.classify(
+                    message=text,
+                    author=author_payload,
+                    project=project_snapshot,
+                    recent_messages=recent_msgs,
+                )
+                suggestion = outcome.suggestion
+                async with session_scope(self._sessionmaker) as session:
+                    new_row = await IMSuggestionRepository(session).append(
+                        project_id=project_id,
+                        message_id=new_message_id,
+                        kind=suggestion.kind,
+                        confidence=suggestion.confidence,
+                        targets=list(suggestion.targets),
+                        proposal=suggestion.proposal.model_dump()
+                        if suggestion.proposal
+                        else None,
+                        reasoning=suggestion.reasoning,
+                        prompt_version=self._agent.prompt_version,
+                        outcome=outcome.outcome,
+                        attempts=outcome.attempts,
+                        counter_of_id=suggestion_id,
+                    )
+                    await AgentRunLogRepository(session).append(
+                        agent="im_assist",
+                        prompt_version=self._agent.prompt_version,
+                        project_id=project_id,
+                        trace_id=get_trace_id(),
+                        outcome=outcome.outcome,
+                        attempts=outcome.attempts,
+                        latency_ms=outcome.result.latency_ms,
+                        prompt_tokens=outcome.result.prompt_tokens,
+                        completion_tokens=outcome.result.completion_tokens,
+                        cache_read_tokens=outcome.result.cache_read_tokens,
+                        error=outcome.error,
+                    )
+                    new_suggestion_payload = self._suggestion_payload(new_row)
+
+                await self._event_bus.emit(
+                    "im_suggestion.produced", new_suggestion_payload
+                )
+            except Exception:
+                _log.exception(
+                    "counter classification failed",
+                    extra={"message_id": new_message_id},
+                )
+
+        # Fanout order per plan doc: original-suggestion update, message,
+        # then the new suggestion (if any).
+        if original_payload is not None:
+            await self._hub.publish(
+                project_id, {"type": "suggestion", "payload": original_payload}
+            )
+        # The MessageService already fired `{type:"message"}` during post()
+        # so we do NOT re-emit here to avoid duplicate bubbles.
+        if new_suggestion_payload is not None:
+            await self._hub.publish(
+                project_id,
+                {"type": "suggestion", "payload": new_suggestion_payload},
+            )
+
+        await self._event_bus.emit(
+            "im_suggestion.countered",
+            {
+                "suggestion_id": suggestion_id,
+                "actor_id": user_id,
+                "project_id": project_id,
+                "new_message_id": new_message_id,
+                "new_suggestion_id": (
+                    new_suggestion_payload["id"]
+                    if new_suggestion_payload
+                    else None
+                ),
+            },
+        )
+
+        # Shape mirrors the plan doc's counter response.
+        new_message_payload = {
+            k: post_result[k]
+            for k in (
+                "id",
+                "project_id",
+                "author_id",
+                "author_username",
+                "body",
+                "created_at",
+            )
+            if k in post_result
+        }
+        return {
+            "ok": True,
+            "original_suggestion": original_payload,
+            "new_message": new_message_payload,
+            "new_suggestion": new_suggestion_payload,
+        }
+
+    async def escalate(self, *, suggestion_id: str, user_id: str) -> dict:
+        """Signal-chain escalate (vision §6 step 4 / §5.6 ladder).
+
+        Flip status→'escalated', set escalation_state='requested'. No meeting
+        is scheduled — v0 is just a flag the UI renders as an amber badge.
+        """
+        async with session_scope(self._sessionmaker) as session:
+            row = await IMSuggestionRepository(session).get(suggestion_id)
+            if row is None:
+                return {"ok": False, "error": "suggestion_not_found"}
+            if row.status != "pending":
+                return {"ok": False, "error": "already_resolved"}
+            project_id = row.project_id
+            await IMSuggestionRepository(session).mark_escalated(suggestion_id)
+            refreshed = await IMSuggestionRepository(session).get(suggestion_id)
+            payload = self._suggestion_payload(refreshed) if refreshed else None
+
+        await self._event_bus.emit(
+            "im_suggestion.escalated",
+            {
+                "suggestion_id": suggestion_id,
+                "actor_id": user_id,
                 "project_id": project_id,
             },
         )

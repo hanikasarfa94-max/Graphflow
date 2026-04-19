@@ -27,7 +27,9 @@ from workgraph_persistence import (
     NotificationRepository,
     PlanRepository,
     ProjectMemberRepository,
+    ProjectMemberRow,
     ProjectRow,
+    StreamRepository,
     TaskRow,
     UserRepository,
     session_scope,
@@ -409,18 +411,46 @@ class MessageService:
             return {"ok": False, "error": "rate_limited"}
 
         async with session_scope(self._sessionmaker) as session:
+            # Phase B (v2): observer-tier members cannot post messages.
+            pm_repo = ProjectMemberRepository(session)
+            member = (
+                await session.execute(
+                    select(ProjectMemberRow).where(
+                        ProjectMemberRow.project_id == project_id,
+                        ProjectMemberRow.user_id == author_id,
+                    )
+                )
+            ).scalar_one_or_none()
+            if member is not None and member.license_tier == "observer":
+                return {"ok": False, "error": "observer_cannot_post"}
+
+            # Fetch (or backfill) the project stream so every message gets a
+            # stream_id. Idempotent — the boot-time backfill usually does this
+            # already, but tests + freshly-seeded projects may race.
+            stream_repo = StreamRepository(session)
+            stream = await stream_repo.get_for_project(project_id)
+            if stream is None:
+                stream = await stream_repo.create(
+                    type="project", project_id=project_id
+                )
+            stream_id = stream.id
+
             row = await MessageRepository(session).append(
-                project_id=project_id, author_id=author_id, body=body
+                project_id=project_id,
+                author_id=author_id,
+                body=body,
+                stream_id=stream_id,
             )
+            # Bump stream activity so GET /api/streams ordering stays fresh.
+            await stream_repo.touch_activity(stream_id)
             author = await UserRepository(session).get(author_id)
-            member_rows = await ProjectMemberRepository(session).list_for_project(
-                project_id
-            )
+            member_rows = await pm_repo.list_for_project(project_id)
             member_ids = [m.user_id for m in member_rows if m.user_id != author_id]
 
         payload = {
             "id": row.id,
             "project_id": project_id,
+            "stream_id": stream_id,
             "author_id": author_id,
             "author_username": author.username if author else None,
             "body": body,
@@ -440,8 +470,21 @@ class MessageService:
         return {"ok": True, **payload}
 
     async def list_recent(self, project_id: str, limit: int = 100) -> list[dict]:
+        """Team-room messages only.
+
+        Post-Phase-L architectural correction: personal streams are
+        anchored to the same project_id as the team room, so filtering
+        by project_id alone leaked personal-stream messages into the
+        team view. We now scope strictly to the project's team-room
+        stream (type='project').
+        """
         async with session_scope(self._sessionmaker) as session:
-            rows = await MessageRepository(session).list_recent(project_id, limit=limit)
+            team_stream = await StreamRepository(session).get_for_project(project_id)
+            if team_stream is None:
+                return []
+            rows = await MessageRepository(session).list_for_stream(
+                team_stream.id, limit=limit
+            )
             user_repo = UserRepository(session)
             authors: dict[str, str] = {}
             for r in rows:
@@ -453,6 +496,7 @@ class MessageService:
                 {
                     "id": r.id,
                     "project_id": r.project_id,
+                    "stream_id": r.stream_id,
                     "author_id": r.author_id,
                     "author_username": authors.get(r.author_id),
                     "body": r.body,

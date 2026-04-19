@@ -9,7 +9,18 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from workgraph_agents import ConflictExplanationAgent, DeliveryAgent, IMAssistAgent
+from workgraph_agents import (
+    ConflictExplanationAgent,
+    DeliveryAgent,
+    DriftAgent,
+    EdgeAgent,
+    EdgeResponse,
+    EdgeResponseOutcome,
+    IMAssistAgent,
+    MembraneAgent,
+    RenderAgent,
+)
+from workgraph_agents.llm import LLMResult
 from workgraph_agents.testing import (
     StubClarificationAgent,
     StubConflictExplanationAgent,
@@ -25,6 +36,7 @@ from workgraph_observability import (
     new_trace_id,
 )
 from workgraph_persistence import (
+    backfill_streams_from_projects,
     build_engine,
     build_sessionmaker,
     create_all,
@@ -37,12 +49,20 @@ from workgraph_api.routers import collab as collab_router
 from workgraph_api.routers import conflicts as conflicts_router
 from workgraph_api.routers import delivery as delivery_router
 from workgraph_api.routers import demo as demo_router
+from workgraph_api.routers import drift as drift_router
 from workgraph_api.routers import events_stream as events_router
 from workgraph_api.routers import graph as graph_router
 from workgraph_api.routers import intake as intake_router
+from workgraph_api.routers import kb as kb_router
+from workgraph_api.routers import membrane as membrane_router
 from workgraph_api.routers import observability as observability_router
+from workgraph_api.routers import personal as personal_router
 from workgraph_api.routers import plan as plan_router
 from workgraph_api.routers import projects as projects_router
+from workgraph_api.routers import render as render_router
+from workgraph_api.routers import routing as routing_router
+from workgraph_api.routers import streams as streams_router
+from workgraph_api.routers import users as users_router
 from workgraph_api.routers import ws as ws_router
 from workgraph_api.services import (
     AssignmentService,
@@ -53,18 +73,236 @@ from workgraph_api.services import (
     ConflictService,
     DecisionService,
     DeliveryService,
+    DriftService,
     IMService,
     IntakeService,
+    MembraneService,
     MessageService,
     NotificationService,
+    PersonalStreamService,
     PlanningService,
     ProjectService,
+    RenderService,
+    RoutingService,
+    SkillsService,
+    StreamService,
 )
 from workgraph_api.settings import load_settings
 
 settings = load_settings()
 configure_logging(settings.log_level)
 _log = logging.getLogger("workgraph.api")
+
+
+class _SilentStubEdgeAgent:
+    """Boot-time fallback EdgeAgent used in `use_stubs` mode.
+
+    Returns `kind='silence'` for every user turn so the demo surface
+    still works without a DeepSeek key. Tests inject their own stub via
+    `app.state.personal_service` — this one is only for the main app
+    running with `WORKGRAPH_USE_STUBS=true`.
+    """
+
+    async def respond(self, *, user_message, context):  # pragma: no cover - boot wiring
+        return EdgeResponseOutcome(
+            response=EdgeResponse(kind="silence", body=None, route_targets=[]),
+            result=LLMResult(
+                content="",
+                model="stub",
+                prompt_tokens=0,
+                completion_tokens=0,
+                latency_ms=0,
+            ),
+            outcome="ok",
+            attempts=1,
+        )
+
+    async def generate_options(self, *, routing_context):  # pragma: no cover
+        raise NotImplementedError(
+            "stub edge agent: generate_options unused in stub boot mode"
+        )
+
+    async def frame_reply(self, *, signal, source_user_context):  # pragma: no cover
+        raise NotImplementedError(
+            "stub edge agent: frame_reply unused in stub boot mode"
+        )
+
+
+class _SilentStubMembraneAgent:
+    """Boot-time fallback MembraneAgent used in `use_stubs` mode.
+
+    Defaults to `flag-for-review` so stub-mode boots NEVER auto-route
+    external content. Per vision §5.12 the safe-default for the membrane
+    is to defer to a human. Tests inject their own stub by overriding
+    `app.state.membrane_service`.
+    """
+
+    prompt_version = "stub.membrane.v1"
+
+    async def classify(  # pragma: no cover - boot wiring
+        self,
+        *,
+        raw_content,
+        source_kind,
+        source_identifier,
+        project_context,
+    ):
+        from workgraph_agents.membrane import (
+            MembraneClassification,
+            MembraneOutcome,
+        )
+
+        return MembraneOutcome(
+            classification=MembraneClassification(
+                is_relevant=False,
+                tags=[],
+                summary="stub membrane — awaiting human review",
+                proposed_target_user_ids=[],
+                proposed_action="flag-for-review",
+                confidence=0.0,
+                safety_notes="",
+            ),
+            result=LLMResult(
+                content="",
+                model="stub",
+                prompt_tokens=0,
+                completion_tokens=0,
+                latency_ms=0,
+            ),
+            outcome="ok",
+            attempts=1,
+        )
+
+
+class _SilentStubRenderAgent:
+    """Boot-time fallback RenderAgent used in `use_stubs` mode.
+
+    Returns minimal manual-review-shape docs without hitting a real LLM.
+    Tests inject their own stub via `app.state.render_service` when they
+    need to drive the agent directly.
+    """
+
+    postmortem_prompt_version = "stub.render.v1"
+    handoff_prompt_version = "stub.render.v1"
+
+    async def render_postmortem(self, project_context):  # pragma: no cover
+        from workgraph_agents.render import (
+            PostmortemDoc,
+            PostmortemOutcome,
+            RenderedSection,
+        )
+
+        project = project_context.get("project") or {}
+        title = project.get("title") or "Project"
+        return PostmortemOutcome(
+            doc=PostmortemDoc(
+                title=f"{title} postmortem (stub)",
+                one_line_summary="Stub render — enable a real LLM for narrative text.",
+                sections=[
+                    RenderedSection(
+                        heading="What happened",
+                        body_markdown="(stub) Render agent offline.",
+                    ),
+                    RenderedSection(
+                        heading="Key decisions (lineage)",
+                        body_markdown="(stub) — see /status for the live list.",
+                    ),
+                    RenderedSection(
+                        heading="What we got right", body_markdown="(stub)"
+                    ),
+                    RenderedSection(
+                        heading="What drifted", body_markdown="(stub)"
+                    ),
+                    RenderedSection(heading="Lessons", body_markdown="(stub)"),
+                ],
+            ),
+            result=LLMResult(
+                content="",
+                model="stub",
+                prompt_tokens=0,
+                completion_tokens=0,
+                latency_ms=0,
+            ),
+            outcome="ok",
+            attempts=1,
+        )
+
+    async def render_handoff(self, departing_user_context):  # pragma: no cover
+        from workgraph_agents.render import (
+            HandoffDoc,
+            HandoffOutcome,
+            RenderedSection,
+        )
+
+        user = departing_user_context.get("user") or {}
+        project = departing_user_context.get("project") or {}
+        name = user.get("display_name") or user.get("username") or "Teammate"
+        return HandoffOutcome(
+            doc=HandoffDoc(
+                title=f"{name}'s handoff — {project.get('title') or 'Project'} (stub)",
+                sections=[
+                    RenderedSection(
+                        heading="Role summary",
+                        body_markdown=f"(stub) {name}'s role summary.",
+                    ),
+                    RenderedSection(
+                        heading="Active tasks I own", body_markdown="(stub)"
+                    ),
+                    RenderedSection(
+                        heading="Recurring decisions I make", body_markdown="(stub)"
+                    ),
+                    RenderedSection(
+                        heading="Key relationships", body_markdown="(stub)"
+                    ),
+                    RenderedSection(
+                        heading="Open items / pending routings",
+                        body_markdown="(stub)",
+                    ),
+                    RenderedSection(
+                        heading="Style notes (how I reply to common asks)",
+                        body_markdown="(stub)",
+                    ),
+                ],
+            ),
+            result=LLMResult(
+                content="",
+                model="stub",
+                prompt_tokens=0,
+                completion_tokens=0,
+                latency_ms=0,
+            ),
+            outcome="ok",
+            attempts=1,
+        )
+
+
+class _SilentStubDriftAgent:
+    """Boot-time fallback DriftAgent used in `use_stubs` mode.
+
+    Returns `has_drift=false` for every check so the demo surface runs
+    without a DeepSeek key. Tests inject their own stub by overriding
+    `app.state.drift_service`.
+    """
+
+    prompt_version = "stub.drift.v1"
+
+    async def check(self, context):  # pragma: no cover - boot wiring
+        from workgraph_agents.drift import DriftCheckOutcome, DriftCheckResult
+
+        return DriftCheckOutcome(
+            result_payload=DriftCheckResult(
+                has_drift=False, drift_items=[], reasoning="stub drift agent"
+            ),
+            result=LLMResult(
+                content="",
+                model="stub",
+                prompt_tokens=0,
+                completion_tokens=0,
+                latency_ms=0,
+            ),
+            outcome="ok",
+            attempts=1,
+        )
 
 
 @asynccontextmanager
@@ -76,6 +314,13 @@ async def lifespan(app: FastAPI):
     await create_all(engine)
     sessionmaker = build_sessionmaker(engine)
     event_bus = EventBus(sessionmaker)
+
+    # Phase B: sync stream primitive with existing ProjectRow / members.
+    # Idempotent — safe to run every boot. Dev SQLite recreates, so this is
+    # usually a no-op; on a seeded DB it populates streams for existing
+    # projects and links messages by project_id.
+    backfill_stats = await backfill_streams_from_projects(sessionmaker)
+    _log.info("stream backfill complete", extra=backfill_stats)
 
     collab_hub = CollabHub(redis_url=settings.redis_url)
     await collab_hub.start()
@@ -100,6 +345,9 @@ async def lifespan(app: FastAPI):
         im_agent = StubIMAssistAgent()
         conflict_agent = StubConflictExplanationAgent()
         delivery_agent = StubDeliveryAgent()
+        drift_agent = _SilentStubDriftAgent()
+        membrane_agent = _SilentStubMembraneAgent()
+        render_agent = _SilentStubRenderAgent()
     else:
         requirement_agent = None  # service-level default (RequirementAgent)
         clarification_agent = None
@@ -107,6 +355,9 @@ async def lifespan(app: FastAPI):
         im_agent = IMAssistAgent()
         conflict_agent = ConflictExplanationAgent()
         delivery_agent = DeliveryAgent()
+        drift_agent = DriftAgent()
+        membrane_agent = MembraneAgent()
+        render_agent = RenderAgent()
 
     im_service = IMService(
         sessionmaker,
@@ -134,6 +385,37 @@ async def lifespan(app: FastAPI):
         event_bus,
         collab_hub,
         delivery_agent,
+    )
+    render_service = RenderService(sessionmaker, render_agent)
+    stream_service = StreamService(sessionmaker, event_bus, collab_hub)
+    drift_service = DriftService(
+        sessionmaker,
+        event_bus,
+        drift_agent,
+        stream_service,
+    )
+    routing_service = RoutingService(sessionmaker, event_bus, stream_service)
+    membrane_service = MembraneService(
+        sessionmaker,
+        event_bus,
+        collab_hub,
+        stream_service,
+        membrane_agent,
+    )
+
+    if settings.use_stubs:
+        edge_agent = _SilentStubEdgeAgent()
+    else:
+        edge_agent = EdgeAgent()
+
+    skills_service = SkillsService(sessionmaker)
+    personal_service = PersonalStreamService(
+        sessionmaker,
+        stream_service,
+        routing_service,
+        edge_agent,
+        event_bus,
+        skills_service=skills_service,
     )
 
     app.state.engine = engine
@@ -165,6 +447,17 @@ async def lifespan(app: FastAPI):
     app.state.conflict_service = conflict_service
     app.state.decision_service = decision_service
     app.state.delivery_service = delivery_service
+    app.state.render_service = render_service
+    app.state.render_agent = render_agent
+    app.state.drift_service = drift_service
+    app.state.drift_agent = drift_agent
+    app.state.stream_service = stream_service
+    app.state.routing_service = routing_service
+    app.state.edge_agent = edge_agent
+    app.state.personal_service = personal_service
+    app.state.skills_service = skills_service
+    app.state.membrane_service = membrane_service
+    app.state.membrane_agent = membrane_agent
     _log.info("api boot ok", extra={"database_url": _sanitize(settings.database_url)})
     try:
         yield
@@ -204,6 +497,8 @@ def _sanitize(url: str) -> str:
 app = FastAPI(title="WorkGraph API", version="0.1.0", lifespan=lifespan)
 app.include_router(auth_router.router)
 app.include_router(intake_router.router)
+app.include_router(kb_router.router)
+app.include_router(membrane_router.router)
 app.include_router(clarification_router.router)
 app.include_router(graph_router.router)
 app.include_router(plan_router.router)
@@ -212,8 +507,14 @@ app.include_router(collab_router.router)
 app.include_router(conflicts_router.router)
 app.include_router(delivery_router.router)
 app.include_router(demo_router.router)
+app.include_router(drift_router.router)
 app.include_router(events_router.router)
 app.include_router(observability_router.router)
+app.include_router(personal_router.router)
+app.include_router(render_router.router)
+app.include_router(routing_router.router)
+app.include_router(streams_router.router)
+app.include_router(users_router.router)
 app.include_router(ws_router.router)
 
 
@@ -280,13 +581,14 @@ async def health() -> dict:
     # Phase 7' fault-injection test reads `sse_streams` to verify the
     # SSE connection counter decrements on client disconnect.
     from workgraph_api.routers.events_stream import ACTIVE_STREAMS
-    from workgraph_api.routers.ws import ACTIVE_WS
+    from workgraph_api.routers.ws import ACTIVE_STREAM_WS, ACTIVE_WS
 
     return {
         "status": "ok",
         "env": settings.env,
         "sse_streams": ACTIVE_STREAMS["count"],
         "ws_streams": ACTIVE_WS["count"],
+        "ws_stream_channels": ACTIVE_STREAM_WS["count"],
     }
 
 

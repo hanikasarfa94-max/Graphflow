@@ -1,0 +1,895 @@
+"""PersonalStreamService — Phase N glue (user-post → EdgeAgent → reply).
+
+North-star §"The canonical interaction":
+    1. user types in their personal project stream
+    2. their sub-agent (EdgeAgent) metabolizes → silence / answer / clarify
+       / route_proposal
+    3. if route_proposal, the source clicks "Ask X" → the target's sub-agent
+       generates rich options → RoutingService dispatches + mirrors to DM
+    4. when the target replies, the source's sub-agent re-frames the reply
+       back into the source's personal stream
+
+This service is the orchestrator. It does NOT own any persistence beyond
+what's already in StreamService / RoutingService; route-proposal state is
+encoded inline in the MessageRow body using a `<route-proposal>{...}</route-proposal>`
+marker. That keeps the ORM untouched while still letting the frontend
+read target_user_ids back when rendering "Ask X" buttons.
+
+The EdgeAgent dependency is passed in — tests substitute a stub that
+never calls an LLM. Prod wires a DeepSeek-backed instance.
+"""
+from __future__ import annotations
+
+import json
+import logging
+import re
+import time
+from typing import Any
+
+from sqlalchemy.ext.asyncio import async_sessionmaker
+
+from workgraph_agents import EdgeAgent
+from workgraph_domain import EventBus
+from workgraph_persistence import (
+    EDGE_AGENT_SYSTEM_USER_ID,
+    MessageRepository,
+    ProjectMemberRepository,
+    ProjectRow,
+    UserRepository,
+    session_scope,
+)
+from sqlalchemy import select
+
+from .routing import RoutingService
+from .skills import SkillsService
+from .streams import StreamService
+
+_log = logging.getLogger("workgraph.api.personal")
+
+# Phase Q — cap how many tool calls one user turn may trigger. The
+# agent loop is: user post → respond → tool_call → execute → respond →
+# (maybe another tool_call) → execute → respond. Two tool calls is
+# enough to answer compound questions ("what's our thinking on boss 1
+# given recent decisions?") without runaway token use.
+MAX_TOOL_CALLS_PER_TURN = 2
+
+_ROUTE_PROPOSAL_MARKER_RE = re.compile(
+    r"\n*<route-proposal>(?P<json>.*?)</route-proposal>\s*$",
+    re.DOTALL,
+)
+
+# Pre-commit rehearsal (vision.md §5.3). Preview runs on every keystroke
+# debounce — cap the blast radius to 1 LLM call per (user, project) per
+# this many seconds. Short drafts short-circuit before touching the LLM.
+PREVIEW_RATE_LIMIT_SECONDS = 2.0
+PREVIEW_MIN_BODY_LENGTH = 10
+
+
+def _encode_route_proposal_body(body: str, payload: dict[str, Any]) -> str:
+    """Append the route-proposal JSON marker to a human-readable body.
+
+    Round-trippable: `_parse_route_proposal` picks out the same JSON.
+    """
+    return f"{body}\n\n<route-proposal>{json.dumps(payload, ensure_ascii=False)}</route-proposal>"
+
+
+def _parse_route_proposal(body: str) -> tuple[str, dict[str, Any] | None]:
+    """Split a route-proposal message body into (human text, parsed payload).
+
+    Returns (original_body, None) if the marker is absent or malformed.
+    """
+    match = _ROUTE_PROPOSAL_MARKER_RE.search(body)
+    if not match:
+        return body, None
+    raw = match.group("json")
+    try:
+        payload = json.loads(raw)
+    except json.JSONDecodeError:
+        return body, None
+    if not isinstance(payload, dict):
+        return body, None
+    human = body[: match.start()].rstrip()
+    return human, payload
+
+
+class PersonalStreamService:
+    """Orchestrates user posts in their personal project stream.
+
+    Methods:
+      * `post`            — user → EdgeAgent.respond → persist
+      * `confirm_route`   — source clicks "Ask X" → generate options +
+                            dispatch via RoutingService
+      * `handle_reply`    — after a routed reply, frame it + post into
+                            the source's personal stream
+    """
+
+    def __init__(
+        self,
+        sessionmaker: async_sessionmaker,
+        stream_service: StreamService,
+        routing_service: RoutingService,
+        edge_agent: EdgeAgent,
+        event_bus: EventBus,
+        skills_service: SkillsService | None = None,
+    ) -> None:
+        self._sessionmaker = sessionmaker
+        self._stream_service = stream_service
+        self._routing_service = routing_service
+        self._edge_agent = edge_agent
+        self._event_bus = event_bus
+        # Skills service is optional for back-compat with existing tests
+        # that construct PersonalStreamService without a skills dispatcher.
+        # If None, tool_call responses degrade to the preamble body so the
+        # stream still gets a sensible answer instead of a dead card.
+        self._skills_service = skills_service or SkillsService(sessionmaker)
+        # Per (user_id, project_id) -> last-preview monotonic timestamp.
+        # In-memory is fine for v1: worst case on process restart one
+        # keystroke-triggered preview slips through. Keyed by tuple so a
+        # user rehearsing in parallel across two projects doesn't throttle
+        # either.
+        self._preview_last_seen: dict[tuple[str, str], float] = {}
+
+    # --------------------------------------------------------------- preview
+
+    async def preview(
+        self, *, user_id: str, project_id: str, body: str
+    ) -> dict[str, Any]:
+        """Pre-commit rehearsal (vision.md §5.3).
+
+        Build the same EdgeAgent context `post()` would, call `respond`,
+        and return the shaped EdgeResponse — but persist nothing. The
+        frontend debounces this call on keystroke pause so the user sees
+        how their draft would be classified before committing.
+
+        Error codes:
+          * 'project_not_found'
+          * 'not_a_project_member'
+          * 'rate_limited' — with `retry_after_ms`; the caller maps to 429
+          * 'preview_failed' — underlying LLM/exception; surfaced as 502
+        """
+        # Short-circuit on trivial drafts before we touch anything. This
+        # is the main token-budget guard: keystroke-debounce will fire for
+        # every pause, and 8-char drafts aren't worth an LLM round-trip.
+        if len(body) < PREVIEW_MIN_BODY_LENGTH:
+            return {"ok": True, "preview": {"kind": "silent_preview"}}
+
+        # Membership + project sanity check — preview is still a read on
+        # the project's graph, so non-members don't get to peek.
+        async with session_scope(self._sessionmaker) as session:
+            project = (
+                await session.execute(
+                    select(ProjectRow).where(ProjectRow.id == project_id)
+                )
+            ).scalar_one_or_none()
+            if project is None:
+                return {"ok": False, "error": "project_not_found"}
+
+            pm_repo = ProjectMemberRepository(session)
+            if not await pm_repo.is_member(project_id, user_id):
+                return {"ok": False, "error": "not_a_project_member"}
+
+            user_row = await UserRepository(session).get(user_id)
+            project_title = project.title
+
+        # Per-(user, project) rate limit. Checked AFTER membership so a
+        # non-member probing isn't silently rate-limited into looking ok.
+        now = time.monotonic()
+        key = (user_id, project_id)
+        last = self._preview_last_seen.get(key)
+        if last is not None and (now - last) < PREVIEW_RATE_LIMIT_SECONDS:
+            retry_after_ms = int(
+                (PREVIEW_RATE_LIMIT_SECONDS - (now - last)) * 1000
+            )
+            return {
+                "ok": False,
+                "error": "rate_limited",
+                "retry_after_ms": max(retry_after_ms, 0),
+            }
+        self._preview_last_seen[key] = now
+
+        # Personal stream must exist so _build_respond_context has recent
+        # messages to include (matches post()'s behaviour).
+        stream_payload = await self._stream_service.ensure_personal_stream(
+            user_id=user_id, project_id=project_id
+        )
+        stream_id = stream_payload["stream_id"]
+
+        context = await self._build_respond_context(
+            user_id=user_id,
+            user_row=user_row,
+            project_id=project_id,
+            project_title=project_title,
+            stream_id=stream_id,
+        )
+
+        try:
+            outcome = await self._edge_agent.respond(
+                user_message=body, context=context
+            )
+        except Exception:
+            _log.exception(
+                "edge.respond raised during preview — returning preview_failed",
+                extra={"user_id": user_id, "project_id": project_id},
+            )
+            return {"ok": False, "error": "preview_failed"}
+
+        response = outcome.response
+        targets = [
+            {
+                "user_id": t.user_id,
+                "username": t.username,
+                "display_name": t.display_name,
+                "rationale": t.rationale,
+            }
+            for t in response.route_targets
+        ]
+        return {
+            "ok": True,
+            "preview": {
+                "kind": response.kind,
+                "body": response.body,
+                "reasoning": response.reasoning,
+                "targets": targets,
+            },
+        }
+
+    # ------------------------------------------------------------------ post
+
+    async def post(
+        self, *, user_id: str, project_id: str, body: str
+    ) -> dict[str, Any]:
+        """User posts into their personal project stream. Edge sub-agent
+        metabolizes and may post a follow-up system message.
+
+        Error codes:
+          * 'project_not_found'
+          * 'not_a_project_member'
+          * 'stream_post_failed' — shouldn't happen once the personal stream
+            exists but we pass through the StreamService error.
+        """
+        # Membership + project sanity check first so we don't spin up a
+        # personal stream for a project the user cannot see.
+        async with session_scope(self._sessionmaker) as session:
+            project = (
+                await session.execute(
+                    select(ProjectRow).where(ProjectRow.id == project_id)
+                )
+            ).scalar_one_or_none()
+            if project is None:
+                return {"ok": False, "error": "project_not_found"}
+
+            pm_repo = ProjectMemberRepository(session)
+            if not await pm_repo.is_member(project_id, user_id):
+                return {"ok": False, "error": "not_a_project_member"}
+
+            user_row = await UserRepository(session).get(user_id)
+            project_title = project.title
+
+        # Ensure the personal stream + post the user's turn.
+        stream_payload = await self._stream_service.ensure_personal_stream(
+            user_id=user_id, project_id=project_id
+        )
+        stream_id = stream_payload["stream_id"]
+
+        post_result = await self._stream_service.post_message(
+            stream_id=stream_id, author_id=user_id, body=body
+        )
+        if not post_result.get("ok"):
+            return {"ok": False, "error": post_result.get("error", "stream_post_failed")}
+        message_id = post_result["id"]
+
+        # Build the EdgeAgent context.
+        context = await self._build_respond_context(
+            user_id=user_id,
+            user_row=user_row,
+            project_id=project_id,
+            project_title=project_title,
+            stream_id=stream_id,
+        )
+
+        # Agent loop — the EdgeAgent may request up to
+        # MAX_TOOL_CALLS_PER_TURN skill executions before settling on a
+        # terminal kind (answer / clarify / route_proposal / silence).
+        # Each tool call produces two additional system messages that
+        # flow through the normal stream so the frontend can render
+        # them in-line.
+        tool_messages: list[dict[str, Any]] = []
+        effective_user_message = body
+        tool_call_count = 0
+
+        while True:
+            try:
+                outcome = await self._edge_agent.respond(
+                    user_message=effective_user_message, context=context
+                )
+            except Exception:
+                _log.exception(
+                    "edge.respond raised — degrading to silence",
+                    extra={
+                        "user_id": user_id,
+                        "project_id": project_id,
+                        "tool_call_count": tool_call_count,
+                    },
+                )
+                return {
+                    "ok": True,
+                    "message_id": message_id,
+                    "edge_response": None,
+                    "tool_messages": tool_messages,
+                }
+
+            response = outcome.response
+            kind = response.kind
+
+            if kind != "tool_call":
+                break
+
+            if tool_call_count >= MAX_TOOL_CALLS_PER_TURN:
+                # Agent wants another tool call after the cap — turn it
+                # into a clarify so the user isn't stuck in a silent
+                # loop. This is the runaway-guard invariant.
+                _log.info(
+                    "edge: tool_call cap hit; degrading to clarify",
+                    extra={
+                        "user_id": user_id,
+                        "project_id": project_id,
+                        "cap": MAX_TOOL_CALLS_PER_TURN,
+                    },
+                )
+                reply_msg = await self._stream_service.post_system_message(
+                    stream_id=stream_id,
+                    author_id=EDGE_AGENT_SYSTEM_USER_ID,
+                    body=(
+                        response.body
+                        or "I've run a couple of lookups — can you sharpen the question a bit?"
+                    ),
+                    kind="edge-clarify",
+                    linked_id=None,
+                )
+                return {
+                    "ok": True,
+                    "message_id": message_id,
+                    "edge_response": {
+                        "kind": "clarify",
+                        "body": response.body,
+                        "reply_message_id": reply_msg.get("id"),
+                        "degraded": "tool_call_cap_exceeded",
+                    },
+                    "tool_messages": tool_messages,
+                }
+
+            tc = response.tool_call
+            assert tc is not None  # coercer guarantees this for kind="tool_call"
+
+            preamble = response.body or "Running skill…"
+            call_payload = {
+                "name": tc.name,
+                "args": dict(tc.args or {}),
+                "preamble": preamble,
+                "reasoning": response.reasoning,
+            }
+            call_msg = await self._stream_service.post_system_message(
+                stream_id=stream_id,
+                author_id=EDGE_AGENT_SYSTEM_USER_ID,
+                body=json.dumps(call_payload, ensure_ascii=False),
+                kind="edge-tool-call",
+                linked_id=message_id,
+            )
+            tool_messages.append(
+                {
+                    "kind": "edge-tool-call",
+                    "message_id": call_msg.get("id"),
+                    "name": tc.name,
+                    "args": call_payload["args"],
+                    "preamble": preamble,
+                }
+            )
+
+            # Execute the skill — read-only, scoped to this project.
+            skill_result = await self._skills_service.execute(
+                project_id=project_id,
+                skill_name=tc.name,
+                args=dict(tc.args or {}),
+            )
+            result_msg = await self._stream_service.post_system_message(
+                stream_id=stream_id,
+                author_id=EDGE_AGENT_SYSTEM_USER_ID,
+                body=json.dumps(skill_result, ensure_ascii=False, default=str),
+                kind="edge-tool-result",
+                linked_id=call_msg.get("id"),
+            )
+            tool_messages.append(
+                {
+                    "kind": "edge-tool-result",
+                    "message_id": result_msg.get("id"),
+                    "name": tc.name,
+                    "result": skill_result,
+                }
+            )
+
+            tool_call_count += 1
+
+            # Re-invoke the agent with the tool result appended to
+            # `recent_messages` so the next respond() sees what we got.
+            # Mirrors how Claude Code threads tool output back into the
+            # following completion.
+            tool_turn_entry = {
+                "author_id": EDGE_AGENT_SYSTEM_USER_ID,
+                "kind": "edge-tool-result",
+                "body": json.dumps(
+                    {"name": tc.name, "result": skill_result},
+                    ensure_ascii=False,
+                    default=str,
+                ),
+                "created_at": None,
+            }
+            recent = list(context.get("recent_messages") or [])
+            recent.append(tool_turn_entry)
+            context = {**context, "recent_messages": recent}
+            # After the first tool call the user message is the tool
+            # result for the agent's purposes — keep the original body
+            # though, so the prompt still knows what the user asked.
+            # effective_user_message stays as `body`.
+
+        # ---- terminal kinds ----------------------------------------------
+
+        # 'silence' — no follow-up turn. First-class so acknowledgements
+        # don't flood the stream with empty edge turns.
+        if kind == "silence":
+            return {
+                "ok": True,
+                "message_id": message_id,
+                "edge_response": {
+                    "kind": "silence",
+                    "body": None,
+                },
+                "tool_messages": tool_messages,
+            }
+
+        # answer / clarify — simple system message, no extra state.
+        if kind in ("answer", "clarify"):
+            reply_kind = "edge-answer" if kind == "answer" else "edge-clarify"
+            reply_body = response.body or ""
+            reply_msg = await self._stream_service.post_system_message(
+                stream_id=stream_id,
+                author_id=EDGE_AGENT_SYSTEM_USER_ID,
+                body=reply_body,
+                kind=reply_kind,
+                linked_id=None,
+            )
+            return {
+                "ok": True,
+                "message_id": message_id,
+                "edge_response": {
+                    "kind": kind,
+                    "body": reply_body,
+                    "reply_message_id": reply_msg.get("id"),
+                },
+                "tool_messages": tool_messages,
+            }
+
+        # route_proposal — encode targets inline in body so the frontend
+        # can render "Ask X" buttons without a new ORM table.
+        if kind == "route_proposal":
+            targets_payload = [
+                {
+                    "user_id": t.user_id,
+                    "username": t.username,
+                    "display_name": t.display_name,
+                    "rationale": t.rationale,
+                }
+                for t in response.route_targets
+            ]
+            human_body = response.body or ""
+            marker = {
+                "message_id": message_id,  # self-pointer back to the user turn
+                "source_user_id": user_id,
+                "project_id": project_id,
+                "framing": human_body,
+                "background": context.get("background", []),
+                "targets": targets_payload,
+                "status": "pending",
+            }
+            encoded = _encode_route_proposal_body(human_body, marker)
+            reply_msg = await self._stream_service.post_system_message(
+                stream_id=stream_id,
+                author_id=EDGE_AGENT_SYSTEM_USER_ID,
+                body=encoded,
+                kind="edge-route-proposal",
+                linked_id=message_id,
+            )
+            proposal_id = reply_msg.get("id")
+            return {
+                "ok": True,
+                "message_id": message_id,
+                "edge_response": {
+                    "kind": "route_proposal",
+                    "body": human_body,
+                    "route_proposal_id": proposal_id,
+                    "targets": targets_payload,
+                },
+                "tool_messages": tool_messages,
+            }
+
+        # Defensive default (shouldn't hit — EdgeKind is a Literal).
+        return {
+            "ok": True,
+            "message_id": message_id,
+            "edge_response": None,
+            "tool_messages": tool_messages,
+        }
+
+    # -------------------------------------------------------- confirm_route
+
+    async def confirm_route(
+        self,
+        *,
+        proposal_id: str,
+        source_user_id: str,
+        target_user_id: str,
+    ) -> dict[str, Any]:
+        """Source clicks "Ask X" on a route-proposal card. Generate options
+        from the target's sub-agent, dispatch, and post a follow-up
+        "✓ asked X" ambient turn so the source stream shows the routed
+        state (since we don't mutate the original proposal row).
+
+        Error codes:
+          * 'proposal_not_found'
+          * 'proposal_not_ours' — caller isn't the proposal's source_user
+          * 'target_not_in_proposal'
+          * dispatch error codes pass through
+        """
+        async with session_scope(self._sessionmaker) as session:
+            proposal = await self._load_proposal(session, proposal_id)
+            if proposal is None:
+                return {"ok": False, "error": "proposal_not_found"}
+
+            if proposal["source_user_id"] != source_user_id:
+                return {"ok": False, "error": "proposal_not_ours"}
+
+            target_ids = {t.get("user_id") for t in proposal.get("targets", [])}
+            if target_user_id not in target_ids:
+                return {"ok": False, "error": "target_not_in_proposal"}
+
+            source_user = await UserRepository(session).get(source_user_id)
+            target_user = await UserRepository(session).get(target_user_id)
+            source_profile = (
+                dict(source_user.profile) if source_user and source_user.profile else {}
+            )
+            target_profile = (
+                dict(target_user.profile) if target_user and target_user.profile else {}
+            )
+            source_display = (
+                source_user.display_name or source_user.username
+                if source_user
+                else source_user_id
+            )
+            target_display = (
+                target_user.display_name or target_user.username
+                if target_user
+                else target_user_id
+            )
+            project_id = proposal["project_id"]
+
+        # Build routing_context for option generation. Keys follow the
+        # EdgeAgent.options prompt contract.
+        routing_context = {
+            "framing": proposal.get("framing", ""),
+            "background": proposal.get("background", []),
+            "source_user": {
+                "id": source_user_id,
+                "display_name": source_display,
+                "profile": source_profile,
+            },
+            "target_user": {
+                "id": target_user_id,
+                "display_name": target_display,
+            },
+            "project_id": project_id,
+            "target_response_profile": target_profile or {},
+        }
+
+        try:
+            options_outcome = await self._edge_agent.generate_options(
+                routing_context=routing_context
+            )
+        except Exception:
+            _log.exception(
+                "edge.generate_options raised — aborting route confirm",
+                extra={"proposal_id": proposal_id},
+            )
+            return {"ok": False, "error": "option_generation_failed"}
+
+        options_payload = [opt.model_dump() for opt in options_outcome.options]
+
+        dispatch_result = await self._routing_service.dispatch(
+            source_user_id=source_user_id,
+            target_user_id=target_user_id,
+            framing=proposal.get("framing", ""),
+            background=proposal.get("background", []),
+            options=options_payload,
+            project_id=project_id,
+        )
+        if not dispatch_result.get("ok"):
+            return dispatch_result
+
+        signal = dispatch_result["signal"]
+
+        # Post a "✓ routed to X" ambient follow-up into the source's
+        # personal stream so the source's timeline reflects the action
+        # without mutating the original proposal row.
+        source_stream_id = signal["source_stream_id"]
+        follow_up = f"✓ asked {target_display}"
+        await self._stream_service.post_system_message(
+            stream_id=source_stream_id,
+            author_id=EDGE_AGENT_SYSTEM_USER_ID,
+            body=follow_up,
+            kind="edge-route-confirmed",
+            linked_id=signal["id"],
+        )
+
+        await self._event_bus.emit(
+            "personal.route_confirmed",
+            {
+                "proposal_id": proposal_id,
+                "signal_id": signal["id"],
+                "source_user_id": source_user_id,
+                "target_user_id": target_user_id,
+                "project_id": project_id,
+            },
+        )
+        return {"ok": True, "signal_id": signal["id"], "signal": signal}
+
+    # ---------------------------------------------------------- handle_reply
+
+    async def handle_reply(
+        self,
+        *,
+        signal_id: str,
+        replier_user_id: str,
+        option_id: str | None = None,
+        custom_text: str | None = None,
+    ) -> dict[str, Any]:
+        """After a routed reply persists, frame it in the source's voice
+        and post into the source's personal stream.
+
+        Delegates the actual persistence + DM mirror to RoutingService.reply.
+        On top of that, calls edge_agent.frame_reply and posts an
+        `edge-reply-frame` system message in the source's personal stream.
+        """
+        reply_result = await self._routing_service.reply(
+            signal_id=signal_id,
+            replier_user_id=replier_user_id,
+            option_id=option_id,
+            custom_text=custom_text,
+        )
+        if not reply_result.get("ok"):
+            return reply_result
+
+        signal = reply_result["signal"]
+        source_stream_id = signal["source_stream_id"]
+
+        async with session_scope(self._sessionmaker) as session:
+            source_user = await UserRepository(session).get(signal["source_user_id"])
+            source_profile = (
+                dict(source_user.profile) if source_user and source_user.profile else {}
+            )
+            source_display = (
+                source_user.display_name or source_user.username
+                if source_user
+                else signal["source_user_id"]
+            )
+
+        source_user_context = {
+            "id": signal["source_user_id"],
+            "display_name": source_display,
+            "profile": source_profile,
+        }
+
+        try:
+            framed_outcome = await self._edge_agent.frame_reply(
+                signal=signal, source_user_context=source_user_context
+            )
+        except Exception:
+            _log.exception(
+                "edge.frame_reply raised — skipping frame card",
+                extra={"signal_id": signal_id},
+            )
+            return {"ok": True, "signal": signal, "framed": None}
+
+        framed = framed_outcome.framed
+        frame_msg = await self._stream_service.post_system_message(
+            stream_id=source_stream_id,
+            author_id=EDGE_AGENT_SYSTEM_USER_ID,
+            body=framed.body,
+            kind="edge-reply-frame",
+            linked_id=signal["id"],
+        )
+        return {
+            "ok": True,
+            "signal": signal,
+            "framed": {
+                "body": framed.body,
+                "action_hint": framed.action_hint,
+                "attach_options": framed.attach_options,
+                "message_id": frame_msg.get("id"),
+            },
+        }
+
+    # --------------------------------------------------------- list_messages
+
+    async def list_messages(
+        self, *, user_id: str, project_id: str, limit: int = 100
+    ) -> dict[str, Any]:
+        """Return the caller's personal-stream messages with route-proposal
+        targets parsed out of the body marker.
+        """
+        stream_payload = await self._stream_service.ensure_personal_stream(
+            user_id=user_id, project_id=project_id
+        )
+        stream_id = stream_payload["stream_id"]
+
+        async with session_scope(self._sessionmaker) as session:
+            rows = await MessageRepository(session).list_for_stream(
+                stream_id, limit=limit
+            )
+            user_repo = UserRepository(session)
+            authors: dict[str, str] = {}
+            for r in rows:
+                if r.author_id not in authors:
+                    u = await user_repo.get(r.author_id)
+                    if u is not None:
+                        authors[r.author_id] = u.username
+
+        messages: list[dict[str, Any]] = []
+        for r in rows:
+            body = r.body
+            metadata: dict[str, Any] = {}
+            if r.kind == "edge-route-proposal":
+                human, payload = _parse_route_proposal(body)
+                if payload is not None:
+                    body = human
+                    metadata = {
+                        "route_proposal": {
+                            "framing": payload.get("framing", ""),
+                            "targets": payload.get("targets", []),
+                            "background": payload.get("background", []),
+                            "status": payload.get("status", "pending"),
+                        }
+                    }
+            messages.append(
+                {
+                    "id": r.id,
+                    "stream_id": stream_id,
+                    "project_id": r.project_id,
+                    "author_id": r.author_id,
+                    "author_username": authors.get(r.author_id),
+                    "body": body,
+                    "kind": r.kind,
+                    "linked_id": r.linked_id,
+                    "created_at": r.created_at.isoformat(),
+                    **metadata,
+                }
+            )
+        return {"ok": True, "stream_id": stream_id, "messages": messages}
+
+    # ----------------------------------------------------------- internals
+
+    async def _build_respond_context(
+        self,
+        *,
+        user_id: str,
+        user_row: Any,
+        project_id: str,
+        project_title: str,
+        stream_id: str,
+    ) -> dict[str, Any]:
+        """Shape the EdgeAgent.respond context. See edge.py prompt contract.
+
+        Keys:
+          * `user` — id / display name / profile
+          * `project` — id + title
+          * `recent_messages` — last ~5 messages in this personal stream
+          * `teammates` — project members (id + display_name) so the LLM
+            can name route targets
+          * `background` — placeholder slot the respond step can enrich;
+            kept empty in v1 so tests don't depend on downstream KB wiring
+        """
+        async with session_scope(self._sessionmaker) as session:
+            pm_repo = ProjectMemberRepository(session)
+            members = await pm_repo.list_for_project(project_id)
+            user_repo = UserRepository(session)
+            member_summaries: list[dict[str, Any]] = []
+            caller_project_role = "member"
+            for m in members:
+                if m.user_id == EDGE_AGENT_SYSTEM_USER_ID:
+                    continue
+                u = await user_repo.get(m.user_id)
+                if u is None:
+                    continue
+                profile = dict(u.profile) if u.profile else {}
+                abilities = list(profile.get("declared_abilities") or [])
+                role_hints = list(profile.get("role_hints") or [])
+                # Prefer profile role_hints (which are richer, e.g.
+                # "design-lead") over the coarse ProjectMemberRow.role
+                # (which defaults to "member"/"admin"). Fall back to
+                # project role when profile is empty.
+                role = role_hints[0] if role_hints else m.role
+                if m.user_id == user_id:
+                    caller_project_role = role
+                    continue
+                member_summaries.append(
+                    {
+                        "user_id": u.id,
+                        "username": u.username,
+                        "display_name": u.display_name,
+                        "role": role,
+                        "abilities": abilities,
+                    }
+                )
+
+            msg_rows = await MessageRepository(session).list_for_stream(
+                stream_id, limit=5
+            )
+            recent_messages = [
+                {
+                    "author_id": r.author_id,
+                    "kind": r.kind,
+                    "body": r.body,
+                    "created_at": r.created_at.isoformat(),
+                }
+                for r in msg_rows
+            ]
+
+        user_profile = (
+            dict(user_row.profile) if user_row and user_row.profile else {}
+        )
+        return {
+            "user": {
+                "id": user_id,
+                "username": user_row.username if user_row else "",
+                "display_name": user_row.display_name if user_row else "",
+                "role": (
+                    (user_profile.get("role_hints") or [None])[0]
+                    or caller_project_role
+                ),
+                "declared_abilities": list(
+                    user_profile.get("declared_abilities") or []
+                ),
+                "profile": user_profile,
+            },
+            "project": {
+                "id": project_id,
+                "title": project_title,
+                "member_summaries": member_summaries,
+            },
+            "teammates": member_summaries,  # legacy alias; keep until tests migrate
+            "recent_messages": recent_messages,
+            "background": [],
+        }
+
+    async def _load_proposal(
+        self, session, proposal_id: str
+    ) -> dict[str, Any] | None:
+        """Read the proposal back from the stored MessageRow body marker."""
+        from workgraph_persistence import MessageRow  # local to avoid cycles
+
+        row = (
+            await session.execute(
+                select(MessageRow).where(MessageRow.id == proposal_id)
+            )
+        ).scalar_one_or_none()
+        if row is None:
+            return None
+        if row.kind != "edge-route-proposal":
+            return None
+        _, payload = _parse_route_proposal(row.body)
+        if payload is None:
+            return None
+        # Fill in canonical fields from the row in case the marker is stale.
+        payload.setdefault("project_id", row.project_id)
+        payload.setdefault("stream_id", row.stream_id)
+        return payload
+
+
+__all__ = ["PersonalStreamService"]

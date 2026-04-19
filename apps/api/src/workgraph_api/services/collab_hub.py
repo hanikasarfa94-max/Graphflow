@@ -28,6 +28,10 @@ class CollabHub:
         self._redis_pubsub_task: asyncio.Task | None = None
         # project_id -> set of asyncio.Queue[dict]
         self._local_queues: dict[str, set[asyncio.Queue]] = defaultdict(set)
+        # stream_id -> set of asyncio.Queue[dict]. Parallel namespace to
+        # `_local_queues` so `/ws/streams/{id}` subscribers see only that
+        # stream's frames without touching project fan-out.
+        self._stream_queues: dict[str, set[asyncio.Queue]] = defaultdict(set)
         # (user_id, project_id) -> deque[float] of message timestamps for rate-limit
         self._msg_timestamps: dict[tuple[str, str], deque[float]] = defaultdict(
             lambda: deque(maxlen=32)
@@ -49,7 +53,7 @@ class CollabHub:
 
             self._redis = aioredis.from_url(self._redis_url, decode_responses=True)
             pubsub = self._redis.pubsub()
-            await pubsub.psubscribe("wg:project:*")
+            await pubsub.psubscribe("wg:project:*", "wg:stream:*")
             self._redis_pubsub_task = asyncio.create_task(
                 self._consume_redis(pubsub), name="collab-redis-consumer"
             )
@@ -81,14 +85,19 @@ class CollabHub:
                 channel = message.get("channel", "")
                 data = message.get("data", "")
                 try:
-                    project_id = channel.split(":", 2)[2]
+                    parts = channel.split(":", 2)
+                    kind = parts[1]  # "project" or "stream"
+                    ident = parts[2]
                 except IndexError:
                     continue
                 try:
                     payload = json.loads(data)
                 except Exception:
                     continue
-                self._fanout_local(project_id, payload)
+                if kind == "stream":
+                    self._fanout_stream_local(ident, payload)
+                else:
+                    self._fanout_local(ident, payload)
         except asyncio.CancelledError:
             return
 
@@ -102,6 +111,19 @@ class CollabHub:
             except asyncio.QueueFull:
                 _log.warning(
                     "collab hub local queue full — dropping", extra={"project_id": project_id}
+                )
+
+    def _fanout_stream_local(self, stream_id: str, payload: dict) -> None:
+        queues = self._stream_queues.get(stream_id)
+        if not queues:
+            return
+        for q in tuple(queues):
+            try:
+                q.put_nowait(payload)
+            except asyncio.QueueFull:
+                _log.warning(
+                    "collab hub stream queue full — dropping",
+                    extra={"stream_id": stream_id},
                 )
 
     async def publish(self, project_id: str, payload: dict[str, Any]) -> None:
@@ -133,6 +155,40 @@ class CollabHub:
         self._local_queues[project_id].discard(queue)
         if not self._local_queues[project_id]:
             self._local_queues.pop(project_id, None)
+
+    # ---- stream channel (parallel to the project channel) ----------------
+
+    async def publish_stream(self, stream_id: str, payload: dict[str, Any]) -> None:
+        """Broadcast `payload` to every subscriber of `stream_id`.
+
+        Used by `/ws/streams/{stream_id}` to deliver message frames without
+        coupling to the project-level fan-out (DM streams have no project
+        and personal streams should not spam all project members).
+        """
+        self._fanout_stream_local(stream_id, payload)
+        if self._redis is not None:
+            try:
+                await self._redis.publish(
+                    f"wg:stream:{stream_id}", json.dumps(payload, default=str)
+                )
+            except Exception as exc:
+                _log.warning(
+                    "collab hub redis stream publish failed",
+                    extra={"error": str(exc)},
+                )
+
+    async def subscribe_stream(self, stream_id: str) -> asyncio.Queue:
+        queue: asyncio.Queue = asyncio.Queue(maxsize=256)
+        self._stream_queues[stream_id].add(queue)
+        return queue
+
+    def unsubscribe_stream(self, stream_id: str, queue: asyncio.Queue) -> None:
+        self._stream_queues[stream_id].discard(queue)
+        if not self._stream_queues[stream_id]:
+            self._stream_queues.pop(stream_id, None)
+
+    def stream_subscriber_count(self, stream_id: str) -> int:
+        return len(self._stream_queues.get(stream_id, ()))
 
     def rate_limit_ok(self, user_id: str, project_id: str, limit_per_sec: int = 10) -> bool:
         """Sliding-window rate check. Returns False when the user exceeded the limit."""

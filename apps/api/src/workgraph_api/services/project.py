@@ -16,6 +16,8 @@ from workgraph_persistence import (
     ProjectMemberRepository,
     ProjectRow,
     RequirementRepository,
+    StreamMemberRepository,
+    StreamRepository,
     UserRepository,
     session_scope,
 )
@@ -32,6 +34,20 @@ class ProjectService:
         async with session_scope(self._sessionmaker) as session:
             await ProjectMemberRepository(session).add(
                 project_id=project_id, user_id=user_id, role="owner"
+            )
+            # Phase B (v2): ensure a project stream exists + creator is in it.
+            # Idempotent — boot backfill handles pre-existing projects, this
+            # covers the just-created case.
+            stream_repo = StreamRepository(session)
+            stream = await stream_repo.get_for_project(project_id)
+            if stream is None:
+                stream = await stream_repo.create(
+                    type="project", project_id=project_id
+                )
+            await StreamMemberRepository(session).add(
+                stream_id=stream.id,
+                user_id=user_id,
+                role_in_stream="admin",
             )
         await self._event_bus.emit(
             "project.member_added",
@@ -54,6 +70,17 @@ class ProjectService:
                 return {"ok": False, "error": "project_not_found"}
             await ProjectMemberRepository(session).add(
                 project_id=project_id, user_id=user_row.id
+            )
+            # Phase B (v2): join the project stream so the invitee sees it in
+            # GET /api/streams and receives broadcast messages.
+            stream_repo = StreamRepository(session)
+            stream = await stream_repo.get_for_project(project_id)
+            if stream is None:
+                stream = await stream_repo.create(
+                    type="project", project_id=project_id
+                )
+            await StreamMemberRepository(session).add(
+                stream_id=stream.id, user_id=user_row.id
             )
             member_user_id = user_row.id
         await self._event_bus.emit(
@@ -107,6 +134,47 @@ class ProjectService:
                 project_id, user_id
             )
 
+    async def set_license_tier(
+        self, *, project_id: str, user_id: str, tier: str
+    ) -> dict:
+        """Phase B (v2): mutate a project member's license tier.
+
+        Allowed values: 'full' | 'task_scoped' | 'observer'. Observer loses
+        mutation capability in message post / suggestion accept. Task-scoped
+        storage lands in v1 but enforcement is v2.
+        """
+        if tier not in {"full", "task_scoped", "observer"}:
+            return {"ok": False, "error": "invalid_tier"}
+        from workgraph_persistence import ProjectMemberRow as _PMR
+        from sqlalchemy import select as _select
+
+        async with session_scope(self._sessionmaker) as session:
+            row = (
+                await session.execute(
+                    _select(_PMR).where(
+                        _PMR.project_id == project_id,
+                        _PMR.user_id == user_id,
+                    )
+                )
+            ).scalar_one_or_none()
+            if row is None:
+                return {"ok": False, "error": "not_a_member"}
+            row.license_tier = tier
+            # Mirror into the stream member role so the stream surface can
+            # render observer state without a join. 'admin' stays 'admin'
+            # (owner) — we don't demote admins here.
+            stream_repo = StreamRepository(session)
+            stream = await stream_repo.get_for_project(project_id)
+            if stream is not None:
+                member_repo = StreamMemberRepository(session)
+                sm = await member_repo.get_member(stream.id, user_id)
+                if sm is not None and sm.role_in_stream != "admin":
+                    sm.role_in_stream = (
+                        "observer" if tier == "observer" else "member"
+                    )
+            await session.flush()
+        return {"ok": True, "project_id": project_id, "user_id": user_id, "tier": tier}
+
     async def members(self, project_id: str) -> list[dict[str, Any]]:
         async with session_scope(self._sessionmaker) as session:
             memberships = await ProjectMemberRepository(session).list_for_project(
@@ -129,6 +197,7 @@ class ProjectService:
                         users[m.user_id].display_name if m.user_id in users else None
                     ),
                     "role": m.role,
+                    "license_tier": m.license_tier,
                 }
                 for m in memberships
                 if m.user_id in users

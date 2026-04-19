@@ -3,6 +3,13 @@ from __future__ import annotations
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 
+from workgraph_agents import EdgeResponse, EdgeResponseOutcome
+from workgraph_agents.drift import DriftCheckOutcome, DriftCheckResult
+from workgraph_agents.llm import LLMResult
+from workgraph_agents.membrane import (
+    MembraneClassification,
+    MembraneOutcome,
+)
 from workgraph_agents.testing import (
     StubClarificationAgent,
     StubConflictExplanationAgent,
@@ -11,8 +18,269 @@ from workgraph_agents.testing import (
     StubPlanningAgent,
     StubRequirementAgent,
 )
+
+
+class _NoDriftAgent:
+    """Default DriftAgent stub for the api_env fixture.
+
+    Returns has_drift=False for every project so tests that exercise
+    unrelated endpoints don't accidentally generate drift alerts in
+    shared state. Tests that exercise drift override
+    `app.state.drift_service` or `app.state.drift_agent` directly.
+    """
+
+    prompt_version = "stub.drift.v1"
+
+    async def check(self, context):
+        return DriftCheckOutcome(
+            result_payload=DriftCheckResult(
+                has_drift=False, drift_items=[], reasoning="test stub"
+            ),
+            result=LLMResult(
+                content="",
+                model="stub",
+                prompt_tokens=0,
+                completion_tokens=0,
+                latency_ms=0,
+            ),
+            outcome="ok",
+            attempts=1,
+        )
+
+
+class _ScriptableMembraneAgent:
+    """Default MembraneAgent stub for the api_env fixture.
+
+    Behaves like a keyword-driven classifier: any content containing
+    "IGNORE" (case-insensitive) is flagged for review with a safety note;
+    otherwise the stub mirrors whatever the test sets in
+    `next_classification`. Tests that need a bespoke result assign
+    `app.state.membrane_agent.next_classification` to an explicit
+    MembraneClassification and the next `classify()` call returns it.
+    """
+
+    prompt_version = "stub.membrane.v1"
+
+    def __init__(self) -> None:
+        self.calls: list[dict] = []
+        # If set, returned verbatim on the next call and reset after.
+        self.next_classification: MembraneClassification | None = None
+
+    async def classify(
+        self,
+        *,
+        raw_content,
+        source_kind,
+        source_identifier,
+        project_context,
+    ):
+        self.calls.append(
+            {
+                "raw_content": raw_content,
+                "source_kind": source_kind,
+                "source_identifier": source_identifier,
+                "project_context": project_context,
+            }
+        )
+        if self.next_classification is not None:
+            classification = self.next_classification
+            self.next_classification = None
+        else:
+            body = (raw_content or "").upper()
+            # Heuristic injection detector so the prompt-injection test
+            # doesn't need to stuff a bespoke classification into state.
+            looks_injectable = any(
+                marker in body
+                for marker in (
+                    "IGNORE ABOVE INSTRUCTIONS",
+                    "IGNORE ALL PREVIOUS INSTRUCTIONS",
+                    "DELETE ALL DATA",
+                    "FORGET PREVIOUS",
+                )
+            )
+            if looks_injectable:
+                classification = MembraneClassification(
+                    is_relevant=False,
+                    tags=["other"],
+                    summary="Suspected prompt-injection payload.",
+                    proposed_target_user_ids=[],
+                    proposed_action="flag-for-review",
+                    confidence=0.2,
+                    safety_notes=(
+                        "stub: content contains injection markers — "
+                        "flagged for human review"
+                    ),
+                )
+            else:
+                # Default: low-confidence, no targets → pending-review
+                # so the auto-approve gate doesn't silently route.
+                classification = MembraneClassification(
+                    is_relevant=True,
+                    tags=["other"],
+                    summary=(raw_content or "")[:160],
+                    proposed_target_user_ids=[],
+                    proposed_action="ambient-log",
+                    confidence=0.5,
+                    safety_notes="",
+                )
+
+        return MembraneOutcome(
+            classification=classification,
+            result=LLMResult(
+                content="",
+                model="stub",
+                prompt_tokens=0,
+                completion_tokens=0,
+                latency_ms=0,
+            ),
+            outcome="ok",
+            attempts=1,
+        )
+
+
+class _StubRenderAgent:
+    """Default RenderAgent stub for the `api_env` fixture.
+
+    Deterministic — produces a PostmortemDoc / HandoffDoc with the right
+    shape so tests that don't exercise render content directly just see a
+    cache-able payload. Tests that DO exercise render behaviour override
+    `app.state.render_service` (to swap the cache) or
+    `app.state.render_agent` (to swap the agent) directly.
+    """
+
+    postmortem_prompt_version = "stub.render.v1"
+    handoff_prompt_version = "stub.render.v1"
+
+    def __init__(self) -> None:
+        self.postmortem_calls: list[dict] = []
+        self.handoff_calls: list[dict] = []
+
+    async def render_postmortem(self, project_context):
+        from workgraph_agents.render import (
+            PostmortemDoc,
+            PostmortemOutcome,
+            RenderedSection,
+        )
+
+        self.postmortem_calls.append(project_context)
+        decisions = project_context.get("decisions") or []
+        citations = "\n".join(
+            f"- **D-{d.get('id')}** — {d.get('rationale') or '(no rationale)'}"
+            for d in decisions
+        ) or "(no recorded decisions)"
+        return PostmortemOutcome(
+            doc=PostmortemDoc(
+                title=f"{(project_context.get('project') or {}).get('title') or 'Project'} postmortem",
+                one_line_summary="Stub postmortem for tests.",
+                sections=[
+                    RenderedSection(
+                        heading="What happened",
+                        body_markdown="Stub narrative.",
+                    ),
+                    RenderedSection(
+                        heading="Key decisions (lineage)",
+                        body_markdown=citations,
+                    ),
+                    RenderedSection(
+                        heading="What we got right", body_markdown="- stub"
+                    ),
+                    RenderedSection(
+                        heading="What drifted", body_markdown="- stub"
+                    ),
+                    RenderedSection(heading="Lessons", body_markdown="- stub"),
+                ],
+            ),
+            result=LLMResult(
+                content="",
+                model="stub",
+                prompt_tokens=0,
+                completion_tokens=0,
+                latency_ms=0,
+            ),
+            outcome="ok",
+            attempts=1,
+        )
+
+    async def render_handoff(self, departing_user_context):
+        from workgraph_agents.render import (
+            HandoffDoc,
+            HandoffOutcome,
+            RenderedSection,
+        )
+
+        self.handoff_calls.append(departing_user_context)
+        user = departing_user_context.get("user") or {}
+        project = departing_user_context.get("project") or {}
+        name = user.get("display_name") or user.get("username") or "Teammate"
+        return HandoffOutcome(
+            doc=HandoffDoc(
+                title=f"{name}'s handoff — {project.get('title') or 'Project'}",
+                sections=[
+                    RenderedSection(
+                        heading="Role summary",
+                        body_markdown=f"{name} is a stubbed teammate.",
+                    ),
+                    RenderedSection(
+                        heading="Active tasks I own", body_markdown="- stub"
+                    ),
+                    RenderedSection(
+                        heading="Recurring decisions I make",
+                        body_markdown="- stub",
+                    ),
+                    RenderedSection(
+                        heading="Key relationships", body_markdown="- stub"
+                    ),
+                    RenderedSection(
+                        heading="Open items / pending routings",
+                        body_markdown="- stub",
+                    ),
+                    RenderedSection(
+                        heading="Style notes (how I reply to common asks)",
+                        body_markdown="- stub",
+                    ),
+                ],
+            ),
+            result=LLMResult(
+                content="",
+                model="stub",
+                prompt_tokens=0,
+                completion_tokens=0,
+                latency_ms=0,
+            ),
+            outcome="ok",
+            attempts=1,
+        )
+
+
+class _SilenceEdgeAgent:
+    """Default EdgeAgent stub for the `api_env` fixture — every turn is
+    treated as 'silence' so tests that don't exercise the edge path stay
+    deterministic. Tests that DO exercise it (test_personal.py) override
+    `app.state.personal_service` with their own wiring.
+    """
+
+    async def respond(self, *, user_message, context):
+        return EdgeResponseOutcome(
+            response=EdgeResponse(kind="silence", body=None, route_targets=[]),
+            result=LLMResult(
+                content="",
+                model="stub",
+                prompt_tokens=0,
+                completion_tokens=0,
+                latency_ms=0,
+            ),
+            outcome="ok",
+            attempts=1,
+        )
+
+    async def generate_options(self, *, routing_context):  # pragma: no cover - not used
+        raise NotImplementedError
+
+    async def frame_reply(self, *, signal, source_user_context):  # pragma: no cover
+        raise NotImplementedError
 from workgraph_domain import EventBus
 from workgraph_persistence import (
+    backfill_streams_from_projects,
     build_engine,
     build_sessionmaker,
     create_all,
@@ -29,12 +297,19 @@ from workgraph_api.services import (
     ConflictService,
     DecisionService,
     DeliveryService,
+    DriftService,
     IMService,
     IntakeService,
+    MembraneService,
     MessageService,
     NotificationService,
+    PersonalStreamService,
     PlanningService,
     ProjectService,
+    RenderService,
+    RoutingService,
+    SkillsService,
+    StreamService,
 )
 
 
@@ -51,6 +326,9 @@ async def api_env():
     await create_all(engine)
     maker = build_sessionmaker(engine)
     bus = EventBus(maker)
+    # Phase B: backfill is idempotent; run it here so tests that boot
+    # without any prior projects behave the same as the prod boot path.
+    await backfill_streams_from_projects(maker)
 
     req_agent = StubRequirementAgent()
     clar_agent = StubClarificationAgent()
@@ -89,6 +367,26 @@ async def api_env():
     delivery_service = DeliveryService(
         maker, bus, collab_hub, delivery_agent
     )
+    stream_service = StreamService(maker, bus, collab_hub)
+    routing_service = RoutingService(maker, bus, stream_service)
+    drift_agent = _NoDriftAgent()
+    drift_service = DriftService(maker, bus, drift_agent, stream_service)
+    edge_agent = _SilenceEdgeAgent()
+    skills_service = SkillsService(maker)
+    personal_service = PersonalStreamService(
+        maker,
+        stream_service,
+        routing_service,
+        edge_agent,
+        bus,
+        skills_service=skills_service,
+    )
+    membrane_agent = _ScriptableMembraneAgent()
+    membrane_service = MembraneService(
+        maker, bus, collab_hub, stream_service, membrane_agent
+    )
+    render_agent = _StubRenderAgent()
+    render_service = RenderService(maker, render_agent)
 
     intake_service = IntakeService(
         maker, bus, agent=req_agent, project_service=project_service
@@ -124,6 +422,17 @@ async def api_env():
     app.state.decision_service = decision_service
     app.state.delivery_service = delivery_service
     app.state.delivery_agent = delivery_agent
+    app.state.drift_service = drift_service
+    app.state.drift_agent = drift_agent
+    app.state.stream_service = stream_service
+    app.state.routing_service = routing_service
+    app.state.edge_agent = edge_agent
+    app.state.personal_service = personal_service
+    app.state.skills_service = skills_service
+    app.state.membrane_agent = membrane_agent
+    app.state.membrane_service = membrane_service
+    app.state.render_agent = render_agent
+    app.state.render_service = render_service
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:

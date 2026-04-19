@@ -52,6 +52,12 @@ class MessageRequest(BaseModel):
     body: str = Field(min_length=1, max_length=4000)
 
 
+class CounterRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    text: str = Field(min_length=1, max_length=4000)
+
+
 async def _project_from_task(sessionmaker, task_id: str) -> str | None:
     async with session_scope(sessionmaker) as session:
         task = (
@@ -243,9 +249,12 @@ async def post_message(
         project_id=project_id, author_id=user.id, body=body.body
     )
     if not result.get("ok"):
-        if result.get("error") == "rate_limited":
+        err = result.get("error", "post_failed")
+        if err == "rate_limited":
             raise HTTPException(status_code=429, detail="rate_limited")
-        raise HTTPException(status_code=400, detail=result.get("error", "post_failed"))
+        if err == "observer_cannot_post":
+            raise HTTPException(status_code=403, detail="observer_cannot_post")
+        raise HTTPException(status_code=400, detail=err)
     return result
 
 
@@ -311,3 +320,68 @@ async def dismiss_suggestion(
     if not result.get("ok"):
         raise HTTPException(status_code=409, detail=result.get("error", "dismiss_failed"))
     return result
+
+
+@router.post("/im_suggestions/{suggestion_id}/counter")
+async def counter_suggestion(
+    suggestion_id: str,
+    body: CounterRequest,
+    request: Request,
+    user: AuthenticatedUser = Depends(require_user),
+):
+    """Signal-chain counter (vision §6). Flips original → countered, posts
+    a new message authored by the counterer, runs IMAssist, returns the
+    original + new message + new suggestion (if the new message was
+    long enough to classify).
+    """
+    service: IMService = request.app.state.im_service
+    payload = await service.get_suggestion(suggestion_id)
+    if payload is None:
+        raise HTTPException(status_code=404, detail="suggestion not found")
+    project_service: ProjectService = request.app.state.project_service
+    if not await project_service.is_member(
+        project_id=payload["project_id"], user_id=user.id
+    ):
+        raise HTTPException(status_code=403, detail="not a project member")
+    result = await service.counter(
+        suggestion_id=suggestion_id, text=body.text, user_id=user.id
+    )
+    if not result.get("ok"):
+        err = result.get("error", "counter_failed")
+        if err == "already_resolved":
+            raise HTTPException(status_code=409, detail=err)
+        if err == "rate_limited":
+            raise HTTPException(status_code=429, detail=err)
+        if err == "suggestion_not_found":
+            raise HTTPException(status_code=404, detail=err)
+        raise HTTPException(status_code=400, detail=err)
+    return result
+
+
+@router.post("/im_suggestions/{suggestion_id}/escalate")
+async def escalate_suggestion(
+    suggestion_id: str,
+    request: Request,
+    user: AuthenticatedUser = Depends(require_user),
+):
+    """Signal-chain escalate (vision §6 / §5.6). Flag-only in v0 — no
+    meeting scheduled; the UI just renders an 'awaiting sync' badge.
+    """
+    service: IMService = request.app.state.im_service
+    payload = await service.get_suggestion(suggestion_id)
+    if payload is None:
+        raise HTTPException(status_code=404, detail="suggestion not found")
+    project_service: ProjectService = request.app.state.project_service
+    if not await project_service.is_member(
+        project_id=payload["project_id"], user_id=user.id
+    ):
+        raise HTTPException(status_code=403, detail="not a project member")
+    result = await service.escalate(suggestion_id=suggestion_id, user_id=user.id)
+    if not result.get("ok"):
+        err = result.get("error", "escalate_failed")
+        if err == "already_resolved":
+            raise HTTPException(status_code=409, detail=err)
+        if err == "suggestion_not_found":
+            raise HTTPException(status_code=404, detail=err)
+        raise HTTPException(status_code=400, detail=err)
+    return result["suggestion"]

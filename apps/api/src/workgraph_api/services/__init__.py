@@ -23,11 +23,18 @@ from .collab_hub import CollabHub
 from .conflicts import ConflictService
 from .decisions import DecisionError, DecisionService
 from .delivery import DeliveryError, DeliveryService
+from .drift import DRIFT_RATE_LIMIT_SECONDS, DriftService
 from .graph_builder import GraphBuilderService
 from .im import IMService
 from .intake import IntakeService
+from .membrane import MembraneService
+from .personal import PersonalStreamService
 from .planning import NotReadyForPlanning, PlanningService, PlanValidationError
 from .project import ProjectService
+from .render import RenderError, RenderService
+from .routing import RoutingService
+from .skills import SkillsService
+from .streams import StreamService
 
 __all__ = [
     "IntakeService",
@@ -56,6 +63,15 @@ __all__ = [
     "DecisionError",
     "DeliveryService",
     "DeliveryError",
+    "DriftService",
+    "DRIFT_RATE_LIMIT_SECONDS",
     "IMService",
+    "MembraneService",
+    "PersonalStreamService",
     "ProjectService",
+    "RenderService",
+    "RenderError",
+    "RoutingService",
+    "SkillsService",
+    "StreamService",
 ]

@@ -292,6 +292,7 @@ class DecisionService:
         return {
             "id": row.id,
             "conflict_id": row.conflict_id,
+            "source_suggestion_id": row.source_suggestion_id,
             "project_id": row.project_id,
             "resolver_id": row.resolver_id,
             "option_index": row.option_index,
