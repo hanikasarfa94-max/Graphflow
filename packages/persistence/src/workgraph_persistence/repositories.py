@@ -31,6 +31,7 @@ from .orm import (
     RiskRow,
     RoutedSignalRow,
     SessionRow,
+    StatusTransitionRow,
     StreamMemberRow,
     StreamRow,
     TaskDependencyRow,
@@ -1871,4 +1872,91 @@ class MembraneSignalRepository:
         if status is not None:
             stmt = stmt.where(MembraneSignalRow.status == status)
         stmt = stmt.order_by(MembraneSignalRow.created_at.desc()).limit(limit)
+        return list((await self._session.execute(stmt)).scalars().all())
+
+
+# ---- Sprint 1b — status transition log (time-cursor replay) -------------
+
+
+class StatusTransitionRepository:
+    """Append-only log of graph-entity status mutations.
+
+    Every status flip on a task / risk / deliverable / goal / milestone /
+    constraint / decision writes a row here. `GET /projects/{id}/graph-at`
+    replays the log to reconstruct the status of each entity at a past
+    timestamp. Writes are cheap (one INSERT per mutation) and the replay
+    query is `project_id + changed_at <= ts` — both indexed.
+
+    `record` is a helper that services call after they flip a status. It
+    accepts `old_status` explicitly rather than reading it back from the
+    row because most service call sites already have the previous value in
+    hand (they just read it before writing), and a separate read would
+    double the query count on the hot path.
+    """
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def record(
+        self,
+        *,
+        project_id: str,
+        entity_kind: str,
+        entity_id: str,
+        old_status: str | None,
+        new_status: str,
+        changed_by_user_id: str | None = None,
+        trace_id: str | None = None,
+        changed_at: datetime | None = None,
+    ) -> StatusTransitionRow:
+        row = StatusTransitionRow(
+            id=_new_id(),
+            project_id=project_id,
+            entity_kind=entity_kind,
+            entity_id=entity_id,
+            old_status=old_status,
+            new_status=new_status,
+            changed_by_user_id=changed_by_user_id,
+            trace_id=trace_id,
+            changed_at=changed_at or datetime.now(timezone.utc),
+        )
+        self._session.add(row)
+        await self._session.flush()
+        return row
+
+    async def list_for_project_up_to(
+        self, project_id: str, *, upto: datetime
+    ) -> list[StatusTransitionRow]:
+        """All transitions on or before `upto`, ordered oldest → newest.
+
+        Ordering matters for replay: the LATEST transition wins per entity.
+        A consumer iterates forwards and overwrites a running map so the
+        final map carries the most recent status per entity.
+        """
+        stmt = (
+            select(StatusTransitionRow)
+            .where(
+                StatusTransitionRow.project_id == project_id,
+                StatusTransitionRow.changed_at <= upto,
+            )
+            .order_by(StatusTransitionRow.changed_at)
+        )
+        return list((await self._session.execute(stmt)).scalars().all())
+
+    async def list_for_project_since(
+        self, project_id: str, *, since: datetime, limit: int = 500
+    ) -> list[StatusTransitionRow]:
+        """Recent transitions after `since`, oldest → newest, capped.
+
+        Used by the web timeline strip to render event markers.
+        """
+        stmt = (
+            select(StatusTransitionRow)
+            .where(
+                StatusTransitionRow.project_id == project_id,
+                StatusTransitionRow.changed_at > since,
+            )
+            .order_by(StatusTransitionRow.changed_at)
+            .limit(limit)
+        )
         return list((await self._session.execute(stmt)).scalars().all())

@@ -486,7 +486,17 @@
       "acceptance": "验收标准",
       "content": "详情"
     },
-    "empty": "图谱为空 —— 接收阶段尚未完成"
+    "empty": "图谱为空 —— 接收阶段尚未完成",
+    "timeline": {
+      "live": "实时",
+      "asOf": "时间",
+      "playhead": "时间轴游标",
+      "viewingAsOf": "回溯至 {when}",
+      "backToLive": "点击回到实时",
+      "markerDecision": "决策",
+      "markerConflict": "冲突",
+      "markerTransition": "状态变化"
+    }
   },
   "detail": {
     "tasks": {

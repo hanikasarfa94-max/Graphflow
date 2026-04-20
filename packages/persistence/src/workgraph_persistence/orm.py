@@ -893,6 +893,59 @@ class MembraneSignalRow(Base):
     )
 
 
+class StatusTransitionRow(Base):
+    """Graph-entity status mutation log — Sprint 1b time-cursor.
+
+    Every status flip on a graph entity (task / risk / deliverable / goal /
+    milestone / constraint / decision) writes one row here. The graph-at-ts
+    endpoint replays the log to reconstruct historical status: for each
+    entity, the last transition with `changed_at <= ts` determines its
+    status at `ts`; if no transition exists, the entity's `created_at`
+    status (usually "open") is assumed.
+
+    Why a dedicated table rather than repurposing EventRow:
+      * EventRow payloads are JSON — filtering by (entity_id, changed_at)
+        requires a JSON-path scan that's slow on SQLite and brittle across
+        the many event names we already emit.
+      * A typed, indexed table matches the replay query shape exactly
+        (project_id + changed_at range) and keeps the hot path cheap.
+
+    v1 has no backfill of historical transitions — we record from this
+    commit forward only. For seeded demo data, entities appear in the
+    graph at their `created_at`; their status just won't change until the
+    first real transition happens (which is fine for the "scrub back to
+    BEFORE Legal flagged compliance" demo story).
+
+    `old_status` may be null if the caller can't cheaply read the prior
+    value (or if this is a creation-style transition). `new_status` is
+    always populated. `changed_by_user_id` is null for system-driven
+    transitions (agent-applied decisions, IM auto-apply).
+    """
+
+    __tablename__ = "status_transitions"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    project_id: Mapped[str] = mapped_column(
+        ForeignKey("projects.id", ondelete="CASCADE"), index=True
+    )
+    # 'task' | 'risk' | 'deliverable' | 'goal' | 'milestone' | 'constraint'
+    # | 'decision' — matches the NodeKind enum on the web side plus the
+    # extras (milestone, constraint) that live only in the tabular views.
+    entity_kind: Mapped[str] = mapped_column(String(16), index=True)
+    entity_id: Mapped[str] = mapped_column(String(36), index=True)
+    old_status: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    new_status: Mapped[str] = mapped_column(String(32))
+    changed_by_user_id: Mapped[str | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    trace_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    # Indexed because the replay query filters by (project_id, changed_at)
+    # range. Defaults to _utcnow so callers can omit it.
+    changed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, index=True
+    )
+
+
 class RoutedSignalRow(Base):
     """Sub-agent-mediated cross-user signal.
 

@@ -37,6 +37,7 @@ from workgraph_persistence import (
     ProjectRow,
     RequirementRepository,
     RiskRow,
+    StatusTransitionRepository,
     StreamRepository,
     TaskRow,
     UserRepository,
@@ -342,7 +343,7 @@ class IMService:
             project_id = row.project_id
             kind = row.kind
             confidence = row.confidence
-            applied = await self._apply_proposal(session, row)
+            applied = await self._apply_proposal(session, row, actor_id=actor_id)
 
             # Signal-chain crystallization (vision §6): when a high-confidence
             # decision-kind suggestion is accepted, persist a DecisionRow that
@@ -644,13 +645,17 @@ class IMService:
         return {"ok": True, "suggestion": payload}
 
     async def _apply_proposal(
-        self, session, row: IMSuggestionRow
+        self, session, row: IMSuggestionRow, *, actor_id: str | None = None
     ) -> dict[str, Any]:
         """Execute the proposal in `row`. Idempotent where possible.
 
         Returns a dict describing what actually changed. Graph-touching
         actions set `graph_touched=True` so the caller can rebroadcast.
+
+        Sprint 1b: any status mutation is accompanied by a
+        StatusTransitionRow so the time-cursor can replay history.
         """
+        trace_id = get_trace_id()
         proposal = row.proposal or {}
         action = proposal.get("action") if isinstance(proposal, dict) else None
         detail = proposal.get("detail", {}) if isinstance(proposal, dict) else {}
@@ -701,8 +706,20 @@ class IMService:
             ).scalar_one_or_none()
             if deliverable is None:
                 return {"ok": False, "error": "deliverable_not_found"}
+            old_status = deliverable.status
             deliverable.status = "dropped"
             await session.flush()
+            # Sprint 1b: record so graph-at can reconstruct the pre-drop
+            # state when the user scrubs back past this moment.
+            await StatusTransitionRepository(session).record(
+                project_id=deliverable.project_id,
+                entity_kind="deliverable",
+                entity_id=deliverable.id,
+                old_status=old_status,
+                new_status="dropped",
+                changed_by_user_id=actor_id,
+                trace_id=trace_id,
+            )
             return {
                 "ok": True,
                 "graph_touched": True,
@@ -719,8 +736,18 @@ class IMService:
             ).scalar_one_or_none()
             if task is None:
                 return {"ok": False, "error": "task_not_found"}
+            old_status = task.status
             task.status = "done"
             await session.flush()
+            await StatusTransitionRepository(session).record(
+                project_id=task.project_id,
+                entity_kind="task",
+                entity_id=task.id,
+                old_status=old_status,
+                new_status="done",
+                changed_by_user_id=actor_id,
+                trace_id=trace_id,
+            )
             return {
                 "ok": True,
                 "graph_touched": True,
@@ -744,8 +771,18 @@ class IMService:
             ).scalar_one_or_none()
             if constraint is None:
                 return {"ok": False, "error": "constraint_not_found"}
+            old_status = constraint.status
             constraint.status = new_status
             await session.flush()
+            await StatusTransitionRepository(session).record(
+                project_id=constraint.project_id,
+                entity_kind="constraint",
+                entity_id=constraint.id,
+                old_status=old_status,
+                new_status=new_status,
+                changed_by_user_id=actor_id,
+                trace_id=trace_id,
+            )
             return {
                 "ok": True,
                 "graph_touched": True,

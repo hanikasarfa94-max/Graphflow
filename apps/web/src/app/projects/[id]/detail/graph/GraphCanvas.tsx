@@ -18,7 +18,15 @@ import ReactFlow, {
   type NodeProps,
 } from "reactflow";
 
-import { api, type ProjectState } from "@/lib/api";
+import {
+  api,
+  fetchGraphAt,
+  fetchTimeline,
+  type ProjectState,
+  type TimelineResponse,
+} from "@/lib/api";
+
+import { TimelineStrip } from "./TimelineStrip";
 
 // Graph v2 Wave 1 — live, differentiated, searchable.
 //
@@ -377,6 +385,13 @@ export function GraphCanvas({
 }) {
   const t = useTranslations("graph");
   const [state, setState] = useState<ProjectState>(initialState);
+  // Sprint 1b: the "live" state is the one we hydrated from /state +
+  // keep in sync via WS. When the user scrubs back, we swap `state`
+  // for the /graph-at payload but stash the live copy so a snap-to-Live
+  // doesn't require a round-trip. `cursorTs=null` means live.
+  const liveStateRef = useRef<ProjectState>(initialState);
+  const [cursorTs, setCursorTs] = useState<string | null>(null);
+  const [timeline, setTimeline] = useState<TimelineResponse | null>(null);
   const [wsState, setWsState] = useState<"connecting" | "open" | "closed">(
     "connecting",
   );
@@ -393,11 +408,61 @@ export function GraphCanvas({
 
   const prevSnapshotRef = useRef<SnapshotIndex>(buildSnapshotIndex(initialState));
   const refetchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Mirror cursorTs into a ref so the WS-onmessage closure (bound at
+  // mount time with [projectId] dep only) always reads the current
+  // value rather than the mount-time stale one.
+  const cursorTsRef = useRef<string | null>(cursorTs);
+  useEffect(() => {
+    cursorTsRef.current = cursorTs;
+  }, [cursorTs]);
 
   // Hydrate localStorage positions once per project.
   useEffect(() => {
     setPositions(loadPositions(projectId));
   }, [projectId]);
+
+  // Fetch the timeline metadata on mount. Markers + bounds rarely
+  // change without a corresponding WS frame, so this runs exactly once
+  // per project; the WS handler re-fetches when new events arrive.
+  useEffect(() => {
+    let cancelled = false;
+    fetchTimeline(projectId)
+      .then((tl) => {
+        if (!cancelled) setTimeline(tl);
+      })
+      .catch(() => {
+        // Non-fatal — strip renders nothing when timeline is null.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId]);
+
+  // Cursor change: fetch /graph-at and swap state. Null snaps back to
+  // live (which uses the ref we stashed on every WS refetch so there's
+  // no round-trip).
+  useEffect(() => {
+    if (cursorTs === null) {
+      setState(liveStateRef.current);
+      return;
+    }
+    let cancelled = false;
+    fetchGraphAt(projectId, cursorTs)
+      .then((historical) => {
+        if (cancelled) return;
+        // Shape matches ProjectState closely — GraphAtState is a
+        // superset with `as_of`. Cast is safe because GraphCanvas only
+        // reads the overlapping fields.
+        setState(historical as unknown as ProjectState);
+      })
+      .catch(() => {
+        // Leave the prior state in place; user will see stale data
+        // momentarily until they pick a valid ts or click Live.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [cursorTs, projectId]);
 
   // WS listener — debounced refetch on any graph-touching frame.
   useEffect(() => {
@@ -437,7 +502,19 @@ export function GraphCanvas({
                 if (Object.keys(changed).length > 0) {
                   setPulses((p) => ({ ...p, ...changed }));
                 }
-                setState(next);
+                // Always stash the latest live state. If the user is
+                // currently scrubbing the past, don't overwrite the
+                // visible state — they explicitly chose a historical
+                // view. They'll hit "Live" to catch up.
+                liveStateRef.current = next;
+                if (cursorTsRef.current === null) setState(next);
+                // Re-fetch the timeline so new markers appear. Cheap —
+                // projects have O(hundreds) of marker-worthy events.
+                fetchTimeline(projectId)
+                  .then(setTimeline)
+                  .catch(() => {
+                    // Non-fatal; strip keeps stale bounds.
+                  });
               })
               .catch(() => {
                 // Keep stale state; user will see "Offline" indicator
@@ -797,8 +874,55 @@ export function GraphCanvas({
     ? rfNodes.find((n) => n.id === hovered.id) ?? null
     : null;
 
+  const isPast = cursorTs !== null;
+
   return (
-    <div style={{ position: "relative", width: "100%", height: "100%" }}>
+    <div
+      style={{
+        position: "relative",
+        width: "100%",
+        height: "100%",
+        display: "flex",
+        flexDirection: "column",
+      }}
+    >
+      {/* Timeline scrubber — rendered above the canvas so the user
+          keeps the "when am I looking at?" context in peripheral view.
+          Falls back to null when the timeline metadata hasn't loaded
+          yet, which keeps the graph layout stable on cold cache. */}
+      <div style={{ padding: "6px 0", flex: "0 0 auto" }}>
+        <TimelineStrip
+          timeline={timeline}
+          cursorTs={cursorTs}
+          onChange={setCursorTs}
+          labels={{
+            live: t("timeline.live"),
+            asOf: t("timeline.asOf"),
+            playhead: t("timeline.playhead"),
+            markerDecision: t("timeline.markerDecision"),
+            markerConflict: t("timeline.markerConflict"),
+            markerTransition: t("timeline.markerTransition"),
+          }}
+        />
+      </div>
+      {/* Canvas area — the dim overlay layers on top at 0.45 opacity
+          when cursor is in the past, without blocking pointer events
+          on the graph itself (markers, zoom, drawer still work). The
+          "viewing as of" pill sits over the dim so it stays legible
+          regardless of what's underneath. */}
+      <div
+        style={{
+          position: "relative",
+          flex: 1,
+          minHeight: 0,
+          // Dim via filter rather than opacity so the Background
+          // gap/color from ReactFlow stays crisp. prefers-reduced-motion
+          // handled by the transition: we drop the duration to 0 via
+          // media query on the canvas container.
+          filter: isPast ? "saturate(0.55) brightness(0.96)" : "none",
+          transition: "filter 220ms ease-out",
+        }}
+      >
       <ReactFlow
         nodes={rfNodes}
         edges={rfEdges}
@@ -883,6 +1007,52 @@ export function GraphCanvas({
             content: t("drawer.content"),
           }}
         />
+      ) : null}
+
+      </div>
+      {/* "Viewing as of" pill — anchored bottom-left of the outer
+          flex container so it sits outside the dimmed canvas wrapper
+          and stays at full saturation. Click to snap back to Live. */}
+      {isPast ? (
+        <button
+          type="button"
+          onClick={() => setCursorTs(null)}
+          style={{
+            position: "absolute",
+            bottom: 14,
+            left: 14,
+            padding: "6px 12px",
+            background: "var(--wg-ink)",
+            color: "#fff",
+            border: "none",
+            borderRadius: 20,
+            fontFamily: "var(--wg-font-mono)",
+            fontSize: 11,
+            letterSpacing: "0.04em",
+            cursor: "pointer",
+            zIndex: 12,
+            boxShadow: "0 4px 12px rgba(0,0,0,0.18)",
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 8,
+          }}
+        >
+          <span
+            aria-hidden
+            style={{
+              width: 6,
+              height: 6,
+              borderRadius: 3,
+              background: "var(--wg-accent)",
+            }}
+          />
+          {t("timeline.viewingAsOf", {
+            when: new Date(cursorTs).toLocaleString(),
+          })}
+          <span style={{ opacity: 0.7, marginLeft: 6 }}>
+            · {t("timeline.backToLive")}
+          </span>
+        </button>
       ) : null}
     </div>
   );

@@ -404,6 +404,68 @@ export interface EventRow {
   created_at: string;
 }
 
+// ---------- Time-cursor (Sprint 1b) ----------
+
+// /graph-at returns a payload shaped like ProjectState for the subset
+// the time-cursor cares about — graph, plan, decisions, conflicts. Fields
+// that aren't time-scoped (assignments, members, parsed, delivery) are
+// echoed as empty so the GraphCanvas swap is drop-in. `as_of` carries
+// the resolved timestamp so the UI can label the pill precisely.
+export interface GraphAtState extends ProjectState {
+  as_of: string;
+}
+
+// Timeline metadata for the scrubber strip: bounds + markers. Markers
+// are keyed by kind so the strip can render each with its own glyph.
+export interface TimelineTransition {
+  id: string;
+  entity_kind: string;
+  entity_id: string;
+  old_status: string | null;
+  new_status: string;
+  changed_at: string;
+}
+
+export interface TimelineDecision {
+  id: string;
+  created_at: string | null;
+  rationale: string;
+}
+
+export interface TimelineConflict {
+  id: string;
+  rule: string;
+  severity: string;
+  created_at: string | null;
+  resolved_at: string | null;
+}
+
+export interface TimelineResponse {
+  project_id: string;
+  created_at: string; // project birth — left bound of the slider
+  now: string; // server clock — right bound (Live)
+  transitions: TimelineTransition[];
+  decisions: TimelineDecision[];
+  conflicts: TimelineConflict[];
+}
+
+export function fetchGraphAt(
+  projectId: string,
+  ts: string,
+): Promise<GraphAtState> {
+  const q = new URLSearchParams({ ts }).toString();
+  return api<GraphAtState>(`/api/projects/${projectId}/graph-at?${q}`);
+}
+
+export function fetchTimeline(
+  projectId: string,
+  baseUrl?: string,
+): Promise<TimelineResponse> {
+  return api<TimelineResponse>(`/api/projects/${projectId}/timeline`, {
+    baseUrl,
+  });
+}
+
 // ---------- Personal stream (Phase N) ----------
 
 // Messages posted into a user's personal project stream. The backend

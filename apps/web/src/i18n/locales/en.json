@@ -486,7 +486,17 @@
       "acceptance": "Acceptance criteria",
       "content": "Detail"
     },
-    "empty": "graph is empty — intake has not completed yet"
+    "empty": "graph is empty — intake has not completed yet",
+    "timeline": {
+      "live": "Live",
+      "asOf": "As of",
+      "playhead": "Timeline position",
+      "viewingAsOf": "Viewing as of {when}",
+      "backToLive": "Click for Live",
+      "markerDecision": "Decision",
+      "markerConflict": "Conflict",
+      "markerTransition": "Status change"
+    }
   },
   "detail": {
     "tasks": {
