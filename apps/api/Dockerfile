@@ -59,6 +59,12 @@ COPY --from=builder /app/.venv /app/.venv
 COPY --from=builder /app/apps/api/src /app/apps/api/src
 COPY --from=builder /app/packages /app/packages
 
+# Alembic bits. `alembic upgrade head` is invoked from /app/apps/api
+# at deploy time; see deploy/DEPLOY.md §5b. The alembic.ini references
+# script_location=alembic, which is relative to /app/apps/api.
+COPY apps/api/alembic.ini /app/apps/api/alembic.ini
+COPY apps/api/alembic /app/apps/api/alembic
+
 # Seed scripts + mock-data fixtures are baked in so
 # `docker compose exec api uv run python scripts/demo/seed_moonshot.py`
 # works out of the box in production.

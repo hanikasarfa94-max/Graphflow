@@ -144,6 +144,33 @@ bash /opt/workgraph/deploy/seed.sh
 
 
 
+## 5b. Schema migrations (Alembic)
+
+The api Dockerfile bundles Alembic. The bootstrap still uses
+`Base.metadata.create_all()` for dev speed, but prod graduates to
+Alembic for any schema change that can't survive a drop+recreate.
+
+**First time per prod DB — stamp at baseline (one-off):**
+```bash
+docker compose -f deploy/docker-compose.yml exec -T api \
+    sh -lc "cd /app/apps/api && alembic stamp 0001_baseline"
+```
+Writes the `alembic_version` table marking the existing schema as "at
+v1". No tables are altered; no data is moved.
+
+**Every subsequent deploy — upgrade before the app serves traffic:**
+```bash
+docker compose -f deploy/docker-compose.yml exec -T api \
+    sh -lc "cd /app/apps/api && alembic upgrade head"
+```
+Idempotent — no-op when already at head. Applies
+`0002_status_transitions`, `0003_commitments`, `0004_commitment_sla`
+to bring a v1 DB to v2. Preview before applying with
+`alembic upgrade head --sql`.
+
+**Rollback** is available (`alembic downgrade -1`) but not automated
+— treat it as a dev convenience, not a prod safety net.
+
 ## 6. Operate
 
 ```bash
