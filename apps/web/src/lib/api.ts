@@ -249,6 +249,42 @@ export function simulateDropTask(
   });
 }
 
+// ---------- Skill atlas (/projects/[id]/skills) ----------
+
+export interface SkillAtlasMemberCard {
+  user_id: string;
+  username: string;
+  display_name: string;
+  project_role: string;
+  role_hints: string[];
+  role_skills: string[];
+  profile_skills_declared: string[];
+  profile_skills_observed: string[];
+  profile_skills_validated: string[];
+  observed_tallies: Record<string, number>;
+  last_activity_at: string | null;
+}
+
+export interface SkillAtlasCollective {
+  role_skill_coverage?: string[];
+  declared_abilities_combined?: string[];
+  observed_skills_combined?: string[];
+  unvalidated_declarations?: string[];
+}
+
+export interface SkillAtlasPayload {
+  viewer_scope: "owner" | "self";
+  members: SkillAtlasMemberCard[];
+  collective: SkillAtlasCollective;
+}
+
+export function fetchSkillAtlas(
+  projectId: string,
+  baseUrl?: string,
+): Promise<SkillAtlasPayload> {
+  return api(`/api/projects/${projectId}/skills`, { baseUrl });
+}
+
 export interface ConflictOption {
   label: string;
   detail: string;

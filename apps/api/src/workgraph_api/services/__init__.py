@@ -35,6 +35,7 @@ from .project import ProjectService
 from .render import RenderError, RenderService
 from .routing import RoutingService
 from .simulation import SimulationError, SimulationService
+from .skill_atlas import SkillAtlasService
 from .skills import SkillsService
 from .sla import SlaService
 from .streams import StreamService
@@ -79,6 +80,7 @@ __all__ = [
     "RoutingService",
     "SimulationError",
     "SimulationService",
+    "SkillAtlasService",
     "SkillsService",
     "SlaService",
     "StreamService",

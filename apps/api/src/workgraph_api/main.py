@@ -63,6 +63,7 @@ from workgraph_api.routers import projects as projects_router
 from workgraph_api.routers import render as render_router
 from workgraph_api.routers import routing as routing_router
 from workgraph_api.routers import simulation as simulation_router
+from workgraph_api.routers import skill_atlas as skill_atlas_router
 from workgraph_api.routers import streams as streams_router
 from workgraph_api.routers import users as users_router
 from workgraph_api.routers import ws as ws_router
@@ -88,6 +89,7 @@ from workgraph_api.services import (
     RenderService,
     RoutingService,
     SimulationService,
+    SkillAtlasService,
     SkillsService,
     SlaService,
     StreamService,
@@ -403,6 +405,7 @@ async def lifespan(app: FastAPI):
     commitment_service = CommitmentService(sessionmaker, event_bus)
     sla_service = SlaService(sessionmaker, event_bus, stream_service)
     simulation_service = SimulationService(sessionmaker)
+    skill_atlas_service = SkillAtlasService(sessionmaker)
     membrane_service = MembraneService(
         sessionmaker,
         event_bus,
@@ -469,6 +472,7 @@ async def lifespan(app: FastAPI):
     app.state.commitment_service = commitment_service
     app.state.sla_service = sla_service
     app.state.simulation_service = simulation_service
+    app.state.skill_atlas_service = skill_atlas_service
 
     # Drift auto-trigger (Sprint 1c). Subscribe drift_service to the
     # event types that most reliably indicate "the project's surface
@@ -556,6 +560,7 @@ app.include_router(demo_router.router)
 app.include_router(drift_router.router)
 app.include_router(commitments_router.router)
 app.include_router(simulation_router.router)
+app.include_router(skill_atlas_router.router)
 app.include_router(events_router.router)
 app.include_router(observability_router.router)
 app.include_router(personal_router.router)

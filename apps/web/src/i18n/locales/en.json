@@ -435,6 +435,7 @@
       "teamRoom": "Team room",
       "status": "Status",
       "kb": "KB",
+      "skills": "Skill atlas",
       "renders": "Renders",
       "renders_postmortem": "Postmortem",
       "renders_handoff": "Handoff",
@@ -760,5 +761,38 @@
       "body": "DM delivery is stubbed in v1 — messages render locally but aren't persisted. Backend endpoints /api/streams/'{id}'/messages and /ws/streams/'{id}' are not wired yet."
     },
     "members": "Members"
+  },
+  "skillAtlas": {
+    "title": "Skill atlas",
+    "subtitle": "Two skills lock to every member: the role skill (imposed by the role, stays with the role) and the profile skill (declared by the person, validated by what the graph actually saw). Together they are the group's capital, beside the knowledge base.",
+    "backToProject": "Back to project",
+    "unavailable": "Skill atlas is unavailable. You may not be a member of this project.",
+    "restrictedBanner": "Restricted view — members see only their own card. The collective aggregate and other members' cards are visible to project owners only.",
+    "scope": {
+      "ownerView": "Owner view · {count} members",
+      "selfView": "Self view"
+    },
+    "collective": {
+      "title": "Group aggregate",
+      "roleSkillCoverage": "Role skill coverage",
+      "declaredCombined": "Declared abilities (combined)",
+      "observedCombined": "Observed skills (validated by emissions)",
+      "unvalidated": "Unvalidated declarations",
+      "noGaps": "None — every declared ability has been observed"
+    },
+    "card": {
+      "roleSkills": "Role skills",
+      "roleSkillsSubtitle": "Imposed by role · transfers to successor on handoff",
+      "declaredAbilities": "Declared abilities",
+      "declaredSubtitle": "Stated at onboarding · green = validated by observed work",
+      "observedSkills": "Observed skills",
+      "observedSubtitle": "Earned from emissions in the last 30 days",
+      "noRoleSkills": "No role skills derived for this role yet.",
+      "noDeclared": "No self-declared abilities yet.",
+      "noObserved": "No observed skills in the last 30 days.",
+      "messagesTag": "{n} messages",
+      "decisionsTag": "{n} decisions",
+      "risksTag": "{n} risks"
+    }
   }
 }

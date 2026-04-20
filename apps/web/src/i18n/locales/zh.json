@@ -435,6 +435,7 @@
       "teamRoom": "团队会议室",
       "status": "状态",
       "kb": "知识库",
+      "skills": "技能图谱",
       "renders": "渲染文档",
       "renders_postmortem": "项目复盘",
       "renders_handoff": "交接文档",
@@ -760,5 +761,38 @@
       "body": "v1 的私信投递仅为本地演示,消息不会持久化。后端尚未开通 /api/streams/'{id}'/messages 与 /ws/streams/'{id}'。"
     },
     "members": "成员"
+  },
+  "skillAtlas": {
+    "title": "技能图谱",
+    "subtitle": "每位成员绑定两种技能:角色技能(由角色赋予,随角色交接传承)与个人技能(由本人声明,由图谱实际观察到的工作验证)。它们与知识库一起,构成小组的资本。",
+    "backToProject": "返回项目",
+    "unavailable": "技能图谱不可用。你可能不是该项目的成员。",
+    "restrictedBanner": "受限视图 —— 成员仅能查看自己的卡片。小组聚合与其他成员卡片仅项目主可见。",
+    "scope": {
+      "ownerView": "项目主视图 · 共 {count} 位成员",
+      "selfView": "自我视图"
+    },
+    "collective": {
+      "title": "小组聚合",
+      "roleSkillCoverage": "角色技能覆盖",
+      "declaredCombined": "已声明能力(合并)",
+      "observedCombined": "已观察技能(由实际工作验证)",
+      "unvalidated": "未验证声明",
+      "noGaps": "无 —— 每项已声明能力都已被观察到"
+    },
+    "card": {
+      "roleSkills": "角色技能",
+      "roleSkillsSubtitle": "由角色赋予 · 交接时传递给继任者",
+      "declaredAbilities": "已声明能力",
+      "declaredSubtitle": "入职时自述 · 绿色 = 已被观察到的工作验证",
+      "observedSkills": "已观察技能",
+      "observedSubtitle": "近 30 天工作产出中累积",
+      "noRoleSkills": "尚未为此角色生成角色技能。",
+      "noDeclared": "暂无自述能力。",
+      "noObserved": "近 30 天未观察到技能信号。",
+      "messagesTag": "{n} 条消息",
+      "decisionsTag": "{n} 个决策",
+      "risksTag": "{n} 个风险"
+    }
   }
 }

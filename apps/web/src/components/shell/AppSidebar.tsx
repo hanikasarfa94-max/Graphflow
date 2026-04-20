@@ -107,6 +107,7 @@ function ProjectNode({
   const teamRoom = `/projects/${project.id}/team`;
   const status = `/projects/${project.id}/status`;
   const kb = `/projects/${project.id}/kb`;
+  const skills = `/projects/${project.id}/skills`;
 
   const subItem: CSSProperties = {
     ...linkBase,
@@ -197,6 +198,17 @@ function ProjectNode({
               }}
             >
               <span aria-hidden>📚</span> {t("shell.project.kb")}
+            </Link>
+          </li>
+          <li>
+            <Link
+              href={skills}
+              style={{
+                ...subItem,
+                ...(isActive(pathname, skills) ? subItemActive : null),
+              }}
+            >
+              <span aria-hidden>🧩</span> {t("shell.project.skills")}
             </Link>
           </li>
           <li>
