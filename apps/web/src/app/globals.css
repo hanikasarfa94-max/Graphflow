@@ -97,15 +97,18 @@ body {
   animation: wg-pulse 1.6s ease-out infinite;
 }
 
-/* Fade-in for graph nodes entering the scene. */
+/* Fade-in for graph nodes entering the scene. Opacity ONLY — never touch
+   `transform` here. React Flow sets an inline `transform: translate(...)`
+   to position each node, and a keyframe animating `transform` will
+   override that forever (animations win over inline for animated
+   properties, and fill-mode=both keeps the final animated state). That
+   pins every node to translateY(0) and all cards pile at one spot. */
 @keyframes wg-fade-in {
   from {
     opacity: 0;
-    transform: translateY(4px);
   }
   to {
     opacity: 1;
-    transform: translateY(0);
   }
 }
 
@@ -148,16 +151,60 @@ body {
 }
 
 /* Nodes fade in when the graph first paints — makes the arrival feel
-   composed, not a flashbulb. */
+   composed, not a flashbulb. DO NOT add `transition: transform` here —
+   React Flow sets inline `transform: translate(...)` for node position
+   and a CSS transition on that fights RF's render cycle, leaving every
+   node stuck mid-animation at the same interpolated position (cards
+   pile). Likewise, never use `transform` in a :hover rule — it replaces
+   the positioning transform with translateY(-1px), snapping nodes to
+   the origin on hover. Use box-shadow for hover feedback instead. */
 .react-flow__node {
   animation: wg-fade-in 320ms ease-out both;
-  transition:
-    box-shadow 200ms ease-out,
-    transform 200ms ease-out;
+  transition: box-shadow 200ms ease-out;
 }
 .react-flow__node:hover {
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
-  transform: translateY(-1px);
+}
+
+/* Public split — landing + login side-by-side, stacks on narrow. */
+.wg-public-split {
+  min-height: 100vh;
+  display: flex;
+  align-items: stretch;
+}
+.wg-public-display {
+  flex: 1;
+  padding: 56px 48px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 28px;
+  background: var(--wg-surface-sunk);
+  border-right: 1px solid var(--wg-line);
+}
+.wg-public-auth {
+  width: 440px;
+  padding: 56px 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  background: var(--wg-surface);
+}
+@media (max-width: 960px) {
+  .wg-public-split {
+    flex-direction: column;
+  }
+  .wg-public-display {
+    border-right: none;
+    border-bottom: 1px solid var(--wg-line);
+    padding: 32px 24px;
+  }
+  .wg-public-auth {
+    width: 100%;
+    padding: 32px 24px;
+  }
 }
 
 /* Scrollbar — charcoal, not default chrome. */

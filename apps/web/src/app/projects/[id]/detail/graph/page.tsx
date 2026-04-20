@@ -44,7 +44,7 @@ export default async function GraphTab({
         overflow: "hidden",
       }}
     >
-      <GraphCanvas state={state} />
+      <GraphCanvas projectId={id} state={state} />
     </div>
   );
 }

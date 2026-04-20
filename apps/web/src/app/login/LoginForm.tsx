@@ -52,25 +52,16 @@ export function LoginForm() {
   }
 
   return (
-    <main
-      style={{
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        minHeight: "100vh",
-        padding: 24,
-        flexDirection: "column",
-        gap: 16,
-      }}
-    >
+    <>
       <form
         onSubmit={handleSubmit}
         style={{
           width: 360,
+          maxWidth: "100%",
           padding: 32,
           border: "1px solid var(--wg-line)",
           borderRadius: "var(--wg-radius)",
-          background: "#fff",
+          background: "var(--wg-surface-raised)",
         }}
       >
         <div
@@ -182,7 +173,7 @@ export function LoginForm() {
       </form>
 
       <LanguageSwitcher />
-    </main>
+    </>
   );
 }
 

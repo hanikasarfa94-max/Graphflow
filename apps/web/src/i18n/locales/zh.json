@@ -110,6 +110,23 @@
       "decideHint": "冲突落定",
       "deliver": "交付",
       "deliverHint": "总结 + 交接"
+    },
+    "demo": {
+      "bubble1": "星际漂移 4月28日上线。",
+      "bubble2": "法务要加合规审查。",
+      "extraNode": "合规",
+      "slaBefore": "4月28日",
+      "slaAfter": "4月30日",
+      "caption": "聊天改图谱,图谱改计划。",
+      "captionZoomed": "每个计划,都是更大图里的一个节点。",
+      "selfLabel": "星际漂移",
+      "peer": {
+        "legal": "法务",
+        "mobile": "移动端",
+        "design": "设计",
+        "infra": "基建",
+        "ops": "运营"
+      }
     }
   },
   "projects": {
@@ -428,6 +445,48 @@
       "detail_risks": "风险",
       "detail_decisions": "决策"
     }
+  },
+  "graph": {
+    "legend": {
+      "goal": "目标",
+      "deliverable": "交付物",
+      "task": "任务",
+      "risk": "风险",
+      "decision": "决策"
+    },
+    "ws": {
+      "connecting": "连接中…",
+      "open": "实时",
+      "closed": "离线"
+    },
+    "intent": {
+      "all": "全部",
+      "flow": "流程",
+      "decisions": "决策",
+      "risks": "风险"
+    },
+    "search": {
+      "placeholder": "搜索节点",
+      "hint": "按 / 开始搜索",
+      "noMatches": "无匹配"
+    },
+    "tooltip": {
+      "status": "状态",
+      "owner": "负责人",
+      "severity": "严重度"
+    },
+    "drawer": {
+      "close": "关闭",
+      "openFull": "打开完整视图 →",
+      "description": "说明",
+      "dependencies": "依赖",
+      "dependedBy": "阻塞",
+      "noDetail": "暂无更多信息。",
+      "belongsTo": "所属",
+      "acceptance": "验收标准",
+      "content": "详情"
+    },
+    "empty": "图谱为空 —— 接收阶段尚未完成"
   },
   "detail": {
     "tasks": {

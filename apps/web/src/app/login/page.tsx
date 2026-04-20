@@ -1,13 +1,17 @@
 import { Suspense } from "react";
 
+import { PublicSplit } from "@/components/public/PublicSplit";
+
 import { LoginForm } from "./LoginForm";
 
 export const dynamic = "force-dynamic";
 
 export default function LoginPage() {
   return (
-    <Suspense fallback={null}>
-      <LoginForm />
-    </Suspense>
+    <PublicSplit>
+      <Suspense fallback={null}>
+        <LoginForm />
+      </Suspense>
+    </PublicSplit>
   );
 }

@@ -30,6 +30,24 @@ export async function requireUser(nextPath?: string): Promise<User> {
   return (await res.json()) as User;
 }
 
+// Like requireUser, but returns null on 401 instead of redirecting. Used by
+// pages that have both logged-out and logged-in modes (e.g. the public
+// landing on /). Short-circuits when no session cookie is present so the
+// logged-out render doesn't depend on the API being up.
+export async function optionalUser(): Promise<User | null> {
+  const cookieStore = await cookies();
+  if (!cookieStore.get("wg_session")) return null;
+  const res = await fetch(`${API_BASE}/api/auth/me`, {
+    headers: { cookie: cookieStore.toString() },
+    cache: "no-store",
+  });
+  if (res.status === 401) return null;
+  if (!res.ok) {
+    throw new ApiError(res.status, null, `auth/me ${res.status}`);
+  }
+  return (await res.json()) as User;
+}
+
 // Server-side fetch that forwards the session cookie. Returns null on 404
 // so pages can render a "not found" state without throwing.
 export async function serverFetch<T>(path: string): Promise<T> {

@@ -110,6 +110,23 @@
       "decideHint": "conflicts resolved",
       "deliver": "Deliver",
       "deliverHint": "summary + handoff"
+    },
+    "demo": {
+      "bubble1": "Ship Stellar Drift by Apr 28.",
+      "bubble2": "Legal flagged compliance review.",
+      "extraNode": "Compliance",
+      "slaBefore": "Apr 28",
+      "slaAfter": "Apr 30",
+      "caption": "Chat changes the graph. The graph changes the plan.",
+      "captionZoomed": "Every plan is a node in the org graph.",
+      "selfLabel": "Stellar Drift",
+      "peer": {
+        "legal": "Legal",
+        "mobile": "Mobile",
+        "design": "Design",
+        "infra": "Infra",
+        "ops": "Ops"
+      }
     }
   },
   "projects": {
@@ -428,6 +445,48 @@
       "detail_risks": "Risks",
       "detail_decisions": "Decisions"
     }
+  },
+  "graph": {
+    "legend": {
+      "goal": "Goal",
+      "deliverable": "Deliverable",
+      "task": "Task",
+      "risk": "Risk",
+      "decision": "Decision"
+    },
+    "ws": {
+      "connecting": "Connecting…",
+      "open": "Live",
+      "closed": "Offline"
+    },
+    "intent": {
+      "all": "All",
+      "flow": "Flow",
+      "decisions": "Decisions",
+      "risks": "Risks"
+    },
+    "search": {
+      "placeholder": "Search nodes",
+      "hint": "Press / to search",
+      "noMatches": "No matches"
+    },
+    "tooltip": {
+      "status": "Status",
+      "owner": "Owner",
+      "severity": "Severity"
+    },
+    "drawer": {
+      "close": "Close",
+      "openFull": "Open full view →",
+      "description": "Description",
+      "dependencies": "Depends on",
+      "dependedBy": "Blocks",
+      "noDetail": "No additional detail.",
+      "belongsTo": "Belongs to",
+      "acceptance": "Acceptance criteria",
+      "content": "Detail"
+    },
+    "empty": "graph is empty — intake has not completed yet"
   },
   "detail": {
     "tasks": {
