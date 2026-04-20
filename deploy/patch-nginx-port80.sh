@@ -17,7 +17,13 @@ fi
 cp -f "$SRC" "$DST"
 echo "[patch-nginx-port80] wrote $DST"
 
-docker compose -f deploy/docker-compose.yml restart nginx
+# Mainland prod skips ports 80/443 (ICP friction + Aliyun default-blocked)
+# and binds to 8080/8443 instead. Idempotent — no-op if already rewritten.
+sed -i 's/"80:80"/"8080:80"/g; s/"443:443"/"8443:443"/g' \
+    deploy/docker-compose.yml
+echo "[patch-nginx-port80] host ports remapped to 8080/8443"
+
+docker compose -f deploy/docker-compose.yml up -d --force-recreate nginx
 sleep 2
 docker compose -f deploy/docker-compose.yml ps
 
