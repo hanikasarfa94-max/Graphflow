@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # Swap the TLS-dependent default nginx conf for the port-80-only prod
 # conf, then bounce nginx. Safe to re-run; the target file is tracked
-# in the repo at deploy/nginx/conf.d/workgraph.prod.conf.
+# in the repo at deploy/nginx/workgraph.prod.conf.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-SRC="deploy/nginx/conf.d/workgraph.prod.conf"
+SRC="deploy/nginx/workgraph.prod.conf"
 DST="deploy/nginx/conf.d/workgraph.conf"
 
 if [ ! -f "$SRC" ]; then
