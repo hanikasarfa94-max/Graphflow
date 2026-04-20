@@ -18,13 +18,30 @@
 // draft is ≥PREVIEW_MIN_BODY_LENGTH characters. The parent owns the
 // RehearsalPreview render — we just surface the hook.
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  forwardRef,
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useRef,
+  useState,
+} from "react";
 import { useTranslations } from "next-intl";
 
 import { ApiError, api, type IMMessage } from "@/lib/api";
 
-const PREVIEW_DEBOUNCE_MS = 1000;
+// 500ms matches north-star §pre-commit rehearsal: long enough that typing
+// bursts don't thrash the edge endpoint, short enough that users feel the
+// card respond to each thought they finish.
+const PREVIEW_DEBOUNCE_MS = 500;
 const PREVIEW_MIN_BODY_LENGTH = 10;
+
+// Imperative handle so a parent ("Send as-is" link on the rehearsal card)
+// can flush the current draft. Only sendNow is exposed — the rest of
+// composer state stays encapsulated.
+export type ComposerHandle = {
+  sendNow: () => void;
+};
 
 type Props = {
   projectId: string;
@@ -46,15 +63,18 @@ type Props = {
 const MAX_ROWS = 8;
 const LINE_HEIGHT_PX = 20;
 
-export function Composer({
-  projectId,
-  currentUserId,
-  onOptimisticSend,
-  onOptimisticError,
-  onError,
-  onPreview,
-  onPreviewClear,
-}: Props) {
+export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
+  {
+    projectId,
+    currentUserId,
+    onOptimisticSend,
+    onOptimisticError,
+    onError,
+    onPreview,
+    onPreviewClear,
+  },
+  ref,
+) {
   const t = useTranslations("stream");
   const [value, setValue] = useState("");
   const [posting, setPosting] = useState(false);
@@ -191,6 +211,12 @@ export function Composer({
     }
   }
 
+  // Expose sendNow to parents — "Send as-is" on the rehearsal card flushes
+  // the current draft without the user having to move focus back. `send`
+  // is recreated every render but useImperativeHandle captures the latest
+  // closure, so the current `value` is always used.
+  useImperativeHandle(ref, () => ({ sendNow: () => void send() }));
+
   return (
     <div style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
       <textarea
@@ -264,4 +290,4 @@ export function Composer({
       <style>{`@keyframes wg-spin { to { transform: rotate(360deg); } }`}</style>
     </div>
   );
-}
+});

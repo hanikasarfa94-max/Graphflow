@@ -546,7 +546,8 @@
     "routeProposal": "Edge would propose routing to <strong>{name}</strong>: <em>{rationale}</em>",
     "devilsAdvocate": "Devil's advocate:",
     "cooldown": "preview cooldown — keep typing",
-    "sendAsIs": "Send as-is"
+    "sendAsIs": "Send as-is",
+    "eyebrow": "Edge — preview"
   },
   "drift": {
     "alertTitle": "Drift alert",
@@ -598,6 +599,45 @@
       "myRelationships": "Key relationships",
       "myOpenItems": "Open items / pending routings",
       "myStyle": "Style notes (how I reply to common asks)"
+    },
+    "editSignal": {
+      "title": "What does this edit mean?",
+      "signals": "Matched signals",
+      "cancel": "Keep editing",
+      "kinds": {
+        "prose_polish": {
+          "label": "Prose polish",
+          "prompt": "Looks like a stylistic tweak — save it as a prose override without touching the graph?",
+          "actions": {
+            "save_as_polish": "Save as polish"
+          }
+        },
+        "semantic_reversal": {
+          "label": "Reverses a decision",
+          "prompt": "This edit reads like it reverses an existing crystallized decision. Crystallize a new superseding decision, or discard the edit so the graph stays truthful?",
+          "actions": {
+            "discard": "Discard edit",
+            "crystallize_superseding": "Crystallize superseding decision"
+          }
+        },
+        "new_content": {
+          "label": "New content",
+          "prompt": "Looks like a new thesis, risk note, or design note — record it as a first-class graph entity, or keep it as free prose on this render?",
+          "actions": {
+            "keep_as_prose": "Keep as prose",
+            "record_risk": "Record as a risk",
+            "record_decision": "Record as a decision"
+          }
+        },
+        "structural_change": {
+          "label": "Structural change",
+          "prompt": "This edit changes a deadline, assignment, or dependency. Cascade to downstream tasks, or apply to this line only?",
+          "actions": {
+            "this_line_only": "This line only",
+            "cascade_downstream": "Cascade to downstream"
+          }
+        }
+      }
     }
   },
   "dm": {

@@ -20,6 +20,7 @@
 // doesn't yet emit a dedicated devils-advocate channel, so this is a
 // lightweight proxy — v2 can promote it to a first-class field.
 
+import type { ReactNode } from "react";
 import { useTranslations } from "next-intl";
 
 import type { RehearsalPreview as RehearsalPreviewType } from "@/lib/api";
@@ -28,6 +29,11 @@ type Props = {
   preview: RehearsalPreviewType | null;
   loading: boolean;
   rateLimited: boolean;
+  // Team-stream uses a decorated shell (accent-soft eyebrow + "Send as-is"
+  // footer, per north-star §pre-commit rehearsal). Personal stream passes
+  // no handler and keeps the minimal v1 shell. Omitting this flag keeps
+  // the two call sites visually distinct without duplicating the component.
+  onSendAsIs?: () => void;
 };
 
 const BODY_PREVIEW_MAX = 180;
@@ -38,18 +44,88 @@ function truncate(body: string | null | undefined): string {
   return body.slice(0, BODY_PREVIEW_MAX - 1).trimEnd() + "…";
 }
 
-export function RehearsalPreview({ preview, loading, rateLimited }: Props) {
+export function RehearsalPreview({
+  preview,
+  loading,
+  rateLimited,
+  onSendAsIs,
+}: Props) {
   const t = useTranslations("rehearsal");
+
+  // When the team-stream caller passes onSendAsIs, wrap the body in an
+  // accent-soft shell with mono eyebrow + "Send as-is" link. The shell is
+  // subdued so it nudges, not shouts. We keep the inner bodies (answer /
+  // clarify / route_proposal) visually consistent with the personal-stream
+  // variant — only the surrounding chrome differs.
+  const decorate = (inner: ReactNode) => {
+    if (!onSendAsIs) return inner;
+    return (
+      <div
+        style={{
+          marginBottom: 8,
+          background: "var(--wg-surface-raised)",
+          border: "1px solid var(--wg-line)",
+          borderRadius: "var(--wg-radius)",
+          overflow: "hidden",
+          // Keep motion minimal — opacity only, no slide-in. Browsers
+          // honour prefers-reduced-motion here because we don't animate
+          // transform or translate.
+          transition: "opacity 120ms linear",
+        }}
+      >
+        <div
+          style={{
+            padding: "4px 10px",
+            fontFamily: "var(--wg-font-mono)",
+            fontSize: 10,
+            letterSpacing: 0.4,
+            textTransform: "uppercase",
+            background: "var(--wg-accent-soft)",
+            color: "var(--wg-ink-soft)",
+            borderBottom: "1px solid var(--wg-line)",
+          }}
+        >
+          {t("eyebrow")}
+        </div>
+        <div style={{ padding: "6px 10px 4px" }}>{inner}</div>
+        <div
+          style={{
+            padding: "4px 10px 6px",
+            textAlign: "right",
+            borderTop: "1px solid var(--wg-line-soft, var(--wg-line))",
+          }}
+        >
+          <button
+            type="button"
+            onClick={onSendAsIs}
+            data-testid="rehearsal-send-as-is"
+            style={{
+              background: "transparent",
+              border: "none",
+              padding: 0,
+              fontFamily: "var(--wg-font-mono)",
+              fontSize: 11,
+              color: "var(--wg-ink-soft)",
+              cursor: "pointer",
+              textDecoration: "underline",
+            }}
+          >
+            {t("sendAsIs")}
+          </button>
+        </div>
+      </div>
+    );
+  };
 
   // Loading has priority: if we're actively fetching a preview, show the
   // thinking spinner. Rate-limited is a softer back-off state.
   if (loading) {
-    return (
+    return decorate(
       <div
         data-testid="rehearsal-preview"
         data-state="thinking"
         style={{
-          marginBottom: 8,
+          marginBottom: onSendAsIs ? 0 : 8,
           padding: "6px 10px",
           fontSize: 12,
           fontFamily: "var(--wg-font-mono)",
@@ -73,17 +149,17 @@ export function RehearsalPreview({ preview, loading, rateLimited }: Props) {
         />
         <span>🧠 {t("thinking")}</span>
         <style>{`@keyframes wg-spin { to { transform: rotate(360deg); } }`}</style>
-      </div>
+      </div>,
     );
   }
 
   if (rateLimited) {
-    return (
+    return decorate(
       <div
         data-testid="rehearsal-preview"
         data-state="cooldown"
         style={{
-          marginBottom: 8,
+          marginBottom: onSendAsIs ? 0 : 8,
           padding: "6px 10px",
           fontSize: 12,
           fontFamily: "var(--wg-font-mono)",
@@ -91,7 +167,7 @@ export function RehearsalPreview({ preview, loading, rateLimited }: Props) {
         }}
       >
         {t("cooldown")}
-      </div>
+      </div>,
     );
   }
 
@@ -117,16 +193,16 @@ export function RehearsalPreview({ preview, loading, rateLimited }: Props) {
   ) : null;
 
   if (preview.kind === "answer") {
-    return (
+    return decorate(
       <div
         data-testid="rehearsal-preview"
         data-state="answer"
         style={{
-          marginBottom: 8,
-          padding: "8px 10px",
+          marginBottom: onSendAsIs ? 0 : 8,
+          padding: onSendAsIs ? 0 : "8px 10px",
           fontSize: 12,
-          background: "var(--wg-surface)",
-          border: "1px solid var(--wg-line)",
+          background: onSendAsIs ? "transparent" : "var(--wg-surface)",
+          border: onSendAsIs ? "none" : "1px solid var(--wg-line)",
           borderRadius: "var(--wg-radius)",
           color: "var(--wg-ink-soft)",
         }}
@@ -138,21 +214,25 @@ export function RehearsalPreview({ preview, loading, rateLimited }: Props) {
           </em>
         </div>
         {devilsAdvocate}
-      </div>
+      </div>,
     );
   }
 
   if (preview.kind === "clarify") {
-    return (
+    return decorate(
       <div
         data-testid="rehearsal-preview"
         data-state="clarify"
         style={{
-          marginBottom: 8,
-          padding: "8px 10px",
+          marginBottom: onSendAsIs ? 0 : 8,
+          padding: onSendAsIs ? 0 : "8px 10px",
           fontSize: 12,
-          background: "rgba(234, 179, 8, 0.08)",
-          border: "1px solid rgba(234, 179, 8, 0.35)",
+          background: onSendAsIs
+            ? "transparent"
+            : "rgba(234, 179, 8, 0.08)",
+          border: onSendAsIs
+            ? "none"
+            : "1px solid rgba(234, 179, 8, 0.35)",
           borderRadius: "var(--wg-radius)",
           color: "var(--wg-ink)",
         }}
@@ -162,7 +242,7 @@ export function RehearsalPreview({ preview, loading, rateLimited }: Props) {
           <em>{truncate(preview.body)}</em>
         </div>
         {devilsAdvocate}
-      </div>
+      </div>,
     );
   }
 
@@ -173,16 +253,18 @@ export function RehearsalPreview({ preview, loading, rateLimited }: Props) {
   const targetName = primary?.display_name || primary?.username || "…";
   const rationale = primary?.rationale || "";
 
-  return (
+  return decorate(
     <div
       data-testid="rehearsal-preview"
       data-state="route_proposal"
       style={{
-        marginBottom: 8,
-        padding: "10px 12px",
+        marginBottom: onSendAsIs ? 0 : 8,
+        padding: onSendAsIs ? 0 : "10px 12px",
         fontSize: 13,
-        background: "var(--wg-surface-raised, var(--wg-surface))",
-        border: "1px solid var(--wg-accent)",
+        background: onSendAsIs
+          ? "transparent"
+          : "var(--wg-surface-raised, var(--wg-surface))",
+        border: onSendAsIs ? "none" : "1px solid var(--wg-accent)",
         borderRadius: "var(--wg-radius)",
         color: "var(--wg-ink)",
       }}
@@ -209,6 +291,6 @@ export function RehearsalPreview({ preview, loading, rateLimited }: Props) {
         </div>
       )}
       {devilsAdvocate}
-    </div>
+    </div>,
   );
 }

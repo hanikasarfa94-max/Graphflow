@@ -546,7 +546,8 @@
     "routeProposal": "Edge 建议转给 <strong>{name}</strong>:<em>{rationale}</em>",
     "devilsAdvocate": "反向质疑:",
     "cooldown": "预览冷却中 —— 继续输入",
-    "sendAsIs": "原样发送"
+    "sendAsIs": "原样发送",
+    "eyebrow": "Edge — 预览"
   },
   "drift": {
     "alertTitle": "偏航提醒",
@@ -598,6 +599,45 @@
       "myRelationships": "关键关系",
       "myOpenItems": "待处理事项与路由",
       "myStyle": "回复常见询问的风格"
+    },
+    "editSignal": {
+      "title": "这次编辑意味着什么?",
+      "signals": "命中信号",
+      "cancel": "继续编辑",
+      "kinds": {
+        "prose_polish": {
+          "label": "文字润色",
+          "prompt": "看起来只是措辞微调——作为文案覆盖保存、不改动图谱?",
+          "actions": {
+            "save_as_polish": "作为润色保存"
+          }
+        },
+        "semantic_reversal": {
+          "label": "推翻原决策",
+          "prompt": "这次修改似乎在推翻一条已晶体化的决策。是新建一条替代决策、还是放弃这次修改让图谱保持一致?",
+          "actions": {
+            "discard": "放弃修改",
+            "crystallize_superseding": "新建替代决策"
+          }
+        },
+        "new_content": {
+          "label": "新增内容",
+          "prompt": "看起来是一条新主张、风险提示或设计备注——要录入图谱为结构化实体,还是仅作为这份渲染里的自由文字?",
+          "actions": {
+            "keep_as_prose": "保留为自由文字",
+            "record_risk": "记为风险",
+            "record_decision": "记为决策"
+          }
+        },
+        "structural_change": {
+          "label": "结构性变更",
+          "prompt": "这次修改涉及截止日期、指派或依赖关系。是仅改本行,还是级联到下游任务?",
+          "actions": {
+            "this_line_only": "仅本行",
+            "cascade_downstream": "级联到下游"
+          }
+        }
+      }
     }
   },
   "dm": {

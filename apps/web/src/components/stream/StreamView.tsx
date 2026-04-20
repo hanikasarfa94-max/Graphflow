@@ -21,12 +21,14 @@ import {
   counterSuggestion,
   dismissSuggestion,
   escalateSuggestion,
+  previewPersonalMessage,
   type Decision,
   type IMMessage,
   type IMSuggestion,
+  type RehearsalPreview as RehearsalPreviewType,
 } from "@/lib/api";
 
-import { Composer } from "./Composer";
+import { Composer, type ComposerHandle } from "./Composer";
 import {
   AmbientSignalCard,
   DecisionCard,
@@ -35,6 +37,7 @@ import {
   SubAgentTurnCard,
 } from "./cards";
 import { MessageProfilePopover } from "./MessageProfilePopover";
+import { RehearsalPreview } from "./RehearsalPreview";
 import type { StreamMember } from "./types";
 
 // WS frames broadcast by the API — shape matches collab.py ws_broadcast calls.
@@ -72,8 +75,23 @@ export function StreamView({ projectId, currentUserId, members, streamId }: Prop
   const [pinnedToBottom, setPinnedToBottom] = useState(true);
   const [hasNewBelow, setHasNewBelow] = useState(false);
 
+  // Pre-commit rehearsal state — mirrors PersonalStream. See north-star
+  // §pre-commit rehearsal: the edge sub-agent previews how the in-flight
+  // draft would be classified (answer / clarify / route_proposal) before
+  // the user commits to sending it into the team stream.
+  const [preview, setPreview] = useState<RehearsalPreviewType | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewRateLimited, setPreviewRateLimited] = useState(false);
+
   const scrollerRef = useRef<HTMLDivElement | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
+  // Ref-based cancellation: every onPreview fires a new AbortController
+  // and bumps a token. A response that lands after a newer keystroke is
+  // dropped so the card never flickers back to a stale classification.
+  const previewAbortRef = useRef<AbortController | null>(null);
+  const previewTokenRef = useRef(0);
+  const mountedRef = useRef(true);
+  const composerRef = useRef<ComposerHandle | null>(null);
 
   const memberList = useMemo(() => withDefaultPresence(members), [members]);
   const memberById = useMemo(() => {
@@ -81,6 +99,66 @@ export function StreamView({ projectId, currentUserId, members, streamId }: Prop
     for (const mem of memberList) m.set(mem.user_id, mem);
     return m;
   }, [memberList]);
+
+  // Track mount so late-arriving preview responses don't setState on an
+  // unmounted tree (e.g. user navigates away mid-fetch).
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      // Abort any in-flight preview on unmount so the browser isn't left
+      // holding the request.
+      previewAbortRef.current?.abort();
+    };
+  }, []);
+
+  // Debounce is handled inside Composer; here we only perform the fetch.
+  // Each call bumps a token so out-of-order responses are ignored.
+  const handlePreview = useCallback(
+    async (body: string) => {
+      previewAbortRef.current?.abort();
+      const controller = new AbortController();
+      previewAbortRef.current = controller;
+      const myToken = ++previewTokenRef.current;
+      setPreviewLoading(true);
+      setPreviewRateLimited(false);
+      try {
+        const res = await previewPersonalMessage(
+          projectId,
+          body,
+          controller.signal,
+        );
+        if (!mountedRef.current) return;
+        if (myToken !== previewTokenRef.current) return;
+        setPreview(res.preview ?? null);
+      } catch (e) {
+        if (!mountedRef.current) return;
+        if (myToken !== previewTokenRef.current) return;
+        // 429: show muted cooldown hint but keep the last good preview so
+        // the card doesn't blink away. Sends are never blocked — preview
+        // degrades silently.
+        if (e instanceof ApiError && e.status === 429) {
+          setPreviewRateLimited(true);
+        } else if ((e as { name?: string })?.name !== "AbortError") {
+          setPreview(null);
+        }
+      } finally {
+        if (!mountedRef.current) return;
+        if (myToken === previewTokenRef.current) {
+          setPreviewLoading(false);
+        }
+      }
+    },
+    [projectId],
+  );
+
+  const handlePreviewClear = useCallback(() => {
+    previewAbortRef.current?.abort();
+    previewTokenRef.current += 1;
+    setPreview(null);
+    setPreviewLoading(false);
+    setPreviewRateLimited(false);
+  }, []);
 
   // ------------- initial load -------------
   useEffect(() => {
@@ -543,6 +621,15 @@ export function StreamView({ projectId, currentUserId, members, streamId }: Prop
 
       {/* Composer */}
       <div style={{ borderTop: "1px solid var(--wg-line)", padding: 10 }}>
+        {/* Rehearsal preview — rendered above the textarea so the user
+            sees how the edge sub-agent would classify their in-flight
+            draft before committing. "Send as-is" flushes the composer. */}
+        <RehearsalPreview
+          preview={preview}
+          loading={previewLoading}
+          rateLimited={previewRateLimited}
+          onSendAsIs={() => composerRef.current?.sendNow()}
+        />
         {error && (
           <div
             role="alert"
@@ -558,11 +645,14 @@ export function StreamView({ projectId, currentUserId, members, streamId }: Prop
           </div>
         )}
         <Composer
+          ref={composerRef}
           projectId={projectId}
           currentUserId={currentUserId}
           onOptimisticSend={onOptimisticSend}
           onOptimisticError={onOptimisticError}
           onError={setError}
+          onPreview={handlePreview}
+          onPreviewClear={handlePreviewClear}
         />
       </div>
     </div>

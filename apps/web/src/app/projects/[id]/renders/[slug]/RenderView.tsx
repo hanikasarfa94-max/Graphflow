@@ -27,6 +27,11 @@ import {
   type PostmortemRender,
   type RenderedSection,
 } from "@/lib/api";
+import { classifyEdit, type EditSignal } from "@/lib/editSignal";
+import {
+  EditSignalModal,
+  type EditSignalResult,
+} from "@/components/rendered/EditSignalModal";
 
 type AnyRender = PostmortemRender | HandoffRender;
 
@@ -51,8 +56,66 @@ export function RenderView({
   // Per-section local edits — keyed by section index. Not persisted.
   const [edits, setEdits] = useState<Record<number, string>>({});
   const [editingIdx, setEditingIdx] = useState<number | null>(null);
+  // Modal state for the edit-signal ceremony. We snapshot the before/
+  // after text into the modal's props so later keystrokes (if any leak
+  // through the disabled editor) can't shift the classification mid-
+  // prompt.
+  const [signalModal, setSignalModal] = useState<{
+    idx: number;
+    before: string;
+    after: string;
+    signal: EditSignal;
+  } | null>(null);
 
   const realIds = useMemo(() => new Set(decisionIds), [decisionIds]);
+
+  // Save path for an edited section. Runs the heuristic classifier;
+  // high-confidence prose polish saves silently (matches the
+  // pre-feature behavior), everything else opens the modal so the
+  // human chooses what the edit *means*. See docs/north-star.md on why
+  // this ceremony is load-bearing.
+  function handleSaveSection(idx: number) {
+    const original = doc.sections[idx]?.body_markdown ?? "";
+    const edited = edits[idx] ?? original;
+    // No-op save — close the editor and move on. Avoids opening a
+    // modal for an edit the user immediately reverted.
+    if (edited === original) {
+      setEditingIdx(null);
+      return;
+    }
+    const signal = classifyEdit(original, edited);
+    if (signal.kind === "prose_polish" && signal.confidence > 0.8) {
+      // Silent path — v1 "save" is just committing local state.
+      setEditingIdx(null);
+      return;
+    }
+    setSignalModal({ idx, before: original, after: edited, signal });
+  }
+
+  function handleSignalResolve(result: EditSignalResult | null) {
+    const pending = signalModal;
+    setSignalModal(null);
+    if (!result || !pending) {
+      // Cancel — keep the editor open so the user can keep typing or
+      // cancel-cancel via the editor's own Cancel button.
+      return;
+    }
+    // v2 TODO: POST the classification + chosen action to the backend
+    // edit-signal endpoint so the edge LLM can crystallize a decision
+    // / risk / cascade on our behalf. v1 emits to the console so the
+    // ceremony is demo-visible without backend changes.
+    // eslint-disable-next-line no-console
+    console.log("[editSignal] v1 stub", {
+      projectId,
+      slug,
+      sectionIdx: pending.idx,
+      kind: result.signal.kind,
+      action: result.action,
+      confidence: result.signal.confidence,
+      matchedSignals: result.signal.matchedSignals,
+    });
+    setEditingIdx(null);
+  }
 
   async function regenerate() {
     setBusy(true);
@@ -257,7 +320,7 @@ export function RenderView({
                 >
                   <span>{t("render.editNote")}</span>
                   <button
-                    onClick={() => setEditingIdx(null)}
+                    onClick={() => handleSaveSection(idx)}
                     style={{
                       background: "var(--wg-ink, #0a1a2b)",
                       color: "var(--wg-paper, #ffffff)",
@@ -283,6 +346,13 @@ export function RenderView({
           </section>
         );
       })}
+      <EditSignalModal
+        open={signalModal !== null}
+        signal={signalModal?.signal ?? null}
+        before={signalModal?.before ?? ""}
+        after={signalModal?.after ?? ""}
+        onResolve={handleSignalResolve}
+      />
     </main>
   );
 }
