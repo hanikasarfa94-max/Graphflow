@@ -21,6 +21,7 @@ from workgraph_persistence import UserRepository, session_scope
 
 from workgraph_api.deps import require_user
 from workgraph_api.services import AuthenticatedUser
+from workgraph_api.services.profile_tallies import compute_profile
 
 router = APIRouter(prefix="/api", tags=["users"])
 
@@ -60,6 +61,21 @@ async def get_me(
         if row is None:
             raise HTTPException(status_code=404, detail="user not found")
         return _shape_user(row)
+
+
+# Observed-profile tallies. Compute-on-read, no schema mutation. Pairs
+# with GET /api/users/me (self-declared) so the client can render both
+# halves of the response profile — the gap is itself information per
+# docs/north-star.md §"Profile as first-class primitive".
+@router.get("/users/me/profile")
+async def get_my_profile(
+    request: Request,
+    user: AuthenticatedUser = Depends(require_user),
+) -> dict:
+    maker = request.app.state.sessionmaker
+    async with session_scope(maker) as session:
+        tallies = await compute_profile(session, user.id)
+    return tallies.to_dict()
 
 
 @router.patch("/users/me")

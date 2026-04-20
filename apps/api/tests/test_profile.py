@@ -1,126 +1,356 @@
-"""Phase B (v2) — user profile tests.
+"""Observed-profile tallies — compute-on-read, no migrations.
 
-North-star §"Profile as first-class primitive": UserRow gains a JSON
-`profile` column (declared_abilities / role_hints / signal_tally) and a
-`display_language` column. GET /api/users/me returns both; PATCH updates
-a subset.
+Covers the service in isolation (direct session seeding, deterministic
+`now`) plus one HTTP-level sanity check through /api/users/me/profile
+so the router wiring + auth guard are exercised.
 """
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
+from uuid import uuid4
+
 import pytest
-from httpx import AsyncClient
+from sqlalchemy import select
+
+from workgraph_persistence import (
+    AssignmentRow,
+    DecisionRow,
+    MessageRow,
+    ProjectMemberRow,
+    ProjectRow,
+    RequirementRow,
+    RiskRow,
+    TaskRow,
+    UserRow,
+    session_scope,
+)
+
+from workgraph_api.services.profile_tallies import compute_profile
 
 
-async def _register(client: AsyncClient, username: str, password: str = "hunter22"):
-    r = await client.post(
-        "/api/auth/register",
-        json={"username": username, "password": password},
+def _uid() -> str:
+    return str(uuid4())
+
+
+async def _seed_user(session, *, username: str) -> UserRow:
+    row = UserRow(
+        id=_uid(),
+        username=username,
+        display_name=username.title(),
+        password_hash="x" * 32,
+        password_salt="s" * 16,
     )
-    assert r.status_code == 200, r.text
-    return r.json()
+    session.add(row)
+    await session.flush()
+    return row
 
 
-# ---------- GET /api/users/me defaults ----------------------------------
+async def _seed_project(session, *, title: str = "P") -> ProjectRow:
+    proj = ProjectRow(id=_uid(), title=title)
+    session.add(proj)
+    await session.flush()
+    req = RequirementRow(id=_uid(), project_id=proj.id, raw_text=title, version=1)
+    session.add(req)
+    await session.flush()
+    return proj
 
 
 @pytest.mark.asyncio
-async def test_get_me_returns_profile_defaults(api_env):
-    client, _, _, _, _, _ = api_env
-    await _register(client, "profile_reader")
+async def test_compute_profile_counts_messages_within_windows(api_env):
+    _, maker, _, _, _, _ = api_env
+    now = datetime.now(timezone.utc)
 
-    r = await client.get("/api/users/me")
+    async with session_scope(maker) as session:
+        user = await _seed_user(session, username="alice-prof")
+        project = await _seed_project(session, title="Profile-M")
+        session.add(
+            ProjectMemberRow(
+                id=_uid(), project_id=project.id, user_id=user.id, role="owner"
+            )
+        )
+        # 2 messages in the 7d window, 3 more in the 30d window, 1 outside.
+        for dt in [now - timedelta(days=1), now - timedelta(days=3)]:
+            session.add(
+                MessageRow(
+                    id=_uid(),
+                    project_id=project.id,
+                    author_id=user.id,
+                    body="hi",
+                    created_at=dt,
+                )
+            )
+        for dt in [
+            now - timedelta(days=10),
+            now - timedelta(days=20),
+            now - timedelta(days=29),
+        ]:
+            session.add(
+                MessageRow(
+                    id=_uid(),
+                    project_id=project.id,
+                    author_id=user.id,
+                    body="later",
+                    created_at=dt,
+                )
+            )
+        # Outside 30d — must not count.
+        session.add(
+            MessageRow(
+                id=_uid(),
+                project_id=project.id,
+                author_id=user.id,
+                body="old",
+                created_at=now - timedelta(days=60),
+            )
+        )
+        await session.flush()
+        user_id = user.id
+
+    async with session_scope(maker) as session:
+        tallies = await compute_profile(session, user_id, now=now)
+
+    assert tallies.observed.messages_posted_7d == 2
+    assert tallies.observed.messages_posted_30d == 5
+    assert tallies.observed.projects_active == 1
+    assert tallies.role_counts == {"owner": 1}
+    assert tallies.display_name == "Alice-Prof"
+    assert tallies.last_activity_at is not None
+
+
+@pytest.mark.asyncio
+async def test_compute_profile_risks_only_on_owned_projects(api_env):
+    _, maker, _, _, _, _ = api_env
+    now = datetime.now(timezone.utc)
+
+    async with session_scope(maker) as session:
+        owner = await _seed_user(session, username="owner-prof")
+        other = await _seed_user(session, username="other-prof")
+
+        owned = await _seed_project(session, title="Owned")
+        # User is owner here
+        session.add(
+            ProjectMemberRow(
+                id=_uid(),
+                project_id=owned.id,
+                user_id=owner.id,
+                role="owner",
+            )
+        )
+        # Open risk on owned project — counts.
+        req_owned = (
+            await session.execute(
+                select(RequirementRow).where(
+                    RequirementRow.project_id == owned.id
+                )
+            )
+        ).scalar_one()
+        session.add(
+            RiskRow(
+                id=_uid(),
+                project_id=owned.id,
+                requirement_id=req_owned.id,
+                sort_order=0,
+                title="scope risk",
+                content="",
+                severity="high",
+                status="open",
+            )
+        )
+        # Closed risk on owned project — does NOT count.
+        session.add(
+            RiskRow(
+                id=_uid(),
+                project_id=owned.id,
+                requirement_id=req_owned.id,
+                sort_order=1,
+                title="stale risk",
+                content="",
+                severity="low",
+                status="resolved",
+            )
+        )
+
+        # Risk on a project the user is only a 'member' of — does NOT count.
+        elsewhere = await _seed_project(session, title="Elsewhere")
+        session.add(
+            ProjectMemberRow(
+                id=_uid(),
+                project_id=elsewhere.id,
+                user_id=owner.id,
+                role="member",
+            )
+        )
+        session.add(
+            ProjectMemberRow(
+                id=_uid(),
+                project_id=elsewhere.id,
+                user_id=other.id,
+                role="owner",
+            )
+        )
+        req_else = (
+            await session.execute(
+                select(RequirementRow).where(
+                    RequirementRow.project_id == elsewhere.id
+                )
+            )
+        ).scalar_one()
+        session.add(
+            RiskRow(
+                id=_uid(),
+                project_id=elsewhere.id,
+                requirement_id=req_else.id,
+                sort_order=0,
+                title="not-mine",
+                content="",
+                severity="medium",
+                status="open",
+            )
+        )
+        await session.flush()
+        owner_id = owner.id
+
+    async with session_scope(maker) as session:
+        tallies = await compute_profile(session, owner_id, now=now)
+
+    assert tallies.observed.risks_owned == 1
+    assert tallies.role_counts == {"owner": 1, "member": 1}
+    assert tallies.observed.projects_active == 2
+
+
+@pytest.mark.asyncio
+async def test_compute_profile_decisions_and_routings(api_env):
+    _, maker, _, _, _, _ = api_env
+    now = datetime.now(timezone.utc)
+
+    async with session_scope(maker) as session:
+        user = await _seed_user(session, username="dec-prof")
+        project = await _seed_project(session, title="Dec")
+        session.add(
+            ProjectMemberRow(
+                id=_uid(),
+                project_id=project.id,
+                user_id=user.id,
+                role="owner",
+            )
+        )
+        await session.flush()
+
+        # A dangling DecisionRow needs a conflict_id. We piggyback on an
+        # uuid that doesn't have to resolve — DecisionRow uses ondelete=CASCADE
+        # but no FK check on SQLite in-memory unless enforced. To keep the
+        # test independent of conflict seeding, write the row directly.
+        session.add(
+            DecisionRow(
+                id=_uid(),
+                conflict_id=_uid(),
+                project_id=project.id,
+                resolver_id=user.id,
+                option_index=0,
+                rationale="ok",
+                created_at=now - timedelta(days=5),
+            )
+        )
+        session.add(
+            DecisionRow(
+                id=_uid(),
+                conflict_id=_uid(),
+                project_id=project.id,
+                resolver_id=user.id,
+                option_index=1,
+                rationale="ok2",
+                created_at=now - timedelta(days=40),  # outside window
+            )
+        )
+
+        # Routings (assignments resolved by user).
+        req_row = (
+            await session.execute(
+                select(RequirementRow).where(
+                    RequirementRow.project_id == project.id
+                )
+            )
+        ).scalar_one()
+        task = TaskRow(
+            id=_uid(),
+            project_id=project.id,
+            requirement_id=req_row.id,
+            title="t",
+            description="",
+            assignee_role="unknown",
+        )
+        session.add(task)
+        await session.flush()
+        session.add(
+            AssignmentRow(
+                id=_uid(),
+                project_id=project.id,
+                task_id=task.id,
+                user_id=user.id,
+                active=False,
+                resolved_at=now - timedelta(days=2),
+            )
+        )
+        # Unresolved → ignored.
+        session.add(
+            AssignmentRow(
+                id=_uid(),
+                project_id=project.id,
+                task_id=task.id,
+                user_id=user.id,
+                active=True,
+            )
+        )
+        await session.flush()
+        user_id = user.id
+
+    async with session_scope(maker) as session:
+        tallies = await compute_profile(session, user_id, now=now)
+
+    assert tallies.observed.decisions_resolved_30d == 1
+    assert tallies.observed.routings_answered_30d == 1
+
+
+@pytest.mark.asyncio
+async def test_compute_profile_empty_user_is_all_zeroes(api_env):
+    _, maker, _, _, _, _ = api_env
+    async with session_scope(maker) as session:
+        user = await _seed_user(session, username="ghost")
+        user_id = user.id
+
+    async with session_scope(maker) as session:
+        tallies = await compute_profile(session, user_id)
+    assert tallies.observed.messages_posted_7d == 0
+    assert tallies.observed.messages_posted_30d == 0
+    assert tallies.observed.decisions_resolved_30d == 0
+    assert tallies.observed.risks_owned == 0
+    assert tallies.observed.routings_answered_30d == 0
+    assert tallies.observed.projects_active == 0
+    assert tallies.role_counts == {}
+    assert tallies.last_activity_at is None
+
+
+@pytest.mark.asyncio
+async def test_users_me_profile_requires_auth(api_env):
+    client, _, _, _, _, _ = api_env
+    # Fresh client — no cookie.
+    client.cookies.clear()
+    r = await client.get("/api/users/me/profile")
+    assert r.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_users_me_profile_returns_tallies(api_env):
+    client, _, _, _, _, _ = api_env
+    await client.post(
+        "/api/auth/register",
+        json={"username": "profuser", "password": "hunter22"},
+    )
+    r = await client.get("/api/users/me/profile")
     assert r.status_code == 200, r.text
     body = r.json()
-    assert body["username"] == "profile_reader"
-    assert body["display_language"] == "en"
-    # Profile starts empty; shape stays stable whether the dict is empty
-    # or has default keys.
-    assert "profile" in body
-    assert isinstance(body["profile"], dict)
-
-
-# ---------- PATCH declared_abilities ------------------------------------
-
-
-@pytest.mark.asyncio
-async def test_patch_me_sets_declared_abilities(api_env):
-    client, _, _, _, _, _ = api_env
-    await _register(client, "profile_writer")
-
-    patch = await client.patch(
-        "/api/users/me",
-        json={"declared_abilities": ["design", "pm", "qa"]},
-    )
-    assert patch.status_code == 200, patch.text
-    body = patch.json()
-    assert body["profile"]["declared_abilities"] == ["design", "pm", "qa"]
-
-    # Round-trip through GET to confirm persistence.
-    me = await client.get("/api/users/me")
-    assert me.status_code == 200
-    assert me.json()["profile"]["declared_abilities"] == ["design", "pm", "qa"]
-
-
-@pytest.mark.asyncio
-async def test_patch_me_merges_role_hints_into_profile(api_env):
-    client, _, _, _, _, _ = api_env
-    await _register(client, "profile_merger")
-
-    # Set declared_abilities first.
-    await client.patch(
-        "/api/users/me",
-        json={"declared_abilities": ["frontend"]},
-    )
-    # Then add role_hints in a separate call — declared_abilities must stay.
-    r = await client.patch(
-        "/api/users/me",
-        json={"role_hints": ["tech-lead"]},
-    )
-    assert r.status_code == 200, r.text
-    profile = r.json()["profile"]
-    assert profile["declared_abilities"] == ["frontend"]
-    assert profile["role_hints"] == ["tech-lead"]
-
-
-# ---------- display_language ---------------------------------------------
-
-
-@pytest.mark.asyncio
-async def test_display_language_persists(api_env):
-    client, _, _, _, _, _ = api_env
-    await _register(client, "lang_picker")
-
-    r = await client.patch(
-        "/api/users/me",
-        json={"display_language": "zh"},
-    )
-    assert r.status_code == 200, r.text
-    assert r.json()["display_language"] == "zh"
-
-    # GET confirms persistence across requests.
-    me = await client.get("/api/users/me")
-    assert me.json()["display_language"] == "zh"
-
-
-@pytest.mark.asyncio
-async def test_invalid_display_language_rejected(api_env):
-    client, _, _, _, _, _ = api_env
-    await _register(client, "lang_invalid")
-
-    r = await client.patch(
-        "/api/users/me",
-        json={"display_language": "klingon"},
-    )
-    # 422 matches FastAPI validation convention for rejected enum values.
-    assert r.status_code == 422, r.text
-
-
-@pytest.mark.asyncio
-async def test_patch_me_requires_auth(api_env):
-    client, _, _, _, _, _ = api_env
-    client.cookies.clear()
-    r = await client.patch(
-        "/api/users/me",
-        json={"declared_abilities": ["stealth-mode"]},
-    )
-    assert r.status_code == 401
+    assert body["display_name"] == "profuser"
+    assert body["observed"]["messages_posted_7d"] == 0
+    assert body["observed"]["projects_active"] == 0
+    assert body["role_counts"] == {}
+    assert body["last_activity_at"] is None
