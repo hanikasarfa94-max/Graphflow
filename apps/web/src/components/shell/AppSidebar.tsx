@@ -549,7 +549,7 @@ export function AppSidebar({
         >
           <LanguageSwitcher />
           <form
-            action="/api/auth/logout"
+            action="/api/auth/logout?redirect=/"
             method="POST"
             style={{ display: "inline" }}
           >

@@ -55,7 +55,7 @@ export async function HomeHeader({ displayName }: { displayName: string }) {
       >
         <LanguageSwitcher />
         <form
-          action="/api/auth/logout"
+          action="/api/auth/logout?redirect=/"
           method="POST"
           style={{ display: "inline" }}
         >

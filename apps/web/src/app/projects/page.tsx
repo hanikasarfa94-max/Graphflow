@@ -65,7 +65,7 @@ export default async function ProjectsPage() {
             {t("projects.signedInAs", { name: user.display_name })}
           </span>
           <form
-            action="/api/auth/logout"
+            action="/api/auth/logout?redirect=/"
             method="POST"
             style={{ display: "inline" }}
           >

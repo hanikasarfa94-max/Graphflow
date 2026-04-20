@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 from workgraph_api.deps import get_auth_service, require_user
@@ -107,10 +108,28 @@ async def post_logout(
     request: Request,
     response: Response,
     service: AuthService = Depends(get_auth_service),
-) -> dict:
+):
+    """Destroy the session cookie.
+
+    HTML form submissions pass `?redirect=/` (or any same-origin path) and
+    receive a 303 to the display/login page — this fixes the bug where
+    submitting the footer's sign-out form used to leave the user staring
+    at `{ok: true}` JSON. JSON callers omit `redirect` and get the old
+    `{ok: true}` shape, so test contracts stay intact.
+    """
     token = request.cookies.get(SESSION_COOKIE)
     if token:
         await service.logout(token)
+
+    redirect_to = request.query_params.get("redirect")
+    # Only allow same-origin redirects to keep this from becoming an
+    # open-redirect vector. "/" is always safe; anything else must
+    # start with a single "/".
+    if redirect_to and redirect_to.startswith("/") and not redirect_to.startswith("//"):
+        redirect = RedirectResponse(url=redirect_to, status_code=303)
+        redirect.delete_cookie(key=SESSION_COOKIE, path="/")
+        return redirect
+
     response.delete_cookie(key=SESSION_COOKIE, path="/")
     return {"ok": True}
 

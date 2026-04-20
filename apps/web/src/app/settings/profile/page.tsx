@@ -119,7 +119,7 @@ export default async function SettingsProfilePage() {
         >
           {user.display_name}
           <form
-            action="/api/auth/logout"
+            action="/api/auth/logout?redirect=/"
             method="POST"
             style={{ display: "inline" }}
           >

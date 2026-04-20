@@ -811,6 +811,10 @@
       "risksTag": "{n} 个风险",
       "handoffButton": "交接…"
     },
+    "inherited": {
+      "header": "继承自前任成员的工作惯例",
+      "subtitle": "未来路由问题到你时,你的子代理会参考这些技能惯例。PII 已剥离,无姓名与消息正文。已有 {count} 位前任把工作模式转入你的账户。"
+    },
     "handoff": {
       "dialogTitle": "交接 {name}",
       "dialogSubtitle": "把角色技能的继承与去 PII 后的工作惯例一并传给继任者。角色技能随岗位,惯例层将在未来路由时供继任者的子代理参考。",

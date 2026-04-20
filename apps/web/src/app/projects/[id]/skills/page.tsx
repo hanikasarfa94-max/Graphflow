@@ -3,7 +3,11 @@ import { getTranslations } from "next-intl/server";
 
 import { MemberHandoffButton } from "@/components/skills/MemberHandoffButton";
 import { serverFetch } from "@/lib/auth";
-import type { SkillAtlasPayload } from "@/lib/api";
+import type {
+  HandoffListPayload,
+  SkillAtlasPayload,
+  SuccessorInheritedPayload,
+} from "@/lib/api";
 
 // /projects/[id]/skills — the group's capability atlas.
 //
@@ -49,6 +53,24 @@ export default async function SkillsAtlasPage({
 
   const isOwner = payload.viewer_scope === "owner";
   const memberCount = payload.members.length;
+
+  // Polish: surface Stage 3 handoff artifacts on this page.
+  //   * Owners see the full handoff history (draft + finalized).
+  //   * Non-owners (self view) see what routines they themselves have
+  //     inherited as a successor on this project. "Nothing yet" is a
+  //     legitimate and common state.
+  const [handoffList, inherited] = await Promise.all([
+    isOwner
+      ? serverFetch<HandoffListPayload>(
+          `/api/projects/${projectId}/handoffs`,
+        ).catch<HandoffListPayload | null>(() => null)
+      : Promise.resolve<HandoffListPayload | null>(null),
+    !isOwner && payload.members[0]
+      ? serverFetch<SuccessorInheritedPayload>(
+          `/api/projects/${projectId}/handoffs/for/${payload.members[0].user_id}`,
+        ).catch<SuccessorInheritedPayload | null>(() => null)
+      : Promise.resolve<SuccessorInheritedPayload | null>(null),
+  ]);
 
   return (
     <main
@@ -109,6 +131,14 @@ export default async function SkillsAtlasPage({
           />
         ))}
       </div>
+
+      {isOwner && handoffList ? (
+        <HandoffHistoryBlock list={handoffList} t={t} />
+      ) : null}
+
+      {!isOwner && inherited && inherited.inherited_routines.length > 0 ? (
+        <InheritedBlock payload={inherited} t={t} />
+      ) : null}
     </main>
   );
 }
@@ -499,6 +529,212 @@ function SkillSection({
         </em>
       )}
     </div>
+  );
+}
+
+function HandoffHistoryBlock({
+  list,
+  t,
+}: {
+  list: HandoffListPayload;
+  t: (key: string, values?: Record<string, string | number>) => string;
+}) {
+  const rows = list.handoffs;
+  return (
+    <section
+      style={{
+        marginTop: 32,
+        padding: "16px 20px",
+        background: "var(--wg-surface-raised)",
+        border: "1px solid var(--wg-line)",
+        borderRadius: 8,
+      }}
+    >
+      <h2
+        style={{
+          margin: "0 0 10px",
+          fontSize: 12,
+          fontFamily: "var(--wg-font-mono)",
+          textTransform: "uppercase",
+          letterSpacing: "0.08em",
+          color: "var(--wg-ink-faint)",
+        }}
+      >
+        {t("handoff.existingHeader")}
+      </h2>
+      {rows.length === 0 ? (
+        <em
+          style={{
+            fontSize: 12,
+            color: "var(--wg-ink-faint)",
+          }}
+        >
+          {t("handoff.noExisting")}
+        </em>
+      ) : (
+        <ul
+          style={{
+            margin: 0,
+            padding: 0,
+            listStyle: "none",
+            display: "flex",
+            flexDirection: "column",
+            gap: 8,
+          }}
+        >
+          {rows.map((h) => (
+            <li
+              key={h.id}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                padding: "8px 12px",
+                background: "var(--wg-surface)",
+                border: "1px solid var(--wg-line-soft, var(--wg-line))",
+                borderRadius: 6,
+                fontSize: 13,
+                gap: 10,
+                flexWrap: "wrap",
+              }}
+            >
+              <div>
+                <strong>{h.from_display_name}</strong>
+                <span style={{ color: "var(--wg-ink-soft)", margin: "0 8px" }}>
+                  →
+                </span>
+                <strong>{h.to_display_name}</strong>
+                <span
+                  style={{
+                    marginLeft: 10,
+                    fontFamily: "var(--wg-font-mono)",
+                    fontSize: 11,
+                    color: "var(--wg-ink-faint)",
+                  }}
+                >
+                  · {h.role_skills_transferred.length} role ·{" "}
+                  {h.profile_skill_routines.length} routines
+                </span>
+              </div>
+              <span
+                style={{
+                  padding: "2px 8px",
+                  background:
+                    h.status === "finalized"
+                      ? "rgba(77,122,74,0.15)"
+                      : "var(--wg-amber-soft)",
+                  color:
+                    h.status === "finalized"
+                      ? "var(--wg-ok, #2f8f4f)"
+                      : "var(--wg-amber)",
+                  border: `1px solid ${
+                    h.status === "finalized"
+                      ? "var(--wg-ok, #2f8f4f)"
+                      : "var(--wg-amber)"
+                  }`,
+                  borderRadius: 12,
+                  fontSize: 10,
+                  fontFamily: "var(--wg-font-mono)",
+                  textTransform: "uppercase",
+                  letterSpacing: "0.06em",
+                }}
+              >
+                {h.status === "finalized"
+                  ? t("handoff.statusFinalized")
+                  : t("handoff.statusDraft")}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+function InheritedBlock({
+  payload,
+  t,
+}: {
+  payload: SuccessorInheritedPayload;
+  t: (key: string, values?: Record<string, string | number>) => string;
+}) {
+  return (
+    <section
+      style={{
+        marginTop: 32,
+        padding: "16px 20px",
+        background: "var(--wg-accent-soft)",
+        border: "1px solid var(--wg-accent-ring, var(--wg-accent))",
+        borderRadius: 8,
+      }}
+    >
+      <h2
+        style={{
+          margin: "0 0 6px",
+          fontSize: 12,
+          fontFamily: "var(--wg-font-mono)",
+          textTransform: "uppercase",
+          letterSpacing: "0.08em",
+          color: "var(--wg-accent)",
+        }}
+      >
+        {t("inherited.header")}
+      </h2>
+      <p
+        style={{
+          margin: "0 0 10px",
+          fontSize: 12,
+          color: "var(--wg-ink-soft)",
+          lineHeight: 1.55,
+        }}
+      >
+        {t("inherited.subtitle", {
+          count: payload.predecessors.length,
+        })}
+      </p>
+      {payload.inherited_role_skills.length > 0 ? (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginBottom: 10 }}>
+          {payload.inherited_role_skills.map((s) => (
+            <SkillChip key={`role-${s}`} label={s} />
+          ))}
+        </div>
+      ) : null}
+      <ul
+        style={{
+          margin: 0,
+          padding: 0,
+          listStyle: "none",
+          display: "flex",
+          flexDirection: "column",
+          gap: 6,
+        }}
+      >
+        {payload.inherited_routines.map((r) => (
+          <li
+            key={r.skill}
+            style={{
+              padding: "6px 10px",
+              background: "var(--wg-surface)",
+              border: "1px solid var(--wg-line-soft, var(--wg-line))",
+              borderRadius: 6,
+              fontSize: 12,
+              color: "var(--wg-ink-soft)",
+            }}
+          >
+            <code
+              style={{
+                fontFamily: "var(--wg-font-mono)",
+                color: "var(--wg-accent)",
+                marginRight: 8,
+              }}
+            >
+              {r.skill}
+            </code>
+            {r.summary}
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 
