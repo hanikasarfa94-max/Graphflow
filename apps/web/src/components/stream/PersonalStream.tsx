@@ -50,6 +50,7 @@ import {
 
 import { HumanTurnCard } from "./cards";
 import { DriftCard } from "./DriftCard";
+import { SlaCard } from "./SlaCard";
 import { EdgeReplyCard } from "./EdgeReplyCard";
 import { MembraneCard } from "./MembraneCard";
 import { RehearsalPreview } from "./RehearsalPreview";
@@ -523,6 +524,12 @@ export function PersonalStream({ projectId, currentUserId, members }: Props) {
             onDiscuss={handleFollowUp}
           />
         );
+      case "sla-alert":
+        // Sprint 2b. SlaService fired because a commitment the viewer
+        // owns crossed DUE-SOON or OVERDUE band. Body is a JSON
+        // payload the card parses to render band + headline +
+        // target_date + humanized "due in 4h" / "overdue 2d".
+        return <SlaCard key={m.id} message={m} />;
       case "membrane-signal":
         // vision.md §5.12. The membrane classifier ingested an external
         // signal (git commit, steam review, rss item, forwarded link)

@@ -474,12 +474,30 @@
       "headlineLabel": "Promise",
       "headlinePlaceholder": "e.g. Ship Stellar Drift by Apr 30",
       "targetDateLabel": "Target date (optional)",
+      "slaLabel": "Escalation window (optional)",
+      "slaHint": "Nudge the owner when this window remains before the target.",
+      "slaOptionNone": "None",
+      "slaOption1d": "24 hours",
+      "slaOption3d": "3 days",
+      "slaOption7d": "7 days",
+      "slaOption14d": "14 days",
       "metricLabel": "How will we know (optional)",
       "metricPlaceholder": "e.g. all 10 tasks shipped, no critical risks open",
       "submit": "Commit",
       "submitting": "Committing…",
       "cancel": "Cancel",
       "errorGeneric": "Couldn't save the commitment"
+    },
+    "sla": {
+      "ok": "on track",
+      "dueSoon": "due {when}",
+      "overdue": "overdue {when}",
+      "hours": "{n}h",
+      "days": "{n}d"
+    },
+    "licenseBanner": {
+      "taskScoped": "Restricted view — you see only your assigned work. Contact the project owner for broader access.",
+      "observer": "Observer view — read-only access."
     },
     "search": {
       "placeholder": "Search nodes",

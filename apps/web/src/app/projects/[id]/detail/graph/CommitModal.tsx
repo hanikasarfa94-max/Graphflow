@@ -28,6 +28,9 @@ export function CommitModal({ projectId, onClose, onCreated }: Props) {
   const [headline, setHeadline] = useState("");
   const [targetDate, setTargetDate] = useState(""); // datetime-local
   const [metric, setMetric] = useState("");
+  // sla: "" (none) | "86400" | "259200" | "604800" | "1209600"
+  //      (none / 1d / 3d / 7d / 14d)
+  const [sla, setSla] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const headlineRef = useRef<HTMLInputElement>(null);
@@ -63,10 +66,15 @@ export function CommitModal({ projectId, onClose, onCreated }: Props) {
         const d = new Date(targetDate);
         if (!isNaN(d.valueOf())) isoTarget = d.toISOString();
       }
+      const slaSeconds =
+        sla && Number.isFinite(parseInt(sla, 10))
+          ? parseInt(sla, 10)
+          : undefined;
       const { commitment } = await createCommitment(projectId, {
         headline: headline.trim(),
         target_date: isoTarget,
         metric: metric.trim() || undefined,
+        sla_window_seconds: slaSeconds,
       });
       onCreated(commitment);
     } catch (e) {
@@ -195,6 +203,48 @@ export function CommitModal({ projectId, onClose, onCreated }: Props) {
               fontFamily: "var(--wg-font-sans)",
             }}
           />
+        </label>
+
+        <label
+          style={{ display: "flex", flexDirection: "column", gap: 4 }}
+        >
+          <span
+            style={{
+              fontSize: 11,
+              fontFamily: "var(--wg-font-mono)",
+              color: "var(--wg-ink-soft)",
+              textTransform: "uppercase",
+              letterSpacing: "0.06em",
+            }}
+          >
+            {t("slaLabel")}
+          </span>
+          <select
+            value={sla}
+            onChange={(ev) => setSla(ev.target.value)}
+            style={{
+              padding: "8px 10px",
+              fontSize: 14,
+              border: "1px solid var(--wg-line)",
+              borderRadius: 4,
+              background: "var(--wg-surface, #fff)",
+              fontFamily: "var(--wg-font-sans)",
+            }}
+          >
+            <option value="">{t("slaOptionNone")}</option>
+            <option value="86400">{t("slaOption1d")}</option>
+            <option value="259200">{t("slaOption3d")}</option>
+            <option value="604800">{t("slaOption7d")}</option>
+            <option value="1209600">{t("slaOption14d")}</option>
+          </select>
+          <span
+            style={{
+              fontSize: 11,
+              color: "var(--wg-ink-faint)",
+            }}
+          >
+            {t("slaHint")}
+          </span>
         </label>
 
         <label

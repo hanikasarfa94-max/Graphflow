@@ -139,6 +139,10 @@ export interface ProjectState {
   decisions: Decision[];
   delivery: Delivery | null;
   commitments: Commitment[];
+  // Sprint 3c — license-scoped view. Present on every /state response
+  // so the frontend can render a banner when the viewer is seeing a
+  // filtered subgraph. Defaults to "full" when absent (older backend).
+  viewer_license_tier?: "full" | "task_scoped" | "observer";
 }
 
 // ---------- Commitments (Sprint 2a — thesis-commit primitive) ----------
@@ -163,6 +167,8 @@ export interface Commitment {
   scope_ref_id: string | null;
   status: CommitmentStatus;
   source_message_id: string | null;
+  sla_window_seconds: number | null;
+  sla_last_escalated_at: string | null;
   created_at: string | null;
   resolved_at: string | null;
 }
@@ -175,6 +181,7 @@ export interface CreateCommitmentParams {
   scope_ref_kind?: CommitmentScopeKind;
   scope_ref_id?: string;
   source_message_id?: string;
+  sla_window_seconds?: number;
 }
 
 export function createCommitment(

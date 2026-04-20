@@ -216,6 +216,27 @@ async def get_project_state(
         project_id=project_id, limit=100
     )
 
+    # Sprint 3c — license-scoped view. A member's license_tier lives
+    # on the ProjectMember row; "full" means see everything, while
+    # "task_scoped" filters the /state payload to just the viewer's
+    # assigned tasks and the entities they anchor to. "observer" is
+    # not filtered here (write-side enforcement is elsewhere — the
+    # v1 expectation is observers see everything read-only).
+    viewer_tier = "full"
+    for m in members:
+        if m.get("user_id") == user.id:
+            viewer_tier = str(m.get("license_tier") or "full")
+            break
+
+    if viewer_tier == "task_scoped":
+        graph, plan, assignments, commitments = _apply_task_scope(
+            viewer_user_id=user.id,
+            graph=graph,
+            plan=plan,
+            assignments=assignments,
+            commitments=commitments,
+        )
+
     return {
         "project": {"id": project.id, "title": project.title},
         "requirement_version": requirement_version,
@@ -231,4 +252,96 @@ async def get_project_state(
         "decisions": decisions,
         "delivery": delivery,
         "commitments": commitments,
+        "viewer_license_tier": viewer_tier,
     }
+
+
+def _apply_task_scope(
+    *,
+    viewer_user_id: str,
+    graph: dict[str, Any],
+    plan: dict[str, Any],
+    assignments: list[dict[str, Any]],
+    commitments: list[dict[str, Any]],
+) -> tuple[
+    dict[str, Any],
+    dict[str, Any],
+    list[dict[str, Any]],
+    list[dict[str, Any]],
+]:
+    """Filter the /state payload to the subgraph a task_scoped member
+    is allowed to see. Keeps goals/risks/constraints (environmental
+    context that every contributor benefits from) and decisions
+    (audit), drops tasks + deliverables + dependencies + commitments
+    that don't anchor to the viewer's assigned work.
+
+    Rules:
+      * Tasks: only those assigned to the viewer (AssignmentRow.active).
+      * Deliverables: only those referenced by visible tasks, plus any
+        that the viewer's own assigned tasks belong to.
+      * Dependencies: only edges where both endpoints are visible.
+      * Milestones: keep all (top-level dates are non-sensitive).
+      * Assignments: only the viewer's own.
+      * Commitments: only those with no scope_ref OR scope_ref anchors
+        at a visible entity (task/deliverable/goal).
+
+    v1 leaves decisions/conflicts untouched — they're audit rows
+    that a task_scoped contractor still needs to see to understand
+    why the plan looks the way it does. v2 may tighten this.
+    """
+    visible_task_ids = {
+        a["task_id"]
+        for a in assignments
+        if a.get("user_id") == viewer_user_id
+        and bool(a.get("active", True))
+    }
+    visible_tasks = [
+        t for t in plan.get("tasks", []) if t["id"] in visible_task_ids
+    ]
+    visible_deliverable_ids = {
+        t["deliverable_id"]
+        for t in visible_tasks
+        if t.get("deliverable_id")
+    }
+    visible_goal_ids = {g["id"] for g in graph.get("goals", [])}
+    visible_dependencies = [
+        d
+        for d in plan.get("dependencies", [])
+        if d["from_task_id"] in visible_task_ids
+        and d["to_task_id"] in visible_task_ids
+    ]
+    visible_deliverables = [
+        d
+        for d in graph.get("deliverables", [])
+        if d["id"] in visible_deliverable_ids
+    ]
+    # Viewer's own assignments only.
+    visible_assignments = [
+        a for a in assignments if a.get("user_id") == viewer_user_id
+    ]
+    # Commitments: unscoped + anchored-to-visible.
+    anchored_visible_ids = (
+        visible_task_ids | visible_deliverable_ids | visible_goal_ids
+    )
+    visible_commitments = [
+        c
+        for c in commitments
+        if c.get("scope_ref_id") is None
+        or c.get("scope_ref_id") in anchored_visible_ids
+    ]
+
+    filtered_graph = {
+        **graph,
+        "deliverables": visible_deliverables,
+    }
+    filtered_plan = {
+        **plan,
+        "tasks": visible_tasks,
+        "dependencies": visible_dependencies,
+    }
+    return (
+        filtered_graph,
+        filtered_plan,
+        visible_assignments,
+        visible_commitments,
+    )

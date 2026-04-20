@@ -155,6 +155,44 @@ function signature(
   return parts.join("|");
 }
 
+// Short, humanized "due in 4h" / "overdue 2d" badge for a commitment
+// node's subtitle. Returns null when the commitment has no SLA window
+// or no target_date (can't measure), when it's already resolved, or
+// when it's in the safe band (more than sla_window before target).
+// Intentionally mirrors SlaService's band logic so the client can
+// render honestly without another round-trip. If server and client
+// ever diverge the server's signal remains the source of truth — the
+// badge is the visual shortcut.
+function computeSlaBadge(
+  status: string,
+  targetDateIso: string | null,
+  slaWindowSeconds: number | null,
+): string | null {
+  if (status !== "open") return null;
+  if (!targetDateIso || !slaWindowSeconds) return null;
+  const target = new Date(targetDateIso).valueOf();
+  if (Number.isNaN(target)) return null;
+  const now = Date.now();
+  const remainingMs = target - now;
+  const remainingSec = Math.round(remainingMs / 1000);
+  if (remainingSec < 0) {
+    return `overdue ${humanizeDuration(-remainingSec)}`;
+  }
+  if (remainingSec <= slaWindowSeconds) {
+    return `due ${humanizeDuration(remainingSec)}`;
+  }
+  return null;
+}
+
+function humanizeDuration(totalSeconds: number): string {
+  const minutes = Math.round(totalSeconds / 60);
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.round(totalSeconds / 3600);
+  if (hours < 48) return `${hours}h`;
+  const days = Math.round(totalSeconds / 86400);
+  return `${days}d`;
+}
+
 // Pull a short, legible headline from a raw Decision. Prefer custom_text
 // (the resolver's own phrasing) over the LLM rationale, which is often a
 // full paragraph.
@@ -724,6 +762,17 @@ export function GraphCanvas({
       if (cm.status && cm.status !== "open") {
         subtitleParts.push(cm.status);
       }
+      // SLA badge suffix: computed client-side to stay honest with the
+      // live wall clock. The server-side SlaService fires escalation
+      // messages when a commitment actually crosses a band, but the
+      // badge below is just a visual state projection — it updates on
+      // every re-render without waiting for an escalation event.
+      const slaBadge = computeSlaBadge(
+        cm.status,
+        cm.target_date,
+        cm.sla_window_seconds,
+      );
+      if (slaBadge) subtitleParts.push(slaBadge);
       const subtitle = subtitleParts.join(" · ") || undefined;
       rawNodes.push({
         id,
@@ -997,6 +1046,13 @@ export function GraphCanvas({
 
   const isPast = cursorTs !== null;
   const isOrgMode = viewMode === "org";
+  const viewerTier = state.viewer_license_tier ?? "full";
+  const licenseBannerKey =
+    viewerTier === "task_scoped"
+      ? "licenseBanner.taskScoped"
+      : viewerTier === "observer"
+        ? "licenseBanner.observer"
+        : null;
 
   return (
     <div
@@ -1008,6 +1064,32 @@ export function GraphCanvas({
         flexDirection: "column",
       }}
     >
+      {/* License-scope banner — shows when the viewer is on a
+          restricted tier so they understand why their /state is
+          filtered. Sits above the timeline strip so it's the first
+          thing their eye picks up when landing on the graph. */}
+      {licenseBannerKey ? (
+        <div
+          role="status"
+          data-testid="license-banner"
+          style={{
+            padding: "6px 12px",
+            background: "var(--wg-amber-soft)",
+            color: "var(--wg-ink)",
+            border: "1px solid var(--wg-amber)",
+            borderRadius: "var(--wg-radius-sm, 4px)",
+            margin: "4px 8px 0",
+            fontSize: 12,
+            fontFamily: "var(--wg-font-mono)",
+            flex: "0 0 auto",
+          }}
+        >
+          {/* Use any-string lookup so older locales without the keys
+              fall through without crashing — useTranslations returns
+              the key itself on miss. */}
+          {t(licenseBannerKey)}
+        </div>
+      ) : null}
       {/* Timeline scrubber — rendered above the canvas so the user
           keeps the "when am I looking at?" context in peripheral view.
           Falls back to null when the timeline metadata hasn't loaded

@@ -474,12 +474,30 @@
       "headlineLabel": "承诺内容",
       "headlinePlaceholder": "例如:4 月 30 日之前上线星际漂移",
       "targetDateLabel": "目标日期(可选)",
+      "slaLabel": "提醒窗口(可选)",
+      "slaHint": "当距离目标日只剩该窗口时,会推送给责任人。",
+      "slaOptionNone": "不提醒",
+      "slaOption1d": "24 小时",
+      "slaOption3d": "3 天",
+      "slaOption7d": "7 天",
+      "slaOption14d": "14 天",
       "metricLabel": "如何判断达成(可选)",
       "metricPlaceholder": "例如:10 项任务全部完成,且无严重风险",
       "submit": "提交承诺",
       "submitting": "提交中…",
       "cancel": "取消",
       "errorGeneric": "无法保存承诺"
+    },
+    "sla": {
+      "ok": "进度正常",
+      "dueSoon": "{when} 到期",
+      "overdue": "已逾期 {when}",
+      "hours": "{n} 小时",
+      "days": "{n} 天"
+    },
+    "licenseBanner": {
+      "taskScoped": "受限视图 —— 只显示你被分配的工作。如需更多权限,请联系项目负责人。",
+      "observer": "观察者视图 —— 只读访问。"
     },
     "search": {
       "placeholder": "搜索节点",
