@@ -65,6 +65,23 @@ function isKbItem(x: unknown): x is { title: string; snippet?: string; id?: stri
   );
 }
 
+// why_chain rows are a superset of isDecision — they also carry `affected`
+// (array of {id, kind, title}) and optional `conflict_summary` /
+// `resolver_name`. We check these first so the richer renderer wins.
+function isWhyChainRow(x: unknown): x is {
+  id: string;
+  headline?: string;
+  rationale?: string;
+  conflict_summary?: string | null;
+  affected?: { id: string; kind: string; title: string }[];
+  resolver_name?: string | null;
+  created_at?: string | null;
+} {
+  if (typeof x !== "object" || x === null) return false;
+  const o = x as Record<string, unknown>;
+  return "affected" in o && Array.isArray(o.affected);
+}
+
 function isDecision(
   x: unknown,
 ): x is { headline?: string; rationale?: string; id?: string } {
@@ -133,6 +150,104 @@ function FormattedResult({ data }: { data: unknown }) {
                     }}
                   >
                     {r.snippet}
+                  </div>
+                )}
+              </li>
+            );
+          }
+          if (isWhyChainRow(row)) {
+            const r = row;
+            const when = r.created_at
+              ? relativeTime(r.created_at)
+              : null;
+            return (
+              <li
+                key={i}
+                style={{
+                  padding: "8px 12px",
+                  background: "var(--wg-accent-soft, #fdf4ec)",
+                  border: "1px solid var(--wg-accent-ring, var(--wg-accent))",
+                  borderRadius: "var(--wg-radius-sm, 4px)",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 4,
+                }}
+              >
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "baseline",
+                    gap: 8,
+                  }}
+                >
+                  <strong
+                    style={{
+                      fontSize: 12,
+                      color: "var(--wg-accent)",
+                      lineHeight: 1.3,
+                    }}
+                  >
+                    ⚡ {r.headline ?? r.rationale ?? "(decision)"}
+                  </strong>
+                  {when && (
+                    <span
+                      style={{
+                        fontSize: 10,
+                        color: "var(--wg-ink-faint)",
+                        fontFamily: "var(--wg-font-mono)",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {when}
+                      {r.resolver_name ? ` · ${r.resolver_name}` : ""}
+                    </span>
+                  )}
+                </div>
+                {r.conflict_summary && (
+                  <div
+                    style={{
+                      fontSize: 11,
+                      color: "var(--wg-ink-soft)",
+                      fontStyle: "italic",
+                      borderLeft:
+                        "2px solid var(--wg-line, #e6e3db)",
+                      paddingLeft: 8,
+                    }}
+                  >
+                    {r.conflict_summary}
+                  </div>
+                )}
+                {r.affected && r.affected.length > 0 && (
+                  <div
+                    style={{
+                      display: "flex",
+                      flexWrap: "wrap",
+                      gap: 4,
+                      marginTop: 2,
+                    }}
+                  >
+                    {r.affected.map((a) => (
+                      <span
+                        key={a.id}
+                        title={`${a.kind}: ${a.title}`}
+                        style={{
+                          fontSize: 10,
+                          fontFamily: "var(--wg-font-mono)",
+                          color: "var(--wg-ink-soft)",
+                          padding: "1px 6px",
+                          background: "var(--wg-surface-raised, #fff)",
+                          border: "1px solid var(--wg-line)",
+                          borderRadius: 8,
+                          maxWidth: 200,
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {a.kind}: {a.title || a.id.slice(0, 6)}
+                      </span>
+                    ))}
                   </div>
                 )}
               </li>
