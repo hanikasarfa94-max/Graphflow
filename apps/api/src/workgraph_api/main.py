@@ -458,6 +458,22 @@ async def lifespan(app: FastAPI):
     app.state.skills_service = skills_service
     app.state.membrane_service = membrane_service
     app.state.membrane_agent = membrane_agent
+
+    # Drift auto-trigger (Sprint 1c). Subscribe drift_service to the
+    # event types that most reliably indicate "the project's surface
+    # has moved since the last drift check." Rate-limit inside
+    # DriftService (60s per project) handles burst protection, so we
+    # can subscribe liberally without blowing LLM cost. Fire-and-forget
+    # via EventBus.subscribe; bad handlers are swallowed with a log.
+    async def _drift_on_event(payload: dict[str, object]) -> None:
+        project_id = payload.get("project_id")
+        if not isinstance(project_id, str):
+            return
+        await drift_service.check_project(project_id=project_id)
+
+    event_bus.subscribe("decision.applied", _drift_on_event)
+    event_bus.subscribe("delivery.generated", _drift_on_event)
+
     _log.info("api boot ok", extra={"database_url": _sanitize(settings.database_url)})
     try:
         yield
