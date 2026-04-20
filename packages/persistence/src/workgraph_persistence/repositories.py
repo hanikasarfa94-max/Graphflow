@@ -1992,6 +1992,7 @@ class CommitmentRepository:
         scope_ref_kind: str | None = None,
         scope_ref_id: str | None = None,
         source_message_id: str | None = None,
+        sla_window_seconds: int | None = None,
     ) -> CommitmentRow:
         row = CommitmentRow(
             id=_new_id(),
@@ -2004,10 +2005,43 @@ class CommitmentRepository:
             scope_ref_kind=scope_ref_kind,
             scope_ref_id=scope_ref_id,
             source_message_id=source_message_id,
+            sla_window_seconds=sla_window_seconds,
         )
         self._session.add(row)
         await self._session.flush()
         return row
+
+    async def mark_escalated(
+        self,
+        commitment_id: str,
+        *,
+        at: datetime | None = None,
+    ) -> CommitmentRow | None:
+        """Stamp sla_last_escalated_at. Called by the SlaService after
+        a ladder fan-out fires so subsequent event-triggered sweeps
+        don't re-page the owner within the throttle window."""
+        row = await self.get(commitment_id)
+        if row is None:
+            return None
+        row.sla_last_escalated_at = at or datetime.now(timezone.utc)
+        await self._session.flush()
+        return row
+
+    async def list_open_for_project(
+        self, project_id: str, *, limit: int = 200
+    ) -> list[CommitmentRow]:
+        """Scoped helper for SlaService sweeps — skip resolved rows
+        cheaply without building a general list-filter API."""
+        stmt = (
+            select(CommitmentRow)
+            .where(
+                CommitmentRow.project_id == project_id,
+                CommitmentRow.status == "open",
+            )
+            .order_by(CommitmentRow.created_at.desc())
+            .limit(limit)
+        )
+        return list((await self._session.execute(stmt)).scalars().all())
 
     async def get(self, commitment_id: str) -> CommitmentRow | None:
         return (

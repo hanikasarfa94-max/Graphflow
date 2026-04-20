@@ -80,6 +80,12 @@ def _row_to_dict(row: CommitmentRow) -> dict[str, Any]:
         "scope_ref_id": row.scope_ref_id,
         "status": row.status,
         "source_message_id": row.source_message_id,
+        "sla_window_seconds": row.sla_window_seconds,
+        "sla_last_escalated_at": (
+            row.sla_last_escalated_at.isoformat()
+            if row.sla_last_escalated_at
+            else None
+        ),
         "created_at": (
             row.created_at.isoformat() if row.created_at else None
         ),
@@ -116,6 +122,7 @@ class CommitmentService:
         scope_ref_kind: str | None = None,
         scope_ref_id: str | None = None,
         source_message_id: str | None = None,
+        sla_window_seconds: int | None = None,
     ) -> dict[str, Any]:
         # Semantic validation on scope anchor first — cheap rejection
         # before we touch the DB.
@@ -139,6 +146,19 @@ class CommitmentService:
             raise CommitmentValidationError(
                 "headline must be 3..500 chars"
             )
+
+        # SLA window: positive int, capped at 365 days so a rounding
+        # error or "-1" doesn't instantly page everyone. Null = no
+        # tracking.
+        if sla_window_seconds is not None:
+            if (
+                not isinstance(sla_window_seconds, int)
+                or sla_window_seconds <= 0
+                or sla_window_seconds > 365 * 24 * 3600
+            ):
+                raise CommitmentValidationError(
+                    "sla_window_seconds must be 1..31_536_000"
+                )
 
         async with session_scope(self._sessionmaker) as session:
             # Anchor-in-project check. The scope entity must belong to
@@ -178,6 +198,7 @@ class CommitmentService:
                 scope_ref_kind=scope_ref_kind,
                 scope_ref_id=scope_ref_id,
                 source_message_id=source_message_id,
+                sla_window_seconds=sla_window_seconds,
             )
             payload = _row_to_dict(row)
 

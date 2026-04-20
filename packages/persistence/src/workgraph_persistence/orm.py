@@ -1056,6 +1056,20 @@ class CommitmentRow(Base):
     source_message_id: Mapped[str | None] = mapped_column(
         ForeignKey("messages.id", ondelete="SET NULL"), nullable=True
     )
+    # SLA window (seconds). When set, the commitment is considered
+    # "due-soon" during the final `sla_window_seconds` before
+    # `target_date`, and "overdue" after. Escalation fans out signals
+    # when the commitment enters either band. Null = no SLA tracking;
+    # the commitment still exists but doesn't page anyone.
+    sla_window_seconds: Mapped[int | None] = mapped_column(
+        Integer, nullable=True
+    )
+    # Last time the escalation ladder fired on this commitment, across
+    # any band. Used to throttle: we don't re-page the owner every time
+    # a graph event lands if we already paged them within the window.
+    sla_last_escalated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_utcnow
     )

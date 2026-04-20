@@ -39,6 +39,13 @@ class CreateCommitmentRequest(BaseModel):
     ) = None
     scope_ref_id: str | None = Field(default=None, max_length=36)
     source_message_id: str | None = Field(default=None, max_length=36)
+    # SLA window (seconds). When set + target_date is set, escalation
+    # fires during the final `sla_window_seconds` before target_date
+    # (due-soon band) and after target_date (overdue band). Capped at
+    # one year; null = no SLA tracking. See CommitmentRow docstring.
+    sla_window_seconds: int | None = Field(
+        default=None, ge=1, le=365 * 24 * 3600
+    )
 
     @field_validator("scope_ref_id")
     @classmethod
@@ -100,6 +107,7 @@ async def create_commitment(
             scope_ref_kind=body.scope_ref_kind,
             scope_ref_id=body.scope_ref_id,
             source_message_id=body.source_message_id,
+            sla_window_seconds=body.sla_window_seconds,
         )
     except CommitmentValidationError as e:
         raise HTTPException(status_code=422, detail=str(e))

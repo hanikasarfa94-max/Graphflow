@@ -87,6 +87,7 @@ from workgraph_api.services import (
     RenderService,
     RoutingService,
     SkillsService,
+    SlaService,
     StreamService,
 )
 from workgraph_api.settings import load_settings
@@ -398,6 +399,7 @@ async def lifespan(app: FastAPI):
     )
     routing_service = RoutingService(sessionmaker, event_bus, stream_service)
     commitment_service = CommitmentService(sessionmaker, event_bus)
+    sla_service = SlaService(sessionmaker, event_bus, stream_service)
     membrane_service = MembraneService(
         sessionmaker,
         event_bus,
@@ -462,6 +464,7 @@ async def lifespan(app: FastAPI):
     app.state.membrane_service = membrane_service
     app.state.membrane_agent = membrane_agent
     app.state.commitment_service = commitment_service
+    app.state.sla_service = sla_service
 
     # Drift auto-trigger (Sprint 1c). Subscribe drift_service to the
     # event types that most reliably indicate "the project's surface
@@ -477,6 +480,25 @@ async def lifespan(app: FastAPI):
 
     event_bus.subscribe("decision.applied", _drift_on_event)
     event_bus.subscribe("delivery.generated", _drift_on_event)
+
+    # SLA auto-trigger (Sprint 2b). Same pattern as drift — sweep a
+    # project's open commitments whenever its graph surface moves,
+    # plus when a new commitment is created (catches "created with
+    # a past target_date"). Per-commitment throttle lives on
+    # CommitmentRow.sla_last_escalated_at (see services/sla.py) so
+    # bursts of events don't spam owners. commitment.created fires
+    # even when there's no target_date — SlaService skips those
+    # cheaply.
+    async def _sla_on_event(payload: dict[str, object]) -> None:
+        project_id = payload.get("project_id")
+        if not isinstance(project_id, str):
+            return
+        await sla_service.check_project(project_id=project_id)
+
+    event_bus.subscribe("decision.applied", _sla_on_event)
+    event_bus.subscribe("delivery.generated", _sla_on_event)
+    event_bus.subscribe("commitment.created", _sla_on_event)
+    event_bus.subscribe("commitment.status_changed", _sla_on_event)
 
     _log.info("api boot ok", extra={"database_url": _sanitize(settings.database_url)})
     try:
