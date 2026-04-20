@@ -551,6 +551,49 @@
       "sharedMembers": "{n} shared"
     }
   },
+  "nodeDetail": {
+    "backToGraph": "back to graph",
+    "openInGraph": "open in graph",
+    "unavailable": "node unavailable — not a project member or fetch failed",
+    "kinds": {
+      "task": "task",
+      "decision": "decision",
+      "risk": "risk",
+      "deliverable": "deliverable",
+      "goal": "goal",
+      "milestone": "milestone",
+      "commitment": "commitment",
+      "conflict": "conflict"
+    },
+    "sections": {
+      "basics": "basics",
+      "description": "description",
+      "acceptance": "acceptance criteria",
+      "rationale": "rationale",
+      "originatingConflict": "originating conflict",
+      "touched": "entities this decision touched",
+      "dependsOn": "depends on",
+      "blocks": "blocks",
+      "boundCommitments": "commitments scoped here",
+      "milestones": "milestones",
+      "touchedByDecisions": "decisions that touched this",
+      "anchor": "scope anchor"
+    },
+    "rows": {
+      "status": "status",
+      "severity": "severity",
+      "kind": "kind",
+      "target_date": "target date",
+      "rule": "rule",
+      "assignee": "owner",
+      "estimate": "estimate",
+      "deliverable": "deliverable",
+      "when": "when",
+      "target": "target",
+      "slaWindow": "SLA window",
+      "metric": "metric"
+    }
+  },
   "detail": {
     "tasks": {
       "title": "Tasks",

@@ -551,6 +551,49 @@
       "sharedMembers": "共享 {n} 人"
     }
   },
+  "nodeDetail": {
+    "backToGraph": "返回图谱",
+    "openInGraph": "在图谱中打开",
+    "unavailable": "节点不可用 —— 你不是项目成员或获取失败",
+    "kinds": {
+      "task": "任务",
+      "decision": "决策",
+      "risk": "风险",
+      "deliverable": "交付物",
+      "goal": "目标",
+      "milestone": "里程碑",
+      "commitment": "承诺",
+      "conflict": "冲突"
+    },
+    "sections": {
+      "basics": "基本信息",
+      "description": "描述",
+      "acceptance": "验收标准",
+      "rationale": "理由",
+      "originatingConflict": "源起冲突",
+      "touched": "该决策影响的实体",
+      "dependsOn": "依赖",
+      "blocks": "阻塞",
+      "boundCommitments": "绑定到此的承诺",
+      "milestones": "里程碑",
+      "touchedByDecisions": "相关决策",
+      "anchor": "承诺锚点"
+    },
+    "rows": {
+      "status": "状态",
+      "severity": "严重度",
+      "kind": "类型",
+      "target_date": "目标日期",
+      "rule": "规则",
+      "assignee": "负责人",
+      "estimate": "预估",
+      "deliverable": "交付物",
+      "when": "时间",
+      "target": "目标",
+      "slaWindow": "SLA 窗口",
+      "metric": "衡量指标"
+    }
+  },
   "detail": {
     "tasks": {
       "title": "任务",
