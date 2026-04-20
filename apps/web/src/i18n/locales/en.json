@@ -512,6 +512,19 @@
       "markerDecision": "Decision",
       "markerConflict": "Conflict",
       "markerTransition": "Status change"
+    },
+    "org": {
+      "toggle": {
+        "graph": "Graph",
+        "org": "Org"
+      },
+      "youAreHere": "You are here",
+      "members": "{n} members",
+      "openRisks": "{n} open risk",
+      "noPeers": "No peer projects yet — you're only in this one.",
+      "lastActivity": "Last activity {time}",
+      "never": "no activity yet",
+      "sharedMembers": "{n} shared"
     }
   },
   "detail": {

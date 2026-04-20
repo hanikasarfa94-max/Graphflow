@@ -512,6 +512,19 @@
       "markerDecision": "决策",
       "markerConflict": "冲突",
       "markerTransition": "状态变化"
+    },
+    "org": {
+      "toggle": {
+        "graph": "图谱",
+        "org": "组织"
+      },
+      "youAreHere": "你在这里",
+      "members": "{n} 位成员",
+      "openRisks": "{n} 个未解决风险",
+      "noPeers": "暂无其他项目 —— 你只在这一个里。",
+      "lastActivity": "最近活动:{time}",
+      "never": "暂无活动",
+      "sharedMembers": "共享 {n} 人"
     }
   },
   "detail": {

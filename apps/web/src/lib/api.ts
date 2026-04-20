@@ -535,6 +535,43 @@ export function fetchTimeline(
   });
 }
 
+// ---------- Org graph (Sprint 3a) ----------
+
+// The org-graph payload is the "meta-graph" above a single project:
+// the center is whatever project the user is currently viewing; peers
+// are the other projects the user belongs to; edges link center ↔ peer
+// when those projects share at least one member. Backend lives in
+// apps/api/src/workgraph_api/services/org_graph.py — keep this type in
+// lockstep with the dict returned there.
+export interface OrgGraphPeer {
+  id: string;
+  title: string;
+  role: string;
+  member_count: number;
+  open_risks: number;
+  last_activity_at: string | null;
+}
+
+export interface OrgGraphEdge {
+  from_project_id: string;
+  to_project_id: string;
+  // "shared_member" in v1; the schema is open so v2 can add
+  // "shared_decision" without breaking existing clients.
+  kind: string;
+  weight: number;
+  shared_users: string[];
+}
+
+export interface OrgGraphPayload {
+  center: { id: string; title: string };
+  peers: OrgGraphPeer[];
+  edges: OrgGraphEdge[];
+}
+
+export function fetchOrgGraph(projectId: string): Promise<OrgGraphPayload> {
+  return api<OrgGraphPayload>(`/api/projects/${projectId}/org-graph`);
+}
+
 // ---------- Personal stream (Phase N) ----------
 
 // Messages posted into a user's personal project stream. The backend

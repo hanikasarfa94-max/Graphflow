@@ -17,6 +17,7 @@ from sqlalchemy import select
 from workgraph_api.deps import require_user
 from workgraph_api.services import AuthenticatedUser, ProjectService
 from workgraph_api.services.graph_replay import GraphReplayService
+from workgraph_api.services.org_graph import org_graph_for_user
 
 router = APIRouter(prefix="/api/projects", tags=["graph"])
 
@@ -251,3 +252,50 @@ async def get_timeline(
             for c in conflicts
         ],
     }
+
+
+# ---- Sprint 3a — cross-project org graph --------------------------------
+
+
+@router.get("/{project_id}/org-graph")
+async def get_org_graph(
+    project_id: str,
+    request: Request,
+    user: AuthenticatedUser = Depends(require_user),
+) -> dict[str, Any]:
+    """Return the cross-project meta-graph for the current user.
+
+    Membership on `{project_id}` gates the call — the landing-page pitch
+    is that zooming out reveals *your* org graph, not "every project
+    every user touches." Peers are strictly the projects the caller
+    belongs to (minus the center).
+
+    The endpoint is deliberately live-only. Time-cursor replay of the
+    org graph is a v2 thought: StatusTransitionRow doesn't cover
+    membership changes so we couldn't reconstruct past membership
+    anyway without a new audit table.
+    """
+    project_service: ProjectService = request.app.state.project_service
+    if not await project_service.is_member(project_id=project_id, user_id=user.id):
+        raise HTTPException(status_code=403, detail="not a project member")
+
+    sessionmaker = request.app.state.sessionmaker
+    async with session_scope(sessionmaker) as session:
+        # Cheap existence check so we return a 404 (not a 200 with an
+        # empty-title center) when the caller passes a bogus id they
+        # happen to also not be a member of. In practice `is_member`
+        # above already filters that out, but the extra guard keeps
+        # the contract explicit.
+        project = (
+            await session.execute(
+                select(ProjectRow).where(ProjectRow.id == project_id)
+            )
+        ).scalar_one_or_none()
+        if project is None:
+            raise HTTPException(status_code=404, detail="project not found")
+
+        return await org_graph_for_user(
+            session,
+            user_id=user.id,
+            center_project_id=project_id,
+        )

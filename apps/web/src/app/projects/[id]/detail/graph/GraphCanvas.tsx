@@ -27,6 +27,7 @@ import {
 } from "@/lib/api";
 
 import { CommitModal } from "./CommitModal";
+import { OrgView } from "./OrgView";
 import { TimelineStrip } from "./TimelineStrip";
 
 // Graph v2 Wave 1 — live, differentiated, searchable.
@@ -431,6 +432,10 @@ export function GraphCanvas({
   } | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [commitModalOpen, setCommitModalOpen] = useState(false);
+  // Sprint 3a — view toggle between the per-project graph and the
+  // cross-project org meta-graph. Purely client state; no URL change
+  // in v1. "graph" is the default so existing bookmarks keep working.
+  const [viewMode, setViewMode] = useState<"graph" | "org">("graph");
 
   const prevSnapshotRef = useRef<SnapshotIndex>(buildSnapshotIndex(initialState));
   const refetchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -991,6 +996,7 @@ export function GraphCanvas({
     : null;
 
   const isPast = cursorTs !== null;
+  const isOrgMode = viewMode === "org";
 
   return (
     <div
@@ -1005,22 +1011,27 @@ export function GraphCanvas({
       {/* Timeline scrubber — rendered above the canvas so the user
           keeps the "when am I looking at?" context in peripheral view.
           Falls back to null when the timeline metadata hasn't loaded
-          yet, which keeps the graph layout stable on cold cache. */}
-      <div style={{ padding: "6px 0", flex: "0 0 auto" }}>
-        <TimelineStrip
-          timeline={timeline}
-          cursorTs={cursorTs}
-          onChange={setCursorTs}
-          labels={{
-            live: t("timeline.live"),
-            asOf: t("timeline.asOf"),
-            playhead: t("timeline.playhead"),
-            markerDecision: t("timeline.markerDecision"),
-            markerConflict: t("timeline.markerConflict"),
-            markerTransition: t("timeline.markerTransition"),
-          }}
-        />
-      </div>
+          yet, which keeps the graph layout stable on cold cache.
+          Sprint 3a: hidden in Org mode — the org meta-graph isn't
+          time-cursor aware in v1, so showing the scrubber would
+          misleadingly imply it is. */}
+      {!isOrgMode ? (
+        <div style={{ padding: "6px 0", flex: "0 0 auto" }}>
+          <TimelineStrip
+            timeline={timeline}
+            cursorTs={cursorTs}
+            onChange={setCursorTs}
+            labels={{
+              live: t("timeline.live"),
+              asOf: t("timeline.asOf"),
+              playhead: t("timeline.playhead"),
+              markerDecision: t("timeline.markerDecision"),
+              markerConflict: t("timeline.markerConflict"),
+              markerTransition: t("timeline.markerTransition"),
+            }}
+          />
+        </div>
+      ) : null}
       {/* Canvas area — the dim overlay layers on top at 0.45 opacity
           when cursor is in the past, without blocking pointer events
           on the graph itself (markers, zoom, drawer still work). The
@@ -1034,81 +1045,118 @@ export function GraphCanvas({
           // Dim via filter rather than opacity so the Background
           // gap/color from ReactFlow stays crisp. prefers-reduced-motion
           // handled by the transition: we drop the duration to 0 via
-          // media query on the canvas container.
-          filter: isPast ? "saturate(0.55) brightness(0.96)" : "none",
+          // media query on the canvas container. Org mode skips the
+          // dim entirely since it isn't time-scoped.
+          filter:
+            isPast && !isOrgMode
+              ? "saturate(0.55) brightness(0.96)"
+              : "none",
           transition: "filter 220ms ease-out",
         }}
       >
-      <ReactFlow
-        nodes={rfNodes}
-        edges={rfEdges}
-        nodeTypes={NODE_TYPES}
-        onNodesChange={onNodesChange}
-        onEdgesChange={onEdgesChange}
-        onNodeDragStop={onNodeDragStop}
-        onNodeMouseEnter={onNodeMouseEnter}
-        onNodeMouseLeave={onNodeMouseLeave}
-        onNodeClick={onNodeClick}
-        onPaneClick={() => setSelected(null)}
-        fitView
-        fitViewOptions={{ padding: 0.12 }}
-        nodesDraggable
-        proOptions={{ hideAttribution: true }}
-      >
-        <Background gap={16} size={1} color="#e6e3db" />
-        <Controls position="bottom-right" showInteractive={false} />
-      </ReactFlow>
+      {/* View-mode swap. Graph mode = full ReactFlow canvas with all
+          the per-entity chrome (legend, intent strip, commit button,
+          search). Org mode = OrgView with its own mini-ReactFlow; the
+          surrounding chrome (WsBadge, view toggle) stays, the graph-
+          specific chrome hides so the org canvas isn't visually noisy. */}
+      {!isOrgMode ? (
+        <ReactFlow
+          nodes={rfNodes}
+          edges={rfEdges}
+          nodeTypes={NODE_TYPES}
+          onNodesChange={onNodesChange}
+          onEdgesChange={onEdgesChange}
+          onNodeDragStop={onNodeDragStop}
+          onNodeMouseEnter={onNodeMouseEnter}
+          onNodeMouseLeave={onNodeMouseLeave}
+          onNodeClick={onNodeClick}
+          onPaneClick={() => setSelected(null)}
+          fitView
+          fitViewOptions={{ padding: 0.12 }}
+          nodesDraggable
+          proOptions={{ hideAttribution: true }}
+        >
+          <Background gap={16} size={1} color="#e6e3db" />
+          <Controls position="bottom-right" showInteractive={false} />
+        </ReactFlow>
+      ) : (
+        <OrgView projectId={projectId} />
+      )}
 
-      <Legend
-        labels={{
-          goal: t("legend.goal"),
-          commitment: t("legend.commitment"),
-          deliverable: t("legend.deliverable"),
-          decision: t("legend.decision"),
-          task: t("legend.task"),
-          risk: t("legend.risk"),
-        }}
-        searchHint={t("search.hint")}
-      />
-      <IntentStrip
-        mode={mode}
-        onChange={setMode}
-        labels={{
-          all: t("intent.all"),
-          flow: t("intent.flow"),
-          decisions: t("intent.decisions"),
-          risks: t("intent.risks"),
-          commitments: t("intent.commitments"),
-        }}
-      />
+      {/* Graph-mode-specific chrome — hidden in Org mode because the
+          legend, intent strip, search bar, and + Commit button have
+          no meaning against a cross-project view. */}
+      {!isOrgMode ? (
+        <>
+          <Legend
+            labels={{
+              goal: t("legend.goal"),
+              commitment: t("legend.commitment"),
+              deliverable: t("legend.deliverable"),
+              decision: t("legend.decision"),
+              task: t("legend.task"),
+              risk: t("legend.risk"),
+            }}
+            searchHint={t("search.hint")}
+          />
+          <IntentStrip
+            mode={mode}
+            onChange={setMode}
+            labels={{
+              all: t("intent.all"),
+              flow: t("intent.flow"),
+              decisions: t("intent.decisions"),
+              risks: t("intent.risks"),
+              commitments: t("intent.commitments"),
+            }}
+          />
+        </>
+      ) : null}
       <WsBadge state={wsState} labels={t} />
 
-      {/* + Commit button — opens CommitModal. Positioned to the left of
-          the WsBadge pill so they align on the same top-right row. */}
-      <button
-        type="button"
-        onClick={() => setCommitModalOpen(true)}
-        style={{
-          position: "absolute",
-          top: 12,
-          right: 118,
-          padding: "4px 12px",
-          background: "var(--wg-accent)",
-          color: "#fff",
-          border: "none",
-          borderRadius: 12,
-          fontSize: 11,
-          fontFamily: "var(--wg-font-mono)",
-          letterSpacing: "0.02em",
-          cursor: "pointer",
-          zIndex: 4,
-          boxShadow: "0 1px 3px rgba(0,0,0,0.12)",
+      {/* View toggle — Graph | Org. Sits immediately to the left of
+          WsBadge/the + Commit area so it shares the top-right strip.
+          In Org mode the + Commit button is hidden, which shifts the
+          toggle's right-offset to match the badge row. */}
+      <ViewToggle
+        mode={viewMode}
+        onChange={setViewMode}
+        labels={{
+          graph: t("org.toggle.graph"),
+          org: t("org.toggle.org"),
         }}
-      >
-        {t("commit.button")}
-      </button>
+        rightOffset={isOrgMode ? 118 : 204}
+      />
 
-      {search !== null ? (
+      {/* + Commit button — opens CommitModal. Positioned to the left of
+          the WsBadge pill so they align on the same top-right row.
+          Sprint 3a: hidden in Org mode (commitments are per-project). */}
+      {!isOrgMode ? (
+        <button
+          type="button"
+          onClick={() => setCommitModalOpen(true)}
+          style={{
+            position: "absolute",
+            top: 12,
+            right: 118,
+            padding: "4px 12px",
+            background: "var(--wg-accent)",
+            color: "#fff",
+            border: "none",
+            borderRadius: 12,
+            fontSize: 11,
+            fontFamily: "var(--wg-font-mono)",
+            letterSpacing: "0.02em",
+            cursor: "pointer",
+            zIndex: 4,
+            boxShadow: "0 1px 3px rgba(0,0,0,0.12)",
+          }}
+        >
+          {t("commit.button")}
+        </button>
+      ) : null}
+
+      {!isOrgMode && search !== null ? (
         <SearchBar
           value={search}
           onChange={setSearch}
@@ -1119,7 +1167,7 @@ export function GraphCanvas({
         />
       ) : null}
 
-      {hovered && hoveredNode ? (
+      {!isOrgMode && hovered && hoveredNode ? (
         <HoverTooltip
           node={hoveredNode}
           x={hovered.x}
@@ -1132,7 +1180,7 @@ export function GraphCanvas({
         />
       ) : null}
 
-      {selected ? (
+      {!isOrgMode && selected ? (
         <NodeDrawer
           nodeId={selected}
           state={state}
@@ -1152,7 +1200,7 @@ export function GraphCanvas({
         />
       ) : null}
 
-      {commitModalOpen ? (
+      {!isOrgMode && commitModalOpen ? (
         <CommitModal
           projectId={projectId}
           onClose={() => setCommitModalOpen(false)}
@@ -1174,8 +1222,10 @@ export function GraphCanvas({
       </div>
       {/* "Viewing as of" pill — anchored bottom-left of the outer
           flex container so it sits outside the dimmed canvas wrapper
-          and stays at full saturation. Click to snap back to Live. */}
-      {isPast ? (
+          and stays at full saturation. Click to snap back to Live.
+          Sprint 3a: only shown in graph mode. Org mode isn't time-
+          cursor aware, so the pill would be misleading there. */}
+      {isPast && !isOrgMode ? (
         <button
           type="button"
           onClick={() => setCursorTs(null)}
@@ -1405,6 +1455,68 @@ function WsBadge({
         }}
       />
       {label}
+    </div>
+  );
+}
+
+// ---- View-mode toggle (Sprint 3a) ---------------------------------------
+
+function ViewToggle({
+  mode,
+  onChange,
+  labels,
+  rightOffset,
+}: {
+  mode: "graph" | "org";
+  onChange: (next: "graph" | "org") => void;
+  labels: { graph: string; org: string };
+  // The toggle shares the top-right strip with the WsBadge and the
+  // + Commit button. Right offset is computed at the call site so it
+  // flexes with whichever neighbours are visible.
+  rightOffset: number;
+}) {
+  return (
+    <div
+      role="group"
+      aria-label="view mode"
+      style={{
+        position: "absolute",
+        top: 12,
+        right: rightOffset,
+        display: "inline-flex",
+        background: "rgba(255,255,255,0.94)",
+        border: "1px solid var(--wg-line)",
+        borderRadius: 12,
+        padding: 2,
+        fontFamily: "var(--wg-font-mono)",
+        fontSize: 10,
+        letterSpacing: "0.04em",
+        zIndex: 4,
+        boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
+      }}
+    >
+      {(["graph", "org"] as const).map((m) => {
+        const active = mode === m;
+        return (
+          <button
+            key={m}
+            type="button"
+            onClick={() => onChange(m)}
+            aria-pressed={active}
+            style={{
+              padding: "4px 10px",
+              borderRadius: 10,
+              border: "none",
+              background: active ? "var(--wg-ink)" : "transparent",
+              color: active ? "#fff" : "var(--wg-ink-soft)",
+              cursor: active ? "default" : "pointer",
+              transition: "background 120ms ease-out, color 120ms ease-out",
+            }}
+          >
+            {labels[m]}
+          </button>
+        );
+      })}
     </div>
   );
 }
