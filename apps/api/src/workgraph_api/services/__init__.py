@@ -26,6 +26,7 @@ from .decisions import DecisionError, DecisionService
 from .delivery import DeliveryError, DeliveryService
 from .drift import DRIFT_RATE_LIMIT_SECONDS, DriftService
 from .graph_builder import GraphBuilderService
+from .handoff import HandoffService
 from .im import IMService
 from .intake import IntakeService
 from .membrane import MembraneService
@@ -46,6 +47,7 @@ __all__ = [
     "ClarificationService",
     "ClarificationQuestionNotFound",
     "GraphBuilderService",
+    "HandoffService",
     "NotReadyForPlanning",
     "PlanningService",
     "PlanValidationError",

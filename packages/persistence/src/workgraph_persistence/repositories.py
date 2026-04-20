@@ -19,6 +19,7 @@ from .orm import (
     DeliverableRow,
     DeliverySummaryRow,
     EventRow,
+    HandoffRow,
     GoalRow,
     IMSuggestionRow,
     IntakeEventRow,
@@ -2082,5 +2083,83 @@ class CommitmentRepository:
             row.resolved_at = datetime.now(timezone.utc)
         else:
             row.resolved_at = None
+        await self._session.flush()
+        return row
+
+
+class HandoffRepository:
+    """Persist Stage 3 skill-succession records."""
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def create(
+        self,
+        *,
+        project_id: str,
+        from_user_id: str,
+        to_user_id: str,
+        role_skills_transferred: list[str],
+        profile_skill_routines: list[dict],
+        brief_markdown: str,
+        from_display_name: str,
+        to_display_name: str,
+    ) -> HandoffRow:
+        row = HandoffRow(
+            id=str(uuid4()),
+            project_id=project_id,
+            from_user_id=from_user_id,
+            to_user_id=to_user_id,
+            status="draft",
+            role_skills_transferred=list(role_skills_transferred),
+            profile_skill_routines=list(profile_skill_routines),
+            brief_markdown=brief_markdown,
+            from_display_name=from_display_name,
+            to_display_name=to_display_name,
+        )
+        self._session.add(row)
+        await self._session.flush()
+        return row
+
+    async def get(self, handoff_id: str) -> HandoffRow | None:
+        return (
+            await self._session.execute(
+                select(HandoffRow).where(HandoffRow.id == handoff_id)
+            )
+        ).scalar_one_or_none()
+
+    async def list_for_project(
+        self, project_id: str, *, limit: int = 100
+    ) -> list[HandoffRow]:
+        stmt = (
+            select(HandoffRow)
+            .where(HandoffRow.project_id == project_id)
+            .order_by(HandoffRow.created_at.desc())
+            .limit(limit)
+        )
+        return list((await self._session.execute(stmt)).scalars().all())
+
+    async def list_finalized_for_successor(
+        self, *, project_id: str, to_user_id: str
+    ) -> list[HandoffRow]:
+        """Return the successor's inherited routines.
+
+        A successor may inherit from multiple predecessors — each gives
+        their own row; the service merges them per-skill."""
+        stmt = (
+            select(HandoffRow)
+            .where(HandoffRow.project_id == project_id)
+            .where(HandoffRow.to_user_id == to_user_id)
+            .where(HandoffRow.status == "finalized")
+            .order_by(HandoffRow.finalized_at.desc())
+        )
+        return list((await self._session.execute(stmt)).scalars().all())
+
+    async def finalize(self, handoff_id: str) -> HandoffRow | None:
+        row = await self.get(handoff_id)
+        if row is None:
+            return None
+        row.status = "finalized"
+        row.finalized_at = datetime.now(timezone.utc)
         await self._session.flush()
         return row

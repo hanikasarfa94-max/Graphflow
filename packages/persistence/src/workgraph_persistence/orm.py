@@ -1076,3 +1076,65 @@ class CommitmentRow(Base):
     resolved_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+
+
+class HandoffRow(Base):
+    """A skill-succession record between two project members.
+
+    Stage 3 of the skill atlas: when a member departs or transitions out
+    of a project, the OWNER prepares a handoff from {from_user_id} to
+    {to_user_id}. The role skill bundle transfers automatically (role
+    skills are role-derived, so whoever holds the role gets them).
+    What this row captures is the **profile-skill routine layer** — the
+    non-PII working patterns the departing member's tenure produced
+    that help the successor's sub-agent pick up where they left off.
+
+    Two-step lifecycle:
+      * status='draft'     — service prepared routines from the
+        departing member's recent emissions; the owner reviews the
+        brief in the UI before accepting.
+      * status='finalized' — routines are live; successor's edge may
+        consult them for skill-keyed context.
+
+    PII-stripping contract:
+      * `profile_skill_routines` stores role-level context only. No
+        user_ids, no raw message bodies. Stakeholders are referenced by
+        role_hint ("the eng-lead", "the qa-lead"), never by name. The
+        derivation layer in services/handoff.py enforces this.
+      * `brief_markdown` is the human-readable preview the owner sees
+        in the dialog — it may include the from/to user's display name
+        for clarity, but this column is never shipped into agent
+        prompts.
+
+    Why no foreign key cascade on delete for users: a finalized handoff
+    is history. We keep the row even if a user is later removed — the
+    string IDs are enough, and snapshotted display_name columns let the
+    brief still render.
+    """
+
+    __tablename__ = "handoff_records"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    project_id: Mapped[str] = mapped_column(
+        ForeignKey("projects.id", ondelete="CASCADE"), index=True
+    )
+    from_user_id: Mapped[str] = mapped_column(String(36), index=True)
+    to_user_id: Mapped[str] = mapped_column(String(36), index=True)
+    status: Mapped[str] = mapped_column(
+        String(16), default="draft", index=True
+    )
+    role_skills_transferred: Mapped[list] = mapped_column(
+        JSON, default=list
+    )
+    profile_skill_routines: Mapped[list] = mapped_column(
+        JSON, default=list
+    )
+    brief_markdown: Mapped[str] = mapped_column(String(8000), default="")
+    from_display_name: Mapped[str] = mapped_column(String(200), default="")
+    to_display_name: Mapped[str] = mapped_column(String(200), default="")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow
+    )
+    finalized_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )

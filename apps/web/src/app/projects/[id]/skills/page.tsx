@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { getTranslations } from "next-intl/server";
 
+import { MemberHandoffButton } from "@/components/skills/MemberHandoffButton";
 import { serverFetch } from "@/lib/auth";
 import type { SkillAtlasPayload } from "@/lib/api";
 
@@ -98,7 +99,14 @@ export default async function SkillsAtlasPage({
         }}
       >
         {payload.members.map((m) => (
-          <MemberCard key={m.user_id} card={m} t={t} />
+          <MemberCard
+            key={m.user_id}
+            card={m}
+            t={t}
+            projectId={projectId}
+            isOwnerView={isOwner}
+            allMembers={payload.members}
+          />
         ))}
       </div>
     </main>
@@ -324,9 +332,15 @@ function CollectiveRow({
 function MemberCard({
   card,
   t,
+  projectId,
+  isOwnerView,
+  allMembers,
 }: {
   card: SkillAtlasPayload["members"][number];
   t: (key: string, values?: Record<string, string | number>) => string;
+  projectId: string;
+  isOwnerView: boolean;
+  allMembers: SkillAtlasPayload["members"];
 }) {
   return (
     <article
@@ -399,11 +413,21 @@ function MemberCard({
           display: "flex",
           gap: 14,
           flexWrap: "wrap",
+          alignItems: "center",
         }}
       >
         <span>{t("card.messagesTag", { n: card.observed_tallies.messages_posted_30d ?? 0 })}</span>
         <span>{t("card.decisionsTag", { n: card.observed_tallies.decisions_resolved_30d ?? 0 })}</span>
         <span>{t("card.risksTag", { n: card.observed_tallies.risks_owned ?? 0 })}</span>
+        {isOwnerView ? (
+          <div style={{ marginLeft: "auto" }}>
+            <MemberHandoffButton
+              projectId={projectId}
+              departingMember={card}
+              candidates={allMembers}
+            />
+          </div>
+        ) : null}
       </footer>
     </article>
   );

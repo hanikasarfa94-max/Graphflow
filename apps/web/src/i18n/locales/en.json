@@ -808,7 +808,36 @@
       "noObserved": "No observed skills in the last 30 days.",
       "messagesTag": "{n} messages",
       "decisionsTag": "{n} decisions",
-      "risksTag": "{n} risks"
+      "risksTag": "{n} risks",
+      "handoffButton": "Hand off…"
+    },
+    "handoff": {
+      "dialogTitle": "Hand off {name}",
+      "dialogSubtitle": "Transfer role-skill inheritance + PII-stripped working routines to a successor. Role skills follow the role; the routine layer is what the successor's sub-agent will consult in future routings.",
+      "successorLabel": "Successor",
+      "successorPlaceholder": "Pick a successor…",
+      "prepareButton": "Draft brief",
+      "preparing": "Drafting…",
+      "prepareFailed": "Could not draft. Only project owners may prepare handoffs.",
+      "draftHeader": "Draft",
+      "roleSkillsHeader": "Role skills inherited",
+      "routinesHeader": "Working routines (agent-facing, PII-stripped)",
+      "noRoutines": "No recent emissions matched the 90-day window. Successor inherits role skills only.",
+      "briefHeader": "Preview",
+      "finalizeButton": "Finalize",
+      "finalizing": "Finalizing…",
+      "finalized": "✓ Finalized",
+      "cancel": "Cancel",
+      "close": "Close",
+      "evidenceCount": "{n} events",
+      "sourcesPrefix": "from:",
+      "rolesPrefix": "with:",
+      "showBrief": "Show full brief",
+      "hideBrief": "Hide brief",
+      "existingHeader": "Existing handoffs on this project",
+      "noExisting": "No handoffs yet.",
+      "statusDraft": "draft",
+      "statusFinalized": "finalized"
     }
   }
 }

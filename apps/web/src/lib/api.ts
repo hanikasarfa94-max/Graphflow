@@ -331,6 +331,78 @@ export function fetchPreAnswer(
   });
 }
 
+// ---------- Handoff (Stage 3 skill succession) ----------
+
+export interface HandoffRoutine {
+  skill: string;
+  summary: string;
+  evidence_count: number;
+  applies_to_roles: string[];
+  sources: string[];
+}
+
+export interface HandoffRecord {
+  id: string;
+  project_id: string;
+  from_user_id: string;
+  to_user_id: string;
+  from_display_name: string;
+  to_display_name: string;
+  status: "draft" | "finalized";
+  role_skills_transferred: string[];
+  profile_skill_routines: HandoffRoutine[];
+  brief_markdown: string;
+  created_at: string;
+  finalized_at: string | null;
+}
+
+export interface HandoffListPayload {
+  viewer_scope: "owner" | "successor";
+  handoffs: HandoffRecord[];
+}
+
+export interface SuccessorInheritedPayload {
+  project_id: string;
+  successor_user_id: string;
+  inherited_role_skills: string[];
+  inherited_routines: HandoffRoutine[];
+  predecessors: {
+    handoff_id: string;
+    from_display_name: string;
+    finalized_at: string | null;
+  }[];
+}
+
+export function prepareHandoff(
+  projectId: string,
+  fromUserId: string,
+  toUserId: string,
+): Promise<{ ok: true; handoff: HandoffRecord }> {
+  return api(`/api/projects/${projectId}/handoff/prepare`, {
+    method: "POST",
+    body: { from_user_id: fromUserId, to_user_id: toUserId },
+  });
+}
+
+export function finalizeHandoff(
+  handoffId: string,
+): Promise<{ ok: true; handoff: HandoffRecord }> {
+  return api(`/api/handoff/${handoffId}/finalize`, { method: "POST" });
+}
+
+export function listProjectHandoffs(
+  projectId: string,
+): Promise<HandoffListPayload> {
+  return api(`/api/projects/${projectId}/handoffs`);
+}
+
+export function fetchSuccessorInherited(
+  projectId: string,
+  userId: string,
+): Promise<SuccessorInheritedPayload> {
+  return api(`/api/projects/${projectId}/handoffs/for/${userId}`);
+}
+
 export interface ConflictOption {
   label: string;
   detail: string;

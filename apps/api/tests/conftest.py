@@ -365,6 +365,7 @@ from workgraph_api.services import (
     DecisionService,
     DeliveryService,
     DriftService,
+    HandoffService,
     IMService,
     IntakeService,
     MembraneService,
@@ -450,6 +451,7 @@ async def api_env():
     pre_answer_service = PreAnswerService(
         maker, skill_atlas_service, pre_answer_agent
     )
+    handoff_service = HandoffService(maker)
     edge_agent = _SilenceEdgeAgent()
     skills_service = SkillsService(maker)
     personal_service = PersonalStreamService(
@@ -518,6 +520,7 @@ async def api_env():
     app.state.skill_atlas_service = skill_atlas_service
     app.state.pre_answer_agent = pre_answer_agent
     app.state.pre_answer_service = pre_answer_service
+    app.state.handoff_service = handoff_service
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:

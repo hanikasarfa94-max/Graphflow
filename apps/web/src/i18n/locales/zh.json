@@ -808,7 +808,36 @@
       "noObserved": "近 30 天未观察到技能信号。",
       "messagesTag": "{n} 条消息",
       "decisionsTag": "{n} 个决策",
-      "risksTag": "{n} 个风险"
+      "risksTag": "{n} 个风险",
+      "handoffButton": "交接…"
+    },
+    "handoff": {
+      "dialogTitle": "交接 {name}",
+      "dialogSubtitle": "把角色技能的继承与去 PII 后的工作惯例一并传给继任者。角色技能随岗位,惯例层将在未来路由时供继任者的子代理参考。",
+      "successorLabel": "继任者",
+      "successorPlaceholder": "选择继任者…",
+      "prepareButton": "拟草交接",
+      "preparing": "拟写中…",
+      "prepareFailed": "拟写失败。只有项目主可发起交接。",
+      "draftHeader": "草稿",
+      "roleSkillsHeader": "继承的角色技能",
+      "routinesHeader": "工作惯例(代理可读,已去 PII)",
+      "noRoutines": "近 90 天未检出可观察产出,仅继承角色技能。",
+      "briefHeader": "预览",
+      "finalizeButton": "定案",
+      "finalizing": "定案中…",
+      "finalized": "✓ 已定案",
+      "cancel": "取消",
+      "close": "关闭",
+      "evidenceCount": "{n} 条记录",
+      "sourcesPrefix": "来源:",
+      "rolesPrefix": "相关角色:",
+      "showBrief": "展开完整预览",
+      "hideBrief": "收起预览",
+      "existingHeader": "项目上已有的交接",
+      "noExisting": "尚未发起交接。",
+      "statusDraft": "草稿",
+      "statusFinalized": "已定案"
     }
   }
 }
