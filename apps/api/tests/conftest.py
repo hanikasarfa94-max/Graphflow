@@ -309,6 +309,7 @@ from workgraph_api.services import (
     ProjectService,
     RenderService,
     RoutingService,
+    SimulationService,
     SkillsService,
     SlaService,
     StreamService,
@@ -375,6 +376,7 @@ async def api_env():
     drift_service = DriftService(maker, bus, drift_agent, stream_service)
     commitment_service = CommitmentService(maker, bus)
     sla_service = SlaService(maker, bus, stream_service)
+    simulation_service = SimulationService(maker)
     edge_agent = _SilenceEdgeAgent()
     skills_service = SkillsService(maker)
     personal_service = PersonalStreamService(
@@ -439,6 +441,7 @@ async def api_env():
     app.state.render_service = render_service
     app.state.commitment_service = commitment_service
     app.state.sla_service = sla_service
+    app.state.simulation_service = simulation_service
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:

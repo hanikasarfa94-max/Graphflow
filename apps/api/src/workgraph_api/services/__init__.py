@@ -34,6 +34,7 @@ from .planning import NotReadyForPlanning, PlanningService, PlanValidationError
 from .project import ProjectService
 from .render import RenderError, RenderService
 from .routing import RoutingService
+from .simulation import SimulationError, SimulationService
 from .skills import SkillsService
 from .sla import SlaService
 from .streams import StreamService
@@ -76,6 +77,8 @@ __all__ = [
     "RenderService",
     "RenderError",
     "RoutingService",
+    "SimulationError",
+    "SimulationService",
     "SkillsService",
     "SlaService",
     "StreamService",
