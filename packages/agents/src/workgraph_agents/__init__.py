@@ -70,6 +70,12 @@ from .membrane import (
     MembraneClassification,
     MembraneOutcome,
 )
+from .pre_answer import (
+    PRE_ANSWER_PROMPT_VERSION,
+    PreAnswerAgent,
+    PreAnswerDraft,
+    PreAnswerOutcome,
+)
 from .planning import (
     ParsedPlan,
     PlanOutcome,
@@ -170,4 +176,8 @@ __all__ = [
     "RenderedSection",
     "POSTMORTEM_PROMPT_VERSION",
     "HANDOFF_PROMPT_VERSION",
+    "PreAnswerAgent",
+    "PreAnswerDraft",
+    "PreAnswerOutcome",
+    "PRE_ANSWER_PROMPT_VERSION",
 ]

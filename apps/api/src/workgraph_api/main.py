@@ -18,6 +18,7 @@ from workgraph_agents import (
     EdgeResponseOutcome,
     IMAssistAgent,
     MembraneAgent,
+    PreAnswerAgent,
     RenderAgent,
 )
 from workgraph_agents.llm import LLMResult
@@ -62,6 +63,7 @@ from workgraph_api.routers import plan as plan_router
 from workgraph_api.routers import projects as projects_router
 from workgraph_api.routers import render as render_router
 from workgraph_api.routers import routing as routing_router
+from workgraph_api.routers import pre_answer as pre_answer_router
 from workgraph_api.routers import simulation as simulation_router
 from workgraph_api.routers import skill_atlas as skill_atlas_router
 from workgraph_api.routers import streams as streams_router
@@ -85,6 +87,7 @@ from workgraph_api.services import (
     NotificationService,
     PersonalStreamService,
     PlanningService,
+    PreAnswerService,
     ProjectService,
     RenderService,
     RoutingService,
@@ -429,6 +432,11 @@ async def lifespan(app: FastAPI):
         skills_service=skills_service,
     )
 
+    pre_answer_agent = PreAnswerAgent()
+    pre_answer_service = PreAnswerService(
+        sessionmaker, skill_atlas_service, pre_answer_agent
+    )
+
     app.state.engine = engine
     app.state.sessionmaker = sessionmaker
     app.state.event_bus = event_bus
@@ -473,6 +481,8 @@ async def lifespan(app: FastAPI):
     app.state.sla_service = sla_service
     app.state.simulation_service = simulation_service
     app.state.skill_atlas_service = skill_atlas_service
+    app.state.pre_answer_agent = pre_answer_agent
+    app.state.pre_answer_service = pre_answer_service
 
     # Drift auto-trigger (Sprint 1c). Subscribe drift_service to the
     # event types that most reliably indicate "the project's surface
@@ -561,6 +571,7 @@ app.include_router(drift_router.router)
 app.include_router(commitments_router.router)
 app.include_router(simulation_router.router)
 app.include_router(skill_atlas_router.router)
+app.include_router(pre_answer_router.router)
 app.include_router(events_router.router)
 app.include_router(observability_router.router)
 app.include_router(personal_router.router)

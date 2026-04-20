@@ -285,6 +285,52 @@ export function fetchSkillAtlas(
   return api(`/api/projects/${projectId}/skills`, { baseUrl });
 }
 
+// ---------- Pre-answer routing (Stage 2) ----------
+//
+// Sender's UI asks target's edge: "given their skills, what would they
+// say?" The pre-answer lets the sender decide whether they even need to
+// interrupt the human. If confidence is high and the answer stands on
+// its own, the sender can cancel the route and save the target's time.
+
+export interface PreAnswerDraft {
+  body: string;
+  confidence: "high" | "medium" | "low";
+  matched_skills: string[];
+  uncovered_topics: string[];
+  recommend_route: boolean;
+  rationale: string;
+}
+
+export interface PreAnswerTargetSummary {
+  user_id: string;
+  display_name: string;
+  project_role: string;
+  role_skills: string[];
+  declared_abilities: string[];
+  validated_skills: string[];
+}
+
+export interface PreAnswerPayload {
+  ok: true;
+  draft: PreAnswerDraft;
+  target: PreAnswerTargetSummary;
+  meta: {
+    outcome: "ok" | "retry" | "manual_review";
+    attempts: number;
+  };
+}
+
+export function fetchPreAnswer(
+  projectId: string,
+  targetUserId: string,
+  question: string,
+): Promise<PreAnswerPayload> {
+  return api<PreAnswerPayload>(`/api/projects/${projectId}/pre-answer`, {
+    method: "POST",
+    body: { target_user_id: targetUserId, question },
+  });
+}
+
 export interface ConflictOption {
   label: string;
   detail: string;

@@ -6,6 +6,7 @@ from httpx import ASGITransport, AsyncClient
 from workgraph_agents import EdgeResponse, EdgeResponseOutcome
 from workgraph_agents.drift import DriftCheckOutcome, DriftCheckResult
 from workgraph_agents.llm import LLMResult
+from workgraph_agents.pre_answer import PreAnswerDraft, PreAnswerOutcome
 from workgraph_agents.membrane import (
     MembraneClassification,
     MembraneOutcome,
@@ -278,6 +279,71 @@ class _SilenceEdgeAgent:
 
     async def frame_reply(self, *, signal, source_user_context):  # pragma: no cover
         raise NotImplementedError
+
+
+class _ScriptablePreAnswerAgent:
+    """Default PreAnswerAgent stub for the api_env fixture.
+
+    Produces a deterministic draft whose `matched_skills` mirrors the
+    target's role_skills so the sanitizer on the real agent would be a
+    no-op. Tests that need a bespoke draft assign
+    `app.state.pre_answer_agent.next_draft` to a custom PreAnswerDraft.
+    """
+
+    prompt_version = "stub.pre_answer.v1"
+
+    def __init__(self) -> None:
+        self.calls: list[dict] = []
+        self.next_draft: PreAnswerDraft | None = None
+
+    async def draft(
+        self,
+        *,
+        question,
+        target_context,
+        sender_context=None,
+        project_context=None,
+    ):
+        self.calls.append(
+            {
+                "question": question,
+                "target_context": target_context,
+                "sender_context": sender_context or {},
+                "project_context": project_context or {},
+            }
+        )
+        if self.next_draft is not None:
+            draft = self.next_draft
+            self.next_draft = None
+        else:
+            role_skills = list(target_context.get("role_skills") or [])
+            # Say "medium confidence, probably route" — realistic default
+            # behaviour when the stub has no project-specific knowledge.
+            draft = PreAnswerDraft(
+                body=(
+                    f"Based on {target_context.get('display_name', 'them')}'s "
+                    f"skills ({', '.join(role_skills[:2]) or 'n/a'}), this "
+                    "would likely be framed as a scope question — route to "
+                    "confirm."
+                ),
+                confidence="medium",
+                matched_skills=role_skills[:2],
+                uncovered_topics=[],
+                recommend_route=True,
+                rationale="stub pre-answer",
+            )
+        return PreAnswerOutcome(
+            draft=draft,
+            result=LLMResult(
+                content="",
+                model="stub",
+                prompt_tokens=0,
+                completion_tokens=0,
+                latency_ms=0,
+            ),
+            outcome="ok",
+            attempts=1,
+        )
 from workgraph_domain import EventBus
 from workgraph_persistence import (
     backfill_streams_from_projects,
@@ -309,6 +375,7 @@ from workgraph_api.services import (
     ProjectService,
     RenderService,
     RoutingService,
+    PreAnswerService,
     SimulationService,
     SkillAtlasService,
     SkillsService,
@@ -379,6 +446,10 @@ async def api_env():
     sla_service = SlaService(maker, bus, stream_service)
     simulation_service = SimulationService(maker)
     skill_atlas_service = SkillAtlasService(maker)
+    pre_answer_agent = _ScriptablePreAnswerAgent()
+    pre_answer_service = PreAnswerService(
+        maker, skill_atlas_service, pre_answer_agent
+    )
     edge_agent = _SilenceEdgeAgent()
     skills_service = SkillsService(maker)
     personal_service = PersonalStreamService(
@@ -445,6 +516,8 @@ async def api_env():
     app.state.sla_service = sla_service
     app.state.simulation_service = simulation_service
     app.state.skill_atlas_service = skill_atlas_service
+    app.state.pre_answer_agent = pre_answer_agent
+    app.state.pre_answer_service = pre_answer_service
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:

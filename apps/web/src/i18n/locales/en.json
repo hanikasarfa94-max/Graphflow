@@ -371,7 +371,23 @@
       "confirmed": "✓ Asked {name}",
       "dismiss": "Don't ask, dismiss",
       "dismissed": "· Dismissed",
-      "noTargets": "(no targets surfaced — type a follow-up to redirect)"
+      "noTargets": "(no targets surfaced — type a follow-up to redirect)",
+      "preAnswer": {
+        "preview": "Preview {name}'s answer",
+        "previewing": "Drafting {name}'s answer…",
+        "header": "Pre-answer from {name}'s edge",
+        "subheader": "Based on their skills — not an actual reply from {name}",
+        "confidenceHigh": "High confidence",
+        "confidenceMedium": "Medium confidence",
+        "confidenceLow": "Low confidence",
+        "matchedLabel": "Matched skills",
+        "uncoveredLabel": "Not covered",
+        "routeAnyway": "Route anyway to {name}",
+        "accept": "Got my answer — don't route",
+        "accepted": "✓ Answered by preview — not routed",
+        "rationaleLabel": "Why",
+        "failed": "Pre-answer failed. You can still route."
+      }
     },
     "inbound": {
       "from": "{name} asked (via edge)",

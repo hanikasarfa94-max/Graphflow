@@ -480,6 +480,7 @@ export function PersonalStream({ projectId, currentUserId, members }: Props) {
           <RouteProposalCard
             key={m.id}
             message={m}
+            projectId={projectId}
             onConfirmed={() => void refresh()}
           />
         );

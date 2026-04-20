@@ -19,16 +19,24 @@ import { useTranslations } from "next-intl";
 import {
   ApiError,
   confirmRouteProposal,
+  fetchPreAnswer,
   parseRouteProposalFromBody,
   stripRouteProposalMarker,
   type PersonalMessage,
   type PersonalRouteTarget,
+  type PreAnswerPayload,
 } from "@/lib/api";
 
 import { relativeTime } from "./types";
 
 type Props = {
   message: PersonalMessage;
+  // project_id is needed for the Stage 2 pre-answer endpoint, which is
+  // scoped to /api/projects/{id}/pre-answer. The classic
+  // `confirmRouteProposal` call doesn't need it, so it stays optional
+  // for backwards compatibility — if omitted, the preview button is
+  // hidden and only the classic "Ask X" flow remains.
+  projectId?: string;
   // Parent may want to refresh its timeline after a dispatch so the new
   // "routed-reply" card can land. We fire-and-forget here; parent is
   // informed via the optional callback.
@@ -58,7 +66,21 @@ const dismissBtn: CSSProperties = {
   cursor: "pointer",
 };
 
-export function RouteProposalCard({ message, onConfirmed }: Props) {
+const secondaryBtn: CSSProperties = {
+  padding: "6px 10px",
+  background: "var(--wg-surface)",
+  color: "var(--wg-ink)",
+  border: "1px solid var(--wg-line)",
+  borderRadius: "var(--wg-radius)",
+  fontSize: 12,
+  cursor: "pointer",
+};
+
+export function RouteProposalCard({
+  message,
+  projectId,
+  onConfirmed,
+}: Props) {
   const t = useTranslations("personal");
 
   // Prefer pre-parsed backend metadata; fall back to embedded marker if
@@ -87,6 +109,19 @@ export function RouteProposalCard({ message, onConfirmed }: Props) {
   const [pendingTargetId, setPendingTargetId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // Stage 2: pre-answer preview state. Keyed by target user id so each
+  // "Preview X" button tracks its own fetch without clobbering siblings.
+  const [previewingTargetId, setPreviewingTargetId] = useState<string | null>(
+    null,
+  );
+  const [preAnswers, setPreAnswers] = useState<
+    Record<string, PreAnswerPayload>
+  >({});
+  const [preAnswerError, setPreAnswerError] = useState<
+    Record<string, string>
+  >({});
+  const [acceptedTargetId, setAcceptedTargetId] = useState<string | null>(null);
+
   if (dismissed) {
     return (
       <div
@@ -103,6 +138,50 @@ export function RouteProposalCard({ message, onConfirmed }: Props) {
         {t("routeProposal.dismissed")}
       </div>
     );
+  }
+
+  async function handlePreview(target: PersonalRouteTarget) {
+    if (!projectId) return;
+    if (previewingTargetId) return;
+    setPreviewingTargetId(target.user_id);
+    setPreAnswerError((prev) => {
+      const next = { ...prev };
+      delete next[target.user_id];
+      return next;
+    });
+    // Use the proposal framing as the question when available — it's
+    // what the agent already framed; otherwise fall back to the raw
+    // body. Either way the target's edge gets a concrete prompt.
+    const question =
+      (proposal?.framing && proposal.framing.trim()) ||
+      (message.body || "").trim() ||
+      target.rationale ||
+      "(no framing)";
+    try {
+      const payload = await fetchPreAnswer(
+        projectId,
+        target.user_id,
+        question,
+      );
+      setPreAnswers((prev) => ({ ...prev, [target.user_id]: payload }));
+    } catch (e) {
+      const msg =
+        e instanceof ApiError
+          ? typeof e.body === "object" && e.body && "detail" in e.body
+            ? String((e.body as { detail?: unknown }).detail ?? "")
+            : `error ${e.status}`
+          : "preview failed";
+      setPreAnswerError((prev) => ({
+        ...prev,
+        [target.user_id]: msg || t("routeProposal.preAnswer.failed"),
+      }));
+    } finally {
+      setPreviewingTargetId(null);
+    }
+  }
+
+  function handleAccept(target: PersonalRouteTarget) {
+    setAcceptedTargetId(target.user_id);
   }
 
   async function handleAsk(target: PersonalRouteTarget) {
@@ -178,7 +257,19 @@ export function RouteProposalCard({ message, onConfirmed }: Props) {
         </div>
       )}
 
-      {confirmedName ? (
+      {acceptedTargetId && !confirmedName ? (
+        <div
+          data-testid="personal-route-proposal-preanswer-accepted"
+          style={{
+            fontFamily: "var(--wg-font-mono)",
+            fontSize: 12,
+            color: "var(--wg-ok, #2f8f4f)",
+            fontWeight: 600,
+          }}
+        >
+          {t("routeProposal.preAnswer.accepted")}
+        </div>
+      ) : confirmedName ? (
         <div
           data-testid="personal-route-proposal-confirmed"
           style={{
@@ -212,25 +303,85 @@ export function RouteProposalCard({ message, onConfirmed }: Props) {
           )}
           {targets.map((tg) => {
             const busy = pendingTargetId === tg.user_id;
+            const previewing = previewingTargetId === tg.user_id;
+            const draft = preAnswers[tg.user_id];
+            const previewError = preAnswerError[tg.user_id];
             return (
-              <button
+              <div
                 key={tg.user_id}
-                type="button"
-                disabled={pendingTargetId !== null}
-                onClick={() => void handleAsk(tg)}
-                data-testid="personal-route-ask-btn"
-                data-target-user-id={tg.user_id}
                 style={{
-                  ...primaryBtn,
-                  opacity: pendingTargetId && !busy ? 0.5 : 1,
-                  cursor: pendingTargetId ? "progress" : "pointer",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 6,
+                  minWidth: 0,
+                  flex: "1 1 220px",
                 }}
-                title={tg.rationale}
               >
-                {busy
-                  ? t("routeProposal.asking", { name: tg.display_name })
-                  : t("routeProposal.ask", { name: tg.display_name })}
-              </button>
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                  <button
+                    type="button"
+                    disabled={pendingTargetId !== null}
+                    onClick={() => void handleAsk(tg)}
+                    data-testid="personal-route-ask-btn"
+                    data-target-user-id={tg.user_id}
+                    style={{
+                      ...primaryBtn,
+                      opacity: pendingTargetId && !busy ? 0.5 : 1,
+                      cursor: pendingTargetId ? "progress" : "pointer",
+                    }}
+                    title={tg.rationale}
+                  >
+                    {busy
+                      ? t("routeProposal.asking", { name: tg.display_name })
+                      : t("routeProposal.ask", { name: tg.display_name })}
+                  </button>
+                  {projectId && !draft ? (
+                    <button
+                      type="button"
+                      disabled={previewingTargetId !== null}
+                      onClick={() => void handlePreview(tg)}
+                      data-testid="personal-route-preview-btn"
+                      data-target-user-id={tg.user_id}
+                      style={{
+                        ...secondaryBtn,
+                        opacity:
+                          previewingTargetId && !previewing ? 0.5 : 1,
+                        cursor: previewingTargetId ? "progress" : "pointer",
+                      }}
+                    >
+                      {previewing
+                        ? t("routeProposal.preAnswer.previewing", {
+                            name: tg.display_name,
+                          })
+                        : t("routeProposal.preAnswer.preview", {
+                            name: tg.display_name,
+                          })}
+                    </button>
+                  ) : null}
+                </div>
+                {previewError ? (
+                  <span
+                    role="alert"
+                    style={{
+                      fontSize: 11,
+                      fontFamily: "var(--wg-font-mono)",
+                      color: "var(--wg-accent)",
+                    }}
+                  >
+                    {previewError}
+                  </span>
+                ) : null}
+                {draft ? (
+                  <PreAnswerPanel
+                    target={tg}
+                    payload={draft}
+                    onAccept={() => handleAccept(tg)}
+                    onRouteAnyway={() => void handleAsk(tg)}
+                    busy={busy}
+                    t={t}
+                  />
+                ) : null}
+              </div>
             );
           })}
           <button
@@ -260,5 +411,234 @@ export function RouteProposalCard({ message, onConfirmed }: Props) {
         </div>
       )}
     </div>
+  );
+}
+
+function PreAnswerPanel({
+  target,
+  payload,
+  onAccept,
+  onRouteAnyway,
+  busy,
+  t,
+}: {
+  target: PersonalRouteTarget;
+  payload: PreAnswerPayload;
+  onAccept: () => void;
+  onRouteAnyway: () => void;
+  busy: boolean;
+  t: (
+    key: string,
+    values?: Record<string, string | number>,
+  ) => string;
+}) {
+  const draft = payload.draft;
+  const confColor =
+    draft.confidence === "high"
+      ? "var(--wg-ok, #2f8f4f)"
+      : draft.confidence === "medium"
+        ? "var(--wg-accent)"
+        : "var(--wg-ink-soft)";
+  const confLabel =
+    draft.confidence === "high"
+      ? t("routeProposal.preAnswer.confidenceHigh")
+      : draft.confidence === "medium"
+        ? t("routeProposal.preAnswer.confidenceMedium")
+        : t("routeProposal.preAnswer.confidenceLow");
+  return (
+    <div
+      data-testid="personal-pre-answer-panel"
+      data-target-user-id={target.user_id}
+      style={{
+        marginTop: 4,
+        padding: "10px 12px",
+        background: "var(--wg-surface)",
+        border: "1px solid var(--wg-line)",
+        borderLeft: `3px solid ${confColor}`,
+        borderRadius: "0 var(--wg-radius) var(--wg-radius) 0",
+        fontSize: 12,
+        display: "flex",
+        flexDirection: "column",
+        gap: 6,
+      }}
+    >
+      <div
+        style={{
+          fontSize: 10,
+          fontFamily: "var(--wg-font-mono)",
+          textTransform: "uppercase",
+          letterSpacing: "0.06em",
+          color: "var(--wg-ink-faint)",
+          display: "flex",
+          justifyContent: "space-between",
+          gap: 10,
+        }}
+      >
+        <span>
+          {t("routeProposal.preAnswer.header", { name: target.display_name })}
+        </span>
+        <span style={{ color: confColor, fontWeight: 600 }}>{confLabel}</span>
+      </div>
+      <div
+        style={{
+          fontSize: 11,
+          fontStyle: "italic",
+          color: "var(--wg-ink-faint)",
+          marginTop: -2,
+        }}
+      >
+        {t("routeProposal.preAnswer.subheader", { name: target.display_name })}
+      </div>
+      <div
+        style={{
+          color: "var(--wg-ink)",
+          whiteSpace: "pre-wrap",
+          wordBreak: "break-word",
+          lineHeight: 1.5,
+        }}
+      >
+        {draft.body}
+      </div>
+      {draft.matched_skills.length > 0 ? (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+          <span
+            style={{
+              fontSize: 10,
+              fontFamily: "var(--wg-font-mono)",
+              color: "var(--wg-ink-faint)",
+              textTransform: "uppercase",
+            }}
+          >
+            {t("routeProposal.preAnswer.matchedLabel")}
+          </span>
+          {draft.matched_skills.map((s) => (
+            <SkillChip key={s} label={s} tone="matched" />
+          ))}
+        </div>
+      ) : null}
+      {draft.uncovered_topics.length > 0 ? (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+          <span
+            style={{
+              fontSize: 10,
+              fontFamily: "var(--wg-font-mono)",
+              color: "var(--wg-ink-faint)",
+              textTransform: "uppercase",
+            }}
+          >
+            {t("routeProposal.preAnswer.uncoveredLabel")}
+          </span>
+          {draft.uncovered_topics.map((s) => (
+            <SkillChip key={s} label={s} tone="uncovered" />
+          ))}
+        </div>
+      ) : null}
+      {draft.rationale ? (
+        <div
+          style={{
+            fontSize: 11,
+            color: "var(--wg-ink-soft)",
+            paddingTop: 4,
+            borderTop: "1px dashed var(--wg-line-soft, var(--wg-line))",
+          }}
+        >
+          <span
+            style={{
+              fontFamily: "var(--wg-font-mono)",
+              textTransform: "uppercase",
+              fontSize: 10,
+              color: "var(--wg-ink-faint)",
+              marginRight: 6,
+            }}
+          >
+            {t("routeProposal.preAnswer.rationaleLabel")}
+          </span>
+          {draft.rationale}
+        </div>
+      ) : null}
+      <div
+        style={{
+          display: "flex",
+          gap: 8,
+          paddingTop: 4,
+          flexWrap: "wrap",
+        }}
+      >
+        <button
+          type="button"
+          onClick={onAccept}
+          data-testid="personal-pre-answer-accept-btn"
+          style={{
+            padding: "5px 10px",
+            background: "var(--wg-ok, #2f8f4f)",
+            color: "#fff",
+            border: "none",
+            borderRadius: "var(--wg-radius)",
+            fontSize: 12,
+            fontWeight: 600,
+            cursor: "pointer",
+          }}
+        >
+          {t("routeProposal.preAnswer.accept")}
+        </button>
+        <button
+          type="button"
+          disabled={busy}
+          onClick={onRouteAnyway}
+          data-testid="personal-pre-answer-route-btn"
+          style={{
+            padding: "5px 10px",
+            background: "var(--wg-surface)",
+            color: "var(--wg-accent)",
+            border: "1px solid var(--wg-accent)",
+            borderRadius: "var(--wg-radius)",
+            fontSize: 12,
+            fontWeight: 600,
+            cursor: busy ? "progress" : "pointer",
+            opacity: busy ? 0.6 : 1,
+          }}
+        >
+          {t("routeProposal.preAnswer.routeAnyway", {
+            name: target.display_name,
+          })}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function SkillChip({
+  label,
+  tone,
+}: {
+  label: string;
+  tone: "matched" | "uncovered";
+}) {
+  const s =
+    tone === "matched"
+      ? {
+          bg: "rgba(77,122,74,0.12)",
+          fg: "var(--wg-ok, #2f8f4f)",
+          border: "var(--wg-ok, #2f8f4f)",
+        }
+      : {
+          bg: "var(--wg-amber-soft)",
+          fg: "var(--wg-amber)",
+          border: "var(--wg-amber)",
+        };
+  return (
+    <span
+      style={{
+        padding: "2px 7px",
+        background: s.bg,
+        color: s.fg,
+        border: `1px solid ${s.border}`,
+        borderRadius: 10,
+        fontSize: 10,
+        fontFamily: "var(--wg-font-mono)",
+      }}
+    >
+      {label}
+    </span>
   );
 }

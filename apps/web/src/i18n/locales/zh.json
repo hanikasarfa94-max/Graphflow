@@ -371,7 +371,23 @@
       "confirmed": "✓ 已询问 {name}",
       "dismiss": "不询问,忽略",
       "dismissed": "· 已忽略",
-      "noTargets": "(尚未识别出合适的人选 —— 输入一条跟进以重新定向)"
+      "noTargets": "(尚未识别出合适的人选 —— 输入一条跟进以重新定向)",
+      "preAnswer": {
+        "preview": "预读 {name} 的答复",
+        "previewing": "正在拟写 {name} 的答复…",
+        "header": "来自 {name} 子代理的预答",
+        "subheader": "基于其技能推演,并非 {name} 本人的回复",
+        "confidenceHigh": "高置信度",
+        "confidenceMedium": "中等置信度",
+        "confidenceLow": "低置信度",
+        "matchedLabel": "匹配技能",
+        "uncoveredLabel": "未覆盖",
+        "routeAnyway": "仍然转给 {name}",
+        "accept": "够用了 —— 不必打扰本人",
+        "accepted": "✓ 预答已采纳,未转路由",
+        "rationaleLabel": "依据",
+        "failed": "预读失败,你仍可转路由。"
+      }
     },
     "inbound": {
       "from": "{name} 通过 Edge 询问",

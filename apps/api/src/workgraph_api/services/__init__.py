@@ -31,6 +31,7 @@ from .intake import IntakeService
 from .membrane import MembraneService
 from .personal import PersonalStreamService
 from .planning import NotReadyForPlanning, PlanningService, PlanValidationError
+from .pre_answer import PreAnswerService
 from .project import ProjectService
 from .render import RenderError, RenderService
 from .routing import RoutingService
@@ -74,6 +75,7 @@ __all__ = [
     "IMService",
     "MembraneService",
     "PersonalStreamService",
+    "PreAnswerService",
     "ProjectService",
     "RenderService",
     "RenderError",
