@@ -853,3 +853,83 @@ async def test_personal_post_rejects_non_member(api_env):
         f"/api/personal/{project_id}/post", json={"body": "intruder"}
     )
     assert r.status_code == 403, r.text
+
+
+# ---------------------------------------------------------------------------
+# Deterministic why-chain fire.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_post_with_why_prefix_auto_fires_why_chain(api_env):
+    """When the user's message starts with 'why', PersonalStreamService
+    pre-invokes the why_chain skill BEFORE calling EdgeAgent. Two system
+    messages (edge-tool-call + edge-tool-result) are persisted and the
+    tool result lands in the response's tool_messages payload so the
+    frontend renders the lineage card. This is the Sprint 1a + node-
+    detail-page completion step — without it the card-render path is
+    LLM-discretion and inconsistent.
+    """
+    client, maker, *_ = api_env
+    stub = _install_stub(api_env)
+    # EdgeAgent immediately settles on silence — we just want to observe
+    # the pre-seed, not a synthesized answer.
+    stub.respond_queue.append(
+        EdgeResponse(kind="silence", body=None, route_targets=[])
+    )
+
+    await _register(client, "n_why_maya")
+    project_id = await _intake(client, "N-why-1")
+    await backfill_streams_from_projects(maker)
+
+    r = await client.post(
+        f"/api/personal/{project_id}/post",
+        json={"body": "Why did we choose this registration flow?"},
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    tool_msgs = body.get("tool_messages") or []
+    kinds = [m["kind"] for m in tool_msgs]
+    assert "edge-tool-call" in kinds
+    assert "edge-tool-result" in kinds
+    # Both must reference why_chain — no other skill should auto-fire.
+    names = {m["name"] for m in tool_msgs}
+    assert names == {"why_chain"}
+    # Tool result envelope — SkillsService returns ok=True even on
+    # empty match (the chain walk is pure); the `result` list may be
+    # empty if no decisions exist yet, which is fine.
+    result_msg = next(m for m in tool_msgs if m["kind"] == "edge-tool-result")
+    assert result_msg["result"]["ok"] is True
+    assert result_msg["result"]["skill"] == "why_chain"
+    # EdgeAgent was called AFTER the pre-seed, with the tool result
+    # threaded into recent_messages.
+    assert len(stub.respond_calls) == 1
+    ctx = stub.respond_calls[0]["context"]
+    recent = ctx.get("recent_messages") or []
+    assert any(
+        r.get("kind") == "edge-tool-result" for r in recent
+    ), "tool result must be injected into context before EdgeAgent.respond"
+
+
+@pytest.mark.asyncio
+async def test_post_without_why_prefix_does_not_auto_fire(api_env):
+    """A normal message does NOT pre-fire why_chain. EdgeAgent is free
+    to choose answer/clarify/tool_call on its own terms."""
+    client, maker, *_ = api_env
+    stub = _install_stub(api_env)
+    stub.respond_queue.append(
+        EdgeResponse(kind="silence", body=None, route_targets=[])
+    )
+
+    await _register(client, "n_no_why")
+    project_id = await _intake(client, "N-nowhy-1")
+    await backfill_streams_from_projects(maker)
+
+    r = await client.post(
+        f"/api/personal/{project_id}/post",
+        json={"body": "Let's schedule a standup tomorrow."},
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    # No tool_messages — the loop exits on the first silence response.
+    assert body.get("tool_messages") == []

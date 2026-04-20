@@ -53,6 +53,25 @@ _log = logging.getLogger("workgraph.api.personal")
 # given recent decisions?") without runaway token use.
 MAX_TOOL_CALLS_PER_TURN = 2
 
+
+# "Why" pre-seed — when a user question starts with a why-word we
+# invoke why_chain DETERMINISTICALLY before letting EdgeAgent decide.
+# Rationale: the skill + card render is the product moment; DeepSeek
+# occasionally chose `answer` / `clarify` kind instead of `tool_call`
+# when it already had enough context in-prompt (direct answer), which
+# is efficient but skips the lineage-card UX the user is paying for.
+# The pre-seed makes the card render every time without second-guessing
+# the LLM. The agent loop then synthesizes the final answer over the
+# pre-seeded tool result.
+_WHY_PREFIX_RE = re.compile(
+    r"^\s*(?:why\b|why'd\b|whys\b|为什么|为何|为啥)",
+    re.IGNORECASE,
+)
+
+
+def _is_why_question(body: str) -> bool:
+    return bool(_WHY_PREFIX_RE.match(body or ""))
+
 _ROUTE_PROPOSAL_MARKER_RE = re.compile(
     r"\n*<route-proposal>(?P<json>.*?)</route-proposal>\s*$",
     re.DOTALL,
@@ -296,6 +315,73 @@ class PersonalStreamService:
         tool_messages: list[dict[str, Any]] = []
         effective_user_message = body
         tool_call_count = 0
+
+        # "Why" pre-seed — deterministic why_chain fire. Persists a
+        # tool_call + tool_result pair identical to what the loop below
+        # would produce, then injects the result into context so the
+        # next EdgeAgent.respond() produces a terminal kind (answer)
+        # with the lineage already in hand. tool_call_count is bumped
+        # to 1 so the cap accounting stays honest — the LLM still gets
+        # one more tool call if it wants to chain.
+        if _is_why_question(body):
+            preamble_body = "Walking the decision lineage…"
+            call_args = {"query": body, "limit": 3}
+            call_payload = {
+                "name": "why_chain",
+                "args": call_args,
+                "preamble": preamble_body,
+                "reasoning": "auto-fire on 'why' prefix",
+            }
+            call_msg = await self._stream_service.post_system_message(
+                stream_id=stream_id,
+                author_id=EDGE_AGENT_SYSTEM_USER_ID,
+                body=json.dumps(call_payload, ensure_ascii=False),
+                kind="edge-tool-call",
+                linked_id=message_id,
+            )
+            skill_result = await self._skills_service.execute(
+                project_id=project_id,
+                skill_name="why_chain",
+                args=call_args,
+            )
+            result_msg = await self._stream_service.post_system_message(
+                stream_id=stream_id,
+                author_id=EDGE_AGENT_SYSTEM_USER_ID,
+                body=json.dumps(skill_result, ensure_ascii=False, default=str),
+                kind="edge-tool-result",
+                linked_id=call_msg.get("id"),
+            )
+            tool_messages.append(
+                {
+                    "kind": "edge-tool-call",
+                    "message_id": call_msg.get("id"),
+                    "name": "why_chain",
+                    "args": call_args,
+                    "preamble": preamble_body,
+                }
+            )
+            tool_messages.append(
+                {
+                    "kind": "edge-tool-result",
+                    "message_id": result_msg.get("id"),
+                    "name": "why_chain",
+                    "result": skill_result,
+                }
+            )
+            tool_call_count += 1
+            tool_turn_entry = {
+                "author_id": EDGE_AGENT_SYSTEM_USER_ID,
+                "kind": "edge-tool-result",
+                "body": json.dumps(
+                    {"name": "why_chain", "result": skill_result},
+                    ensure_ascii=False,
+                    default=str,
+                ),
+                "created_at": None,
+            }
+            recent = list(context.get("recent_messages") or [])
+            recent.append(tool_turn_entry)
+            context = {**context, "recent_messages": recent}
 
         while True:
             try:
