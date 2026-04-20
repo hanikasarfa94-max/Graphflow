@@ -5,7 +5,7 @@ set -euo pipefail
 
 COMPOSE="docker compose -f $(dirname "$0")/docker-compose.yml"
 
-for s in seed_moonshot seed_moonshot_zh seed_rich_details seed_wiki; do
+for s in seed_moonshot seed_moonshot_zh seed_rich_details seed_wiki seed_v2_features; do
   echo "=== $s ==="
   $COMPOSE exec -T api python /app/scripts/demo/$s.py
 done
