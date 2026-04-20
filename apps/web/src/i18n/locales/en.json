@@ -449,6 +449,7 @@
   "graph": {
     "legend": {
       "goal": "Goal",
+      "commitment": "Commitment",
       "deliverable": "Deliverable",
       "task": "Task",
       "risk": "Risk",
@@ -463,7 +464,22 @@
       "all": "All",
       "flow": "Flow",
       "decisions": "Decisions",
-      "risks": "Risks"
+      "risks": "Risks",
+      "commitments": "Commitments"
+    },
+    "commit": {
+      "button": "+ Commit",
+      "title": "Commit a promise",
+      "subtitle": "A thesis-commit binds the project to a future state. Drift detection measures reality against what was promised.",
+      "headlineLabel": "Promise",
+      "headlinePlaceholder": "e.g. Ship Stellar Drift by Apr 30",
+      "targetDateLabel": "Target date (optional)",
+      "metricLabel": "How will we know (optional)",
+      "metricPlaceholder": "e.g. all 10 tasks shipped, no critical risks open",
+      "submit": "Commit",
+      "submitting": "Committing…",
+      "cancel": "Cancel",
+      "errorGeneric": "Couldn't save the commitment"
     },
     "search": {
       "placeholder": "Search nodes",

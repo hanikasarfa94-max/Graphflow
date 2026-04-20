@@ -211,6 +211,11 @@ async def get_project_state(
     delivery_service = request.app.state.delivery_service
     delivery = await delivery_service.latest_for_project(project_id)
 
+    commitment_service = request.app.state.commitment_service
+    commitments = await commitment_service.list_for_project(
+        project_id=project_id, limit=100
+    )
+
     return {
         "project": {"id": project.id, "title": project.title},
         "requirement_version": requirement_version,
@@ -225,4 +230,5 @@ async def get_project_state(
         "conflict_summary": conflicts_payload["summary"],
         "decisions": decisions,
         "delivery": delivery,
+        "commitments": commitments,
     }

@@ -20,6 +20,7 @@ from .collab import (
     NotificationService,
 )
 from .collab_hub import CollabHub
+from .commitments import CommitmentService, CommitmentValidationError
 from .conflicts import ConflictService
 from .decisions import DecisionError, DecisionService
 from .delivery import DeliveryError, DeliveryService
@@ -58,6 +59,8 @@ __all__ = [
     "MessageService",
     "NotificationService",
     "CollabHub",
+    "CommitmentService",
+    "CommitmentValidationError",
     "ConflictService",
     "DecisionService",
     "DecisionError",

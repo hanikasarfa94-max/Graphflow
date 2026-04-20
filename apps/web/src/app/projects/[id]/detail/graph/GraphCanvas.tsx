@@ -26,6 +26,7 @@ import {
   type TimelineResponse,
 } from "@/lib/api";
 
+import { CommitModal } from "./CommitModal";
 import { TimelineStrip } from "./TimelineStrip";
 
 // Graph v2 Wave 1 — live, differentiated, searchable.
@@ -45,32 +46,44 @@ import { TimelineStrip } from "./TimelineStrip";
 // Wave 2 adds decision nodes (needs backend state extension), dagre
 // layout, and the intent strip.
 
-type NodeKind = "goal" | "deliverable" | "decision" | "task" | "risk";
+type NodeKind =
+  | "goal"
+  | "commitment"
+  | "deliverable"
+  | "decision"
+  | "task"
+  | "risk";
 
 // Intent strip modes — "which slice of the graph do I care about right
 // now?" Active mode dims non-members without hiding them, so the viewer
 // keeps spatial context.
-type IntentMode = "all" | "flow" | "decisions" | "risks";
+type IntentMode = "all" | "flow" | "decisions" | "risks" | "commitments";
 
-// Wave 2 adds a decision lane between deliverables and tasks. Each column
-// ends 60px before the next one starts so cards breathe at fitView zoom.
-//   goal:       40  → 300
-//   deliverable 360 → 620
-//   decision    680 → 880
-//   task        940 → 1220
-//   risk        1280 → 1520
+// Sprint 2a adds a commitment lane between goals and deliverables.
+// Commitments are promises of future state (distinct from decisions,
+// which pick between options). They sit close to goals because they
+// usually frame the project's target. Every column ends ≥40px before
+// the next one starts so cards breathe at fitView zoom.
+//   goal:        40   → 300
+//   commitment:  340  → 540
+//   deliverable: 580  → 840
+//   decision:    880  → 1080
+//   task:        1120 → 1400
+//   risk:        1440 → 1680
 const COL_X: Record<NodeKind, number> = {
   goal: 40,
-  deliverable: 360,
-  decision: 680,
-  task: 940,
-  risk: 1280,
+  commitment: 340,
+  deliverable: 580,
+  decision: 880,
+  task: 1120,
+  risk: 1440,
 };
 const ROW_STEP = 110;
 const ROW_START = 40;
 
 const NODE_WIDTH: Record<NodeKind, number> = {
   goal: 260,
+  commitment: 200,
   deliverable: 260,
   decision: 200,
   task: 280,
@@ -95,6 +108,7 @@ const SEVERITY_BORDER: Record<string, string> = {
 // a glance — eye reads the stripe before reading the label.
 const KIND_BAR: Record<NodeKind, string> = {
   goal: "var(--wg-accent)",
+  commitment: "#b5802b",
   deliverable: "#4d7a4a",
   decision: "var(--wg-accent)",
   task: "var(--wg-ink-faint)",
@@ -102,6 +116,7 @@ const KIND_BAR: Record<NodeKind, string> = {
 };
 const KIND_ICON: Record<NodeKind, string> = {
   goal: "◆",
+  commitment: "◎",
   deliverable: "▦",
   decision: "⚡",
   task: "▸",
@@ -334,6 +349,11 @@ function buildSnapshotIndex(state: ProjectState): SnapshotIndex {
       "decision",
       dec as unknown as Record<string, unknown>,
     );
+  for (const cm of state.commitments ?? [])
+    idx[`commitment-${cm.id}`] = signature(
+      "commitment",
+      cm as unknown as Record<string, unknown>,
+    );
   for (const t of state.plan.tasks)
     idx[`task-${t.id}`] = signature("task", t as Record<string, unknown>);
   for (const r of state.graph.risks)
@@ -347,14 +367,19 @@ type Positions = Record<string, { x: number; y: number }>;
 // 620, task moved 740→860, risk moved 1120→1180), so Wave 1 caches produce
 // overlapping cards. Any older cache keys for this project are cleared on
 // first load so users don't have to Clear Site Data manually.
-const POSITIONS_KEY_PREFIX = "graph-pos:v2:";
+const POSITIONS_KEY_PREFIX = "graph-pos:v3:";
 
 function loadPositions(projectId: string): Positions {
   try {
-    // Clean up any legacy Wave 1 key for this project.
-    const legacy = `graph-pos:${projectId}`;
-    if (localStorage.getItem(legacy) !== null) {
-      localStorage.removeItem(legacy);
+    // Drop superseded keys. Each column-layout shift bumps the version
+    // suffix; stale caches would collide with the new X positions.
+    for (const legacy of [
+      `graph-pos:${projectId}`,
+      `graph-pos:v2:${projectId}`,
+    ]) {
+      if (localStorage.getItem(legacy) !== null) {
+        localStorage.removeItem(legacy);
+      }
     }
     const raw = localStorage.getItem(POSITIONS_KEY_PREFIX + projectId);
     if (!raw) return {};
@@ -405,6 +430,7 @@ export function GraphCanvas({
     y: number;
   } | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
+  const [commitModalOpen, setCommitModalOpen] = useState(false);
 
   const prevSnapshotRef = useRef<SnapshotIndex>(buildSnapshotIndex(initialState));
   const refetchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -617,6 +643,21 @@ export function GraphCanvas({
           }
         }
       }
+    } else if (mode === "commitments") {
+      // Commitments + the graph entities they scope to. Unanchored
+      // commitments still light up — the promise itself is what the
+      // viewer wants to focus on.
+      for (const cm of state.commitments ?? []) {
+        inMode.add(`commitment-${cm.id}`);
+        if (cm.scope_ref_kind && cm.scope_ref_id) {
+          if (cm.scope_ref_kind === "deliverable")
+            inMode.add(`del-${cm.scope_ref_id}`);
+          else if (cm.scope_ref_kind === "task")
+            inMode.add(`task-${cm.scope_ref_id}`);
+          else if (cm.scope_ref_kind === "goal")
+            inMode.add(`goal-${cm.scope_ref_id}`);
+        }
+      }
     }
 
     // Returns true if a node should render dimmed under the current
@@ -653,6 +694,81 @@ export function GraphCanvas({
           pulseExpiresAt: pulseAt(id),
         },
       });
+    });
+
+    // Commitments — promises of future state. Rendered in their own
+    // column between goals and deliverables. Target-date shows as
+    // subtitle when present; status badge via the bar color
+    // (amber/sage later; see SEVERITY handling below).
+    (state.commitments ?? []).forEach((cm, i) => {
+      const id = `commitment-${cm.id}`;
+      const title = trim(cm.headline, 64);
+      const subtitleParts: string[] = [];
+      if (cm.target_date) {
+        try {
+          subtitleParts.push(
+            new Date(cm.target_date).toLocaleDateString(undefined, {
+              month: "short",
+              day: "numeric",
+            }),
+          );
+        } catch {
+          // fall through — no date on subtitle
+        }
+      }
+      if (cm.status && cm.status !== "open") {
+        subtitleParts.push(cm.status);
+      }
+      const subtitle = subtitleParts.join(" · ") || undefined;
+      rawNodes.push({
+        id,
+        type: "wg",
+        sourcePosition: Position.Right,
+        targetPosition: Position.Left,
+        position: posOr(id, {
+          x: COL_X.commitment,
+          y: ROW_START + i * ROW_STEP,
+        }),
+        data: {
+          kind: "commitment",
+          title,
+          subtitle,
+          dimmed: dimFor(id, title, subtitle),
+          pulseExpiresAt: pulseAt(id),
+        },
+      });
+      // If the commitment is anchored to a graph entity, emit a
+      // dashed edge to it so the scope is visible.
+      if (cm.scope_ref_kind && cm.scope_ref_id) {
+        const targetNodeId = (() => {
+          switch (cm.scope_ref_kind) {
+            case "deliverable":
+              return `del-${cm.scope_ref_id}`;
+            case "task":
+              return `task-${cm.scope_ref_id}`;
+            case "goal":
+              return `goal-${cm.scope_ref_id}`;
+            case "milestone":
+              return null; // milestones not rendered as nodes today
+            default:
+              return null;
+          }
+        })();
+        if (targetNodeId) {
+          rawEdges.push({
+            id: `e-cm-${cm.id}`,
+            source: id,
+            target: targetNodeId,
+            style: {
+              stroke: "#b5802b",
+              strokeWidth: 1.1,
+              strokeDasharray: "3 3",
+              opacity: 0.7,
+            },
+            markerEnd: { type: MarkerType.ArrowClosed, color: "#b5802b" },
+          });
+        }
+      }
     });
 
     state.graph.deliverables.forEach((d, i) => {
@@ -946,6 +1062,7 @@ export function GraphCanvas({
       <Legend
         labels={{
           goal: t("legend.goal"),
+          commitment: t("legend.commitment"),
           deliverable: t("legend.deliverable"),
           decision: t("legend.decision"),
           task: t("legend.task"),
@@ -961,9 +1078,35 @@ export function GraphCanvas({
           flow: t("intent.flow"),
           decisions: t("intent.decisions"),
           risks: t("intent.risks"),
+          commitments: t("intent.commitments"),
         }}
       />
       <WsBadge state={wsState} labels={t} />
+
+      {/* + Commit button — opens CommitModal. Positioned to the left of
+          the WsBadge pill so they align on the same top-right row. */}
+      <button
+        type="button"
+        onClick={() => setCommitModalOpen(true)}
+        style={{
+          position: "absolute",
+          top: 12,
+          right: 118,
+          padding: "4px 12px",
+          background: "var(--wg-accent)",
+          color: "#fff",
+          border: "none",
+          borderRadius: 12,
+          fontSize: 11,
+          fontFamily: "var(--wg-font-mono)",
+          letterSpacing: "0.02em",
+          cursor: "pointer",
+          zIndex: 4,
+          boxShadow: "0 1px 3px rgba(0,0,0,0.12)",
+        }}
+      >
+        {t("commit.button")}
+      </button>
 
       {search !== null ? (
         <SearchBar
@@ -1005,6 +1148,25 @@ export function GraphCanvas({
             belongsTo: t("drawer.belongsTo"),
             acceptance: t("drawer.acceptance"),
             content: t("drawer.content"),
+          }}
+        />
+      ) : null}
+
+      {commitModalOpen ? (
+        <CommitModal
+          projectId={projectId}
+          onClose={() => setCommitModalOpen(false)}
+          onCreated={() => {
+            // Close the modal, then refetch project state so the
+            // new commitment flows into the graph. No optimistic
+            // merge — the backend's shape is authoritative and the
+            // refetch costs one round-trip.
+            setCommitModalOpen(false);
+            api<ProjectState>(`/api/projects/${projectId}/state`)
+              .then((next) => setState(next))
+              .catch(() => {
+                // stale state is fine; user can manually reload
+              });
           }}
         />
       ) : null}
@@ -1069,6 +1231,7 @@ function Legend({
 }) {
   const items: { kind: NodeKind }[] = [
     { kind: "goal" },
+    { kind: "commitment" },
     { kind: "deliverable" },
     { kind: "decision" },
     { kind: "task" },
@@ -1137,7 +1300,13 @@ function IntentStrip({
   onChange: (m: IntentMode) => void;
   labels: Record<IntentMode, string>;
 }) {
-  const options: IntentMode[] = ["all", "flow", "decisions", "risks"];
+  const options: IntentMode[] = [
+    "all",
+    "flow",
+    "decisions",
+    "risks",
+    "commitments",
+  ];
   return (
     <div
       style={{
@@ -1833,6 +2002,30 @@ function resolveEntity(
             ? dec.rationale
             : undefined,
         status: dec.apply_outcome,
+      },
+    };
+  }
+  if (nodeId.startsWith("commitment-")) {
+    const id = nodeId.slice("commitment-".length);
+    const cm = (state.commitments ?? []).find((x) => x.id === id);
+    if (!cm) return undefined;
+    const descParts: string[] = [];
+    if (cm.target_date) {
+      try {
+        descParts.push(
+          `Target: ${new Date(cm.target_date).toLocaleDateString()}`,
+        );
+      } catch {
+        // skip
+      }
+    }
+    if (cm.metric) descParts.push(`Metric: ${cm.metric}`);
+    return {
+      kind: "commitment",
+      detail: {
+        title: cm.headline,
+        description: descParts.join("\n") || undefined,
+        status: cm.status,
       },
     };
   }

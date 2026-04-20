@@ -12,6 +12,7 @@ from .orm import (
     AssignmentRow,
     ClarificationQuestionRow,
     CommentRow,
+    CommitmentRow,
     ConflictRow,
     ConstraintRow,
     DecisionRow,
@@ -1960,3 +1961,92 @@ class StatusTransitionRepository:
             .limit(limit)
         )
         return list((await self._session.execute(stmt)).scalars().all())
+
+
+class CommitmentRepository:
+    """CRUD + listing for CommitmentRow (Sprint 2a).
+
+    Invariants the service layer relies on:
+      * `headline` is effectively immutable — callers mark a commitment
+        `withdrawn` and create a new row instead of editing. This
+        keeps the timeline of promises legible.
+      * Only terminal-state transitions touch `resolved_at`. Non-
+        terminal updates (re-anchoring scope_ref) do not — the create
+        timestamp remains the canonical "when was this promised."
+    """
+
+    _TERMINAL_STATUSES = frozenset({"met", "missed", "withdrawn"})
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def create(
+        self,
+        *,
+        project_id: str,
+        created_by_user_id: str,
+        headline: str,
+        owner_user_id: str | None = None,
+        target_date: datetime | None = None,
+        metric: str | None = None,
+        scope_ref_kind: str | None = None,
+        scope_ref_id: str | None = None,
+        source_message_id: str | None = None,
+    ) -> CommitmentRow:
+        row = CommitmentRow(
+            id=_new_id(),
+            project_id=project_id,
+            created_by_user_id=created_by_user_id,
+            owner_user_id=owner_user_id or created_by_user_id,
+            headline=headline,
+            target_date=target_date,
+            metric=metric,
+            scope_ref_kind=scope_ref_kind,
+            scope_ref_id=scope_ref_id,
+            source_message_id=source_message_id,
+        )
+        self._session.add(row)
+        await self._session.flush()
+        return row
+
+    async def get(self, commitment_id: str) -> CommitmentRow | None:
+        return (
+            await self._session.execute(
+                select(CommitmentRow).where(CommitmentRow.id == commitment_id)
+            )
+        ).scalar_one_or_none()
+
+    async def list_for_project(
+        self,
+        project_id: str,
+        *,
+        status: str | None = None,
+        limit: int = 100,
+    ) -> list[CommitmentRow]:
+        stmt = select(CommitmentRow).where(CommitmentRow.project_id == project_id)
+        if status is not None:
+            stmt = stmt.where(CommitmentRow.status == status)
+        stmt = stmt.order_by(CommitmentRow.created_at.desc()).limit(limit)
+        return list((await self._session.execute(stmt)).scalars().all())
+
+    async def set_status(
+        self,
+        commitment_id: str,
+        *,
+        status: str,
+    ) -> CommitmentRow | None:
+        """Update the commitment's status. Setting a terminal state
+        (met/missed/withdrawn) stamps `resolved_at`; reverting to open
+        clears it. Unknown status strings raise ValueError at the
+        service boundary — this layer stays permissive so seed/migration
+        data doesn't get rejected."""
+        row = await self.get(commitment_id)
+        if row is None:
+            return None
+        row.status = status
+        if status in self._TERMINAL_STATUSES:
+            row.resolved_at = datetime.now(timezone.utc)
+        else:
+            row.resolved_at = None
+        await self._session.flush()
+        return row

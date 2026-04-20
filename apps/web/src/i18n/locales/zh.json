@@ -449,6 +449,7 @@
   "graph": {
     "legend": {
       "goal": "目标",
+      "commitment": "承诺",
       "deliverable": "交付物",
       "task": "任务",
       "risk": "风险",
@@ -463,7 +464,22 @@
       "all": "全部",
       "flow": "流程",
       "decisions": "决策",
-      "risks": "风险"
+      "risks": "风险",
+      "commitments": "承诺"
+    },
+    "commit": {
+      "button": "+ 承诺",
+      "title": "立下一个承诺",
+      "subtitle": "承诺将项目与未来的状态绑定。漂移检测会用这条承诺作为标尺,衡量现状与应然。",
+      "headlineLabel": "承诺内容",
+      "headlinePlaceholder": "例如:4 月 30 日之前上线星际漂移",
+      "targetDateLabel": "目标日期(可选)",
+      "metricLabel": "如何判断达成(可选)",
+      "metricPlaceholder": "例如:10 项任务全部完成,且无严重风险",
+      "submit": "提交承诺",
+      "submitting": "提交中…",
+      "cancel": "取消",
+      "errorGeneric": "无法保存承诺"
     },
     "search": {
       "placeholder": "搜索节点",

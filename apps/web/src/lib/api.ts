@@ -138,6 +138,75 @@ export interface ProjectState {
   conflict_summary: ConflictSummary;
   decisions: Decision[];
   delivery: Delivery | null;
+  commitments: Commitment[];
+}
+
+// ---------- Commitments (Sprint 2a — thesis-commit primitive) ----------
+
+export type CommitmentStatus = "open" | "met" | "missed" | "withdrawn";
+
+export type CommitmentScopeKind =
+  | "task"
+  | "deliverable"
+  | "goal"
+  | "milestone";
+
+export interface Commitment {
+  id: string;
+  project_id: string;
+  created_by_user_id: string;
+  owner_user_id: string | null;
+  headline: string;
+  target_date: string | null;
+  metric: string | null;
+  scope_ref_kind: CommitmentScopeKind | null;
+  scope_ref_id: string | null;
+  status: CommitmentStatus;
+  source_message_id: string | null;
+  created_at: string | null;
+  resolved_at: string | null;
+}
+
+export interface CreateCommitmentParams {
+  headline: string;
+  owner_user_id?: string;
+  target_date?: string; // ISO8601
+  metric?: string;
+  scope_ref_kind?: CommitmentScopeKind;
+  scope_ref_id?: string;
+  source_message_id?: string;
+}
+
+export function createCommitment(
+  projectId: string,
+  params: CreateCommitmentParams,
+): Promise<{ ok: boolean; commitment: Commitment }> {
+  return api(`/api/projects/${projectId}/commitments`, {
+    method: "POST",
+    body: params as unknown as JsonValue,
+  });
+}
+
+export function listCommitments(
+  projectId: string,
+  opts: { status?: CommitmentStatus; limit?: number } = {},
+  baseUrl?: string,
+): Promise<{ commitments: Commitment[] }> {
+  const qs: string[] = [];
+  if (opts.status) qs.push(`status=${encodeURIComponent(opts.status)}`);
+  if (opts.limit) qs.push(`limit=${opts.limit}`);
+  const q = qs.length ? `?${qs.join("&")}` : "";
+  return api(`/api/projects/${projectId}/commitments${q}`, { baseUrl });
+}
+
+export function setCommitmentStatus(
+  commitmentId: string,
+  status: CommitmentStatus,
+): Promise<{ ok: boolean; commitment: Commitment }> {
+  return api(`/api/commitments/${commitmentId}/status`, {
+    method: "PATCH",
+    body: { status },
+  });
 }
 
 export interface ConflictOption {

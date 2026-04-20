@@ -995,3 +995,70 @@ class RoutedSignalRow(Base):
     responded_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+
+
+class CommitmentRow(Base):
+    """A thesis-commit — a human-authored promise of a future state,
+    distinct from a DecisionRow.
+
+    Decisions pick between options and resolve a conflict. Commitments
+    bind an owner to an outcome. Drift detection measures current graph
+    state vs commitments; the "delivery is behind April 30 commitment"
+    card we want in-product reads from this table.
+
+    Schema choices:
+      * `headline` is the human-authored short form ("Ship Stellar
+        Drift by Apr 30"). Immutable once created — if the commitment
+        changes, mark this one `withdrawn` and create a new row so
+        the timeline of promises stays legible.
+      * `target_date` is optional. Commitments can be date-less
+        ("ship with crossplay" — a quality promise, not a deadline).
+      * `metric` is free-form text in v1. v2 structures it
+        ({op, field, value}) so drift can evaluate quantitatively.
+      * `scope_ref_{kind,id}` anchors the commitment to a graph
+        entity. Unanchored commitments are allowed (v1 auto-derives
+        drift by text match); anchored ones are cheaper to compare.
+      * `status` lifecycle: open → met | missed | withdrawn.
+        Terminal states set `resolved_at`.
+      * `source_message_id` links back to the chat turn that spawned
+        the commitment (for lineage + forensic replay).
+
+    v2 additions parked for Sprint 2b (SLA): add `sla_window_seconds`
+    and `sla_last_poke_at` fields. Current shape is forward-compat.
+    """
+
+    __tablename__ = "commitments"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    project_id: Mapped[str] = mapped_column(
+        ForeignKey("projects.id", ondelete="CASCADE"), index=True
+    )
+    created_by_user_id: Mapped[str] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    owner_user_id: Mapped[str | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    headline: Mapped[str] = mapped_column(String(500))
+    target_date: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
+    )
+    metric: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    scope_ref_kind: Mapped[str | None] = mapped_column(
+        String(32), nullable=True
+    )
+    scope_ref_id: Mapped[str | None] = mapped_column(
+        String(36), nullable=True, index=True
+    )
+    status: Mapped[str] = mapped_column(
+        String(32), default="open", index=True
+    )
+    source_message_id: Mapped[str | None] = mapped_column(
+        ForeignKey("messages.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow
+    )
+    resolved_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )

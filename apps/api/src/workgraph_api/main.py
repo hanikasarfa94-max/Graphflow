@@ -46,6 +46,7 @@ from workgraph_schemas import ApiError, ApiErrorCode
 from workgraph_api.routers import auth as auth_router
 from workgraph_api.routers import clarification as clarification_router
 from workgraph_api.routers import collab as collab_router
+from workgraph_api.routers import commitments as commitments_router
 from workgraph_api.routers import conflicts as conflicts_router
 from workgraph_api.routers import delivery as delivery_router
 from workgraph_api.routers import demo as demo_router
@@ -70,6 +71,7 @@ from workgraph_api.services import (
     ClarificationService,
     CollabHub,
     CommentService,
+    CommitmentService,
     ConflictService,
     DecisionService,
     DeliveryService,
@@ -395,6 +397,7 @@ async def lifespan(app: FastAPI):
         stream_service,
     )
     routing_service = RoutingService(sessionmaker, event_bus, stream_service)
+    commitment_service = CommitmentService(sessionmaker, event_bus)
     membrane_service = MembraneService(
         sessionmaker,
         event_bus,
@@ -458,6 +461,7 @@ async def lifespan(app: FastAPI):
     app.state.skills_service = skills_service
     app.state.membrane_service = membrane_service
     app.state.membrane_agent = membrane_agent
+    app.state.commitment_service = commitment_service
 
     # Drift auto-trigger (Sprint 1c). Subscribe drift_service to the
     # event types that most reliably indicate "the project's surface
@@ -524,6 +528,7 @@ app.include_router(conflicts_router.router)
 app.include_router(delivery_router.router)
 app.include_router(demo_router.router)
 app.include_router(drift_router.router)
+app.include_router(commitments_router.router)
 app.include_router(events_router.router)
 app.include_router(observability_router.router)
 app.include_router(personal_router.router)
