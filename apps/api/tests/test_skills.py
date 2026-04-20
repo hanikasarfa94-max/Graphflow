@@ -14,8 +14,6 @@ Coverage:
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
-
 import pytest
 
 from workgraph_api.services import SkillsService
@@ -525,3 +523,150 @@ async def test_member_profile_missing_user_id_arg_is_invalid(api_env):
     )
     assert out["ok"] is False
     assert out["error"] == "invalid_args"
+
+
+# ---------------------------------------------------------------------------
+# routing_suggest — graph-distance × activity × profile-match scorer.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_routing_suggest_ranks_graph_match_above_profile_only(api_env):
+    """A member who resolved a decision matching the query tokens should
+    outrank a member whose only match is a declared ability. Graph
+    distance carries the heaviest weight (0.5 vs 0.2)."""
+    _, maker, *_ = api_env
+    pid = await _mk_project(maker)
+    graph_match_uid = await _mk_user(maker, "sk_route_graph")
+    profile_match_uid = await _mk_user(
+        maker,
+        "sk_route_profile",
+        declared_abilities=["compliance"],
+    )
+    await _add_member(maker, pid, graph_match_uid)
+    await _add_member(maker, pid, profile_match_uid)
+    # Graph-match user has a decision whose rationale contains the query.
+    await _mk_decision(
+        maker,
+        pid,
+        resolver_id=graph_match_uid,
+        rationale="compliance review crystallized before launch",
+    )
+    svc = SkillsService(maker)
+    out = await svc.execute(
+        project_id=pid,
+        skill_name="routing_suggest",
+        args={"query": "compliance review", "limit": 5},
+    )
+    assert out["ok"] is True
+    rows = out["result"]
+    assert len(rows) == 2, rows
+    # Graph-match wins.
+    assert rows[0]["user_id"] == graph_match_uid
+    assert rows[0]["graph_score"] > 0
+    assert rows[0]["score"] > rows[1]["score"]
+    # Both rows carry structured breakdowns.
+    for r in rows:
+        assert {
+            "user_id",
+            "display_name",
+            "role",
+            "score",
+            "graph_score",
+            "activity_score",
+            "profile_score",
+            "reason",
+        } <= r.keys()
+
+
+@pytest.mark.asyncio
+async def test_routing_suggest_excludes_source_user(api_env):
+    _, maker, *_ = api_env
+    pid = await _mk_project(maker)
+    src = await _mk_user(maker, "sk_route_src")
+    other = await _mk_user(maker, "sk_route_other")
+    await _add_member(maker, pid, src)
+    await _add_member(maker, pid, other)
+    await _mk_decision(
+        maker, pid, resolver_id=src, rationale="boss fight balancing tuned"
+    )
+    await _mk_decision(
+        maker, pid, resolver_id=other, rationale="boss fight balancing tuned"
+    )
+    svc = SkillsService(maker)
+    out = await svc.execute(
+        project_id=pid,
+        skill_name="routing_suggest",
+        args={"query": "boss fight balancing", "source_user_id": src},
+    )
+    assert out["ok"] is True
+    uids = [r["user_id"] for r in out["result"]]
+    assert src not in uids
+    assert other in uids
+
+
+@pytest.mark.asyncio
+async def test_routing_suggest_empty_query_returns_empty(api_env):
+    _, maker, *_ = api_env
+    pid = await _mk_project(maker)
+    uid = await _mk_user(maker, "sk_route_empty")
+    await _add_member(maker, pid, uid)
+    svc = SkillsService(maker)
+    out = await svc.execute(
+        project_id=pid,
+        skill_name="routing_suggest",
+        args={"query": ""},
+    )
+    assert out["ok"] is True
+    assert out["result"] == []
+
+
+@pytest.mark.asyncio
+async def test_routing_suggest_drops_zero_signal_members(api_env):
+    """Members with no graph, activity, or profile signal must not surface
+    — the LLM shouldn't route to strangers with no visible connection."""
+    _, maker, *_ = api_env
+    pid = await _mk_project(maker)
+    matched_uid = await _mk_user(maker, "sk_route_match")
+    stranger_uid = await _mk_user(maker, "sk_route_stranger")
+    await _add_member(maker, pid, matched_uid)
+    await _add_member(maker, pid, stranger_uid)
+    await _mk_decision(
+        maker,
+        pid,
+        resolver_id=matched_uid,
+        rationale="memory leak bug fixed in boss fight one",
+    )
+    svc = SkillsService(maker)
+    out = await svc.execute(
+        project_id=pid,
+        skill_name="routing_suggest",
+        args={"query": "memory leak"},
+    )
+    assert out["ok"] is True
+    rows = out["result"]
+    assert len(rows) == 1
+    assert rows[0]["user_id"] == matched_uid
+
+
+@pytest.mark.asyncio
+async def test_routing_suggest_accepts_cjk_tokens(api_env):
+    """CJK 2-char tokens are kept (they carry meaning) while 2-letter
+    Latin tokens are filtered as noise."""
+    _, maker, *_ = api_env
+    pid = await _mk_project(maker)
+    uid = await _mk_user(maker, "sk_route_cjk")
+    await _add_member(maker, pid, uid)
+    await _mk_decision(
+        maker, pid, resolver_id=uid, rationale="合规 审查 已完成"
+    )
+    svc = SkillsService(maker)
+    out = await svc.execute(
+        project_id=pid,
+        skill_name="routing_suggest",
+        args={"query": "合规 审查"},
+    )
+    assert out["ok"] is True
+    rows = out["result"]
+    assert len(rows) == 1
+    assert rows[0]["graph_score"] > 0

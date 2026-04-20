@@ -38,6 +38,8 @@ Skill catalog (kept in lockstep with the respond prompt and with
 from __future__ import annotations
 
 import logging
+import re
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from sqlalchemy import select
@@ -45,9 +47,11 @@ from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from workgraph_agents import ALLOWED_SKILLS
 from workgraph_persistence import (
+    AssignmentRepository,
     ConflictRepository,
     DecisionRepository,
     MembraneSignalRepository,
+    MessageRepository,
     PlanRepository,
     ProjectGraphRepository,
     ProjectMemberRepository,
@@ -68,6 +72,20 @@ _KB_SEARCH_MAX_LIMIT = 20
 _RECENT_DECISIONS_MAX_LIMIT = 20
 _WHY_CHAIN_SCAN_LIMIT = 100  # how many recent decisions to score against a query
 _WHY_CHAIN_MAX_RESULTS = 5
+
+# routing_suggest — how many recent rows to pull for the activity signal.
+_ROUTING_RECENT_MESSAGE_SCAN = 300
+_ROUTING_RECENT_DECISION_SCAN = 100
+_ROUTING_ACTIVITY_WINDOW_DAYS = 7
+_ROUTING_MAX_RESULTS = 5
+
+# Scorer weights. Graph distance dominates (the whole point of a graph-
+# native platform); activity and profile are tie-breakers. Changing these
+# constants is the primary knob for v2 — embeddings shift graph-distance,
+# but the wire format stays stable.
+_ROUTING_W_GRAPH = 0.50
+_ROUTING_W_ACTIVITY = 0.30
+_ROUTING_W_PROFILE = 0.20
 
 
 class SkillsService:
@@ -108,6 +126,10 @@ class SkillsService:
                 )
             elif skill_name == "why_chain":
                 result = await self._why_chain(project_id=project_id, **args)
+            elif skill_name == "routing_suggest":
+                result = await self._routing_suggest(
+                    project_id=project_id, **args
+                )
             else:  # defensive — already guarded above
                 return {"ok": False, "error": "unknown_skill"}
         except TypeError as e:
@@ -460,4 +482,298 @@ class SkillsService:
         return out
 
 
+    # ------------------------------------------------------------------
+    # routing_suggest — graph-distance-aware candidate scorer.
+    #
+    # The v2 bet, sharpened: routing by graph distance beats routing by
+    # org chart or @mention. When the edge LLM is about to propose a
+    # route_proposal, it can call this skill to get a ranked list of
+    # candidate members with explicit scores. Three signals:
+    #
+    #   graph_score — fraction of query tokens that appear in the titles
+    #     of this member's assigned tasks OR in the rationale of
+    #     decisions they've resolved. "How close is their work to the
+    #     thing being asked?"
+    #   activity_score — rolling-7d count of their messages + decisions,
+    #     normalized to [0,1]. "Are they around right now?"
+    #   profile_score — fraction of query tokens matching their
+    #     declared_abilities + role_hints. "Have they self-declared
+    #     expertise in this?"
+    #
+    # Source user is excluded (no self-routing). Members with zero signal
+    # across all three axes are dropped so the LLM doesn't pick a
+    # stranger with no visible connection to the issue. Query is tokenized
+    # with a minimal lowercase split-on-whitespace pass; stop words and
+    # short tokens are filtered. Embeddings replace this in v2 without
+    # changing the wire format.
+    # ------------------------------------------------------------------
+    async def _routing_suggest(
+        self,
+        *,
+        project_id: str,
+        query: str = "",
+        source_user_id: str | None = None,
+        limit: int = 3,
+    ) -> list[dict[str, Any]]:
+        try:
+            limit_val = max(1, min(int(limit), _ROUTING_MAX_RESULTS))
+        except (TypeError, ValueError):
+            limit_val = 3
+
+        tokens = _tokenize_query(query)
+        if not tokens:
+            # No signal to score against. Return an empty list rather
+            # than guess — the LLM should fall back to prompt intuition.
+            return []
+
+        async with session_scope(self._sessionmaker) as session:
+            members = await ProjectMemberRepository(session).list_for_project(
+                project_id
+            )
+            if not members:
+                return []
+
+            # Pre-fetch shared data once.
+            assignments = await AssignmentRepository(session).list_for_project(
+                project_id
+            )
+            active_assignments = [a for a in assignments if a.active]
+
+            req_repo = RequirementRepository(session)
+            latest_req = await req_repo.latest_for_project(project_id)
+            task_title_by_id: dict[str, str] = {}
+            if latest_req is not None:
+                plan = await PlanRepository(session).list_all(latest_req.id)
+                for t in plan.get("tasks", []):
+                    task_title_by_id[t.id] = (t.title or "").lower()
+
+            # All recent messages + decisions scoped to this project.
+            msg_repo = MessageRepository(session)
+            recent_messages = await msg_repo.list_recent(
+                project_id, limit=_ROUTING_RECENT_MESSAGE_SCAN
+            )
+            dec_repo = DecisionRepository(session)
+            recent_decisions = await dec_repo.list_for_project(
+                project_id, limit=_ROUTING_RECENT_DECISION_SCAN
+            )
+
+            # SQLite in tests strips tz info on round-trip, leaving
+            # naive datetimes in created_at. Compare on naive UTC so
+            # aware/naive mix doesn't raise. Production Postgres
+            # preserves tz, but since both sides become naive UTC the
+            # comparison still behaves identically.
+            now = datetime.now(timezone.utc).replace(tzinfo=None)
+            window_start = now - timedelta(days=_ROUTING_ACTIVITY_WINDOW_DAYS)
+
+            def _as_naive(dt: datetime | None) -> datetime | None:
+                if dt is None:
+                    return None
+                return dt.replace(tzinfo=None) if dt.tzinfo else dt
+
+            # Hydrate per-member rollups.
+            user_repo = UserRepository(session)
+            scored: list[dict[str, Any]] = []
+
+            for m in members:
+                if source_user_id and m.user_id == source_user_id:
+                    continue
+                # Graph-distance tokens: concat the text the user is
+                # plausibly "close to" into one haystack.
+                assigned_task_ids = [
+                    a.task_id
+                    for a in active_assignments
+                    if a.user_id == m.user_id
+                ]
+                graph_haystack_parts: list[str] = []
+                for tid in assigned_task_ids:
+                    title = task_title_by_id.get(tid)
+                    if title:
+                        graph_haystack_parts.append(title)
+                for d in recent_decisions:
+                    if d.resolver_id == m.user_id:
+                        graph_haystack_parts.append(
+                            (d.rationale or "").lower()
+                        )
+                        if d.custom_text:
+                            graph_haystack_parts.append(d.custom_text.lower())
+                graph_haystack = " ".join(graph_haystack_parts)
+                graph_hits = sum(1 for tok in tokens if tok in graph_haystack)
+                graph_score = graph_hits / len(tokens)
+
+                # Activity in the 7d window.
+                msg_count = sum(
+                    1
+                    for msg in recent_messages
+                    if msg.author_id == m.user_id
+                    and _as_naive(msg.created_at) is not None
+                    and _as_naive(msg.created_at) >= window_start
+                )
+                dec_count = sum(
+                    1
+                    for d in recent_decisions
+                    if d.resolver_id == m.user_id
+                    and _as_naive(d.created_at) is not None
+                    and _as_naive(d.created_at) >= window_start
+                )
+                # Normalize: 10 actions/week saturates. Simple ceiling.
+                activity_score = min(1.0, (msg_count + dec_count) / 10.0)
+
+                # Profile match.
+                user = await user_repo.get(m.user_id)
+                profile_text_parts: list[str] = []
+                display_name = m.user_id
+                if user is not None:
+                    display_name = user.display_name or user.username
+                    profile = dict(user.profile or {})
+                    profile_text_parts.extend(
+                        str(a).lower()
+                        for a in (profile.get("declared_abilities") or [])
+                    )
+                    profile_text_parts.extend(
+                        str(h).lower()
+                        for h in (profile.get("role_hints") or [])
+                    )
+                profile_text = " ".join(profile_text_parts)
+                profile_hits = (
+                    sum(1 for tok in tokens if tok in profile_text)
+                    if profile_text
+                    else 0
+                )
+                profile_score = profile_hits / len(tokens) if tokens else 0.0
+
+                total = (
+                    _ROUTING_W_GRAPH * graph_score
+                    + _ROUTING_W_ACTIVITY * activity_score
+                    + _ROUTING_W_PROFILE * profile_score
+                )
+                # Drop members with zero signal — prevents the LLM from
+                # proposing a teammate whose visible work has nothing
+                # to do with the query.
+                if total <= 0.0:
+                    continue
+
+                # Reason string — what made them rank? Pick whichever
+                # of the three signals contributed most, back it up with
+                # concrete evidence from the haystack.
+                contributions = {
+                    "graph": _ROUTING_W_GRAPH * graph_score,
+                    "activity": _ROUTING_W_ACTIVITY * activity_score,
+                    "profile": _ROUTING_W_PROFILE * profile_score,
+                }
+                primary = max(contributions, key=lambda k: contributions[k])
+                if primary == "graph" and graph_hits > 0:
+                    reason = "recent graph-adjacent work"
+                elif primary == "activity":
+                    reason = (
+                        f"active this week ({msg_count + dec_count} signals)"
+                    )
+                elif primary == "profile" and profile_hits > 0:
+                    reason = "self-declared expertise"
+                else:
+                    reason = "baseline fit"
+
+                scored.append(
+                    {
+                        "user_id": m.user_id,
+                        "display_name": display_name,
+                        "role": m.role,
+                        "score": round(total, 3),
+                        "graph_score": round(graph_score, 3),
+                        "activity_score": round(activity_score, 3),
+                        "profile_score": round(profile_score, 3),
+                        "reason": reason,
+                    }
+                )
+
+        scored.sort(key=lambda r: r["score"], reverse=True)
+        return scored[:limit_val]
+
+
 __all__ = ["SkillsService"]
+
+
+# ---------------------------------------------------------------------------
+# Tokenization helpers (module-private, pure).
+# ---------------------------------------------------------------------------
+
+# Minimal stop-word list — EN + ZH common non-content words. Not exhaustive;
+# the goal is to prevent "the", "and", "is", "了", "的" from dominating the
+# token set, not to build a linguist-grade tokenizer. Anything not in this
+# list but ≥3 characters makes the cut.
+_STOP_WORDS = frozenset(
+    {
+        "the",
+        "and",
+        "for",
+        "with",
+        "from",
+        "into",
+        "that",
+        "this",
+        "about",
+        "which",
+        "what",
+        "why",
+        "who",
+        "how",
+        "when",
+        "where",
+        "should",
+        "could",
+        "would",
+        "can",
+        "will",
+        "are",
+        "was",
+        "has",
+        "have",
+        "but",
+        "not",
+        "请",
+        "是否",
+        "为什么",
+        "怎么",
+        "什么",
+        "这个",
+        "那个",
+    }
+)
+
+_MAX_QUERY_TOKENS = 10
+
+
+def _tokenize_query(query: str) -> list[str]:
+    """Lowercase split-on-whitespace tokenizer with a small stop-word filter.
+
+    v1 is deliberately naive — embeddings replace it in v2 without
+    changing the wire format of routing_suggest. The invariant we
+    preserve: tokens are lowercase, unique, and non-empty; the list is
+    capped so a megabyte of text can't blow up the scorer.
+    """
+    if not query:
+        return []
+    # Fold CJK punctuation to whitespace so "合规审查?为什么" splits.
+    cleaned = re.sub(r"[\s。、,,.!?()()【】「」\[\]<>&|\\/:;\"'`]+", " ", query)
+    parts = [p.strip().lower() for p in cleaned.split()]
+    seen: set[str] = set()
+    out: list[str] = []
+    for p in parts:
+        if len(p) < 3:
+            # Keep CJK bigrams — a 2-char CJK token carries meaning
+            # even though EN 2-letter tokens don't. Heuristic: if the
+            # token has any CJK codepoint, accept ≥ 2 chars.
+            if len(p) >= 2 and any(
+                "\u4e00" <= ch <= "\u9fff" for ch in p
+            ):
+                pass
+            else:
+                continue
+        if p in _STOP_WORDS:
+            continue
+        if p in seen:
+            continue
+        seen.add(p)
+        out.append(p)
+        if len(out) >= _MAX_QUERY_TOKENS:
+            break
+    return out

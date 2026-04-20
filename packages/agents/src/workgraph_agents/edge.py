@@ -58,7 +58,14 @@ REPLY_FRAME_PROMPT_VERSION = "2026-04-18.phaseM.v1"
 # the backend dispatcher and the prompt text reference the same list —
 # anything outside this set is rejected at the service layer.
 ALLOWED_SKILLS = frozenset(
-    {"kb_search", "recent_decisions", "risk_scan", "member_profile", "why_chain"}
+    {
+        "kb_search",
+        "recent_decisions",
+        "risk_scan",
+        "member_profile",
+        "why_chain",
+        "routing_suggest",
+    }
 )
 
 _PROMPT_DIR = Path(__file__).parent / "prompts" / "edge"
@@ -74,7 +81,12 @@ EdgeKind = Literal["answer", "clarify", "tool_call", "route_proposal", "silence"
 OptionKind = Literal["accept", "counter", "escalate", "custom"]
 ActionHint = Literal["accept", "counter_back", "info_only"]
 SkillName = Literal[
-    "kb_search", "recent_decisions", "risk_scan", "member_profile", "why_chain"
+    "kb_search",
+    "recent_decisions",
+    "risk_scan",
+    "member_profile",
+    "why_chain",
+    "routing_suggest",
 ]
 
 
