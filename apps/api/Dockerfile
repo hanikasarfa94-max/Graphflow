@@ -7,7 +7,12 @@ FROM ghcr.io/astral-sh/uv:0.5-python3.11-bookworm-slim AS builder
 ENV UV_LINK_MODE=copy \
     UV_COMPILE_BYTECODE=1 \
     UV_PYTHON_DOWNLOADS=never \
-    PYTHONDONTWRITEBYTECODE=1
+    PYTHONDONTWRITEBYTECODE=1 \
+    # Mainland VPS → PyPI is slow/unreliable; use the Tsinghua mirror
+    # and bump the timeout. Override at build time with
+    # `--build-arg UV_INDEX_URL=...` if a different mirror is needed.
+    UV_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple \
+    UV_HTTP_TIMEOUT=600
 
 WORKDIR /app
 
