@@ -499,6 +499,11 @@
       "taskScoped": "受限视图 —— 只显示你被分配的工作。如需更多权限,请联系项目负责人。",
       "observer": "观察者视图 —— 只读访问。"
     },
+    "sim": {
+      "banner": "推演中:移除「{headline}」 — {orphans} 个孤立任务 · {exposed} 个暴露的交付物 · {slipping} 个里程碑滑动 · {atRisk} 个承诺受影响",
+      "exit": "退出推演",
+      "running": "推演中…"
+    },
     "search": {
       "placeholder": "搜索节点",
       "hint": "按 / 开始搜索",
@@ -518,7 +523,8 @@
       "noDetail": "暂无更多信息。",
       "belongsTo": "所属",
       "acceptance": "验收标准",
-      "content": "详情"
+      "content": "详情",
+      "simulate": "⚡ 推演移除"
     },
     "empty": "图谱为空 —— 接收阶段尚未完成",
     "timeline": {

@@ -216,6 +216,39 @@ export function setCommitmentStatus(
   });
 }
 
+// ---------- Counterfactual simulation (/simulate) ----------
+
+export type SimulationKind = "drop_task";
+
+export interface SimulationAffected {
+  id: string;
+  kind: "task" | "deliverable" | "milestone" | "commitment";
+  title: string;
+  reason: string;
+}
+
+export interface SimulationResult {
+  kind: SimulationKind;
+  entity_kind: "task";
+  entity_id: string;
+  dropped: SimulationAffected[];
+  orphan_tasks: SimulationAffected[];
+  slipping_milestones: SimulationAffected[];
+  exposed_deliverables: SimulationAffected[];
+  at_risk_commitments: SimulationAffected[];
+  total_blast_radius: number;
+}
+
+export function simulateDropTask(
+  projectId: string,
+  taskId: string,
+): Promise<SimulationResult> {
+  return api(`/api/projects/${projectId}/simulate`, {
+    method: "POST",
+    body: { kind: "drop_task", entity_kind: "task", entity_id: taskId },
+  });
+}
+
 export interface ConflictOption {
   label: string;
   detail: string;

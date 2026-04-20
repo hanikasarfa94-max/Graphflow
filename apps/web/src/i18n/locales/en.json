@@ -499,6 +499,11 @@
       "taskScoped": "Restricted view — you see only your assigned work. Contact the project owner for broader access.",
       "observer": "Observer view — read-only access."
     },
+    "sim": {
+      "banner": "Simulating: drop \"{headline}\" — {orphans} orphan tasks · {exposed} exposed deliverables · {slipping} slipping milestones · {atRisk} at-risk commitments",
+      "exit": "EXIT SIMULATION",
+      "running": "Simulating drop…"
+    },
     "search": {
       "placeholder": "Search nodes",
       "hint": "Press / to search",
@@ -518,7 +523,8 @@
       "noDetail": "No additional detail.",
       "belongsTo": "Belongs to",
       "acceptance": "Acceptance criteria",
-      "content": "Detail"
+      "content": "Detail",
+      "simulate": "⚡ Simulate drop"
     },
     "empty": "graph is empty — intake has not completed yet",
     "timeline": {

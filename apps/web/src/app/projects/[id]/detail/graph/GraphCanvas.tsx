@@ -22,7 +22,9 @@ import {
   api,
   fetchGraphAt,
   fetchTimeline,
+  simulateDropTask,
   type ProjectState,
+  type SimulationResult,
   type TimelineResponse,
 } from "@/lib/api";
 
@@ -219,7 +221,43 @@ interface NodeData {
   // pulsed. Kept as a scalar (not a boolean) so useMemo doesn't have to
   // re-run every second — WgNode evaluates its own visibility timer.
   pulseExpiresAt: number;
+  // Counterfactual simulation overlay role. When non-null, the node
+  // renders with a colored ring + chip describing its role in the
+  // hypothetical scenario. Only set when sim mode is active.
+  simRole?: "dropped" | "orphan" | "exposed" | "at_risk" | null;
 }
+
+// Visual tuning per simulation role. Dropped is loud (accent/red);
+// orphan / exposed / at_risk share an amber warning band; null = live view.
+const SIM_ROLE_STYLE: Record<
+  "dropped" | "orphan" | "exposed" | "at_risk",
+  { ring: string; chipBg: string; chipFg: string; label: string }
+> = {
+  dropped: {
+    ring: "var(--wg-accent)",
+    chipBg: "var(--wg-accent)",
+    chipFg: "#fff",
+    label: "DROPPED",
+  },
+  orphan: {
+    ring: "var(--wg-amber)",
+    chipBg: "var(--wg-amber)",
+    chipFg: "#fff",
+    label: "ORPHAN",
+  },
+  exposed: {
+    ring: "var(--wg-amber)",
+    chipBg: "var(--wg-amber)",
+    chipFg: "#fff",
+    label: "EXPOSED",
+  },
+  at_risk: {
+    ring: "var(--wg-amber)",
+    chipBg: "var(--wg-amber-soft)",
+    chipFg: "var(--wg-amber)",
+    label: "AT RISK",
+  },
+};
 
 function WgNode({ data, selected }: NodeProps<NodeData>) {
   const [pulsing, setPulsing] = useState(
@@ -248,6 +286,7 @@ function WgNode({ data, selected }: NodeProps<NodeData>) {
       ? SEVERITY_BORDER[data.severity.toLowerCase()] ?? SEVERITY_BORDER.low
       : KIND_BAR[data.kind];
 
+  const simStyle = data.simRole ? SIM_ROLE_STYLE[data.simRole] : null;
   return (
     <div
       style={{
@@ -256,17 +295,25 @@ function WgNode({ data, selected }: NodeProps<NodeData>) {
         flexDirection: "column",
         padding: "9px 12px 9px 16px",
         background: bg,
-        border: `1px solid ${selected ? "var(--wg-accent)" : "var(--wg-line)"}`,
+        border: `1px solid ${
+          simStyle
+            ? simStyle.ring
+            : selected
+              ? "var(--wg-accent)"
+              : "var(--wg-line)"
+        }`,
         borderRadius: 6,
         width: NODE_WIDTH[data.kind],
         opacity: data.dimmed ? 0.22 : 1,
         transition:
           "opacity 200ms ease-out, border-color 140ms ease-out, box-shadow 200ms ease-out",
-        boxShadow: pulsing
-          ? "0 0 0 3px var(--wg-accent-ring), 0 0 16px rgba(192, 71, 30, 0.28)"
-          : selected
-            ? "0 0 0 2px var(--wg-accent-ring)"
-            : undefined,
+        boxShadow: simStyle
+          ? `0 0 0 2px ${simStyle.ring}`
+          : pulsing
+            ? "0 0 0 3px var(--wg-accent-ring), 0 0 16px rgba(192, 71, 30, 0.28)"
+            : selected
+              ? "0 0 0 2px var(--wg-accent-ring)"
+              : undefined,
         animation: pulsing ? "wg-pulse 1.6s ease-out infinite" : undefined,
       }}
     >
@@ -282,6 +329,26 @@ function WgNode({ data, selected }: NodeProps<NodeData>) {
           borderRadius: "6px 0 0 6px",
         }}
       />
+      {simStyle ? (
+        <div
+          aria-hidden
+          style={{
+            position: "absolute",
+            top: -9,
+            left: 10,
+            padding: "2px 6px",
+            background: simStyle.chipBg,
+            color: simStyle.chipFg,
+            fontSize: 9,
+            fontFamily: "var(--wg-font-mono)",
+            letterSpacing: "0.08em",
+            borderRadius: 3,
+            boxShadow: "0 1px 2px rgba(0,0,0,0.1)",
+          }}
+        >
+          {simStyle.label}
+        </div>
+      ) : null}
       <div
         style={{
           position: "absolute",
@@ -470,6 +537,13 @@ export function GraphCanvas({
   } | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [commitModalOpen, setCommitModalOpen] = useState(false);
+  // Counterfactual simulation overlay. When non-null, the graph renders
+  // sim chips + dims unaffected nodes. Cleared by the "Exit simulation"
+  // button or by navigating away.
+  const [simulation, setSimulation] = useState<SimulationResult | null>(
+    null,
+  );
+  const [simRunning, setSimRunning] = useState(false);
   // Sprint 3a — view toggle between the per-project graph and the
   // cross-project org meta-graph. Purely client state; no URL change
   // in v1. "graph" is the default so existing bookmarks keep working.
@@ -712,11 +786,34 @@ export function GraphCanvas({
         (subtitle ?? "").toLowerCase().includes(rawQuery)
       );
     };
+    // Counterfactual overlay — when a simulation is active, build a
+    // map of node-id → simulation role so the render pass can stamp
+    // chips + dim non-affected nodes.
+    const simRoleMap = new Map<
+      string,
+      "dropped" | "orphan" | "exposed" | "at_risk"
+    >();
+    if (simulation) {
+      for (const d of simulation.dropped) simRoleMap.set(`task-${d.id}`, "dropped");
+      for (const o of simulation.orphan_tasks) simRoleMap.set(`task-${o.id}`, "orphan");
+      for (const d of simulation.exposed_deliverables)
+        simRoleMap.set(`del-${d.id}`, "exposed");
+      for (const c of simulation.at_risk_commitments)
+        simRoleMap.set(`commitment-${c.id}`, "at_risk");
+      // Milestones aren't rendered as graph nodes; the banner lists them.
+    }
+
     const dimFor = (id: string, title: string, subtitle?: string) => {
+      // Sim mode dominates: when active, only nodes in the blast radius
+      // stay at full opacity. Search + intent dimming take a backseat
+      // so the viewer focuses on the hypothetical.
+      if (simulation) return !simRoleMap.has(id);
       if (rawQuery.length > 0 && !matchSearch(title, subtitle)) return true;
       if (mode !== "all" && !inMode.has(id)) return true;
       return false;
     };
+    const simRoleFor = (id: string): NodeData["simRole"] =>
+      simRoleMap.get(id) ?? null;
 
     state.graph.goals.forEach((g, i) => {
       const id = `goal-${g.id}`;
@@ -735,6 +832,7 @@ export function GraphCanvas({
           title,
           dimmed: dimFor(id, title),
           pulseExpiresAt: pulseAt(id),
+          simRole: simRoleFor(id),
         },
       });
     });
@@ -789,6 +887,7 @@ export function GraphCanvas({
           subtitle,
           dimmed: dimFor(id, title, subtitle),
           pulseExpiresAt: pulseAt(id),
+          simRole: simRoleFor(id),
         },
       });
       // If the commitment is anchored to a graph entity, emit a
@@ -844,6 +943,7 @@ export function GraphCanvas({
           subtitle: status,
           dimmed: dimFor(id, title, status),
           pulseExpiresAt: pulseAt(id),
+          simRole: simRoleFor(id),
         },
       });
       if (state.graph.goals.length > 0) {
@@ -881,6 +981,7 @@ export function GraphCanvas({
           subtitle,
           dimmed: dimFor(id, title, subtitle),
           pulseExpiresAt: pulseAt(id),
+          simRole: simRoleFor(id),
         },
       });
       // Edges from decision to each resolvable target.
@@ -933,6 +1034,7 @@ export function GraphCanvas({
           subtitle: subtitle || undefined,
           dimmed: dimFor(id, title, subtitle),
           pulseExpiresAt: pulseAt(id),
+          simRole: simRoleFor(id),
         },
       });
       if (tk.deliverable_id) {
@@ -981,12 +1083,13 @@ export function GraphCanvas({
           severity: sev,
           dimmed: dimFor(id, title, sev),
           pulseExpiresAt: pulseAt(id),
+          simRole: simRoleFor(id),
         },
       });
     });
 
     return { rawNodes, rawEdges };
-  }, [state, positions, pulses, rawQuery, mode]);
+  }, [state, positions, pulses, rawQuery, mode, simulation]);
 
   // React Flow needs controlled state for dragging to persist. Sync our
   // computed nodes/edges into RF state whenever the computation changes.
@@ -1088,6 +1191,74 @@ export function GraphCanvas({
               fall through without crashing — useTranslations returns
               the key itself on miss. */}
           {t(licenseBannerKey)}
+        </div>
+      ) : null}
+      {/* Counterfactual simulation banner — tells the viewer what
+          scenario is active and summarizes the blast radius. Click
+          Exit to return to the live graph. */}
+      {simulation ? (
+        <div
+          role="status"
+          data-testid="sim-banner"
+          style={{
+            padding: "8px 12px",
+            background: "rgba(192,71,30,0.06)",
+            border: "1px solid var(--wg-accent)",
+            borderRadius: "var(--wg-radius-sm, 4px)",
+            margin: "4px 8px 0",
+            fontSize: 12,
+            fontFamily: "var(--wg-font-mono)",
+            flex: "0 0 auto",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 12,
+          }}
+        >
+          <span style={{ color: "var(--wg-ink)" }}>
+            {t("sim.banner", {
+              headline:
+                simulation.dropped[0]?.title ?? simulation.entity_id.slice(0, 8),
+              orphans: simulation.orphan_tasks.length,
+              exposed: simulation.exposed_deliverables.length,
+              slipping: simulation.slipping_milestones.length,
+              atRisk: simulation.at_risk_commitments.length,
+            })}
+          </span>
+          <button
+            type="button"
+            onClick={() => setSimulation(null)}
+            style={{
+              background: "var(--wg-accent)",
+              color: "#fff",
+              border: 0,
+              padding: "4px 10px",
+              borderRadius: 4,
+              fontFamily: "inherit",
+              fontSize: 11,
+              cursor: "pointer",
+              letterSpacing: "0.04em",
+            }}
+          >
+            {t("sim.exit")}
+          </button>
+        </div>
+      ) : simRunning ? (
+        <div
+          role="status"
+          style={{
+            padding: "6px 12px",
+            background: "var(--wg-surface-sunk)",
+            border: "1px dashed var(--wg-line)",
+            borderRadius: "var(--wg-radius-sm, 4px)",
+            margin: "4px 8px 0",
+            fontSize: 12,
+            fontFamily: "var(--wg-font-mono)",
+            flex: "0 0 auto",
+            color: "var(--wg-ink-soft)",
+          }}
+        >
+          {t("sim.running")}
         </div>
       ) : null}
       {/* Timeline scrubber — rendered above the canvas so the user
@@ -1268,6 +1439,19 @@ export function GraphCanvas({
           state={state}
           projectId={projectId}
           onClose={() => setSelected(null)}
+          onSimulate={async (taskId) => {
+            setSelected(null);
+            setSimRunning(true);
+            try {
+              const result = await simulateDropTask(projectId, taskId);
+              setSimulation(result);
+            } catch {
+              // Swallow — sim is a read-only exploration; worst case
+              // the overlay doesn't appear and the graph stays live.
+            } finally {
+              setSimRunning(false);
+            }
+          }}
           labels={{
             close: t("drawer.close"),
             openFull: t("drawer.openFull"),
@@ -1278,6 +1462,7 @@ export function GraphCanvas({
             belongsTo: t("drawer.belongsTo"),
             acceptance: t("drawer.acceptance"),
             content: t("drawer.content"),
+            simulate: t("drawer.simulate"),
           }}
         />
       ) : null}
@@ -1769,6 +1954,7 @@ interface DrawerLabels {
   belongsTo: string;
   acceptance: string;
   content: string;
+  simulate?: string;
 }
 
 function NodeDrawer({
@@ -1776,12 +1962,16 @@ function NodeDrawer({
   state,
   projectId,
   onClose,
+  onSimulate,
   labels,
 }: {
   nodeId: string;
   state: ProjectState;
   projectId: string;
   onClose: () => void;
+  // Called when the user clicks "⚡ Simulate drop" on a task node.
+  // GraphCanvas fires the API call and flips the overlay on.
+  onSimulate?: (taskId: string) => void;
   labels: DrawerLabels;
 }) {
   const entity = resolveEntity(nodeId, state);
@@ -2005,6 +2195,10 @@ function NodeDrawer({
             padding: "12px 18px",
             borderTop: "1px solid var(--wg-line)",
             background: "var(--wg-surface-sunk)",
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            gap: 8,
           }}
         >
           <Link
@@ -2018,6 +2212,33 @@ function NodeDrawer({
           >
             {labels.openFull}
           </Link>
+          {/* Simulate drop — only makes sense for tasks (the backend
+              only supports drop_task in v1). Fires the API call via
+              the parent callback; drawer closes so the overlay is
+              uncluttered. */}
+          {kind === "task" && onSimulate && labels.simulate ? (
+            <button
+              type="button"
+              onClick={() => {
+                if (entity.deepLinkId) {
+                  onSimulate(entity.deepLinkId);
+                }
+              }}
+              style={{
+                padding: "4px 10px",
+                fontSize: 11,
+                fontFamily: "var(--wg-font-mono)",
+                background: "var(--wg-accent)",
+                color: "#fff",
+                border: 0,
+                borderRadius: 4,
+                cursor: "pointer",
+                letterSpacing: "0.04em",
+              }}
+            >
+              {labels.simulate}
+            </button>
+          ) : null}
         </footer>
       ) : null}
     </aside>
