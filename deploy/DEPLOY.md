@@ -44,6 +44,18 @@ mkdir -p /opt/workgraph && cd /opt/workgraph
 tar -xzf /opt/workgraph.tar.gz
 ```
 
+**Every subsequent deploy — extract, but preserve prod-local files:**
+```bash
+cd /opt/workgraph
+tar -xzf /opt/workgraph.tar.gz \
+    --exclude='data' \
+    --exclude='deploy/.env' \
+    --exclude='deploy/nginx/conf.d'   # preserves the port-80-only override below
+```
+Forgetting `deploy/nginx/conf.d` restores the stock TLS-enabled nginx
+conf, which crash-loops on a missing cert. If that happens, rewrite the
+file per §4 and `docker compose restart nginx`.
+
 ## 2. Cloudflare DNS (one-time, in Cloudflare dashboard)
 
 - `flyflow.love` → DNS → Records
@@ -153,7 +165,7 @@ Alembic for any schema change that can't survive a drop+recreate.
 **First time per prod DB — stamp at baseline (one-off):**
 ```bash
 docker compose -f deploy/docker-compose.yml exec -T api \
-    sh -lc "cd /app/apps/api && alembic stamp 0001_baseline"
+    /app/.venv/bin/alembic -c /app/apps/api/alembic.ini stamp 0001_baseline
 ```
 Writes the `alembic_version` table marking the existing schema as "at
 v1". No tables are altered; no data is moved.
@@ -161,12 +173,49 @@ v1". No tables are altered; no data is moved.
 **Every subsequent deploy — upgrade before the app serves traffic:**
 ```bash
 docker compose -f deploy/docker-compose.yml exec -T api \
-    sh -lc "cd /app/apps/api && alembic upgrade head"
+    /app/.venv/bin/alembic -c /app/apps/api/alembic.ini upgrade head
 ```
 Idempotent — no-op when already at head. Applies
-`0002_status_transitions`, `0003_commitments`, `0004_commitment_sla`
-to bring a v1 DB to v2. Preview before applying with
-`alembic upgrade head --sql`.
+`0002_status_transitions`, `0003_commitments`, `0004_commitment_sla`,
+`0005_handoff_records` to bring a v1 DB to v2. Preview before applying
+with `... upgrade head --sql`.
+
+**Why the full binary path:** `docker compose exec -T api sh -lc "..."`
+spawns a login shell that drops the container's
+`PATH=/app/.venv/bin:$PATH`, so `alembic` can't be found by name. Calling
+`/app/.venv/bin/alembic` directly sidesteps the shell entirely.
+
+**Why `--workdir /app/apps/api`:** `script_location = alembic` in
+alembic.ini is relative to the command's CWD, not the config file's
+directory. The container WORKDIR is `/app`, so alembic looks for
+`/app/alembic/` and fails. Setting `--workdir /app/apps/api` on
+`docker compose exec` fixes it.
+
+**Recovery: "table already exists" on first migration run.** If the
+prod DB was ever booted before being stamped, the bootstrap layer
+(`Base.metadata.create_all()` in the api's startup path) already
+created every ORM table — including any table a pending migration
+would create. `alembic upgrade head` then blows up trying to
+re-create an existing table. The DB is not corrupted; alembic just
+doesn't know the schema is already at head. Recovery:
+
+```bash
+# 1. Confirm the tables actually exist (expect to see all)
+docker compose -f deploy/docker-compose.yml exec -T api python -c \
+  "import sqlite3; c=sqlite3.connect('/app/data/workgraph.sqlite'); \
+   print(sorted(r[0] for r in c.execute('SELECT name FROM sqlite_master WHERE type=\"table\"')))"
+
+# 2. Stamp at head — no DDL runs; just tells alembic "DB matches head"
+docker compose -f deploy/docker-compose.yml exec -T --workdir /app/apps/api api \
+    /app/.venv/bin/alembic stamp head
+
+# 3. Verify
+docker compose -f deploy/docker-compose.yml exec -T --workdir /app/apps/api api \
+    /app/.venv/bin/alembic current
+```
+
+After this, future `upgrade head` runs are a no-op until a new migration
+file lands — exactly what we want.
 
 **Rollback** is available (`alembic downgrade -1`) but not automated
 — treat it as a dev convenience, not a prod safety net.
