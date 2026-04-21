@@ -64,6 +64,7 @@ from workgraph_api.routers import plan as plan_router
 from workgraph_api.routers import projects as projects_router
 from workgraph_api.routers import render as render_router
 from workgraph_api.routers import routing as routing_router
+from workgraph_api.routers import scrimmage as scrimmage_router
 from workgraph_api.routers import handoff as handoff_router
 from workgraph_api.routers import perf as perf_router
 from workgraph_api.routers import pre_answer as pre_answer_router
@@ -96,6 +97,7 @@ from workgraph_api.services import (
     PlanningService,
     PreAnswerService,
     ProjectService,
+    ScrimmageService,
     RenderService,
     RoutingService,
     SignalTallyService,
@@ -459,6 +461,14 @@ async def lifespan(app: FastAPI):
     leader_escalation_service = LeaderEscalationService(
         sessionmaker, routing_service, pre_answer_service
     )
+    scrimmage_service = ScrimmageService(
+        sessionmaker,
+        event_bus,
+        pre_answer_service,
+        pre_answer_agent,
+        license_context_service,
+        skill_atlas_service,
+    )
     handoff_service = HandoffService(sessionmaker)
     dissent_service = DissentService(sessionmaker, event_bus)
     from workgraph_api.services.perf_aggregation import PerfAggregationService
@@ -514,6 +524,7 @@ async def lifespan(app: FastAPI):
     app.state.pre_answer_service = pre_answer_service
     app.state.license_context_service = license_context_service
     app.state.leader_escalation_service = leader_escalation_service
+    app.state.scrimmage_service = scrimmage_service
     app.state.handoff_service = handoff_service
     app.state.dissent_service = dissent_service
     app.state.perf_service = perf_service
@@ -629,6 +640,7 @@ app.include_router(observability_router.router)
 app.include_router(personal_router.router)
 app.include_router(render_router.router)
 app.include_router(routing_router.router)
+app.include_router(scrimmage_router.router)
 app.include_router(streams_router.router)
 app.include_router(users_router.router)
 app.include_router(ws_router.router)

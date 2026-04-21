@@ -38,6 +38,7 @@ from .personal import PersonalStreamService
 from .planning import NotReadyForPlanning, PlanningService, PlanValidationError
 from .pre_answer import PreAnswerService
 from .project import ProjectService
+from .scrimmage import ScrimmageError, ScrimmageService
 from .render import RenderError, RenderService
 from .routing import RoutingService
 from .signal_tally import SIGNAL_KINDS, SignalTallyService
@@ -93,6 +94,8 @@ __all__ = [
     "PersonalStreamService",
     "PreAnswerService",
     "ProjectService",
+    "ScrimmageError",
+    "ScrimmageService",
     "RenderService",
     "RenderError",
     "RoutingService",

@@ -34,6 +34,7 @@ from .orm import (
     RequirementRow,
     RiskRow,
     RoutedSignalRow,
+    ScrimmageRow,
     SessionRow,
     StatusTransitionRow,
     StreamMemberRow,
@@ -2165,6 +2166,75 @@ class HandoffRepository:
         row.finalized_at = datetime.now(timezone.utc)
         await self._session.flush()
         return row
+
+
+class ScrimmageRepository:
+    """Phase 2.B — agent-vs-agent scrimmage transcripts."""
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def create(
+        self,
+        *,
+        project_id: str,
+        source_user_id: str,
+        target_user_id: str,
+        question_text: str,
+        routed_signal_id: str | None = None,
+        trace_id: str | None = None,
+    ) -> ScrimmageRow:
+        row = ScrimmageRow(
+            id=_new_id(),
+            project_id=project_id,
+            routed_signal_id=routed_signal_id,
+            source_user_id=source_user_id,
+            target_user_id=target_user_id,
+            question_text=question_text,
+            transcript_json=[],
+            outcome="in_progress",
+            proposal_json=None,
+            trace_id=trace_id,
+        )
+        self._session.add(row)
+        await self._session.flush()
+        return row
+
+    async def finalize(
+        self,
+        scrimmage_id: str,
+        *,
+        transcript: list,
+        outcome: str,
+        proposal: dict | None,
+    ) -> ScrimmageRow | None:
+        row = await self.get(scrimmage_id)
+        if row is None:
+            return None
+        row.transcript_json = list(transcript)
+        row.outcome = outcome
+        row.proposal_json = proposal
+        row.completed_at = datetime.now(timezone.utc)
+        await self._session.flush()
+        return row
+
+    async def get(self, scrimmage_id: str) -> ScrimmageRow | None:
+        return (
+            await self._session.execute(
+                select(ScrimmageRow).where(ScrimmageRow.id == scrimmage_id)
+            )
+        ).scalar_one_or_none()
+
+    async def list_for_project(
+        self, project_id: str, *, limit: int = 50
+    ) -> list[ScrimmageRow]:
+        stmt = (
+            select(ScrimmageRow)
+            .where(ScrimmageRow.project_id == project_id)
+            .order_by(ScrimmageRow.created_at.desc())
+            .limit(limit)
+        )
+        return list((await self._session.execute(stmt)).scalars().all())
 
 
 class LicenseAuditRepository:

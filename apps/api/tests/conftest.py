@@ -288,6 +288,10 @@ class _ScriptablePreAnswerAgent:
     target's role_skills so the sanitizer on the real agent would be a
     no-op. Tests that need a bespoke draft assign
     `app.state.pre_answer_agent.next_draft` to a custom PreAnswerDraft.
+
+    For multi-turn flows (scrimmage Phase 2.B) tests can queue several
+    drafts via `draft_queue.append(...)`. Queued drafts are consumed in
+    FIFO order; `next_draft` still wins over the queue if both are set.
     """
 
     prompt_version = "stub.pre_answer.v1"
@@ -295,6 +299,7 @@ class _ScriptablePreAnswerAgent:
     def __init__(self) -> None:
         self.calls: list[dict] = []
         self.next_draft: PreAnswerDraft | None = None
+        self.draft_queue: list[PreAnswerDraft] = []
 
     async def draft(
         self,
@@ -315,6 +320,8 @@ class _ScriptablePreAnswerAgent:
         if self.next_draft is not None:
             draft = self.next_draft
             self.next_draft = None
+        elif self.draft_queue:
+            draft = self.draft_queue.pop(0)
         else:
             role_skills = list(target_context.get("role_skills") or [])
             # Say "medium confidence, probably route" — realistic default
@@ -380,6 +387,7 @@ from workgraph_api.services import (
     RenderService,
     RoutingService,
     PreAnswerService,
+    ScrimmageService,
     SignalTallyService,
     SimulationService,
     SkillAtlasService,
@@ -470,6 +478,14 @@ async def api_env():
     leader_escalation_service = LeaderEscalationService(
         maker, routing_service, pre_answer_service
     )
+    scrimmage_service = ScrimmageService(
+        maker,
+        bus,
+        pre_answer_service,
+        pre_answer_agent,
+        license_context_service,
+        skill_atlas_service,
+    )
     handoff_service = HandoffService(maker)
     dissent_service = DissentService(maker, bus)
     # Mirror the production subscription — drift uses fire-and-forget
@@ -553,6 +569,7 @@ async def api_env():
     app.state.pre_answer_service = pre_answer_service
     app.state.license_context_service = license_context_service
     app.state.leader_escalation_service = leader_escalation_service
+    app.state.scrimmage_service = scrimmage_service
     app.state.handoff_service = handoff_service
     app.state.dissent_service = dissent_service
     app.state.perf_service = perf_service

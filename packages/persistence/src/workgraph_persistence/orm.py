@@ -1179,6 +1179,63 @@ class DissentRow(Base):
     outcome_evidence_ids: Mapped[list] = mapped_column(JSON, default=list)
 
 
+class ScrimmageRow(Base):
+    """Phase 2.B — agent-vs-agent debate transcript.
+
+    Two sub-agents (source's and target's) exchange 2–3 turns before any
+    human sees the question. On convergence we propose a pending decision
+    for the leader to approve; on non-convergence we surface both final
+    stances to humans as a debate summary card.
+
+    `transcript_json` shape:
+        list[{turn: int, speaker: 'source'|'target', text: str,
+              stance: 'agree_with_other'|'propose_compromise'|'hold_position',
+              proposal_summary: str | None,
+              citations: list[dict]}]
+
+    `outcome` values:
+        'converged_proposal' — both agents landed on the same proposal
+        'unresolved_crux'    — 3 turns without convergence
+        'in_progress'        — transient (should never persist on return)
+
+    `proposal_json` carries the converged proposal text + both final
+    stances when outcome == 'converged_proposal'. Null otherwise.
+
+    `routed_signal_id` is nullable: scrimmage can fire without a
+    pre-existing routing (pre-commit rehearsal path) OR as a pre-step
+    to a route that may never land if convergence succeeds.
+    """
+
+    __tablename__ = "scrimmages"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    project_id: Mapped[str] = mapped_column(
+        ForeignKey("projects.id", ondelete="CASCADE"), index=True
+    )
+    routed_signal_id: Mapped[str | None] = mapped_column(
+        ForeignKey("routed_signals.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    source_user_id: Mapped[str] = mapped_column(String(36), index=True)
+    target_user_id: Mapped[str] = mapped_column(String(36), index=True)
+    question_text: Mapped[str] = mapped_column(String(4000))
+    transcript_json: Mapped[list] = mapped_column(JSON, default=list)
+    outcome: Mapped[str] = mapped_column(
+        String(32), default="in_progress", index=True
+    )
+    proposal_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    trace_id: Mapped[str | None] = mapped_column(
+        String(64), nullable=True, index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+
 class HandoffRow(Base):
     """A skill-succession record between two project members.
 
