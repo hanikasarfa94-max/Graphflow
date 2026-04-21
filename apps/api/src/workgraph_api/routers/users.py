@@ -63,8 +63,11 @@ async def get_me(
         return _shape_user(row)
 
 
-# Observed-profile tallies. Compute-on-read, no schema mutation. Pairs
-# with GET /api/users/me (self-declared) so the client can render both
+# Observed-profile tallies. Compute-on-read is the safety net; when the
+# UserRow.profile['signal_tally'] dict has a persisted value for a kind,
+# prefer it so the auto-evolution loop (SignalTallyService increments +
+# routing_suggest affinity bump) reflects the same number users see.
+# Pairs with GET /api/users/me (self-declared) so the client renders both
 # halves of the response profile — the gap is itself information per
 # docs/north-star.md §"Profile as first-class primitive".
 @router.get("/users/me/profile")
@@ -75,7 +78,27 @@ async def get_my_profile(
     maker = request.app.state.sessionmaker
     async with session_scope(maker) as session:
         tallies = await compute_profile(session, user.id)
-    return tallies.to_dict()
+        row = await UserRepository(session).get(user.id)
+        persisted_tally = (
+            dict((row.profile or {}).get("signal_tally") or {}) if row else {}
+        )
+    payload = tallies.to_dict()
+    observed = payload.get("observed") or {}
+    # Persisted counts aren't window-scoped — if present, overlay onto the
+    # _30d window keys (which are the ones profile_tallies.py exposes).
+    # Keep compute-on-read as the default; persisted wins only when set.
+    mapping = {
+        "messages_posted": "messages_posted_30d",
+        "decisions_resolved": "decisions_resolved_30d",
+        "routings_answered": "routings_answered_30d",
+        "risks_owned": "risks_owned",
+    }
+    for kind, key in mapping.items():
+        if kind in persisted_tally:
+            observed[key] = int(persisted_tally[kind])
+    payload["observed"] = observed
+    payload["signal_tally_persisted"] = persisted_tally
+    return payload
 
 
 @router.patch("/users/me")

@@ -51,6 +51,7 @@ from workgraph_persistence import (
     session_scope,
 )
 
+from .signal_tally import SignalTallyService
 from .streams import StreamService
 
 _log = logging.getLogger("workgraph.api.routing")
@@ -83,10 +84,12 @@ class RoutingService:
         sessionmaker: async_sessionmaker,
         event_bus: EventBus,
         stream_service: StreamService,
+        signal_tally: SignalTallyService | None = None,
     ) -> None:
         self._sessionmaker = sessionmaker
         self._event_bus = event_bus
         self._stream_service = stream_service
+        self._signal_tally = signal_tally
 
     # ---- dispatch --------------------------------------------------------
 
@@ -307,6 +310,8 @@ class RoutingService:
                 "has_custom_text": bool(custom_text),
             },
         )
+        if self._signal_tally is not None:
+            await self._signal_tally.increment(replier_user_id, "routings_answered")
         return {"ok": True, "signal": signal_payload}
 
     # ---- reads -----------------------------------------------------------

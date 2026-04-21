@@ -35,6 +35,7 @@ from workgraph_persistence import (
 from .collab import AssignmentService
 from .collab_hub import CollabHub
 from .conflicts import ConflictService
+from .signal_tally import SignalTallyService
 
 _log = logging.getLogger("workgraph.api.decisions")
 
@@ -56,12 +57,14 @@ class DecisionService:
         hub: CollabHub,
         conflict_service: ConflictService,
         assignment_service: AssignmentService,
+        signal_tally: SignalTallyService | None = None,
     ) -> None:
         self._sessionmaker = sessionmaker
         self._event_bus = event_bus
         self._hub = hub
         self._conflicts = conflict_service
         self._assignments = assignment_service
+        self._signal_tally = signal_tally
 
     async def submit(
         self,
@@ -165,6 +168,8 @@ class DecisionService:
                 "trace_id": trace_id,
             },
         )
+        if self._signal_tally is not None:
+            await self._signal_tally.increment(actor_id, "decisions_resolved")
         if conflict_payload is not None:
             await self._hub.publish(
                 project_id, {"type": "conflict", "payload": conflict_payload}

@@ -377,6 +377,7 @@ from workgraph_api.services import (
     RenderService,
     RoutingService,
     PreAnswerService,
+    SignalTallyService,
     SimulationService,
     SkillAtlasService,
     SkillsService,
@@ -421,8 +422,9 @@ async def api_env():
     comment_service = CommentService(
         maker, bus, collab_hub, notification_service
     )
+    signal_tally_service = SignalTallyService(maker)
     message_service = MessageService(
-        maker, bus, collab_hub, notification_service
+        maker, bus, collab_hub, notification_service, signal_tally_service
     )
     im_service = IMService(
         maker,
@@ -434,13 +436,16 @@ async def api_env():
     )
     conflict_service = ConflictService(maker, bus, collab_hub, conflict_agent)
     decision_service = DecisionService(
-        maker, bus, collab_hub, conflict_service, assignment_service
+        maker, bus, collab_hub, conflict_service, assignment_service,
+        signal_tally_service,
     )
     delivery_service = DeliveryService(
         maker, bus, collab_hub, delivery_agent
     )
     stream_service = StreamService(maker, bus, collab_hub)
-    routing_service = RoutingService(maker, bus, stream_service)
+    routing_service = RoutingService(
+        maker, bus, stream_service, signal_tally_service
+    )
     drift_agent = _NoDriftAgent()
     drift_service = DriftService(maker, bus, drift_agent, stream_service)
     commitment_service = CommitmentService(maker, bus)
@@ -498,6 +503,7 @@ async def api_env():
     app.state.assignment_service = assignment_service
     app.state.comment_service = comment_service
     app.state.message_service = message_service
+    app.state.signal_tally_service = signal_tally_service
     app.state.im_service = im_service
     app.state.conflict_service = conflict_service
     app.state.decision_service = decision_service

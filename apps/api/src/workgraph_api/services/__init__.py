@@ -36,6 +36,7 @@ from .pre_answer import PreAnswerService
 from .project import ProjectService
 from .render import RenderError, RenderService
 from .routing import RoutingService
+from .signal_tally import SIGNAL_KINDS, SignalTallyService
 from .simulation import SimulationError, SimulationService
 from .skill_atlas import SkillAtlasService
 from .skills import SkillsService
@@ -82,6 +83,8 @@ __all__ = [
     "RenderService",
     "RenderError",
     "RoutingService",
+    "SIGNAL_KINDS",
+    "SignalTallyService",
     "SimulationError",
     "SimulationService",
     "SkillAtlasService",

@@ -36,6 +36,7 @@ from workgraph_persistence import (
 )
 
 from .collab_hub import CollabHub
+from .signal_tally import SignalTallyService
 
 _log = logging.getLogger("workgraph.api.collab")
 
@@ -398,11 +399,13 @@ class MessageService:
         event_bus: EventBus,
         hub: CollabHub,
         notifications: NotificationService,
+        signal_tally: SignalTallyService | None = None,
     ) -> None:
         self._sessionmaker = sessionmaker
         self._event_bus = event_bus
         self._hub = hub
         self._notifications = notifications
+        self._signal_tally = signal_tally
 
     async def post(
         self, *, project_id: str, author_id: str, body: str
@@ -458,6 +461,8 @@ class MessageService:
         }
         await self._event_bus.emit("message.posted", payload)
         await self._hub.publish(project_id, _broadcast_payload("message", payload))
+        if self._signal_tally is not None:
+            await self._signal_tally.increment(author_id, "messages_posted")
         for uid in member_ids:
             await self._notifications.notify(
                 user_id=uid,

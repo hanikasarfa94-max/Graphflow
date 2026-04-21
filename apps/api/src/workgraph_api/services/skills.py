@@ -652,6 +652,15 @@ class SkillsService:
                 if total <= 0.0:
                     continue
 
+                # Profile auto-evolution feedback (closes competition §10
+                # item 1). If the candidate has a persisted signal_tally
+                # for the kind we're routing, bump their score so
+                # repeated resolvers rise over time. Bounded at +50% so
+                # the graph / activity / profile signals still dominate
+                # and the wire format stays stable.
+                tally_affinity = _tally_affinity(user, tokens)
+                total *= 1.0 + tally_affinity
+
                 # Reason string — what made them rank? Pick whichever
                 # of the three signals contributed most, back it up with
                 # concrete evidence from the haystack.
@@ -740,6 +749,37 @@ _STOP_WORDS = frozenset(
 )
 
 _MAX_QUERY_TOKENS = 10
+
+# Affinity cap — persisted-tally bump saturates at +50% so a long-tenured
+# resolver doesn't eclipse a fresh but graph-relevant candidate. Saturation
+# hits at ≈20 accumulated resolutions across decisions + routings (the
+# kinds most predictive of "this person handles asks like this").
+_TALLY_AFFINITY_CAP = 0.5
+_TALLY_SATURATION = 20.0
+
+
+def _tally_affinity(user, _tokens: list[str]) -> float:
+    """Bounded multiplier derived from persisted signal_tally.
+
+    Combines decisions_resolved + routings_answered as a "resolver track
+    record" — the two kinds directly predictive of how useful a route is.
+    messages_posted and risks_owned are noisier proxies and stay out of
+    the bump so chatty members don't float to the top.
+    """
+    if user is None:
+        return 0.0
+    tally = (user.profile or {}).get("signal_tally") or {}
+    if not isinstance(tally, dict):
+        return 0.0
+    score = 0
+    for kind in ("decisions_resolved", "routings_answered"):
+        try:
+            score += int(tally.get(kind, 0) or 0)
+        except (TypeError, ValueError):
+            continue
+    if score <= 0:
+        return 0.0
+    return min(_TALLY_AFFINITY_CAP, score / _TALLY_SATURATION)
 
 
 def _tokenize_query(query: str) -> list[str]:

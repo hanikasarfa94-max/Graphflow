@@ -93,6 +93,7 @@ from workgraph_api.services import (
     ProjectService,
     RenderService,
     RoutingService,
+    SignalTallyService,
     SimulationService,
     SkillAtlasService,
     SkillsService,
@@ -346,8 +347,9 @@ async def lifespan(app: FastAPI):
     comment_service = CommentService(
         sessionmaker, event_bus, collab_hub, notification_service
     )
+    signal_tally_service = SignalTallyService(sessionmaker)
     message_service = MessageService(
-        sessionmaker, event_bus, collab_hub, notification_service
+        sessionmaker, event_bus, collab_hub, notification_service, signal_tally_service
     )
     if settings.use_stubs:
         _log.info("WORKGRAPH_USE_STUBS=true — every LLM agent is a stub")
@@ -391,6 +393,7 @@ async def lifespan(app: FastAPI):
         collab_hub,
         conflict_service,
         assignment_service,
+        signal_tally_service,
     )
     delivery_service = DeliveryService(
         sessionmaker,
@@ -406,7 +409,9 @@ async def lifespan(app: FastAPI):
         drift_agent,
         stream_service,
     )
-    routing_service = RoutingService(sessionmaker, event_bus, stream_service)
+    routing_service = RoutingService(
+        sessionmaker, event_bus, stream_service, signal_tally_service
+    )
     commitment_service = CommitmentService(sessionmaker, event_bus)
     sla_service = SlaService(sessionmaker, event_bus, stream_service)
     simulation_service = SimulationService(sessionmaker)
@@ -465,6 +470,7 @@ async def lifespan(app: FastAPI):
     app.state.assignment_service = assignment_service
     app.state.comment_service = comment_service
     app.state.message_service = message_service
+    app.state.signal_tally_service = signal_tally_service
     app.state.im_service = im_service
     app.state.conflict_service = conflict_service
     app.state.decision_service = decision_service
