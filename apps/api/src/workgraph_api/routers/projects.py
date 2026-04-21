@@ -216,12 +216,12 @@ async def get_project_state(
         project_id=project_id, limit=100
     )
 
-    # Sprint 3c — license-scoped view. A member's license_tier lives
-    # on the ProjectMember row; "full" means see everything, while
-    # "task_scoped" filters the /state payload to just the viewer's
-    # assigned tasks and the entities they anchor to. "observer" is
-    # not filtered here (write-side enforcement is elsewhere — the
-    # v1 expectation is observers see everything read-only).
+    # License-scoped view. `full` sees everything; `task_scoped`
+    # narrows to the viewer's assigned subgraph; `observer` is the
+    # external-auditor tier — a subgraph slice restricted to the
+    # nodes the viewer has an explicit link to (assigned tasks,
+    # decisions they resolved). Write-side enforcement for observer
+    # lives in collab.py (`observer_cannot_post`).
     viewer_tier = "full"
     for m in members:
         if m.get("user_id") == user.id:
@@ -235,6 +235,23 @@ async def get_project_state(
             plan=plan,
             assignments=assignments,
             commitments=commitments,
+        )
+    elif viewer_tier == "observer":
+        (
+            graph,
+            plan,
+            assignments,
+            commitments,
+            decisions,
+            members,
+        ) = _apply_observer_scope(
+            viewer_user_id=user.id,
+            graph=graph,
+            plan=plan,
+            assignments=assignments,
+            commitments=commitments,
+            decisions=decisions,
+            members=members,
         )
 
     return {
@@ -344,4 +361,92 @@ def _apply_task_scope(
         filtered_plan,
         visible_assignments,
         visible_commitments,
+    )
+
+
+def _apply_observer_scope(
+    *,
+    viewer_user_id: str,
+    graph: dict[str, Any],
+    plan: dict[str, Any],
+    assignments: list[dict[str, Any]],
+    commitments: list[dict[str, Any]],
+    decisions: list[dict[str, Any]],
+    members: list[dict[str, Any]],
+) -> tuple[
+    dict[str, Any],
+    dict[str, Any],
+    list[dict[str, Any]],
+    list[dict[str, Any]],
+    list[dict[str, Any]],
+    list[dict[str, Any]],
+]:
+    """Subgraph slice for external-auditor (observer) tier.
+
+    Observers see ONLY nodes they have an explicit link to. Unlike
+    task_scoped (which keeps environmental goals/risks as context),
+    observer hides everything unlinked so an auditor engaged for one
+    deliverable cannot enumerate the wider plan.
+
+    Rules:
+      * Tasks: only those with an active assignment to the viewer.
+      * Dependencies: only edges where both endpoints are visible.
+      * Deliverables / goals / constraints / risks / milestones:
+        empty — the ORM has no viewer-link field on these (RiskRow
+        has no owner_user_id, goals/deliverables have no assignee),
+        so an observer sees none of them by default.
+      * Decisions: only those where `resolver_id == viewer`. The
+        ORM stores resolver as the single human participation field
+        on DecisionRow; there is no separate "participant" join.
+      * Assignments: viewer's own only.
+      * Commitments: empty — no direct-link field.
+      * Members: full list preserved so the auditor can see the
+        org context, with the viewer's own row flagged.
+    """
+    visible_task_ids = {
+        a["task_id"]
+        for a in assignments
+        if a.get("user_id") == viewer_user_id
+        and bool(a.get("active", True))
+    }
+    visible_tasks = [
+        t for t in plan.get("tasks", []) if t["id"] in visible_task_ids
+    ]
+    visible_dependencies = [
+        d
+        for d in plan.get("dependencies", [])
+        if d["from_task_id"] in visible_task_ids
+        and d["to_task_id"] in visible_task_ids
+    ]
+    visible_assignments = [
+        a for a in assignments if a.get("user_id") == viewer_user_id
+    ]
+    visible_decisions = [
+        d for d in decisions if d.get("resolver_id") == viewer_user_id
+    ]
+    annotated_members = [
+        {**m, "is_viewer": m.get("user_id") == viewer_user_id}
+        for m in members
+    ]
+
+    filtered_graph = {
+        **graph,
+        "goals": [],
+        "deliverables": [],
+        "constraints": [],
+        "risks": [],
+    }
+    filtered_plan = {
+        **plan,
+        "tasks": visible_tasks,
+        "dependencies": visible_dependencies,
+        "milestones": [],
+    }
+    return (
+        filtered_graph,
+        filtered_plan,
+        visible_assignments,
+        [],
+        visible_decisions,
+        annotated_members,
     )
