@@ -42,6 +42,7 @@ from workgraph_domain import EventBus
 from workgraph_observability import get_trace_id
 from workgraph_persistence import (
     EDGE_AGENT_SYSTEM_USER_ID,
+    LicenseAuditRepository,
     ProjectMemberRepository,
     RoutedSignalRepository,
     RoutedSignalRow,
@@ -51,6 +52,8 @@ from workgraph_persistence import (
     session_scope,
 )
 
+from .license_context import LicenseContextService
+from .license_lint import lint_reply
 from .signal_tally import SignalTallyService
 from .streams import StreamService
 
@@ -85,11 +88,13 @@ class RoutingService:
         event_bus: EventBus,
         stream_service: StreamService,
         signal_tally: SignalTallyService | None = None,
+        license_context_service: LicenseContextService | None = None,
     ) -> None:
         self._sessionmaker = sessionmaker
         self._event_bus = event_bus
         self._stream_service = stream_service
         self._signal_tally = signal_tally
+        self._license_ctx = license_context_service
 
     # ---- dispatch --------------------------------------------------------
 
@@ -218,6 +223,7 @@ class RoutingService:
         replier_user_id: str,
         option_id: str | None = None,
         custom_text: str | None = None,
+        lint_decision: str | None = None,
     ) -> dict[str, Any]:
         """Record target's reply, post into source's personal stream, mirror DM.
 
@@ -226,6 +232,15 @@ class RoutingService:
           * 'not_the_target' — replier must be signal.target_user_id
           * 'already_replied' — status is not 'pending' (idempotency boundary)
           * 'empty_reply' — neither option_id nor custom_text provided
+
+        If `lint_decision` is None (default), a license-lint runs on the
+        outbound reply body. When the lint pauses, this method returns
+        `{"ok": False, "error": "lint_paused", "lint": {...}}` without
+        persisting the reply — the caller surfaces the options to the
+        source and then calls reply() again with the chosen
+        `lint_decision`. `lint_decision='deny'` writes the audit row
+        and short-circuits without shipping; other decisions proceed
+        to persistence + fan-out.
         """
         if not option_id and not (custom_text and custom_text.strip()):
             return {"ok": False, "error": "empty_reply"}
@@ -239,6 +254,55 @@ class RoutingService:
                 return {"ok": False, "error": "not_the_target"}
             if signal.status != "pending":
                 return {"ok": False, "error": "already_replied"}
+
+            # License lint on outbound reply body — the source is the
+            # recipient of this reply. We scan the custom_text (if any)
+            # or the option-label body the source will see.
+            scan_body = custom_text or ""
+            if not scan_body and option_id:
+                for opt in signal.options_json or []:
+                    if isinstance(opt, dict) and opt.get("id") == option_id:
+                        # Join label + background so any cited refs
+                        # in the option payload get scanned too.
+                        scan_body = " ".join(
+                            str(opt.get(k) or "")
+                            for k in ("label", "background", "reason")
+                        )
+                        break
+            lint_result: dict[str, Any] | None = None
+            if (
+                lint_decision is None
+                and self._license_ctx is not None
+                and signal.project_id
+            ):
+                lint_result = await self.lint_outbound_reply(
+                    project_id=signal.project_id,
+                    source_user_id=signal.target_user_id,
+                    recipient_user_id=signal.source_user_id,
+                    reply_body=scan_body,
+                    signal_id=signal.id,
+                )
+                if lint_result.get("status") == "paused":
+                    return {
+                        "ok": False,
+                        "error": "lint_paused",
+                        "lint": lint_result,
+                    }
+
+            # Handle source decision. 'deny' halts before persistence.
+            if lint_decision == "deny" and signal.project_id:
+                await self.resolve_lint_decision(
+                    project_id=signal.project_id,
+                    source_user_id=signal.target_user_id,
+                    recipient_user_id=signal.source_user_id,
+                    reply_body=scan_body,
+                    decision="deny",
+                    referenced_node_ids=[],
+                    out_of_view_node_ids=[],
+                    effective_tier="full",
+                    signal_id=signal.id,
+                )
+                return {"ok": False, "error": "denied"}
 
             updated = await repo.mark_replied(
                 signal_id,
@@ -312,7 +376,169 @@ class RoutingService:
         )
         if self._signal_tally is not None:
             await self._signal_tally.increment(replier_user_id, "routings_answered")
+
+        # Audit trail for the reply. Covers the three non-denied
+        # outcomes: clean lint, edited ship (lint_decision='edit' or
+        # 'ship' with lint flags), and manual answer.
+        if signal.project_id and self._license_ctx is not None:
+            audit_outcome = "clean"
+            ref_ids: list[str] = []
+            out_ids: list[str] = []
+            eff_tier = "full"
+            if lint_decision == "edit":
+                audit_outcome = "edited"
+            elif lint_decision == "ship":
+                audit_outcome = "edited"  # source shipped past a flag
+            elif lint_decision == "answer_manually":
+                audit_outcome = "manual"
+            if lint_result is not None:
+                ref_ids = list(lint_result.get("referenced") or [])
+                out_ids = list(lint_result.get("out_of_view") or [])
+                eff_tier = str(lint_result.get("effective_tier") or "full")
+            async with session_scope(self._sessionmaker) as session:
+                await LicenseAuditRepository(session).record(
+                    project_id=signal.project_id,
+                    source_user_id=signal.target_user_id,
+                    target_user_id=signal.source_user_id,
+                    signal_id=signal.id,
+                    referenced_node_ids=ref_ids,
+                    out_of_view_node_ids=out_ids,
+                    outcome=audit_outcome,
+                    effective_tier=eff_tier,
+                )
         return {"ok": True, "signal": signal_payload}
+
+    # ---- license lint ---------------------------------------------------
+
+    async def lint_outbound_reply(
+        self,
+        *,
+        project_id: str,
+        source_user_id: str,
+        recipient_user_id: str,
+        reply_body: str,
+        signal_id: str | None = None,
+        explicit_citations: list[str] | None = None,
+    ) -> dict[str, Any]:
+        """Scan an outbound reply against the recipient's license view.
+
+        If the lint is clean, returns `{"status": "clean", ...}` and the
+        caller may ship the reply. If any cited node falls outside the
+        recipient's view, returns `{"status": "paused", "options": [...]}`
+        — the caller surfaces this as a pause card with
+        ship / edit / deny / answer_manually.
+
+        No persistence happens here; the caller records the decision
+        through `resolve_lint_decision` once the source picks an option.
+        """
+        if self._license_ctx is None:
+            # Fall-open only when the service hasn't been wired. Tests
+            # that exercise lint always wire it; production wiring in
+            # main.py wires it too. This branch exists for minimal
+            # integration-test paths that don't touch lint.
+            return {
+                "status": "clean",
+                "referenced": [],
+                "out_of_view": [],
+                "effective_tier": "full",
+            }
+        result = await lint_reply(
+            license_context_service=self._license_ctx,
+            project_id=project_id,
+            source_user_id=source_user_id,
+            recipient_user_id=recipient_user_id,
+            reply_body=reply_body,
+            explicit_citations=explicit_citations,
+        )
+        if result["clean"]:
+            return {
+                "status": "clean",
+                "referenced": result["referenced"],
+                "out_of_view": [],
+                "effective_tier": result["effective_tier"],
+            }
+        return {
+            "status": "paused",
+            "referenced": result["referenced"],
+            "out_of_view": result["out_of_view"],
+            "effective_tier": result["effective_tier"],
+            "signal_id": signal_id,
+            "options": [
+                {"id": "ship", "label": "Ship anyway"},
+                {"id": "edit", "label": "Edit then ship"},
+                {"id": "deny", "label": "Deny — don't send"},
+                {
+                    "id": "answer_manually",
+                    "label": "Answer manually (bypass routing)",
+                },
+            ],
+        }
+
+    async def resolve_lint_decision(
+        self,
+        *,
+        project_id: str,
+        source_user_id: str,
+        recipient_user_id: str,
+        reply_body: str,
+        decision: str,
+        referenced_node_ids: list[str],
+        out_of_view_node_ids: list[str],
+        effective_tier: str,
+        signal_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Persist a LicenseAuditRow for the source's decision on a
+        paused reply. `decision` ∈ {'ship', 'edit', 'deny',
+        'answer_manually'}. Maps 1:1 to audit outcomes 'clean' (when
+        lint was already clean), 'edited', 'denied', 'manual'.
+
+        Returns the persisted outcome so the caller can tell the UI
+        what to render.
+        """
+        outcome_map = {
+            "ship": "clean" if not out_of_view_node_ids else "edited",
+            "edit": "edited",
+            "deny": "denied",
+            "answer_manually": "manual",
+        }
+        outcome = outcome_map.get(decision, "edited")
+        async with session_scope(self._sessionmaker) as session:
+            await LicenseAuditRepository(session).record(
+                project_id=project_id,
+                source_user_id=source_user_id,
+                target_user_id=recipient_user_id,
+                signal_id=signal_id,
+                referenced_node_ids=referenced_node_ids,
+                out_of_view_node_ids=out_of_view_node_ids,
+                outcome=outcome,
+                effective_tier=effective_tier,
+            )
+        return {"ok": True, "outcome": outcome}
+
+    async def record_clean_audit(
+        self,
+        *,
+        project_id: str,
+        source_user_id: str,
+        recipient_user_id: str,
+        referenced_node_ids: list[str],
+        effective_tier: str,
+        signal_id: str | None = None,
+    ) -> None:
+        """Write a clean-outcome audit row (no out-of-view ids). Used
+        when the lint pass found nothing to flag but we still want an
+        audit trail of the reply."""
+        async with session_scope(self._sessionmaker) as session:
+            await LicenseAuditRepository(session).record(
+                project_id=project_id,
+                source_user_id=source_user_id,
+                target_user_id=recipient_user_id,
+                signal_id=signal_id,
+                referenced_node_ids=referenced_node_ids,
+                out_of_view_node_ids=[],
+                outcome="clean",
+                effective_tier=effective_tier,
+            )
 
     # ---- reads -----------------------------------------------------------
 

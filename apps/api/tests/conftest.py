@@ -368,6 +368,8 @@ from workgraph_api.services import (
     HandoffService,
     IMService,
     IntakeService,
+    LeaderEscalationService,
+    LicenseContextService,
     MembraneService,
     MessageService,
     NotificationService,
@@ -443,8 +445,13 @@ async def api_env():
         maker, bus, collab_hub, delivery_agent
     )
     stream_service = StreamService(maker, bus, collab_hub)
+    license_context_service = LicenseContextService(maker)
     routing_service = RoutingService(
-        maker, bus, stream_service, signal_tally_service
+        maker,
+        bus,
+        stream_service,
+        signal_tally_service,
+        license_context_service,
     )
     drift_agent = _NoDriftAgent()
     drift_service = DriftService(maker, bus, drift_agent, stream_service)
@@ -454,7 +461,13 @@ async def api_env():
     skill_atlas_service = SkillAtlasService(maker)
     pre_answer_agent = _ScriptablePreAnswerAgent()
     pre_answer_service = PreAnswerService(
-        maker, skill_atlas_service, pre_answer_agent
+        maker,
+        skill_atlas_service,
+        pre_answer_agent,
+        license_context_service,
+    )
+    leader_escalation_service = LeaderEscalationService(
+        maker, routing_service, pre_answer_service
     )
     handoff_service = HandoffService(maker)
     from workgraph_api.services.perf_aggregation import PerfAggregationService
@@ -529,6 +542,8 @@ async def api_env():
     app.state.skill_atlas_service = skill_atlas_service
     app.state.pre_answer_agent = pre_answer_agent
     app.state.pre_answer_service = pre_answer_service
+    app.state.license_context_service = license_context_service
+    app.state.leader_escalation_service = leader_escalation_service
     app.state.handoff_service = handoff_service
     app.state.perf_service = perf_service
 

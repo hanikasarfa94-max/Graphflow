@@ -29,6 +29,9 @@ from .graph_builder import GraphBuilderService
 from .handoff import HandoffService
 from .im import IMService
 from .intake import IntakeService
+from .leader_escalation import LEADER_DRAFT_OPTION_ID, LeaderEscalationService
+from .license_context import LicenseContextService, tighter_tier
+from .license_lint import extract_node_ids, lint_reply
 from .membrane import MembraneService
 from .personal import PersonalStreamService
 from .planning import NotReadyForPlanning, PlanningService, PlanValidationError
@@ -76,6 +79,12 @@ __all__ = [
     "DriftService",
     "DRIFT_RATE_LIMIT_SECONDS",
     "IMService",
+    "LEADER_DRAFT_OPTION_ID",
+    "LeaderEscalationService",
+    "LicenseContextService",
+    "tighter_tier",
+    "extract_node_ids",
+    "lint_reply",
     "MembraneService",
     "PersonalStreamService",
     "PreAnswerService",

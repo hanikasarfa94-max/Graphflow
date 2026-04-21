@@ -85,6 +85,8 @@ from workgraph_api.services import (
     HandoffService,
     IMService,
     IntakeService,
+    LeaderEscalationService,
+    LicenseContextService,
     MembraneService,
     MessageService,
     NotificationService,
@@ -410,8 +412,13 @@ async def lifespan(app: FastAPI):
         drift_agent,
         stream_service,
     )
+    license_context_service = LicenseContextService(sessionmaker)
     routing_service = RoutingService(
-        sessionmaker, event_bus, stream_service, signal_tally_service
+        sessionmaker,
+        event_bus,
+        stream_service,
+        signal_tally_service,
+        license_context_service,
     )
     commitment_service = CommitmentService(sessionmaker, event_bus)
     sla_service = SlaService(sessionmaker, event_bus, stream_service)
@@ -442,7 +449,13 @@ async def lifespan(app: FastAPI):
 
     pre_answer_agent = PreAnswerAgent()
     pre_answer_service = PreAnswerService(
-        sessionmaker, skill_atlas_service, pre_answer_agent
+        sessionmaker,
+        skill_atlas_service,
+        pre_answer_agent,
+        license_context_service,
+    )
+    leader_escalation_service = LeaderEscalationService(
+        sessionmaker, routing_service, pre_answer_service
     )
     handoff_service = HandoffService(sessionmaker)
     from workgraph_api.services.perf_aggregation import PerfAggregationService
@@ -496,6 +509,8 @@ async def lifespan(app: FastAPI):
     app.state.skill_atlas_service = skill_atlas_service
     app.state.pre_answer_agent = pre_answer_agent
     app.state.pre_answer_service = pre_answer_service
+    app.state.license_context_service = license_context_service
+    app.state.leader_escalation_service = leader_escalation_service
     app.state.handoff_service = handoff_service
     app.state.perf_service = perf_service
 

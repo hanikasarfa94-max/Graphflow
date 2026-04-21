@@ -32,6 +32,7 @@ from workgraph_persistence import (
     session_scope,
 )
 
+from .license_context import LicenseContextService
 from .skill_atlas import SkillAtlasService
 
 _log = logging.getLogger("workgraph.api.pre_answer")
@@ -46,10 +47,12 @@ class PreAnswerService:
         sessionmaker: async_sessionmaker,
         skill_atlas_service: SkillAtlasService,
         pre_answer_agent: PreAnswerAgent,
+        license_context_service: LicenseContextService | None = None,
     ) -> None:
         self._sessionmaker = sessionmaker
         self._atlas = skill_atlas_service
         self._agent = pre_answer_agent
+        self._license_ctx = license_context_service
         self._rate: dict[tuple[str, str], list[float]] = {}
 
     def _check_rate(self, *, sender_id: str, project_id: str) -> bool:
@@ -71,8 +74,40 @@ class PreAnswerService:
             )
 
     async def _load_project_context(
-        self, project_id: str
+        self,
+        project_id: str,
+        *,
+        sender_user_id: str | None = None,
+        target_user_id: str | None = None,
     ) -> dict[str, Any]:
+        # License-scoped context: if we have both sender+target we pass
+        # the pair to the slice builder so the tighter tier wins.
+        # Falls through to the unscoped read when the slice builder
+        # isn't wired (legacy tests).
+        if (
+            self._license_ctx is not None
+            and sender_user_id is not None
+        ):
+            slice_ = await self._license_ctx.build_slice(
+                project_id=project_id,
+                viewer_user_id=sender_user_id,
+                audience_user_id=target_user_id,
+            )
+            project = slice_.get("project") or {}
+            decisions = (slice_.get("decisions") or [])[:6]
+            return {
+                "title": project.get("title"),
+                "recent_decisions": [
+                    {
+                        "id": str(d.get("id")),
+                        "summary": (
+                            d.get("rationale") or d.get("custom_text") or ""
+                        )[:200],
+                    }
+                    for d in decisions
+                ],
+                "license_tier": slice_.get("license_tier") or "full",
+            }
         async with session_scope(self._sessionmaker) as session:
             project = (
                 await session.execute(
@@ -159,7 +194,11 @@ class PreAnswerService:
         sender_username, sender_display = await self._user_display(
             sender_user_id
         )
-        project_ctx = await self._load_project_context(project_id)
+        project_ctx = await self._load_project_context(
+            project_id,
+            sender_user_id=sender_user_id,
+            target_user_id=target_user_id,
+        )
 
         target_context = {
             "display_name": target_card["display_name"],

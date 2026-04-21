@@ -23,6 +23,7 @@ from .orm import (
     GoalRow,
     IMSuggestionRow,
     IntakeEventRow,
+    LicenseAuditRow,
     MembraneSignalRow,
     MessageRow,
     MilestoneRow,
@@ -2163,3 +2164,48 @@ class HandoffRepository:
         row.finalized_at = datetime.now(timezone.utc)
         await self._session.flush()
         return row
+
+
+class LicenseAuditRepository:
+    """Phase 1.A — append-only audit log for cross-license replies."""
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def record(
+        self,
+        *,
+        project_id: str,
+        source_user_id: str,
+        target_user_id: str,
+        signal_id: str | None,
+        referenced_node_ids: list[str],
+        out_of_view_node_ids: list[str],
+        outcome: str,
+        effective_tier: str,
+    ) -> LicenseAuditRow:
+        row = LicenseAuditRow(
+            id=_new_id(),
+            project_id=project_id,
+            source_user_id=source_user_id,
+            target_user_id=target_user_id,
+            signal_id=signal_id,
+            referenced_node_ids=list(referenced_node_ids or []),
+            out_of_view_node_ids=list(out_of_view_node_ids or []),
+            outcome=outcome,
+            effective_tier=effective_tier,
+        )
+        self._session.add(row)
+        await self._session.flush()
+        return row
+
+    async def list_for_project(
+        self, project_id: str, *, limit: int = 200
+    ) -> list[LicenseAuditRow]:
+        stmt = (
+            select(LicenseAuditRow)
+            .where(LicenseAuditRow.project_id == project_id)
+            .order_by(LicenseAuditRow.created_at.desc())
+            .limit(limit)
+        )
+        return list((await self._session.execute(stmt)).scalars().all())

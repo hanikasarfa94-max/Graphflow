@@ -1078,6 +1078,49 @@ class CommitmentRow(Base):
     )
 
 
+class LicenseAuditRow(Base):
+    """Phase 1.A — cross-license reply audit row.
+
+    One row per outbound-reply-lint evaluation: whether the reply was
+    shipped clean, edited before ship, denied outright, or bumped to
+    manual answer. Referenced node ids (citation targets found in the
+    reply body) are persisted so compliance queries can later ask
+    "which replies leaked D#42" without replaying the source messages.
+
+    Never deletes — this is audit history. `source_user_id` is the
+    reply author (typically the leader or sub-agent source); `target_
+    user_id` is the recipient whose license scoped the lint.
+    """
+
+    __tablename__ = "license_audit"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    project_id: Mapped[str] = mapped_column(
+        ForeignKey("projects.id", ondelete="CASCADE"), index=True
+    )
+    source_user_id: Mapped[str] = mapped_column(String(36), index=True)
+    target_user_id: Mapped[str] = mapped_column(String(36), index=True)
+    # Signal or context this audit row pertains to (RoutedSignalRow.id
+    # for outbound-reply lint, null for preview-only evaluations).
+    signal_id: Mapped[str | None] = mapped_column(
+        String(36), nullable=True, index=True
+    )
+    # Node ids found cited in the reply body. Always a flat list[str].
+    referenced_node_ids: Mapped[list] = mapped_column(JSON, default=list)
+    # Subset of referenced_node_ids that fell outside the recipient's
+    # license view. Empty list == clean lint.
+    out_of_view_node_ids: Mapped[list] = mapped_column(JSON, default=list)
+    # 'clean' | 'edited' | 'denied' | 'manual'
+    outcome: Mapped[str] = mapped_column(String(16), index=True)
+    # Effective license tier used by the lint (the tighter of viewer
+    # and audience). Kept for forensic replay — a later audit needs
+    # to reproduce which ruleset applied.
+    effective_tier: Mapped[str] = mapped_column(String(16), default="full")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow
+    )
+
+
 class HandoffRow(Base):
     """A skill-succession record between two project members.
 
