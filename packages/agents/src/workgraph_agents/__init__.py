@@ -1,3 +1,11 @@
+from .citations import (
+    Citation,
+    CitationKind,
+    CitedClaim,
+    claims_payload,
+    is_uncited,
+    wrap_uncited,
+)
 from .clarification import (
     ClarificationAgent,
     ClarificationBatch,
@@ -180,4 +188,10 @@ __all__ = [
     "PreAnswerDraft",
     "PreAnswerOutcome",
     "PRE_ANSWER_PROMPT_VERSION",
+    "Citation",
+    "CitationKind",
+    "CitedClaim",
+    "wrap_uncited",
+    "claims_payload",
+    "is_uncited",
 ]

@@ -24,6 +24,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from workgraph_agents import PreAnswerAgent
+from workgraph_agents.citations import claims_payload, is_uncited, wrap_uncited
 from workgraph_persistence import (
     DecisionRepository,
     ProjectMemberRepository,
@@ -233,6 +234,9 @@ class PreAnswerService:
             },
         )
 
+        draft_claims = list(outcome.draft.claims) or wrap_uncited(
+            outcome.draft.body
+        )
         return {
             "ok": True,
             "draft": {
@@ -242,6 +246,8 @@ class PreAnswerService:
                 "uncovered_topics": outcome.draft.uncovered_topics,
                 "recommend_route": outcome.draft.recommend_route,
                 "rationale": outcome.draft.rationale,
+                "claims": claims_payload(draft_claims),
+                "uncited": is_uncited(draft_claims),
             },
             "target": {
                 "user_id": target_user_id,

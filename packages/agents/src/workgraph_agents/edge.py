@@ -46,6 +46,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from .citations import CitedClaim
 from .llm import LLMClient, LLMResult, ParseFailure
 
 _log = logging.getLogger("workgraph.agents.edge")
@@ -126,6 +127,11 @@ class EdgeResponse(BaseModel):
     `body` is required for answer / clarify / route_proposal / tool_call;
     must be None for `silence`. `tool_call` is only populated when
     kind="tool_call"; `route_targets` only when kind="route_proposal".
+
+    Phase 1.B — `claims` carries structured `{text, citations[]}` so every
+    substantive sentence in the reply can be chip-linked to the graph/KB
+    node that backs it. Empty / absent `claims` is tolerated: the service
+    wraps the plain `body` and flags the turn `uncited` for the UI.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -135,6 +141,7 @@ class EdgeResponse(BaseModel):
     reasoning: str = Field(default="", max_length=240)
     tool_call: ToolCall | None = None
     route_targets: list[RouteTarget] = Field(default_factory=list)
+    claims: list[CitedClaim] = Field(default_factory=list, max_length=8)
 
     @field_validator("route_targets")
     @classmethod
@@ -272,6 +279,11 @@ class FramedReply(BaseModel):
     `attach_options` tells the UI to regenerate a fresh option set (e.g.
     when the target countered and the source now needs to pick
     accept/counter-back/escalate).
+
+    Phase 1.B — `claims` carries structured `{text, citations[]}` so the
+    framed summary's claims can be chip-linked to the graph/KB nodes
+    that back them. Empty `claims` → service wraps `body` and flags
+    the turn `uncited` for the UI.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -280,6 +292,7 @@ class FramedReply(BaseModel):
     action_hint: ActionHint
     attach_options: bool = False
     reasoning: str = Field(default="", max_length=240)
+    claims: list[CitedClaim] = Field(default_factory=list, max_length=8)
 
 
 @dataclass(slots=True)

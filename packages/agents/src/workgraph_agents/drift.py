@@ -33,6 +33,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from .citations import CitedClaim
 from .llm import LLMClient, LLMResult, ParseFailure
 
 _log = logging.getLogger("workgraph.agents.drift")
@@ -55,6 +56,11 @@ class DriftItem(BaseModel):
 
     `affected_user_ids` is the list the DriftService fans out to — each
     listed user's personal stream gets a drift-alert card.
+
+    Phase 1.B — `claims` carries structured `{text, citations[]}`. The
+    headline / what_drifted / vs_thesis_or_decision fields stay for
+    backwards compat; callers prefer `claims` when present so the UI
+    can render inline provenance chips.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -65,6 +71,7 @@ class DriftItem(BaseModel):
     vs_thesis_or_decision: str = Field(min_length=1, max_length=500)
     suggested_next_step: str = Field(min_length=1, max_length=320)
     affected_user_ids: list[str] = Field(default_factory=list, max_length=10)
+    claims: list[CitedClaim] = Field(default_factory=list, max_length=8)
 
 
 class DriftCheckResult(BaseModel):

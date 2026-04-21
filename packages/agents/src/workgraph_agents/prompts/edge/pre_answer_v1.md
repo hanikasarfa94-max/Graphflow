@@ -62,7 +62,16 @@ The user message is a JSON object:
   "matched_skills": ["<skill>", ...],
   "uncovered_topics": ["<topic the target isn't equipped for>", ...],
   "recommend_route": true | false,
-  "rationale": "<≤60 words: why this confidence, what to tell the sender>"
+  "rationale": "<≤60 words: why this confidence, what to tell the sender>",
+  "claims": [
+    {
+      "text": "<one factual sentence from body>",
+      "citations": [
+        {"node_id": "<id from project.recent_decisions or similar>",
+         "kind": "decision|task|risk|deliverable|goal|milestone|commitment|wiki_page|kb"}
+      ]
+    }
+  ]
 }
 ```
 
@@ -72,3 +81,13 @@ Rules:
 - `recommend_route: false` iff confidence is `high` AND the answer stands on its own. Otherwise `true` (default) — the human should still see it.
 - Never fabricate graph facts. If the question asks about a specific D-N or T-N you weren't given, say you'd need to check.
 - Keep `body` in second-person-absent voice: "Scope decisions on the airlock rework usually land on a 2-week slip…" — NOT "I would say…".
+
+### Citations (Phase 1.B)
+
+Every sentence in `body` that makes a factual claim about the project
+(a decision id, a task title, a risk reference) MUST appear in
+`claims` with citations to the corresponding graph nodes. Ids MUST
+come from `project.recent_decisions` (or similar context you were
+given) — do NOT invent. Style / hedging / "you'd need to check"
+sentences can stay out of `claims` or ride with `citations: []` so
+the UI renders them muted.

@@ -299,6 +299,9 @@ export interface PreAnswerDraft {
   uncovered_topics: string[];
   recommend_route: boolean;
   rationale: string;
+  // Phase 1.B — provenance chips for factual claims inside `body`.
+  claims?: CitedClaim[];
+  uncited?: boolean;
 }
 
 export interface PreAnswerTargetSummary {
@@ -810,6 +813,31 @@ export interface PersonalRouteProposalMetadata {
   status: string;
 }
 
+// Phase 1.B — provenance chips for edge-LLM claims. `kind` mirrors
+// the backend CitationKind taxonomy; string fallback keeps us
+// forward-compatible when the backend adds node kinds.
+export type CitationKind =
+  | "decision"
+  | "task"
+  | "risk"
+  | "deliverable"
+  | "goal"
+  | "milestone"
+  | "commitment"
+  | "wiki_page"
+  | "kb"
+  | string;
+
+export interface Citation {
+  node_id: string;
+  kind: CitationKind;
+}
+
+export interface CitedClaim {
+  text: string;
+  citations: Citation[];
+}
+
 export interface PersonalMessage {
   id: string;
   stream_id: string;
@@ -824,6 +852,13 @@ export interface PersonalMessage {
   // Present on edge-route-proposal messages — backend parses the marker
   // server-side. The body has already had the marker stripped.
   route_proposal?: PersonalRouteProposalMetadata;
+  // Phase 1.B — structured claims parsed out of the body marker.
+  // Empty / missing means "no structured claims" (the body is rendered
+  // as-is, muted).
+  claims?: CitedClaim[];
+  // True iff every claim has an empty `citations` list. Lets the UI
+  // decide once per card whether to render muted.
+  uncited?: boolean;
 }
 
 // edge_response.kind uses the EdgeAgent response kinds (not the stored
@@ -845,6 +880,9 @@ export interface PersonalPostResponse {
         reply_message_id?: string;
         route_proposal_id?: string;
         targets?: PersonalRouteTarget[];
+        // Phase 1.B — structured claims + uncited flag.
+        claims?: CitedClaim[];
+        uncited?: boolean;
       }
     | null;
 }
@@ -917,6 +955,10 @@ export interface RehearsalPreview {
   body?: string | null;
   reasoning?: string;
   targets?: PersonalRouteTarget[];
+  // Phase 1.B — preview carries the same claims/uncited shape so the
+  // rehearsal card can show provenance chips before the user commits.
+  claims?: CitedClaim[];
+  uncited?: boolean;
 }
 
 export interface PreviewResponse {

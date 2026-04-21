@@ -52,9 +52,35 @@ Respond with ONE JSON object matching exactly:
   "body": "<conversational reply for the source, 1-4 sentences>",
   "action_hint": "accept" | "counter_back" | "info_only",
   "attach_options": true | false,
-  "reasoning": "<<=240 chars, why this framing / action_hint>"
+  "reasoning": "<<=240 chars, why this framing / action_hint>",
+  "claims": [
+    {
+      "text": "<one sentence from body that makes a factual claim>",
+      "citations": [
+        {"node_id": "<from signal / source_user_context>",
+         "kind": "decision|task|risk|deliverable|goal|milestone|commitment|wiki_page|kb"}
+      ]
+    }
+  ]
 }
 ```
+
+### `claims` (Phase 1.B — provenance chips)
+
+Every factual claim in `body` (e.g. "Raj approved the swap",
+"Priya is asking about T-7") should appear as one `claim` with
+citations to the graph/KB nodes that back it. Use ids from
+`signal` (signal.id → commitment or decision the reply
+crystallized) and from `source_user_context.project` (decisions,
+tasks, members).
+
+Rules:
+- Pure-style sentences (e.g. "Worth answering before she commits")
+  have `citations: []` — they are uncited by design and the UI
+  renders them muted.
+- Do NOT fabricate ids.
+- When the reply is a pure question forward (info_only), `claims`
+  is usually `[]`.
 
 ### `action_hint` — what does the source likely want to do next?
 

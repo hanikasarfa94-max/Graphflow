@@ -36,6 +36,7 @@ from typing import Any
 from sqlalchemy import and_, desc, or_, select
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
+from workgraph_agents.citations import claims_payload, is_uncited, wrap_uncited
 from workgraph_agents.drift import DriftAgent, DriftItem
 from workgraph_domain import EventBus
 from workgraph_observability import get_trace_id
@@ -217,7 +218,9 @@ class DriftService:
             "ok": True,
             "alerts_posted": alerts_posted,
             "has_drift": result.has_drift,
-            "drift_items": [item.model_dump() for item in result.drift_items],
+            "drift_items": [
+                _drift_item_with_claims(item) for item in result.drift_items
+            ],
             "reasoning": result.reasoning,
             "outcome": outcome.outcome,
         }
@@ -395,10 +398,36 @@ def _encode_drift_body(item: DriftItem, *, project_id: str) -> str:
 
     We embed project_id too so the frontend card can render a jump-to-
     project link without cross-referencing linked_id.
+
+    Phase 1.B — if the drift item arrived without `claims`, wrap the
+    what_drifted + vs_thesis_or_decision strings as uncited claims so
+    the frontend always sees the same shape. `uncited` flag lets the
+    card render muted.
     """
     payload = item.model_dump()
     payload["project_id"] = project_id
+    claims = list(item.claims) or wrap_uncited(
+        # Prefer the two-part drift reasoning; fall back to headline.
+        item.what_drifted or item.headline
+    )
+    payload["claims"] = claims_payload(claims)
+    payload["uncited"] = is_uncited(claims)
     return json.dumps(payload, ensure_ascii=False)
+
+
+def _drift_item_with_claims(item: DriftItem) -> dict[str, Any]:
+    """Return a drift_item dict with a `claims` / `uncited` tag always set.
+
+    Mirrors `_encode_drift_body` so API consumers and in-stream cards
+    see identical shapes.
+    """
+    payload = item.model_dump()
+    claims = list(item.claims) or wrap_uncited(
+        item.what_drifted or item.headline
+    )
+    payload["claims"] = claims_payload(claims)
+    payload["uncited"] = is_uncited(claims)
+    return payload
 
 
 def _decode_drift_body(body: str) -> dict[str, Any]:

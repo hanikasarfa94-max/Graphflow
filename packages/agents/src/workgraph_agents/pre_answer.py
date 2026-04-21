@@ -26,6 +26,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from .citations import CitedClaim
 from .llm import LLMClient, LLMResult, ParseFailure
 
 _log = logging.getLogger("workgraph.agents.pre_answer")
@@ -44,7 +45,13 @@ Outcome = Literal["ok", "retry", "manual_review"]
 
 
 class PreAnswerDraft(BaseModel):
-    """Structured output of PreAnswerAgent.draft()."""
+    """Structured output of PreAnswerAgent.draft().
+
+    Phase 1.B — `claims` carries structured `{text, citations[]}` so the
+    pre-answer's substantive sentences can be chip-linked to graph/KB
+    nodes. Empty `claims` tolerated: the service wraps `body` and flags
+    the card `uncited` for the UI.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
@@ -54,6 +61,7 @@ class PreAnswerDraft(BaseModel):
     uncovered_topics: list[str] = Field(default_factory=list, max_length=6)
     recommend_route: bool = True
     rationale: str = Field(default="", max_length=400)
+    claims: list[CitedClaim] = Field(default_factory=list, max_length=8)
 
 
 _MANUAL_REVIEW_DRAFT = PreAnswerDraft(

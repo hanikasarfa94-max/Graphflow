@@ -33,6 +33,7 @@ import {
   type RoutingSignal,
 } from "@/lib/api";
 
+import { CitedClaimList } from "./CitedClaimList";
 import type { StreamMember } from "./types";
 import { relativeTime } from "./types";
 
@@ -262,7 +263,8 @@ export function RoutedReplyCard({ message, memberById, onFollowUp }: Props) {
 
       <div
         style={{
-          color: "var(--wg-ink)",
+          color: message.uncited === true ? "var(--wg-ink-faint)" : "var(--wg-ink)",
+          fontStyle: message.uncited === true ? "italic" : "normal",
           whiteSpace: "pre-wrap",
           wordBreak: "break-word",
         }}
@@ -282,6 +284,13 @@ export function RoutedReplyCard({ message, memberById, onFollowUp }: Props) {
           message.body
         )}
       </div>
+
+      {message.claims && message.claims.length > 0 && (
+        <CitedClaimList
+          projectId={message.project_id ?? ""}
+          claims={message.claims}
+        />
+      )}
 
       {locallyAccepted ? (
         <div

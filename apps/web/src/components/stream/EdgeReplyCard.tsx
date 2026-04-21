@@ -21,10 +21,12 @@ import type { CSSProperties } from "react";
 
 import type { PersonalMessage } from "@/lib/api";
 
+import { CitedClaimList } from "./CitedClaimList";
 import { relativeTime } from "./types";
 
 type Props = {
   message: PersonalMessage;
+  projectId?: string;
   onFollowUp?: (prefill: string) => void;
 };
 
@@ -75,10 +77,14 @@ const followUpBtn: CSSProperties = {
   cursor: "pointer",
 };
 
-export function EdgeReplyCard({ message, onFollowUp }: Props) {
+export function EdgeReplyCard({ message, projectId, onFollowUp }: Props) {
   const t = useTranslations("personal");
   const variant = variantStyle(message.kind);
   const subLabel = t(`edge.${variant.subLabelKey}`);
+  const effectiveProjectId = projectId ?? message.project_id ?? "";
+  const claims = message.claims ?? [];
+  const hasClaims = claims.length > 0;
+  const isUncited = message.uncited === true;
 
   function handleFollowUp() {
     if (!onFollowUp) return;
@@ -122,15 +128,24 @@ export function EdgeReplyCard({ message, onFollowUp }: Props) {
           {relativeTime(message.created_at)}
         </span>
       </div>
-      <div
-        style={{
-          color: "var(--wg-ink)",
-          whiteSpace: "pre-wrap",
-          wordBreak: "break-word",
-        }}
-      >
-        {message.body}
-      </div>
+      {hasClaims ? (
+        <CitedClaimList
+          projectId={effectiveProjectId}
+          claims={claims}
+        />
+      ) : (
+        <div
+          data-uncited={isUncited ? "true" : "false"}
+          style={{
+            color: isUncited ? "var(--wg-ink-faint)" : "var(--wg-ink)",
+            fontStyle: isUncited ? "italic" : "normal",
+            whiteSpace: "pre-wrap",
+            wordBreak: "break-word",
+          }}
+        >
+          {message.body}
+        </div>
+      )}
       {onFollowUp && (
         <button
           type="button"

@@ -20,8 +20,9 @@
 import { useTranslations } from "next-intl";
 import type { CSSProperties } from "react";
 
-import type { PersonalMessage } from "@/lib/api";
+import type { CitedClaim, PersonalMessage } from "@/lib/api";
 
+import { CitedClaimList } from "./CitedClaimList";
 import { relativeTime } from "./types";
 
 type Props = {
@@ -40,6 +41,8 @@ interface ParsedDriftItem {
   suggested_next_step: string;
   affected_user_ids: string[];
   project_id?: string;
+  claims?: CitedClaim[];
+  uncited?: boolean;
 }
 
 function parseBody(body: string): ParsedDriftItem | null {
@@ -72,6 +75,15 @@ function parseBody(body: string): ParsedDriftItem | null {
         : [],
       project_id:
         typeof parsed.project_id === "string" ? parsed.project_id : undefined,
+      claims: Array.isArray(parsed.claims)
+        ? (parsed.claims.filter(
+            (c): c is CitedClaim =>
+              c !== null &&
+              typeof c === "object" &&
+              typeof (c as CitedClaim).text === "string",
+          ) as CitedClaim[])
+        : undefined,
+      uncited: typeof parsed.uncited === "boolean" ? parsed.uncited : undefined,
     };
   } catch {
     return null;
@@ -262,6 +274,15 @@ export function DriftCard({ message, onDiscuss }: Props) {
       <div style={{ ...fieldValue, fontStyle: "normal" }}>
         {parsed.suggested_next_step}
       </div>
+
+      {parsed.claims && parsed.claims.length > 0 && (
+        <div style={{ marginTop: 8 }}>
+          <CitedClaimList
+            projectId={parsed.project_id ?? message.project_id ?? ""}
+            claims={parsed.claims}
+          />
+        </div>
+      )}
 
       {onDiscuss && (
         <button

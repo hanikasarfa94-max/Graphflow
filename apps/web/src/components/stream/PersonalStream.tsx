@@ -408,6 +408,8 @@ export function PersonalStream({ projectId, currentUserId, members }: Props) {
             kind: messageKind,
             linked_id: null,
             created_at: new Date().toISOString(),
+            claims: edgeResp.claims,
+            uncited: edgeResp.uncited,
             ...(edgeResp.kind === "route_proposal"
               ? {
                   route_proposal: {
@@ -472,6 +474,7 @@ export function PersonalStream({ projectId, currentUserId, members }: Props) {
           <EdgeReplyCard
             key={m.id}
             message={m}
+            projectId={projectId}
             onFollowUp={handleFollowUp}
           />
         );

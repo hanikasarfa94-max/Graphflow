@@ -29,6 +29,12 @@ from typing import Any
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from workgraph_agents import EdgeAgent
+from workgraph_agents.citations import (
+    CitedClaim,
+    claims_payload,
+    is_uncited,
+    wrap_uncited,
+)
 from workgraph_domain import EventBus
 from workgraph_persistence import (
     EDGE_AGENT_SYSTEM_USER_ID,
@@ -77,6 +83,15 @@ _ROUTE_PROPOSAL_MARKER_RE = re.compile(
     re.DOTALL,
 )
 
+# Phase 1.B — claims marker for edge-answer / edge-clarify / edge-reply-frame
+# / edge-route-proposal message bodies. Same round-trip pattern as the route
+# proposal marker so the ORM stays untouched. List-messages strips the
+# marker and surfaces `claims` on the PersonalMessage payload.
+_CLAIMS_MARKER_RE = re.compile(
+    r"\n*<claims>(?P<json>.*?)</claims>\s*$",
+    re.DOTALL,
+)
+
 # Pre-commit rehearsal (vision.md §5.3). Preview runs on every keystroke
 # debounce — cap the blast radius to 1 LLM call per (user, project) per
 # this many seconds. Short drafts short-circuit before touching the LLM.
@@ -90,6 +105,47 @@ def _encode_route_proposal_body(body: str, payload: dict[str, Any]) -> str:
     Round-trippable: `_parse_route_proposal` picks out the same JSON.
     """
     return f"{body}\n\n<route-proposal>{json.dumps(payload, ensure_ascii=False)}</route-proposal>"
+
+
+def _encode_claims_body(body: str, claims: list[dict[str, Any]]) -> str:
+    """Append the claims marker to a human-readable body.
+
+    No-op when `claims` is empty so legacy replies (and tests that inspect
+    raw body strings) stay untouched.
+    """
+    if not claims:
+        return body
+    return f"{body}\n\n<claims>{json.dumps(claims, ensure_ascii=False)}</claims>"
+
+
+def _parse_claims(body: str) -> tuple[str, list[dict[str, Any]]]:
+    """Split body into (human text, claims list). Returns (body, []) when
+    the marker is absent or malformed.
+    """
+    match = _CLAIMS_MARKER_RE.search(body)
+    if not match:
+        return body, []
+    raw = match.group("json")
+    try:
+        payload = json.loads(raw)
+    except json.JSONDecodeError:
+        return body, []
+    if not isinstance(payload, list):
+        return body, []
+    # Shallow sanity filter so a corrupt marker doesn't blow up the UI.
+    cleaned: list[dict[str, Any]] = []
+    for item in payload:
+        if not isinstance(item, dict):
+            continue
+        text = item.get("text")
+        if not isinstance(text, str) or not text.strip():
+            continue
+        citations = item.get("citations") or []
+        if not isinstance(citations, list):
+            citations = []
+        cleaned.append({"text": text, "citations": citations})
+    human = body[: match.start()].rstrip()
+    return human, cleaned
 
 
 def _parse_route_proposal(body: str) -> tuple[str, dict[str, Any] | None]:
@@ -242,6 +298,7 @@ class PersonalStreamService:
             }
             for t in response.route_targets
         ]
+        claims = list(response.claims) or wrap_uncited(response.body)
         return {
             "ok": True,
             "preview": {
@@ -249,6 +306,8 @@ class PersonalStreamService:
                 "body": response.body,
                 "reasoning": response.reasoning,
                 "targets": targets,
+                "claims": claims_payload(claims),
+                "uncited": is_uncited(claims),
             },
         }
 
@@ -536,10 +595,15 @@ class PersonalStreamService:
         if kind in ("answer", "clarify"):
             reply_kind = "edge-answer" if kind == "answer" else "edge-clarify"
             reply_body = response.body or ""
+            # Phase 1.B — wrap uncited when the model skipped `claims`.
+            claims = list(response.claims) or wrap_uncited(reply_body)
+            claims_json = claims_payload(claims)
+            uncited_flag = is_uncited(claims)
+            persisted_body = _encode_claims_body(reply_body, claims_json)
             reply_msg = await self._stream_service.post_system_message(
                 stream_id=stream_id,
                 author_id=EDGE_AGENT_SYSTEM_USER_ID,
-                body=reply_body,
+                body=persisted_body,
                 kind=reply_kind,
                 linked_id=None,
             )
@@ -550,6 +614,8 @@ class PersonalStreamService:
                     "kind": kind,
                     "body": reply_body,
                     "reply_message_id": reply_msg.get("id"),
+                    "claims": claims_json,
+                    "uncited": uncited_flag,
                 },
                 "tool_messages": tool_messages,
             }
@@ -567,6 +633,13 @@ class PersonalStreamService:
                 for t in response.route_targets
             ]
             human_body = response.body or ""
+            # Phase 1.B — wrap uncited claims and append marker alongside
+            # the route-proposal marker. Order matters: claims marker goes
+            # FIRST, route-proposal marker LAST, so the route-proposal
+            # parser (which anchors to end of string) keeps working.
+            claims = list(response.claims) or wrap_uncited(human_body)
+            claims_json = claims_payload(claims)
+            uncited_flag = is_uncited(claims)
             marker = {
                 "message_id": message_id,  # self-pointer back to the user turn
                 "source_user_id": user_id,
@@ -576,7 +649,8 @@ class PersonalStreamService:
                 "targets": targets_payload,
                 "status": "pending",
             }
-            encoded = _encode_route_proposal_body(human_body, marker)
+            body_with_claims = _encode_claims_body(human_body, claims_json)
+            encoded = _encode_route_proposal_body(body_with_claims, marker)
             reply_msg = await self._stream_service.post_system_message(
                 stream_id=stream_id,
                 author_id=EDGE_AGENT_SYSTEM_USER_ID,
@@ -593,6 +667,8 @@ class PersonalStreamService:
                     "body": human_body,
                     "route_proposal_id": proposal_id,
                     "targets": targets_payload,
+                    "claims": claims_json,
+                    "uncited": uncited_flag,
                 },
                 "tool_messages": tool_messages,
             }
@@ -784,10 +860,15 @@ class PersonalStreamService:
             return {"ok": True, "signal": signal, "framed": None}
 
         framed = framed_outcome.framed
+        # Phase 1.B — wrap uncited when the model skipped claims.
+        framed_claims = list(framed.claims) or wrap_uncited(framed.body)
+        framed_claims_json = claims_payload(framed_claims)
+        framed_uncited = is_uncited(framed_claims)
+        persisted_frame_body = _encode_claims_body(framed.body, framed_claims_json)
         frame_msg = await self._stream_service.post_system_message(
             stream_id=source_stream_id,
             author_id=EDGE_AGENT_SYSTEM_USER_ID,
-            body=framed.body,
+            body=persisted_frame_body,
             kind="edge-reply-frame",
             linked_id=signal["id"],
         )
@@ -799,6 +880,8 @@ class PersonalStreamService:
                 "action_hint": framed.action_hint,
                 "attach_options": framed.attach_options,
                 "message_id": frame_msg.get("id"),
+                "claims": framed_claims_json,
+                "uncited": framed_uncited,
             },
         }
 
@@ -843,6 +926,23 @@ class PersonalStreamService:
                             "status": payload.get("status", "pending"),
                         }
                     }
+            # Phase 1.B — strip the claims marker (if any) and surface the
+            # parsed claims on the payload. Applies to every edge-* kind
+            # that carries prose (answer / clarify / route-proposal /
+            # reply-frame); other kinds pass through untouched.
+            if r.kind in (
+                "edge-answer",
+                "edge-clarify",
+                "edge-route-proposal",
+                "edge-reply-frame",
+            ):
+                body_no_claims, claims_list = _parse_claims(body)
+                body = body_no_claims
+                if claims_list:
+                    metadata["claims"] = claims_list
+                    metadata["uncited"] = all(
+                        not (c.get("citations") or []) for c in claims_list
+                    )
             messages.append(
                 {
                     "id": r.id,
