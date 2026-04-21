@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { getTranslations } from "next-intl/server";
 
+import { RecordDissentButton } from "@/components/decision/RecordDissentButton";
 import type { ProjectState } from "@/lib/api";
 import { requireUser, serverFetch } from "@/lib/auth";
 
@@ -108,17 +109,27 @@ export default async function DecisionsPage({
               >
                 {d.rationale || d.custom_text || "—"}
               </div>
-              <Link
-                href={`/projects/${id}/nodes/${d.id}`}
+              <div
                 style={{
-                  fontSize: 11,
-                  fontFamily: "var(--wg-font-mono)",
-                  color: "var(--wg-accent)",
-                  textDecoration: "none",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 16,
+                  marginTop: 8,
                 }}
               >
-                {t("detail.decisions.viewLineage")} →
-              </Link>
+                <Link
+                  href={`/projects/${id}/nodes/${d.id}`}
+                  style={{
+                    fontSize: 11,
+                    fontFamily: "var(--wg-font-mono)",
+                    color: "var(--wg-accent)",
+                    textDecoration: "none",
+                  }}
+                >
+                  {t("detail.decisions.viewLineage")} →
+                </Link>
+                <RecordDissentButton projectId={id} decisionId={d.id} />
+              </div>
             </li>
           ))}
         </ul>

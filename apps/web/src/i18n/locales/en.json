@@ -857,10 +857,29 @@
       "risks": "Open risks owned",
       "tasksDone": "Tasks done",
       "skills": "Skills (declared / observed / overlap)",
-      "activity30d": "Messages (30d) · last active"
+      "activity30d": "Messages (30d) · last active",
+      "dissentAccuracy": "Dissent accuracy"
     },
     "linkToPanel": "Performance",
     "lastActiveNever": "no recorded activity",
     "empty": "No members yet."
+  },
+  "dissent": {
+    "sectionTitle": "Dissent",
+    "empty": "No recorded dissent.",
+    "recordButton": "Record dissent",
+    "composerPlaceholder": "Why you disagree (≤500 chars)",
+    "submit": "Submit",
+    "submitting": "Submitting…",
+    "cancel": "Cancel",
+    "recorded": "Dissent recorded.",
+    "youLabel": "You",
+    "errorPrefix": "Couldn't record:",
+    "errorGeneric": "Couldn't record dissent. Please retry.",
+    "chip": {
+      "supported": "supported",
+      "refuted": "refuted",
+      "stillOpen": "still open"
+    }
   }
 }

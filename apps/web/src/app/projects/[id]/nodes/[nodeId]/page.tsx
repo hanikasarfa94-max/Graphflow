@@ -2,8 +2,9 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 
-import type { ProjectState } from "@/lib/api";
-import { serverFetch } from "@/lib/auth";
+import { DissentList } from "@/components/decision/DissentList";
+import type { DissentRecord, ProjectState, User } from "@/lib/api";
+import { optionalUser, serverFetch } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -216,6 +217,28 @@ export default async function NodeDetailPage({
     notFound();
   }
 
+  // For decision nodes, pull the dissent list server-side so first
+  // paint includes it. Non-decision kinds skip the fetch.
+  let dissents: DissentRecord[] = [];
+  let viewer: User | null = null;
+  if (node.kind === "decision") {
+    try {
+      const res = await serverFetch<{
+        ok: boolean;
+        dissents: DissentRecord[];
+      }>(`/api/projects/${projectId}/decisions/${node.id}/dissents`);
+      if (res.ok) dissents = res.dissents ?? [];
+    } catch {
+      dissents = [];
+    }
+    viewer = await optionalUser();
+  }
+
+  const viewerIsMember = !!(
+    viewer &&
+    state.members.some((m) => m.user_id === viewer!.id)
+  );
+
   return (
     <main
       style={{
@@ -228,6 +251,14 @@ export default async function NodeDetailPage({
       <BackStrip projectId={projectId} label={t("backToGraph")} />
       <Header node={node} labels={{ kind: t(`kinds.${node.kind}`) }} />
       <KindSpecific node={node} state={state} projectId={projectId} t={t} />
+      {node.kind === "decision" ? (
+        <DissentList
+          projectId={projectId}
+          decisionId={node.id}
+          initial={dissents}
+          canRecord={viewerIsMember}
+        />
+      ) : null}
       <FooterLinks
         projectId={projectId}
         nodeId={nodeId}

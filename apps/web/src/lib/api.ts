@@ -406,6 +406,47 @@ export function fetchSuccessorInherited(
   return api(`/api/projects/${projectId}/handoffs/for/${userId}`);
 }
 
+// ---------- Dissent (Phase 2.A) ----------
+
+export type DissentValidatedOutcome =
+  | "supported"
+  | "refuted"
+  | "still_open"
+  | null;
+
+export interface DissentRecord {
+  id: string;
+  decision_id: string;
+  dissenter_user_id: string;
+  dissenter_display_name: string;
+  stance_text: string;
+  created_at: string;
+  validated_by_outcome: DissentValidatedOutcome;
+  outcome_evidence_ids: string[];
+}
+
+export function listDecisionDissents(
+  projectId: string,
+  decisionId: string,
+  baseUrl?: string,
+): Promise<{ ok: boolean; dissents: DissentRecord[] }> {
+  return api(
+    `/api/projects/${projectId}/decisions/${decisionId}/dissents`,
+    { baseUrl },
+  );
+}
+
+export function recordDissent(
+  projectId: string,
+  decisionId: string,
+  stanceText: string,
+): Promise<{ ok: boolean; dissent: DissentRecord }> {
+  return api(`/api/projects/${projectId}/decisions/${decisionId}/dissents`, {
+    method: "POST",
+    body: { stance_text: stanceText },
+  });
+}
+
 export interface ConflictOption {
   label: string;
   detail: string;

@@ -38,6 +38,12 @@ interface PerfRecord {
     observed: number;
     overlap: number;
   };
+  dissent_accuracy: {
+    total: number;
+    supported: number;
+    refuted: number;
+    still_open: number;
+  };
   activity_last_30d: {
     messages: number;
     last_active_at: string | null;
@@ -200,6 +206,7 @@ function PerfTable({
             <Th align="right">{t("cols.risks")}</Th>
             <Th align="right">{t("cols.tasksDone")}</Th>
             <Th>{t("cols.skills")}</Th>
+            <Th>{t("cols.dissentAccuracy")}</Th>
             <Th>{t("cols.activity30d")}</Th>
           </tr>
         </thead>
@@ -268,6 +275,9 @@ function PerfTable({
                   {row.skills_validated.declared} / {row.skills_validated.observed} /{" "}
                   {row.skills_validated.overlap}
                 </span>
+              </Td>
+              <Td>
+                <DissentCell bucket={row.dissent_accuracy} />
               </Td>
               <Td>
                 <div
@@ -340,6 +350,69 @@ function Td({
     >
       {children}
     </td>
+  );
+}
+
+function DissentCell({
+  bucket,
+}: {
+  bucket: PerfRecord["dissent_accuracy"];
+}) {
+  // Render {supported}/{total} + a narrow horizontal bar split into
+  // three segments (supported green / refuted amber / still_open gray).
+  // When total is zero we draw an empty dimmed bar so the column
+  // stays visually stable.
+  const { total, supported, refuted, still_open } = bucket;
+  const pctSupp = total > 0 ? (supported / total) * 100 : 0;
+  const pctRef = total > 0 ? (refuted / total) * 100 : 0;
+  const pctOpen = total > 0 ? (still_open / total) * 100 : 0;
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 80 }}>
+      <div
+        style={{
+          fontFamily: "var(--wg-font-mono)",
+          fontSize: 12,
+          color: total === 0 ? "var(--wg-ink-faint)" : "var(--wg-ink)",
+        }}
+      >
+        {supported} / {total}
+      </div>
+      <div
+        style={{
+          display: "flex",
+          width: 80,
+          height: 4,
+          background: "var(--wg-line-soft, rgba(0,0,0,0.06))",
+          borderRadius: 2,
+          overflow: "hidden",
+        }}
+        aria-hidden
+      >
+        {total > 0 ? (
+          <>
+            <span
+              style={{
+                width: `${pctSupp}%`,
+                background: "var(--wg-green, #1f7a3d)",
+              }}
+            />
+            <span
+              style={{
+                width: `${pctRef}%`,
+                background: "var(--wg-amber, #c58b00)",
+              }}
+            />
+            <span
+              style={{
+                width: `${pctOpen}%`,
+                background: "var(--wg-ink-faint)",
+                opacity: 0.4,
+              }}
+            />
+          </>
+        ) : null}
+      </div>
+    </div>
   );
 }
 

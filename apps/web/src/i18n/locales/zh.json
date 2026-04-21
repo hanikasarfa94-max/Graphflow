@@ -857,10 +857,29 @@
       "risks": "所持开放风险",
       "tasksDone": "已完成任务",
       "skills": "技能(声明 / 观察 / 重叠)",
-      "activity30d": "近 30 天消息 · 最近活跃"
+      "activity30d": "近 30 天消息 · 最近活跃",
+      "dissentAccuracy": "异议准确率"
     },
     "linkToPanel": "绩效",
     "lastActiveNever": "暂无活动记录",
     "empty": "尚无成员。"
+  },
+  "dissent": {
+    "sectionTitle": "异议",
+    "empty": "尚无异议记录。",
+    "recordButton": "记录异议",
+    "composerPlaceholder": "写下你为何反对(不超过 500 字)",
+    "submit": "提交",
+    "submitting": "提交中…",
+    "cancel": "取消",
+    "recorded": "异议已记录。",
+    "youLabel": "我",
+    "errorPrefix": "无法记录:",
+    "errorGeneric": "异议记录失败,请重试。",
+    "chip": {
+      "supported": "已印证",
+      "refuted": "已驳回",
+      "stillOpen": "待观察"
+    }
   }
 }
