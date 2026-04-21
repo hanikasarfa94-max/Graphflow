@@ -9,6 +9,11 @@ import { PendingSection } from "@/components/home/PendingSection";
 import { ProjectsSection } from "@/components/home/ProjectsSection";
 import { PublicSplit } from "@/components/public/PublicSplit";
 import { optionalUser } from "@/lib/auth";
+// Migration note: the home `<main>` intentionally keeps one inline style
+// — it's a one-shot layout container (max-width + page padding) and
+// wrapping it in a primitive would add a file for ~3 props. Every
+// descendant section now uses the `Card` / `Heading` / `Text` / `Button`
+// primitives; see components/home/*.
 
 import { LoginForm } from "./login/LoginForm";
 

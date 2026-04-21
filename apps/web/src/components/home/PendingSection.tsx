@@ -7,6 +7,7 @@ import { useState } from "react";
 import type { PendingSignal } from "@/lib/api";
 
 import { relativeTime } from "@/components/stream/types";
+import { Button, EmptyState, Text } from "@/components/ui";
 
 import { SectionHeader } from "./SectionHeader";
 
@@ -22,17 +23,7 @@ export function PendingSection({ pending }: { pending: PendingSignal[] }) {
     return (
       <section style={{ marginBottom: 40 }} aria-labelledby="home-pending">
         <SectionHeader title={t("home.pending.title")} />
-        <div
-          style={{
-            padding: 16,
-            border: "1px dashed var(--wg-line)",
-            borderRadius: "var(--wg-radius)",
-            color: "var(--wg-ink-faint)",
-            fontSize: 13,
-          }}
-        >
-          {t("home.pending.empty")}
-        </div>
+        <EmptyState>{t("home.pending.empty")}</EmptyState>
       </section>
     );
   }
@@ -55,26 +46,25 @@ export function PendingSection({ pending }: { pending: PendingSignal[] }) {
       >
         {visible.map((p) => (
           <li key={p.suggestion_id}>
-            <PendingRow p={p} jumpLabel={t("home.pending.jumpToTurn")} fromLabel={t("home.pending.fromProject", { project: p.project_title })} />
+            <PendingRow
+              p={p}
+              jumpLabel={t("home.pending.jumpToTurn")}
+              fromLabel={t("home.pending.fromProject", {
+                project: p.project_title,
+              })}
+            />
           </li>
         ))}
       </ul>
       {hiddenCount > 0 && !showAll ? (
-        <button
-          type="button"
+        <Button
+          variant="link"
+          size="sm"
           onClick={() => setShowAll(true)}
-          style={{
-            marginTop: 12,
-            background: "transparent",
-            border: "none",
-            color: "var(--wg-accent)",
-            cursor: "pointer",
-            fontSize: 13,
-            fontFamily: "var(--wg-font-mono)",
-          }}
+          style={{ marginTop: 12 }}
         >
           {t("home.pending.showMore", { count: hiddenCount })}
-        </button>
+        </Button>
       ) : null}
     </section>
   );
@@ -90,7 +80,8 @@ function PendingRow({
   fromLabel: string;
 }) {
   // Suggestion kind → small colored badge, so the eye can tell a blocker
-  // from a tag at a glance.
+  // from a tag at a glance. All colors come from the accent/amber/sunk
+  // token family — house signal-color rule.
   const badge = badgeStyle(p.kind);
   return (
     <Link
@@ -125,38 +116,35 @@ function PendingRow({
         {p.kind}
       </span>
       <div style={{ minWidth: 0 }}>
-        <div
+        <Text
+          as="div"
+          variant="body"
           style={{
-            fontSize: 14,
-            lineHeight: 1.4,
             overflow: "hidden",
             textOverflow: "ellipsis",
             whiteSpace: "nowrap",
           }}
         >
           {p.summary}
-        </div>
-        <div
-          style={{
-            fontSize: 11,
-            color: "var(--wg-ink-faint)",
-            fontFamily: "var(--wg-font-mono)",
-            marginTop: 2,
-          }}
+        </Text>
+        <Text
+          as="div"
+          variant="caption"
+          muted
+          style={{ marginTop: 2, color: "var(--wg-ink-faint)" }}
         >
           {fromLabel} · {relativeTime(p.created_at)}
-        </div>
+        </Text>
       </div>
-      <span
+      <Text
+        variant="caption"
         style={{
           color: "var(--wg-accent)",
-          fontSize: 12,
-          fontFamily: "var(--wg-font-mono)",
           whiteSpace: "nowrap",
         }}
       >
         {jumpLabel}
-      </span>
+      </Text>
     </Link>
   );
 }

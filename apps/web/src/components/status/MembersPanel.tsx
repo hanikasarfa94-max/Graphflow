@@ -85,7 +85,7 @@ function MemberCard({
           height: 36,
           borderRadius: "50%",
           background: "var(--wg-ink)",
-          color: "#fff",
+          color: "var(--wg-surface-raised)",
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
@@ -103,8 +103,8 @@ function MemberCard({
             width: 10,
             height: 10,
             borderRadius: "50%",
-            background: "#3ba55c",
-            border: "2px solid #fff",
+            background: "var(--wg-ok)",
+            border: "2px solid var(--wg-surface-raised)",
           }}
         />
       </div>
@@ -140,7 +140,7 @@ function MemberCard({
                 padding: "1px 6px",
                 borderRadius: 10,
                 background: "var(--wg-accent)",
-                color: "#fff",
+                color: "var(--wg-surface-raised)",
                 fontSize: 10,
                 fontWeight: 600,
               }}

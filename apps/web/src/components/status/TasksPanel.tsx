@@ -19,14 +19,18 @@ type Assignment = {
 // cancelled = explicitly killed).
 const TERMINAL_STATUSES = new Set(["done", "cancelled", "archived"]);
 
+// House signal-color rule (2026-04-21 unification pass): task status
+// pills ride the same sage / amber / terracotta triad as risks and
+// drift — was previously three custom pastel hexes (#dcf1dc / #fff3d9
+// / #fdecec) that didn't line up with anything else.
 function statusColor(status: string): string {
   switch (status) {
     case "done":
-      return "#dcf1dc";
+      return "var(--wg-ok-soft)";
     case "in_progress":
-      return "#fff3d9";
+      return "var(--wg-amber-soft)";
     case "blocked":
-      return "#fdecec";
+      return "var(--wg-accent-soft)";
     default:
       return "var(--wg-surface)";
   }

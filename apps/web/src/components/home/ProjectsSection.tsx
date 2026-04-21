@@ -5,6 +5,7 @@ import { useTranslations } from "next-intl";
 import { useState } from "react";
 
 import { relativeTime } from "@/components/stream/types";
+import { Button, EmptyState, Text } from "@/components/ui";
 
 import type { HomeProjectCard } from "./data";
 import { NewProjectModal } from "./NewProjectModal";
@@ -23,38 +24,18 @@ export function ProjectsSection({
       <SectionHeader
         title={t("home.projects.title")}
         right={
-          <button
-            type="button"
+          <Button
+            variant="primary"
+            size="md"
             onClick={() => setModalOpen(true)}
-            style={{
-              background: "var(--wg-accent)",
-              color: "#fff",
-              border: "none",
-              borderRadius: "var(--wg-radius)",
-              padding: "6px 12px",
-              fontSize: 12,
-              fontWeight: 600,
-              fontFamily: "var(--wg-font-sans)",
-              cursor: "pointer",
-            }}
           >
             {t("home.projects.newButton")}
-          </button>
+          </Button>
         }
       />
 
       {projects.length === 0 ? (
-        <div
-          style={{
-            padding: 16,
-            border: "1px dashed var(--wg-line)",
-            borderRadius: "var(--wg-radius)",
-            color: "var(--wg-ink-faint)",
-            fontSize: 13,
-          }}
-        >
-          {t("home.projects.empty")}
-        </div>
+        <EmptyState>{t("home.projects.empty")}</EmptyState>
       ) : (
         <ul
           style={{
@@ -84,22 +65,23 @@ export function ProjectsSection({
                 }}
               >
                 <div style={{ minWidth: 0 }}>
-                  <div
+                  <Text
+                    as="div"
+                    variant="body"
                     style={{
                       fontWeight: 600,
-                      fontSize: 14,
                       overflow: "hidden",
                       textOverflow: "ellipsis",
                       whiteSpace: "nowrap",
                     }}
                   >
                     {p.title}
-                  </div>
-                  <div
+                  </Text>
+                  <Text
+                    as="div"
+                    variant="caption"
                     style={{
-                      fontSize: 11,
                       color: "var(--wg-ink-faint)",
-                      fontFamily: "var(--wg-font-mono)",
                       marginTop: 2,
                     }}
                   >
@@ -107,14 +89,14 @@ export function ProjectsSection({
                     {p.last_activity_at
                       ? ` · ${relativeTime(p.last_activity_at)}`
                       : ""}
-                  </div>
+                  </Text>
                 </div>
                 {p.unread_count > 0 ? (
                   <span
                     style={{
                       background: "var(--wg-accent)",
-                      color: "#fff",
-                      fontSize: 11,
+                      color: "var(--wg-surface-raised)",
+                      fontSize: "var(--wg-fs-caption)",
                       fontFamily: "var(--wg-font-mono)",
                       padding: "2px 8px",
                       borderRadius: 999,

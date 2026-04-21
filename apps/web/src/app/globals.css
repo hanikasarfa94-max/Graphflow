@@ -53,6 +53,24 @@
   /* Motion. Short + linear-ish; no bouncy springs. */
   --wg-motion-fast: 120ms ease-out;
   --wg-motion-base: 200ms ease-out;
+
+  /* Type scale — single source of truth for headings + body + caption.
+     Numbers match the UI-primitives migration (2026-04-21). Mono
+     captions stay at 11px because they're fine as-is. */
+  --wg-fs-h1: 28px;
+  --wg-fs-h2: 18px;
+  --wg-fs-h3: 14px;
+  --wg-fs-body: 13px;
+  --wg-fs-label: 12px;
+  --wg-fs-caption: 11px;
+  --wg-lh-tight: 1.25;
+  --wg-lh-normal: 1.5;
+
+  /* Signal-color soft tokens — used by severity-bearing cards so they
+     never reach for hardcoded hex. `--wg-accent-soft` already exists
+     above (terracotta tint). `--wg-amber-soft` and `--wg-ok-soft`
+     fill the gap for medium + low-severity and ok surfaces. */
+  --wg-ok-soft: rgba(77, 122, 74, 0.1);
 }
 
 * {

@@ -20,6 +20,7 @@
 import { useTranslations } from "next-intl";
 import type { CSSProperties } from "react";
 
+import { Button } from "@/components/ui";
 import type { CitedClaim, PersonalMessage } from "@/lib/api";
 
 import { CitedClaimList } from "./CitedClaimList";
@@ -90,9 +91,18 @@ function parseBody(body: string): ParsedDriftItem | null {
   }
 }
 
-// Severity → accent colour + label variant. We lean on the existing
-// amber/red tokens where available, with conservative fallbacks so the
-// card still reads if the tokens aren't loaded.
+// Severity → accent colour + label variant. House signal-color rule
+// (2026-04-21 unification pass): drift severity rides the same
+// terracotta / amber / sunk triad as the rest of the product. The
+// previous `#fbecec` / `#fbf0dd` / `#fbf6e5` hex soups are gone — they
+// drifted away from the token palette and from risk severity in status
+// panels.
+//
+//   high    → terracotta accent (same as risk critical/high) — this is
+//             the alarm signal the user is most likely to react to.
+//   medium  → amber accent (same as risk medium / manual_review) — an
+//             escalation, not a crash.
+//   low     → neutral sunk surface + ink-soft rail — ambient.
 function severityStyle(severity: DriftSeverity): {
   borderLeft: string;
   background: string;
@@ -101,24 +111,24 @@ function severityStyle(severity: DriftSeverity): {
 } {
   if (severity === "high") {
     return {
-      borderLeft: "3px solid var(--wg-danger, #c33b3b)",
-      background: "#fbecec",
-      badge: "var(--wg-danger, #c33b3b)",
+      borderLeft: "3px solid var(--wg-accent)",
+      background: "var(--wg-accent-soft)",
+      badge: "var(--wg-accent)",
       icon: "⚠️",
     };
   }
   if (severity === "medium") {
     return {
-      borderLeft: "3px solid var(--wg-accent, #c58a3f)",
-      background: "#fbf0dd",
-      badge: "var(--wg-accent, #c58a3f)",
+      borderLeft: "3px solid var(--wg-amber)",
+      background: "var(--wg-amber-soft)",
+      badge: "var(--wg-amber)",
       icon: "⚠️",
     };
   }
   return {
-    borderLeft: "3px solid var(--wg-amber, #d9a520)",
-    background: "#fbf6e5",
-    badge: "var(--wg-amber, #d9a520)",
+    borderLeft: "3px solid var(--wg-ink-soft)",
+    background: "var(--wg-surface-sunk)",
+    badge: "var(--wg-ink-soft)",
     icon: "⚠️",
   };
 }
@@ -136,27 +146,15 @@ const headerRow: CSSProperties = {
 const severityBadge = (color: string): CSSProperties => ({
   display: "inline-block",
   padding: "1px 6px",
-  borderRadius: "var(--wg-radius-sm, 4px)",
+  borderRadius: "var(--wg-radius-sm)",
   background: color,
-  color: "#fff",
+  color: "var(--wg-surface-raised)",
   fontSize: 10,
   fontFamily: "var(--wg-font-mono)",
   letterSpacing: 0.5,
   textTransform: "uppercase",
   marginLeft: 6,
 });
-
-const discussBtn: CSSProperties = {
-  marginTop: 10,
-  padding: "5px 12px",
-  background: "transparent",
-  color: "var(--wg-ink-soft)",
-  border: "1px solid var(--wg-line)",
-  borderRadius: "var(--wg-radius-sm, 4px)",
-  fontSize: 11,
-  fontFamily: "var(--wg-font-mono)",
-  cursor: "pointer",
-};
 
 const fieldLabel: CSSProperties = {
   fontFamily: "var(--wg-font-mono)",
@@ -188,14 +186,14 @@ export function DriftCard({ message, onDiscuss }: Props) {
         data-testid="personal-drift-card-fallback"
         data-message-id={message.id}
         style={{
-          marginBottom: 12,
+          marginBottom: 10,
           marginLeft: 42,
-          padding: "10px 14px",
-          background: "#fbf6e5",
+          padding: "14px",
+          background: "var(--wg-surface-sunk)",
           border: "1px solid var(--wg-line)",
-          borderLeft: "3px solid var(--wg-amber, #d9a520)",
+          borderLeft: "3px solid var(--wg-amber)",
           borderRadius: "0 var(--wg-radius) var(--wg-radius) 0",
-          fontSize: 13,
+          fontSize: "var(--wg-fs-body)",
           color: "var(--wg-ink)",
           whiteSpace: "pre-wrap",
           wordBreak: "break-word",
@@ -227,14 +225,14 @@ export function DriftCard({ message, onDiscuss }: Props) {
       data-message-id={message.id}
       data-severity={parsed.severity}
       style={{
-        marginBottom: 12,
+        marginBottom: 10,
         marginLeft: 42,
-        padding: "10px 14px",
+        padding: "14px",
         background: style.background,
         border: "1px solid var(--wg-line)",
         borderLeft: style.borderLeft,
         borderRadius: "0 var(--wg-radius) var(--wg-radius) 0",
-        fontSize: 13,
+        fontSize: "var(--wg-fs-body)",
       }}
     >
       <div style={headerRow}>
@@ -285,14 +283,15 @@ export function DriftCard({ message, onDiscuss }: Props) {
       )}
 
       {onDiscuss && (
-        <button
-          type="button"
+        <Button
+          variant="ghost"
+          size="sm"
           onClick={handleDiscuss}
           data-testid="personal-drift-discuss-btn"
-          style={discussBtn}
+          style={{ marginTop: 10 }}
         >
           {t("discussWithEdge")}
-        </button>
+        </Button>
       )}
     </div>
   );

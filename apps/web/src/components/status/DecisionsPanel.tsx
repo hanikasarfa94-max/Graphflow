@@ -98,7 +98,7 @@ export async function DecisionsPanel({
                       style={{
                         padding: "1px 6px",
                         borderRadius: 10,
-                        background: "#fff",
+                        background: "var(--wg-surface-raised)",
                         border: "1px solid var(--wg-line)",
                         color: "var(--wg-ink-soft)",
                       }}

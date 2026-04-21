@@ -1,5 +1,7 @@
 import { getTranslations } from "next-intl/server";
 
+import { EmptyState } from "@/components/ui";
+
 import { SectionHeader } from "./SectionHeader";
 
 // Phase F §3 — placeholder section for gated admin approvals. The backend
@@ -13,18 +15,11 @@ export async function ApprovalsSection() {
   return (
     <section style={{ marginBottom: 40 }} aria-labelledby="home-approvals">
       <SectionHeader title={t("home.approvals.title")} subdued />
-      <div
-        style={{
-          padding: 16,
-          border: "1px dashed var(--wg-line)",
-          borderRadius: "var(--wg-radius)",
-          color: "var(--wg-ink-faint)",
-          fontSize: 13,
-          fontStyle: "italic",
-        }}
-      >
-        {t("home.approvals.placeholderNote")}
-      </div>
+      <EmptyState>
+        <span style={{ fontStyle: "italic" }}>
+          {t("home.approvals.placeholderNote")}
+        </span>
+      </EmptyState>
     </section>
   );
 }

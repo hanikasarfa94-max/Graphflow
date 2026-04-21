@@ -37,6 +37,7 @@ import {
 } from "react";
 import { useTranslations } from "next-intl";
 
+import { Button } from "@/components/ui";
 import {
   ApiError,
   edgeKindToMessageKind,
@@ -612,7 +613,7 @@ export function PersonalStream({ projectId, currentUserId, members }: Props) {
         gridTemplateRows: "1fr auto",
         height: "calc(100vh - 100px)",
         minHeight: 520,
-        background: "#fff",
+        background: "var(--wg-surface-raised)",
         border: "1px solid var(--wg-line)",
         borderRadius: "var(--wg-radius)",
       }}
@@ -716,25 +717,15 @@ export function PersonalStream({ projectId, currentUserId, members }: Props) {
               overflowY: "auto",
             }}
           />
-          <button
-            type="button"
+          <Button
+            variant="primary"
             onClick={() => void send()}
             disabled={!draft.trim() || posting}
             data-testid="personal-send-btn"
-            style={{
-              padding: "10px 18px",
-              background: "var(--wg-accent)",
-              color: "#fff",
-              border: "none",
-              borderRadius: "var(--wg-radius)",
-              fontSize: 14,
-              fontWeight: 600,
-              cursor: "pointer",
-              opacity: !draft.trim() || posting ? 0.6 : 1,
-            }}
+            style={{ padding: "10px 18px" }}
           >
             {t("composer.send")}
-          </button>
+          </Button>
         </div>
       </div>
     </div>

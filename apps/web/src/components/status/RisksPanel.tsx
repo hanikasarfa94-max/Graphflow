@@ -16,10 +16,16 @@ const SEVERITY_RANK: Record<Severity, number> = {
   low: 3,
 };
 
+// House signal-color rule (2026-04-21 unification pass):
+//   critical / high → terracotta  (crystallization / critical)
+//   medium          → amber       (escalation)
+//   low             → ink-soft    (neutral / low priority)
+// Was previously a custom mustard + cornflower-blue palette unrelated
+// to the rest of the product.
 const SEVERITY_COLOR: Record<Severity, string> = {
   critical: "var(--wg-accent)",
-  high: "#c7a44a",
-  medium: "#4a7ac7",
+  high: "var(--wg-accent)",
+  medium: "var(--wg-amber)",
   low: "var(--wg-ink-soft)",
 };
 

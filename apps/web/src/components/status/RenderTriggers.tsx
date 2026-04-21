@@ -21,6 +21,7 @@ import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
 
+import { Button } from "@/components/ui";
 import {
   getPostmortemRender,
   regenerateHandoffRender,
@@ -191,33 +192,33 @@ export function RenderTriggers({
         >
           {existing ? (
             <>
-              <button
+              <Button
+                variant="primary"
                 onClick={handleViewPostmortem}
                 disabled={postmortemBusy}
-                style={buttonStyle("primary", postmortemBusy)}
               >
                 {t("status.renderTriggers.postmortem.view")}
-              </button>
-              <button
+              </Button>
+              <Button
+                variant="ghost"
                 onClick={handleGeneratePostmortem}
                 disabled={postmortemBusy}
-                style={buttonStyle("secondary", postmortemBusy)}
               >
                 {postmortemBusy
                   ? t("states.loading")
                   : t("status.renderTriggers.postmortem.regenerate")}
-              </button>
+              </Button>
             </>
           ) : (
-            <button
+            <Button
+              variant="primary"
               onClick={handleGeneratePostmortem}
               disabled={postmortemBusy}
-              style={buttonStyle("primary", postmortemBusy)}
             >
               {postmortemBusy
                 ? t("states.loading")
                 : t("status.renderTriggers.postmortem.generate")}
-            </button>
+            </Button>
           )}
         </div>
       </div>
@@ -310,7 +311,7 @@ function HandoffRow({
         padding: "8px 10px",
         border: "1px solid var(--wg-line)",
         borderRadius: "var(--wg-radius)",
-        background: "#fff",
+        background: "var(--wg-surface-raised)",
         flexWrap: "wrap",
       }}
     >
@@ -322,7 +323,7 @@ function HandoffRow({
           height: 28,
           borderRadius: "50%",
           background: "var(--wg-ink)",
-          color: "#fff",
+          color: "var(--wg-surface-raised)",
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
@@ -353,44 +354,15 @@ function HandoffRow({
           {member.role}
         </div>
       </div>
-      <button
+      <Button
+        variant="ghost"
         onClick={onGenerate}
         disabled={disabled}
-        style={buttonStyle("secondary", busy || disabled)}
       >
         {busy ? busyLabel : label}
-      </button>
+      </Button>
     </li>
   );
 }
 
-function buttonStyle(
-  kind: "primary" | "secondary",
-  busy: boolean,
-): React.CSSProperties {
-  if (kind === "primary") {
-    return {
-      background: "var(--wg-ink)",
-      color: "#fff",
-      border: "1px solid var(--wg-ink)",
-      padding: "6px 12px",
-      fontSize: 13,
-      fontFamily: "inherit",
-      cursor: busy ? "wait" : "pointer",
-      borderRadius: 2,
-      opacity: busy ? 0.7 : 1,
-    };
-  }
-  return {
-    background: "transparent",
-    color: "var(--wg-ink)",
-    border: "1px solid var(--wg-line)",
-    padding: "6px 12px",
-    fontSize: 13,
-    fontFamily: "inherit",
-    cursor: busy ? "wait" : "pointer",
-    borderRadius: 2,
-    opacity: busy ? 0.7 : 1,
-  };
-}
 

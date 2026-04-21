@@ -5,6 +5,7 @@ import { useTranslations } from "next-intl";
 import { useState } from "react";
 
 import { relativeTime } from "@/components/stream/types";
+import { Button, Card, Heading, Text } from "@/components/ui";
 
 import type { ActiveContext } from "./data";
 import { SectionHeader } from "./SectionHeader";
@@ -36,131 +37,133 @@ function ActiveTaskCard({
   const t = useTranslations();
 
   return (
-    <div
-      style={{
-        padding: 20,
-        border: "1px solid var(--wg-line)",
-        borderRadius: "var(--wg-radius)",
-        background: "var(--wg-surface-raised)",
-        display: "flex",
-        flexDirection: "column",
-        gap: 14,
-      }}
-    >
-      {/* Title row */}
-      <div>
-        <div
-          style={{
-            fontSize: 11,
-            fontFamily: "var(--wg-font-mono)",
-            color: "var(--wg-ink-faint)",
-            letterSpacing: "0.08em",
-            textTransform: "uppercase",
-            marginBottom: 4,
-          }}
-        >
-          {active.project_title}
-        </div>
-        <Link
-          href={`/projects/${active.project_id}`}
-          style={{
-            fontSize: 18,
-            fontWeight: 600,
-            color: "var(--wg-ink)",
-            textDecoration: "none",
-            lineHeight: 1.3,
-          }}
-        >
-          {active.task_title}
-        </Link>
-      </div>
-
-      {/* Status + age row */}
+    <Card variant="raised" flush>
       <div
         style={{
+          padding: 20,
           display: "flex",
-          gap: 16,
-          fontSize: 12,
-          fontFamily: "var(--wg-font-mono)",
-          color: "var(--wg-ink-soft)",
-          flexWrap: "wrap",
+          flexDirection: "column",
+          gap: 14,
         }}
       >
-        <span>
-          <span style={{ color: "var(--wg-ink-faint)" }}>
-            {t("home.active.status")}
-          </span>{" "}
-          {active.status}
-        </span>
-        {active.updated_at ? (
-          <span>
+        {/* Title row */}
+        <div>
+          <Text
+            as="div"
+            variant="caption"
+            style={{
+              color: "var(--wg-ink-faint)",
+              letterSpacing: "0.08em",
+              textTransform: "uppercase",
+              marginBottom: 4,
+            }}
+          >
+            {active.project_title}
+          </Text>
+          <Link
+            href={`/projects/${active.project_id}`}
+            style={{ textDecoration: "none" }}
+          >
+            <Heading level={2}>{active.task_title}</Heading>
+          </Link>
+        </div>
+
+        {/* Status + age row */}
+        <div
+          style={{
+            display: "flex",
+            gap: 16,
+            flexWrap: "wrap",
+          }}
+        >
+          <Text variant="label" muted style={{ fontFamily: "var(--wg-font-mono)" }}>
             <span style={{ color: "var(--wg-ink-faint)" }}>
-              {t("home.active.age")}
+              {t("home.active.status")}
             </span>{" "}
-            {relativeTime(active.updated_at)}
-          </span>
-        ) : null}
+            {active.status}
+          </Text>
+          {active.updated_at ? (
+            <Text variant="label" muted style={{ fontFamily: "var(--wg-font-mono)" }}>
+              <span style={{ color: "var(--wg-ink-faint)" }}>
+                {t("home.active.age")}
+              </span>{" "}
+              {relativeTime(active.updated_at)}
+            </Text>
+          ) : null}
+        </div>
+
+        {/* Context triptych */}
+        <dl
+          style={{
+            display: "grid",
+            gridTemplateColumns: "auto 1fr",
+            gap: "6px 16px",
+            margin: 0,
+          }}
+        >
+          <Text
+            as="dt"
+            variant="caption"
+            style={{ color: "var(--wg-ink-faint)" }}
+          >
+            {t("home.active.upstream")}
+          </Text>
+          <dd style={{ margin: 0, fontSize: "var(--wg-fs-body)" }}>
+            {active.upstream_decision ? (
+              <Link
+                href={`/projects/${active.project_id}/nodes/${active.upstream_decision.id}`}
+                style={{ color: "var(--wg-accent)", textDecoration: "none" }}
+              >
+                ⚡{" "}
+                {active.upstream_decision.rationale ||
+                  active.upstream_decision.custom_text ||
+                  "(decision)"}
+              </Link>
+            ) : (
+              <Text variant="body" muted>
+                —
+              </Text>
+            )}
+          </dd>
+
+          <Text
+            as="dt"
+            variant="caption"
+            style={{ color: "var(--wg-ink-faint)" }}
+          >
+            {t("home.active.downstream")}
+          </Text>
+          <dd style={{ margin: 0, fontSize: "var(--wg-fs-body)" }}>
+            {active.downstream_task_titles.length === 0 ? (
+              <Text variant="body" muted>
+                {t("home.active.noDownstream")}
+              </Text>
+            ) : (
+              active.downstream_task_titles.join(" · ")
+            )}
+          </dd>
+
+          <Text
+            as="dt"
+            variant="caption"
+            style={{ color: "var(--wg-ink-faint)" }}
+          >
+            {t("home.active.adjacent")}
+          </Text>
+          <dd style={{ margin: 0, fontSize: "var(--wg-fs-body)" }}>
+            {active.adjacent_member_names.length === 0 ? (
+              <Text variant="body" muted>
+                {t("home.active.noAdjacent")}
+              </Text>
+            ) : (
+              active.adjacent_member_names.join(" · ")
+            )}
+          </dd>
+        </dl>
+
+        <EdgeLLMNudge projectId={active.project_id} />
       </div>
-
-      {/* Context triptych */}
-      <dl
-        style={{
-          display: "grid",
-          gridTemplateColumns: "auto 1fr",
-          gap: "6px 16px",
-          margin: 0,
-          fontSize: 13,
-          lineHeight: 1.5,
-        }}
-      >
-        <dt style={{ color: "var(--wg-ink-faint)", fontFamily: "var(--wg-font-mono)", fontSize: 11 }}>
-          {t("home.active.upstream")}
-        </dt>
-        <dd style={{ margin: 0 }}>
-          {active.upstream_decision ? (
-            <Link
-              href={`/projects/${active.project_id}/nodes/${active.upstream_decision.id}`}
-              style={{ color: "var(--wg-accent)", textDecoration: "none" }}
-            >
-              ⚡{" "}
-              {active.upstream_decision.rationale ||
-                active.upstream_decision.custom_text ||
-                "(decision)"}
-            </Link>
-          ) : (
-            <span style={{ color: "var(--wg-ink-faint)" }}>—</span>
-          )}
-        </dd>
-
-        <dt style={{ color: "var(--wg-ink-faint)", fontFamily: "var(--wg-font-mono)", fontSize: 11 }}>
-          {t("home.active.downstream")}
-        </dt>
-        <dd style={{ margin: 0 }}>
-          {active.downstream_task_titles.length === 0 ? (
-            <span style={{ color: "var(--wg-ink-faint)" }}>
-              {t("home.active.noDownstream")}
-            </span>
-          ) : (
-            active.downstream_task_titles.join(" · ")
-          )}
-        </dd>
-
-        <dt style={{ color: "var(--wg-ink-faint)", fontFamily: "var(--wg-font-mono)", fontSize: 11 }}>
-          {t("home.active.adjacent")}
-        </dt>
-        <dd style={{ margin: 0 }}>
-          {active.adjacent_member_names.length === 0 ? (
-            <span style={{ color: "var(--wg-ink-faint)" }}>
-              {t("home.active.noAdjacent")}
-            </span>
-          ) : (
-            active.adjacent_member_names.join(" · ")
-          )}
-        </dd>
-      </dl>
-
-      <EdgeLLMNudge projectId={active.project_id} />
-    </div>
+    </Card>
   );
 }
 
@@ -171,43 +174,36 @@ function LastDecisionCard({
 }) {
   const t = useTranslations();
   return (
-    <div
-      style={{
-        padding: 20,
-        border: "1px solid var(--wg-line)",
-        borderRadius: "var(--wg-radius)",
-        background: "var(--wg-surface-raised)",
-        display: "flex",
-        flexDirection: "column",
-        gap: 12,
-      }}
-    >
+    <Card variant="raised" flush>
       <div
         style={{
-          fontSize: 14,
-          lineHeight: 1.5,
-          color: "var(--wg-ink)",
+          display: "flex",
+          flexDirection: "column",
+          gap: 12,
+          padding: 20,
         }}
       >
-        {t("home.active.lastDecisionFallback", {
-          project: active.project_title,
-          summary: active.summary,
-          time: active.created_at ? relativeTime(active.created_at) : "",
-        })}
+        <Text variant="body">
+          {t("home.active.lastDecisionFallback", {
+            project: active.project_title,
+            summary: active.summary,
+            time: active.created_at ? relativeTime(active.created_at) : "",
+          })}
+        </Text>
+        <Link
+          href={`/projects/${active.project_id}/nodes/${active.decision_id}`}
+          style={{
+            fontSize: "var(--wg-fs-label)",
+            color: "var(--wg-accent)",
+            fontFamily: "var(--wg-font-mono)",
+            textDecoration: "none",
+          }}
+        >
+          ⚡ view lineage →
+        </Link>
+        <EdgeLLMNudge projectId={active.project_id} />
       </div>
-      <Link
-        href={`/projects/${active.project_id}/nodes/${active.decision_id}`}
-        style={{
-          fontSize: 12,
-          color: "var(--wg-accent)",
-          fontFamily: "var(--wg-font-mono)",
-          textDecoration: "none",
-        }}
-      >
-        ⚡ view lineage →
-      </Link>
-      <EdgeLLMNudge projectId={active.project_id} />
-    </div>
+    </Card>
   );
 }
 
@@ -218,33 +214,25 @@ function CaughtUpCard({
 }) {
   const t = useTranslations();
   return (
-    <div
-      style={{
-        padding: 20,
-        border: "1px solid var(--wg-line)",
-        borderRadius: "var(--wg-radius)",
-        background: "var(--wg-surface-raised)",
-        display: "flex",
-        flexDirection: "column",
-        gap: 8,
-      }}
-    >
-      <div style={{ fontSize: 16, fontWeight: 600 }}>
-        {t("home.active.caughtUp")}
-      </div>
+    <Card variant="raised" flush>
       <div
         style={{
-          fontSize: 13,
-          color: "var(--wg-ink-soft)",
+          display: "flex",
+          flexDirection: "column",
+          gap: 8,
+          padding: 20,
         }}
       >
-        {active.last_crystallization_at
-          ? t("home.active.caughtUpLastCrystallization", {
-              time: relativeTime(active.last_crystallization_at),
-            })
-          : t("home.active.caughtUpNoHistory")}
+        <Heading level={2}>{t("home.active.caughtUp")}</Heading>
+        <Text variant="body" muted>
+          {active.last_crystallization_at
+            ? t("home.active.caughtUpLastCrystallization", {
+                time: relativeTime(active.last_crystallization_at),
+              })
+            : t("home.active.caughtUpNoHistory")}
+        </Text>
       </div>
-    </div>
+    </Card>
   );
 }
 
@@ -314,33 +302,25 @@ function EdgeLLMNudge({ projectId }: { projectId: string }) {
           border: "1px solid var(--wg-line)",
           borderRadius: "var(--wg-radius)",
           background: "var(--wg-surface)",
-          fontSize: 13,
+          fontSize: "var(--wg-fs-body)",
           fontFamily: "var(--wg-font-sans)",
           color: "var(--wg-ink)",
         }}
       />
-      <button
+      <Button
         type="submit"
+        variant="primary"
+        size="md"
         disabled={pending || !text.trim()}
-        style={{
-          padding: "8px 14px",
-          background: "var(--wg-accent)",
-          color: "#fff",
-          border: "none",
-          borderRadius: "var(--wg-radius)",
-          fontSize: 12,
-          fontWeight: 600,
-          cursor: pending ? "progress" : "pointer",
-          opacity: pending || !text.trim() ? 0.55 : 1,
-        }}
       >
         →
-      </button>
+      </Button>
       {error ? (
         <span
           role="alert"
           style={{
-            fontSize: 11,
+            fontSize: "var(--wg-fs-caption)",
+            fontFamily: "var(--wg-font-mono)",
             color: "var(--wg-accent)",
             alignSelf: "center",
           }}

@@ -2,6 +2,10 @@ import type { ReactNode } from "react";
 
 // Small, consistent section header used across the personal home. Keeps
 // the visual rhythm uniform so the eye can scan between sections quickly.
+// Uses the caption mono scale directly (--wg-fs-caption). Wrapping it in
+// <Heading> would be wrong — semantically this is an h2 but visually it
+// wants the mono-caps treatment the Heading primitive intentionally
+// doesn't do.
 export function SectionHeader({
   title,
   right,
@@ -23,7 +27,7 @@ export function SectionHeader({
     >
       <h2
         style={{
-          fontSize: 11,
+          fontSize: "var(--wg-fs-caption)",
           letterSpacing: "0.08em",
           textTransform: "uppercase",
           color: subdued ? "var(--wg-ink-faint)" : "var(--wg-ink-soft)",

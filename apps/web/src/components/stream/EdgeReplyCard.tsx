@@ -17,8 +17,8 @@
 // via the `onFollowUp` callback. Parent owns the composer state.
 
 import { useTranslations } from "next-intl";
-import type { CSSProperties } from "react";
 
+import { Button } from "@/components/ui";
 import type { PersonalMessage } from "@/lib/api";
 
 import { CitedClaimList } from "./CitedClaimList";
@@ -65,18 +65,6 @@ function variantStyle(kind: PersonalMessage["kind"]): {
   };
 }
 
-const followUpBtn: CSSProperties = {
-  marginTop: 8,
-  padding: "4px 10px",
-  background: "transparent",
-  color: "var(--wg-ink-soft)",
-  border: "1px solid var(--wg-line)",
-  borderRadius: "var(--wg-radius-sm, 4px)",
-  fontSize: 11,
-  fontFamily: "var(--wg-font-mono)",
-  cursor: "pointer",
-};
-
 export function EdgeReplyCard({ message, projectId, onFollowUp }: Props) {
   const t = useTranslations("personal");
   const variant = variantStyle(message.kind);
@@ -98,14 +86,14 @@ export function EdgeReplyCard({ message, projectId, onFollowUp }: Props) {
       data-message-id={message.id}
       data-kind={message.kind}
       style={{
-        marginBottom: 12,
+        marginBottom: 10,
         marginLeft: 42,
-        padding: "10px 14px",
+        padding: "14px",
         background: variant.background,
         border: "1px solid var(--wg-line)",
         borderLeft: variant.borderLeft,
         borderRadius: "0 var(--wg-radius) var(--wg-radius) 0",
-        fontSize: 13,
+        fontSize: "var(--wg-fs-body)",
       }}
     >
       <div
@@ -147,14 +135,15 @@ export function EdgeReplyCard({ message, projectId, onFollowUp }: Props) {
         </div>
       )}
       {onFollowUp && (
-        <button
-          type="button"
+        <Button
+          variant="ghost"
+          size="sm"
           onClick={handleFollowUp}
           data-testid="personal-follow-up-btn"
-          style={followUpBtn}
+          style={{ marginTop: 8 }}
         >
           {t("followUp")}
-        </button>
+        </Button>
       )}
     </div>
   );

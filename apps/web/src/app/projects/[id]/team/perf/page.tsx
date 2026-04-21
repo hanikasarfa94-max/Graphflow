@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { getTranslations } from "next-intl/server";
 
+import { Card, Heading, Text } from "@/components/ui";
 import { ApiError } from "@/lib/api";
 import { requireUser, serverFetch } from "@/lib/auth";
 
@@ -86,7 +87,7 @@ export default async function ProjectTeamPerfPage({
         <Link
           href={`/projects/${id}/team`}
           style={{
-            fontSize: 12,
+            fontSize: "var(--wg-fs-label)",
             fontFamily: "var(--wg-font-mono)",
             color: "var(--wg-ink-soft)",
             textDecoration: "none",
@@ -96,27 +97,15 @@ export default async function ProjectTeamPerfPage({
         </Link>
       </div>
       <header style={{ marginBottom: 22 }}>
-        <h1
-          style={{
-            margin: 0,
-            fontSize: 28,
-            fontWeight: 600,
-            color: "var(--wg-ink)",
-          }}
-        >
-          {t("title")}
-        </h1>
-        <p
-          style={{
-            margin: "8px 0 0",
-            color: "var(--wg-ink-soft)",
-            fontSize: 14,
-            lineHeight: 1.55,
-            maxWidth: 640,
-          }}
+        <Heading level={1}>{t("title")}</Heading>
+        <Text
+          as="p"
+          variant="body"
+          muted
+          style={{ margin: "8px 0 0", maxWidth: 640 }}
         >
           {t("subtitle")}
-        </p>
+        </Text>
       </header>
 
       {forbidden ? (
@@ -139,7 +128,7 @@ function InlineNotice({
   tone: "warn" | "muted";
   label: string;
 }) {
-  const styles =
+  const warnStyle =
     tone === "warn"
       ? {
           background: "var(--wg-amber-soft)",
@@ -158,9 +147,9 @@ function InlineNotice({
         marginTop: 8,
         padding: "12px 16px",
         borderRadius: "var(--wg-radius)",
-        fontSize: 13,
+        fontSize: "var(--wg-fs-body)",
         fontFamily: "var(--wg-font-mono)",
-        ...styles,
+        ...warnStyle,
       }}
     >
       {label}
@@ -178,19 +167,12 @@ function PerfTable({
   t: (k: string) => string;
 }) {
   return (
-    <section
-      style={{
-        background: "var(--wg-surface-raised)",
-        border: "1px solid var(--wg-line)",
-        borderRadius: "var(--wg-radius)",
-        overflow: "hidden",
-      }}
-    >
+    <Card flush>
       <table
         style={{
           width: "100%",
           borderCollapse: "collapse",
-          fontSize: 13,
+          fontSize: "var(--wg-fs-body)",
         }}
       >
         <thead>
@@ -218,27 +200,24 @@ function PerfTable({
                 background:
                   idx % 2 === 0
                     ? "transparent"
-                    : "var(--wg-line-soft, rgba(0,0,0,0.02))",
+                    : "var(--wg-line-soft)",
                 borderBottom:
                   idx === rows.length - 1
                     ? "none"
-                    : "1px solid var(--wg-line-soft, var(--wg-line))",
+                    : "1px solid var(--wg-line-soft)",
               }}
             >
               <Td>
-                <div style={{ fontWeight: 500, color: "var(--wg-ink)" }}>
+                <Text as="div" variant="body" style={{ fontWeight: 500 }}>
                   {row.display_name}
-                </div>
-                <div
-                  style={{
-                    fontSize: 11,
-                    fontFamily: "var(--wg-font-mono)",
-                    color: "var(--wg-ink-faint)",
-                    marginTop: 2,
-                  }}
+                </Text>
+                <Text
+                  as="div"
+                  variant="caption"
+                  style={{ color: "var(--wg-ink-faint)", marginTop: 2 }}
                 >
                   {row.username} · {row.role_in_project} · {row.license_tier}
-                </div>
+                </Text>
               </Td>
               <Td align="right">
                 <CountCell
@@ -265,45 +244,31 @@ function PerfTable({
                 />
               </Td>
               <Td>
-                <span
-                  style={{
-                    fontFamily: "var(--wg-font-mono)",
-                    fontSize: 12,
-                    color: "var(--wg-ink)",
-                  }}
-                >
+                <Text variant="mono">
                   {row.skills_validated.declared} / {row.skills_validated.observed} /{" "}
                   {row.skills_validated.overlap}
-                </span>
+                </Text>
               </Td>
               <Td>
                 <DissentCell bucket={row.dissent_accuracy} />
               </Td>
               <Td>
-                <div
-                  style={{
-                    fontFamily: "var(--wg-font-mono)",
-                    fontSize: 12,
-                    color: "var(--wg-ink)",
-                  }}
-                >
+                <Text as="div" variant="mono">
                   {row.activity_last_30d.messages}
-                </div>
-                <div
-                  style={{
-                    fontSize: 11,
-                    color: "var(--wg-ink-faint)",
-                    marginTop: 2,
-                  }}
+                </Text>
+                <Text
+                  as="div"
+                  variant="caption"
+                  style={{ color: "var(--wg-ink-faint)", marginTop: 2 }}
                 >
                   {formatLastActive(row.activity_last_30d.last_active_at, t)}
-                </div>
+                </Text>
               </Td>
             </tr>
           ))}
         </tbody>
       </table>
-    </section>
+    </Card>
   );
 }
 
@@ -319,7 +284,7 @@ function Th({
       style={{
         padding: "10px 14px",
         textAlign: align,
-        fontSize: 11,
+        fontSize: "var(--wg-fs-caption)",
         fontFamily: "var(--wg-font-mono)",
         letterSpacing: "0.04em",
         textTransform: "uppercase",
@@ -359,30 +324,31 @@ function DissentCell({
   bucket: PerfRecord["dissent_accuracy"];
 }) {
   // Render {supported}/{total} + a narrow horizontal bar split into
-  // three segments (supported green / refuted amber / still_open gray).
-  // When total is zero we draw an empty dimmed bar so the column
-  // stays visually stable.
+  // three segments. Signal-color rule (2026-04-21 pass): supported =
+  // sage (ok), refuted = amber (medium severity), still_open =
+  // ink-faint (low / neutral). Was previously using greens + yellows
+  // that drifted from the house palette.
   const { total, supported, refuted, still_open } = bucket;
   const pctSupp = total > 0 ? (supported / total) * 100 : 0;
   const pctRef = total > 0 ? (refuted / total) * 100 : 0;
   const pctOpen = total > 0 ? (still_open / total) * 100 : 0;
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 80 }}>
-      <div
+      <Text
+        variant="mono"
         style={{
-          fontFamily: "var(--wg-font-mono)",
-          fontSize: 12,
           color: total === 0 ? "var(--wg-ink-faint)" : "var(--wg-ink)",
+          fontSize: "var(--wg-fs-label)",
         }}
       >
         {supported} / {total}
-      </div>
+      </Text>
       <div
         style={{
           display: "flex",
           width: 80,
           height: 4,
-          background: "var(--wg-line-soft, rgba(0,0,0,0.06))",
+          background: "var(--wg-line-soft)",
           borderRadius: 2,
           overflow: "hidden",
         }}
@@ -393,13 +359,13 @@ function DissentCell({
             <span
               style={{
                 width: `${pctSupp}%`,
-                background: "var(--wg-green, #1f7a3d)",
+                background: "var(--wg-ok)",
               }}
             />
             <span
               style={{
                 width: `${pctRef}%`,
-                background: "var(--wg-amber, #c58b00)",
+                background: "var(--wg-amber)",
               }}
             />
             <span
@@ -418,16 +384,16 @@ function DissentCell({
 
 function CountCell({ count, href }: { count: number; href: string | null }) {
   const content = (
-    <span
+    <Text
+      variant="mono"
       style={{
-        fontFamily: "var(--wg-font-mono)",
         fontSize: 16,
         fontWeight: 600,
         color: count === 0 ? "var(--wg-ink-faint)" : "var(--wg-accent)",
       }}
     >
       {count}
-    </span>
+    </Text>
   );
   if (!href || count === 0) return content;
   return (

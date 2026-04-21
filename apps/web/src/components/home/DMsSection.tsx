@@ -2,6 +2,7 @@ import Link from "next/link";
 import { getTranslations } from "next-intl/server";
 
 import { relativeTime } from "@/components/stream/types";
+import { EmptyState, Text } from "@/components/ui";
 
 import type { HomeDMCard } from "./data";
 import { SectionHeader } from "./SectionHeader";
@@ -19,17 +20,7 @@ export async function DMsSection({ dms }: { dms: HomeDMCard[] }) {
     <section style={{ marginBottom: 40 }} aria-labelledby="home-dms">
       <SectionHeader title={t("home.dms.title")} />
       {visible.length === 0 ? (
-        <div
-          style={{
-            padding: 16,
-            border: "1px dashed var(--wg-line)",
-            borderRadius: "var(--wg-radius)",
-            color: "var(--wg-ink-faint)",
-            fontSize: 13,
-          }}
-        >
-          {t("home.dms.empty")}
-        </div>
+        <EmptyState>{t("home.dms.empty")}</EmptyState>
       ) : (
         <ul
           style={{
@@ -60,22 +51,23 @@ export async function DMsSection({ dms }: { dms: HomeDMCard[] }) {
               >
                 <Avatar label={d.other_display_name} />
                 <div style={{ minWidth: 0 }}>
-                  <div
+                  <Text
+                    as="div"
+                    variant="body"
                     style={{
                       fontWeight: 600,
-                      fontSize: 14,
                       overflow: "hidden",
                       textOverflow: "ellipsis",
                       whiteSpace: "nowrap",
                     }}
                   >
                     {d.other_display_name}
-                  </div>
-                  <div
+                  </Text>
+                  <Text
+                    as="div"
+                    variant="caption"
                     style={{
-                      fontSize: 11,
                       color: "var(--wg-ink-faint)",
-                      fontFamily: "var(--wg-font-mono)",
                       overflow: "hidden",
                       textOverflow: "ellipsis",
                       whiteSpace: "nowrap",
@@ -85,14 +77,14 @@ export async function DMsSection({ dms }: { dms: HomeDMCard[] }) {
                     {d.last_activity_at
                       ? ` · ${relativeTime(d.last_activity_at)}`
                       : ""}
-                  </div>
+                  </Text>
                 </div>
                 {d.unread_count > 0 ? (
                   <span
                     style={{
                       background: "var(--wg-accent)",
-                      color: "#fff",
-                      fontSize: 11,
+                      color: "var(--wg-surface-raised)",
+                      fontSize: "var(--wg-fs-caption)",
                       fontFamily: "var(--wg-font-mono)",
                       padding: "2px 8px",
                       borderRadius: 999,

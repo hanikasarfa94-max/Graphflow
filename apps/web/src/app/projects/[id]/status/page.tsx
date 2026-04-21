@@ -7,6 +7,7 @@ import { Panel } from "@/components/status/Panel";
 import { RenderTriggers } from "@/components/status/RenderTriggers";
 import { RisksPanel } from "@/components/status/RisksPanel";
 import { TasksPanel } from "@/components/status/TasksPanel";
+import { Heading, Text } from "@/components/ui";
 import type { ProjectState } from "@/lib/api";
 import { requireUser, serverFetch } from "@/lib/auth";
 
@@ -54,32 +55,18 @@ export default async function ProjectStatusPage({
           flexWrap: "wrap",
         }}
       >
-        <h1 style={{ margin: 0, fontSize: 18, fontWeight: 600 }}>
-          {t("status.title")}
-        </h1>
-        <div
-          style={{
-            fontSize: 11,
-            fontFamily: "var(--wg-font-mono)",
-            color: "var(--wg-ink-soft)",
-          }}
-        >
+        <Heading level={2}>{t("status.title")}</Heading>
+        <Text variant="caption" muted>
           {t("status.lastRefreshed", { time: refreshedAt })}
-        </div>
+        </Text>
       </header>
 
       {errorMessage ? (
         <Panel title={t("status.title")}>
-          <div
-            role="alert"
-            style={{
-              padding: 12,
-              color: "var(--wg-accent)",
-              fontFamily: "var(--wg-font-mono)",
-              fontSize: 13,
-            }}
-          >
-            {errorMessage}
+          <div role="alert" style={{ padding: 12 }}>
+            <Text variant="body" style={{ color: "var(--wg-accent)", fontFamily: "var(--wg-font-mono)" }}>
+              {errorMessage}
+            </Text>
           </div>
         </Panel>
       ) : null}

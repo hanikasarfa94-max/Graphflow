@@ -18,6 +18,7 @@ import Link from "next/link";
 import { useTranslations } from "next-intl";
 import type { CSSProperties } from "react";
 
+import { Button } from "@/components/ui";
 import type { ScrimmageResult, ScrimmageTurn } from "@/lib/api";
 
 import { CitedClaimList } from "./CitedClaimList";
@@ -30,17 +31,17 @@ const STANCE_LABEL_KEY: Record<ScrimmageTurn["stance"], string> = {
 
 const cardShell: CSSProperties = {
   marginTop: 8,
-  padding: "10px 14px",
+  padding: "14px",
   background: "var(--wg-surface)",
   border: "1px solid var(--wg-line)",
   borderLeft: "3px solid var(--wg-accent)",
   borderRadius: "0 var(--wg-radius) var(--wg-radius) 0",
-  fontSize: 13,
+  fontSize: "var(--wg-fs-body)",
 };
 
 const headerRow: CSSProperties = {
   fontFamily: "var(--wg-font-mono)",
-  fontSize: 11,
+  fontSize: "var(--wg-fs-caption)",
   color: "var(--wg-accent)",
   letterSpacing: "0.04em",
   textTransform: "uppercase",
@@ -48,27 +49,21 @@ const headerRow: CSSProperties = {
   marginBottom: 8,
 };
 
-const primaryBtn: CSSProperties = {
+// Scrimmage approve = "crystallize" (primary/terracotta); "ask directly"
+// also commits the user to a routing action (primary); "reject" /
+// "close" map to ghost. The `Link`-as-button variant kept its inline
+// look because a <Button>-wrapped <Link> would break Next's prefetching.
+const primaryLinkBtn: CSSProperties = {
   padding: "6px 12px",
   background: "var(--wg-accent)",
   color: "#fff",
-  border: "none",
+  border: "1px solid var(--wg-accent)",
   borderRadius: "var(--wg-radius)",
-  fontSize: 12,
+  fontSize: "var(--wg-fs-label)",
   fontWeight: 600,
   cursor: "pointer",
   textDecoration: "none",
   display: "inline-block",
-};
-
-const secondaryBtn: CSSProperties = {
-  padding: "6px 10px",
-  background: "var(--wg-surface)",
-  color: "var(--wg-ink)",
-  border: "1px solid var(--wg-line)",
-  borderRadius: "var(--wg-radius)",
-  fontSize: 12,
-  cursor: "pointer",
 };
 
 // ---- running card -------------------------------------------------------
@@ -187,21 +182,20 @@ export function DecisionProposalCard({
         {proposal.decision_id ? (
           <Link
             href={`/projects/${projectId}/detail/decisions`}
-            style={primaryBtn}
+            style={primaryLinkBtn}
             data-testid="scrimmage-approve-btn"
             data-decision-id={proposal.decision_id}
           >
             {t("converged.approve")}
           </Link>
         ) : null}
-        <button
-          type="button"
+        <Button
+          variant="ghost"
           onClick={onReject}
-          style={secondaryBtn}
           data-testid="scrimmage-reject-btn"
         >
           {t("converged.reject", { name: targetName })}
-        </button>
+        </Button>
       </div>
     </div>
   );
@@ -253,14 +247,13 @@ export function DebateSummaryCard({
         />
       </div>
 
-      <button
-        type="button"
+      <Button
+        variant="primary"
         onClick={onAskDirectly}
-        style={primaryBtn}
         data-testid="scrimmage-ask-directly-btn"
       >
         {t("unresolved.ask", { name: targetName })}
-      </button>
+      </Button>
     </div>
   );
 }

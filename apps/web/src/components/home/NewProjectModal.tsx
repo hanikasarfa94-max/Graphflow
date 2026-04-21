@@ -4,6 +4,8 @@ import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
+import { Button } from "@/components/ui";
+
 // New-project modal per Phase F §7. Projects are created from the intake
 // endpoint (POST /api/intake/message), which returns a project row. We
 // then invite each supplied username via POST /api/projects/{id}/invite
@@ -154,7 +156,7 @@ export function NewProjectModal({
         onSubmit={submit}
         style={{
           width: "min(520px, 100%)",
-          background: "#fff",
+          background: "var(--wg-surface-raised)",
           border: "1px solid var(--wg-line)",
           borderRadius: "var(--wg-radius)",
           padding: 24,
@@ -241,41 +243,22 @@ export function NewProjectModal({
             marginTop: 4,
           }}
         >
-          <button
-            type="button"
+          <Button
+            variant="ghost"
             onClick={onClose}
             disabled={pending}
-            style={{
-              padding: "8px 14px",
-              background: "transparent",
-              border: "1px solid var(--wg-line)",
-              borderRadius: "var(--wg-radius)",
-              fontSize: 13,
-              cursor: pending ? "not-allowed" : "pointer",
-              color: "var(--wg-ink-soft)",
-            }}
           >
             {t("home.newProject.cancel")}
-          </button>
-          <button
+          </Button>
+          <Button
             type="submit"
+            variant="primary"
             disabled={pending || !title.trim()}
-            style={{
-              padding: "8px 16px",
-              background: "var(--wg-accent)",
-              color: "#fff",
-              border: "none",
-              borderRadius: "var(--wg-radius)",
-              fontSize: 13,
-              fontWeight: 600,
-              cursor: pending ? "progress" : "pointer",
-              opacity: pending || !title.trim() ? 0.6 : 1,
-            }}
           >
             {pending
               ? t("home.newProject.submitting")
               : t("home.newProject.submit")}
-          </button>
+          </Button>
         </div>
       </form>
     </div>

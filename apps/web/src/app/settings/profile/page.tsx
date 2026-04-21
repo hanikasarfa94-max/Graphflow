@@ -1,6 +1,7 @@
 import { cookies, headers } from "next/headers";
 import Link from "next/link";
 
+import { Button, Card, Heading, Text } from "@/components/ui";
 import { requireUser } from "@/lib/auth";
 import {
   PROFILE_OBSERVED_KEYS,
@@ -61,7 +62,6 @@ export default async function SettingsProfilePage() {
         maxWidth: 720,
         margin: "0 auto",
         padding: "56px 24px",
-        fontFamily: "var(--wg-font-sans)",
       }}
     >
       <header
@@ -74,12 +74,13 @@ export default async function SettingsProfilePage() {
         }}
       >
         <div>
-          <div
+          <Text
+            as="div"
+            variant="label"
+            muted
             style={{
-              fontSize: 12,
               letterSpacing: "0.08em",
               textTransform: "uppercase",
-              color: "var(--wg-ink-soft)",
             }}
           >
             <span
@@ -94,49 +95,36 @@ export default async function SettingsProfilePage() {
               }}
             />
             WorkGraph · <Link href="/projects">projects</Link>
-          </div>
-          <h1 style={{ fontSize: 28, fontWeight: 600, margin: "8px 0 0" }}>
+          </Text>
+          <Heading level={1} style={{ margin: "8px 0 0" }}>
             {t.title}
-          </h1>
-          <p
-            style={{
-              margin: "6px 0 0",
-              color: "var(--wg-ink-soft)",
-              fontSize: 14,
-              maxWidth: 520,
-            }}
+          </Heading>
+          <Text
+            as="p"
+            variant="body"
+            muted
+            style={{ margin: "6px 0 0", maxWidth: 520 }}
           >
             {t.subtitle}
-          </p>
+          </Text>
         </div>
-        <div
-          style={{
-            fontSize: 12,
-            fontFamily: "var(--wg-font-mono)",
-            color: "var(--wg-ink-soft)",
-            textAlign: "right",
-          }}
-        >
-          {user.display_name}
+        <div style={{ textAlign: "right" }}>
+          <Text variant="label" muted style={{ fontFamily: "var(--wg-font-mono)" }}>
+            {user.display_name}
+          </Text>
           <form
             action="/api/auth/logout?redirect=/"
             method="POST"
             style={{ display: "inline" }}
           >
-            <button
+            <Button
               type="submit"
-              style={{
-                marginLeft: 10,
-                background: "transparent",
-                border: "none",
-                color: "var(--wg-accent)",
-                cursor: "pointer",
-                fontSize: 12,
-                fontFamily: "var(--wg-font-mono)",
-              }}
+              variant="link"
+              size="sm"
+              style={{ marginLeft: 10 }}
             >
               {t.signOut}
-            </button>
+            </Button>
           </form>
         </div>
       </header>
@@ -145,27 +133,14 @@ export default async function SettingsProfilePage() {
           the ability catalog ships. The observed block below is the
           compute-on-read projection. */}
 
-      <section
-        aria-labelledby="observed-heading"
-        style={{
-          marginTop: 24,
-          padding: 20,
-          background: "var(--wg-surface-raised)",
-          border: "1px solid var(--wg-line)",
-          borderRadius: "var(--wg-radius)",
-        }}
-      >
-        <h2
+      <Card variant="raised" style={{ marginTop: 24 }} aria-labelledby="observed-heading">
+        <Heading
+          level={2}
           id="observed-heading"
-          style={{
-            fontSize: 16,
-            fontWeight: 600,
-            margin: 0,
-            marginBottom: 4,
-          }}
+          style={{ marginBottom: 4 }}
         >
           {t.observedSectionHeading}
-        </h2>
+        </Heading>
 
         {/* Stats grid — 2 cols, labels + numbers. */}
         <dl
@@ -188,39 +163,27 @@ export default async function SettingsProfilePage() {
                 paddingBottom: 8,
               }}
             >
-              <dt
-                style={{
-                  fontSize: 13,
-                  color: "var(--wg-ink-soft)",
-                  margin: 0,
-                }}
-              >
+              <Text as="dt" variant="body" muted>
                 {t.observedLabels[key]}
-              </dt>
-              <dd
-                style={{
-                  fontFamily: "var(--wg-font-mono)",
-                  fontSize: 18,
-                  fontWeight: 600,
-                  margin: 0,
-                  color: "var(--wg-ink)",
-                }}
+              </Text>
+              <Text
+                as="dd"
+                variant="mono"
+                style={{ fontSize: 18, fontWeight: 600 }}
               >
                 {observed[key]}
-              </dd>
+              </Text>
             </div>
           ))}
         </dl>
 
-        <p
-          style={{
-            fontSize: 12,
-            color: "var(--wg-ink-faint)",
-            margin: 0,
-          }}
+        <Text
+          as="p"
+          variant="label"
+          style={{ color: "var(--wg-ink-faint)" }}
         >
           {t.observedFootnote}
-        </p>
+        </Text>
 
         <div
           style={{
@@ -230,49 +193,29 @@ export default async function SettingsProfilePage() {
             display: "flex",
             justifyContent: "space-between",
             alignItems: "baseline",
-            fontSize: 13,
-            color: "var(--wg-ink-soft)",
-            fontFamily: "var(--wg-font-mono)",
           }}
         >
-          <span>{t.lastActivityLabel}</span>
-          <span style={{ color: "var(--wg-ink)" }}>
+          <Text variant="body" muted style={{ fontFamily: "var(--wg-font-mono)" }}>
+            {t.lastActivityLabel}
+          </Text>
+          <Text variant="mono">
             {lastActivityFormatted ?? t.lastActivityNever}
-          </span>
+          </Text>
         </div>
-      </section>
+      </Card>
 
-      <section
-        aria-labelledby="roles-heading"
-        style={{
-          marginTop: 20,
-          padding: 20,
-          background: "var(--wg-surface-raised)",
-          border: "1px solid var(--wg-line)",
-          borderRadius: "var(--wg-radius)",
-        }}
-      >
-        <h2
+      <Card variant="raised" style={{ marginTop: 20 }} aria-labelledby="roles-heading">
+        <Heading
+          level={2}
           id="roles-heading"
-          style={{
-            fontSize: 16,
-            fontWeight: 600,
-            margin: 0,
-            marginBottom: 8,
-          }}
+          style={{ marginBottom: 8 }}
         >
           {t.rolesHeading}
-        </h2>
+        </Heading>
         {Object.keys(roleCounts).length === 0 ? (
-          <p
-            style={{
-              margin: 0,
-              color: "var(--wg-ink-soft)",
-              fontSize: 13,
-            }}
-          >
+          <Text as="p" variant="body" muted>
             {t.rolesEmpty}
-          </p>
+          </Text>
         ) : (
           <ul
             style={{
@@ -293,7 +236,7 @@ export default async function SettingsProfilePage() {
                   background: "var(--wg-accent-soft)",
                   color: "var(--wg-accent)",
                   fontFamily: "var(--wg-font-mono)",
-                  fontSize: 12,
+                  fontSize: "var(--wg-fs-label)",
                 }}
               >
                 {role} · {n}
@@ -301,7 +244,7 @@ export default async function SettingsProfilePage() {
             ))}
           </ul>
         )}
-      </section>
+      </Card>
     </main>
   );
 }

@@ -16,6 +16,7 @@
 import { useState, type CSSProperties } from "react";
 import { useTranslations } from "next-intl";
 
+import { Button } from "@/components/ui";
 import {
   ApiError,
   recordDissent,
@@ -51,28 +52,6 @@ const row: CSSProperties = {
   background: "var(--wg-surface-raised)",
   border: "1px solid var(--wg-line)",
   borderRadius: "var(--wg-radius)",
-};
-
-const primaryBtn: CSSProperties = {
-  padding: "6px 12px",
-  background: "var(--wg-accent)",
-  color: "#fff",
-  border: "none",
-  borderRadius: "var(--wg-radius)",
-  fontSize: 12,
-  fontWeight: 600,
-  cursor: "pointer",
-};
-
-const ghostBtn: CSSProperties = {
-  padding: "6px 12px",
-  background: "transparent",
-  color: "var(--wg-ink-soft)",
-  border: "1px solid var(--wg-line)",
-  borderRadius: "var(--wg-radius-sm, 4px)",
-  fontSize: 12,
-  fontFamily: "var(--wg-font-mono)",
-  cursor: "pointer",
 };
 
 export function DissentList({
@@ -156,16 +135,16 @@ export function DissentList({
       )}
 
       {canRecord && !composerOpen ? (
-        <button
-          type="button"
-          style={{ ...ghostBtn, marginTop: 12 }}
+        <Button
+          variant="ghost"
           onClick={() => {
             setComposerOpen(true);
             setErr(null);
           }}
+          style={{ marginTop: 12 }}
         >
           + {t("recordButton")}
-        </button>
+        </Button>
       ) : null}
 
       {canRecord && composerOpen ? (
@@ -210,15 +189,14 @@ export function DissentList({
                 fontSize: 11,
                 fontFamily: "var(--wg-font-mono)",
                 color:
-                  remaining < 50 ? "var(--wg-amber, #c58b00)" : "var(--wg-ink-faint)",
+                  remaining < 50 ? "var(--wg-amber)" : "var(--wg-ink-faint)",
               }}
             >
               {remaining}
             </span>
             <div style={{ display: "flex", gap: 8 }}>
-              <button
-                type="button"
-                style={ghostBtn}
+              <Button
+                variant="ghost"
                 onClick={() => {
                   setComposerOpen(false);
                   setDraft("");
@@ -227,22 +205,21 @@ export function DissentList({
                 disabled={busy}
               >
                 {t("cancel")}
-              </button>
-              <button
-                type="button"
-                style={primaryBtn}
+              </Button>
+              <Button
+                variant="primary"
                 onClick={submit}
                 disabled={busy || draft.trim().length === 0}
               >
                 {busy ? t("submitting") : t("submit")}
-              </button>
+              </Button>
             </div>
           </div>
           {err ? (
             <div
               style={{
                 fontSize: 12,
-                color: "var(--wg-amber, #c58b00)",
+                color: "var(--wg-amber)",
                 fontFamily: "var(--wg-font-mono)",
               }}
             >
@@ -339,23 +316,27 @@ function chipStyle(
   outcome: Exclude<DissentValidatedOutcome, null>,
   t: (k: string) => string,
 ): [string, string, string] {
+  // House signal-color rule (2026-04-21 pass):
+  //   supported → sage (--wg-ok), refuted → amber, still_open → neutral.
+  // Previously used undefined `--wg-green*` tokens with ad-hoc hex
+  // fallbacks; now maps onto the real palette.
   switch (outcome) {
     case "supported":
       return [
-        "var(--wg-green-soft, rgba(34, 139, 66, 0.12))",
-        "var(--wg-green, #1f7a3d)",
+        "var(--wg-ok-soft)",
+        "var(--wg-ok)",
         t("chip.supported"),
       ];
     case "refuted":
       return [
-        "var(--wg-amber-soft, rgba(197, 139, 0, 0.14))",
-        "var(--wg-amber, #c58b00)",
+        "var(--wg-amber-soft)",
+        "var(--wg-amber)",
         t("chip.refuted"),
       ];
     case "still_open":
     default:
       return [
-        "var(--wg-line-soft, rgba(0,0,0,0.04))",
+        "var(--wg-line-soft)",
         "var(--wg-ink-faint)",
         t("chip.stillOpen"),
       ];

@@ -29,8 +29,9 @@
 
 import Link from "next/link";
 import { useTranslations } from "next-intl";
-import { useState, type CSSProperties } from "react";
+import { useState } from "react";
 
+import { Button } from "@/components/ui";
 import type { Decision, IMMessage, IMSuggestion } from "@/lib/api";
 
 import {
@@ -40,37 +41,10 @@ import {
   type StreamMember,
 } from "./types";
 
-// ---------- shared button styles (copied from ChatPane — same palette) ----
-
-const primaryBtn: CSSProperties = {
-  padding: "6px 12px",
-  background: "var(--wg-accent)",
-  color: "#fff",
-  border: "none",
-  borderRadius: "var(--wg-radius)",
-  fontSize: 12,
-  fontWeight: 600,
-  cursor: "pointer",
-};
-const ghostBtn: CSSProperties = {
-  padding: "6px 12px",
-  background: "transparent",
-  color: "var(--wg-ink-soft)",
-  border: "1px solid var(--wg-line)",
-  borderRadius: "var(--wg-radius)",
-  fontSize: 12,
-  cursor: "pointer",
-};
-const amberBtn: CSSProperties = {
-  padding: "6px 12px",
-  background: "transparent",
-  color: "var(--wg-amber)",
-  border: "1px solid var(--wg-amber)",
-  borderRadius: "var(--wg-radius)",
-  fontSize: 12,
-  fontWeight: 600,
-  cursor: "pointer",
-};
+// Button styling lives in `@/components/ui/Button` now — primary/ghost/
+// amber variants replace the three hand-rolled CSSProperties objects
+// that used to live here (and in ChatPane, ScrimmageCards, DriftCard,
+// RouteProposalCard — every place that needed a button).
 
 // ---------- small bits ----------
 
@@ -90,7 +64,7 @@ function Avatar({
         width: 32,
         height: 32,
         borderRadius: "50%",
-        background: "#e6e3db",
+        background: "var(--wg-line)",
         color: "var(--wg-ink-soft)",
         fontWeight: 600,
         fontSize: 13,
@@ -171,7 +145,7 @@ function renderBody(body: string): React.ReactNode {
         style={{
           color: "var(--wg-accent)",
           fontWeight: 600,
-          background: "#f6efe8",
+          background: "var(--wg-accent-soft)",
           padding: "1px 4px",
           borderRadius: 3,
         }}
@@ -249,7 +223,7 @@ export function HumanTurnCard({
     <div
       data-testid="stream-human-card"
       data-message-id={message.id}
-      style={{ marginBottom: 12 }}
+      style={{ marginBottom: 10 }}
     >
       <AuthorHeader
         name={name}
@@ -274,11 +248,11 @@ export function HumanTurnCard({
       <div
         style={{
           marginLeft: 42,
-          padding: "8px 12px",
-          background: mine ? "#f6efe8" : "var(--wg-surface-raised)",
+          padding: "14px",
+          background: mine ? "var(--wg-accent-soft)" : "var(--wg-surface-raised)",
           border: "1px solid var(--wg-line)",
           borderRadius: "var(--wg-radius)",
-          fontSize: 14,
+          fontSize: "var(--wg-fs-body)",
           whiteSpace: "pre-wrap",
           wordBreak: "break-word",
         }}
@@ -349,14 +323,14 @@ export function EdgeLLMTurnCard({
     <div
       data-testid="stream-edge-card"
       style={{
-        marginBottom: 12,
+        marginBottom: 10,
         marginLeft: 42,
-        padding: "8px 12px",
+        padding: "14px",
         background: "var(--wg-surface-sunk)",
         border: "1px solid var(--wg-line-soft)",
         borderLeft: "3px solid var(--wg-ink-faint)",
         borderRadius: "var(--wg-radius)",
-        fontSize: 13,
+        fontSize: "var(--wg-fs-body)",
       }}
     >
       <div
@@ -438,9 +412,9 @@ export function SubAgentTurnCard({
     <div
       data-testid="stream-subagent-card"
       style={{
-        marginBottom: 12,
+        marginBottom: 10,
         marginLeft: 42,
-        padding: 10,
+        padding: 14,
         background: "var(--wg-surface-raised)",
         border: "1px solid var(--wg-line)",
         borderLeft: `3px solid ${kindColor}`,
@@ -526,29 +500,27 @@ export function SubAgentTurnCard({
             flexWrap: "wrap",
           }}
         >
-          <button type="button" onClick={() => onDismiss(suggestion)} style={ghostBtn}>
+          <Button variant="ghost" onClick={() => onDismiss(suggestion)}>
             {t("actions.dismiss")}
-          </button>
-          <button
-            type="button"
+          </Button>
+          <Button
+            variant="amber"
             onClick={() => onEscalate(suggestion)}
-            style={amberBtn}
             data-testid="escalate-btn"
           >
             {t("actions.escalate")}
-          </button>
-          <button
-            type="button"
+          </Button>
+          <Button
+            variant="ghost"
             onClick={() => setCounterOpen((v) => !v)}
-            style={ghostBtn}
             data-testid="counter-btn"
             aria-expanded={counterOpen}
           >
             {counterOpen ? t("actions.cancel") : t("actions.counter")}
-          </button>
-          <button type="button" onClick={() => onAccept(suggestion)} style={primaryBtn}>
+          </Button>
+          <Button variant="primary" onClick={() => onAccept(suggestion)}>
             {t("actions.accept")}
-          </button>
+          </Button>
         </div>
       )}
       {counterOpen && !escalationRequested && !statusIsResolved && (
@@ -570,9 +542,9 @@ export function SubAgentTurnCard({
               padding: "8px 10px",
               border: "1px solid var(--wg-line)",
               borderRadius: "var(--wg-radius)",
-              fontSize: 13,
+              fontSize: "var(--wg-fs-body)",
               fontFamily: "var(--wg-font-sans)",
-              background: "#fff",
+              background: "var(--wg-surface-raised)",
               resize: "vertical",
             }}
           />
@@ -583,18 +555,14 @@ export function SubAgentTurnCard({
               marginTop: 6,
             }}
           >
-            <button
-              type="button"
+            <Button
+              variant="primary"
               onClick={submitCounter}
               disabled={!counterText.trim() || sending}
               data-testid="counter-submit"
-              style={{
-                ...primaryBtn,
-                opacity: !counterText.trim() || sending ? 0.6 : 1,
-              }}
             >
               {t("actions.sendCounter")}
-            </button>
+            </Button>
           </div>
         </div>
       )}
@@ -616,9 +584,9 @@ export function DecisionCard({
     <div
       data-testid="stream-decision-card"
       style={{
-        marginBottom: 12,
+        marginBottom: 10,
         marginLeft: 42,
-        padding: 10,
+        padding: 14,
         background: "var(--wg-accent-soft)",
         border: "1px solid var(--wg-accent-ring)",
         borderLeft: "3px solid var(--wg-accent)",
