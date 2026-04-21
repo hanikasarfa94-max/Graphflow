@@ -51,6 +51,7 @@ from workgraph_api.routers import commitments as commitments_router
 from workgraph_api.routers import conflicts as conflicts_router
 from workgraph_api.routers import delivery as delivery_router
 from workgraph_api.routers import demo as demo_router
+from workgraph_api.routers import dissent as dissent_router
 from workgraph_api.routers import drift as drift_router
 from workgraph_api.routers import events_stream as events_router
 from workgraph_api.routers import graph as graph_router
@@ -81,6 +82,7 @@ from workgraph_api.services import (
     ConflictService,
     DecisionService,
     DeliveryService,
+    DissentService,
     DriftService,
     HandoffService,
     IMService,
@@ -458,6 +460,7 @@ async def lifespan(app: FastAPI):
         sessionmaker, routing_service, pre_answer_service
     )
     handoff_service = HandoffService(sessionmaker)
+    dissent_service = DissentService(sessionmaker, event_bus)
     from workgraph_api.services.perf_aggregation import PerfAggregationService
 
     perf_service = PerfAggregationService(sessionmaker)
@@ -512,6 +515,7 @@ async def lifespan(app: FastAPI):
     app.state.license_context_service = license_context_service
     app.state.leader_escalation_service = leader_escalation_service
     app.state.handoff_service = handoff_service
+    app.state.dissent_service = dissent_service
     app.state.perf_service = perf_service
 
     # Drift auto-trigger (Sprint 1c). Subscribe drift_service to the
@@ -528,6 +532,21 @@ async def lifespan(app: FastAPI):
 
     event_bus.subscribe("decision.applied", _drift_on_event)
     event_bus.subscribe("delivery.generated", _drift_on_event)
+
+    # Dissent validation (Phase 2.A). Every decision.applied invites
+    # both a supersession check (did this decision displace a prior
+    # one on the same conflict_id? → dissents on the prior flip
+    # supported) and a self-fruit check (did this decision's own
+    # apply succeed? → dissents on it flip refuted). Both are
+    # idempotent; re-firing is a no-op.
+    async def _dissent_on_decision_applied(
+        payload: dict[str, object],
+    ) -> None:
+        await dissent_service.validate_on_decision_applied(payload)
+
+    event_bus.subscribe(
+        "decision.applied", _dissent_on_decision_applied
+    )
 
     # SLA auto-trigger (Sprint 2b). Same pattern as drift — sweep a
     # project's open commitments whenever its graph surface moves,
@@ -597,6 +616,7 @@ app.include_router(collab_router.router)
 app.include_router(conflicts_router.router)
 app.include_router(delivery_router.router)
 app.include_router(demo_router.router)
+app.include_router(dissent_router.router)
 app.include_router(drift_router.router)
 app.include_router(commitments_router.router)
 app.include_router(simulation_router.router)

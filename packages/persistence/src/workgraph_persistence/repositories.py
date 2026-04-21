@@ -18,6 +18,7 @@ from .orm import (
     DecisionRow,
     DeliverableRow,
     DeliverySummaryRow,
+    DissentRow,
     EventRow,
     HandoffRow,
     GoalRow,
@@ -2209,3 +2210,126 @@ class LicenseAuditRepository:
             .limit(limit)
         )
         return list((await self._session.execute(stmt)).scalars().all())
+
+
+class DissentRepository:
+    """Phase 2.A — dissent rows + judgment-accuracy validation surface."""
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def upsert(
+        self,
+        *,
+        decision_id: str,
+        dissenter_user_id: str,
+        stance_text: str,
+    ) -> DissentRow:
+        """Create or replace the dissenter's stance on this decision.
+
+        The replace semantics (rather than append) match the PLAN-v3
+        contract: one dissent per (decision, dissenter). A second
+        POST overwrites the text AND clears the validation state so a
+        fresh stance starts fresh — previous outcome evidence no
+        longer applies to the new wording.
+        """
+        existing = await self.get_by_decision_and_user(
+            decision_id=decision_id, dissenter_user_id=dissenter_user_id
+        )
+        if existing is not None:
+            existing.stance_text = stance_text
+            existing.validated_by_outcome = None
+            existing.outcome_evidence_ids = []
+            # created_at stays — the dissent's age is about when the
+            # disagreement first surfaced, not when the wording last
+            # shifted. UI sorts by created_at.
+            await self._session.flush()
+            return existing
+        row = DissentRow(
+            id=_new_id(),
+            decision_id=decision_id,
+            dissenter_user_id=dissenter_user_id,
+            stance_text=stance_text,
+            validated_by_outcome=None,
+            outcome_evidence_ids=[],
+        )
+        self._session.add(row)
+        await self._session.flush()
+        return row
+
+    async def get(self, dissent_id: str) -> DissentRow | None:
+        return (
+            await self._session.execute(
+                select(DissentRow).where(DissentRow.id == dissent_id)
+            )
+        ).scalar_one_or_none()
+
+    async def get_by_decision_and_user(
+        self, *, decision_id: str, dissenter_user_id: str
+    ) -> DissentRow | None:
+        return (
+            await self._session.execute(
+                select(DissentRow)
+                .where(DissentRow.decision_id == decision_id)
+                .where(DissentRow.dissenter_user_id == dissenter_user_id)
+            )
+        ).scalar_one_or_none()
+
+    async def list_for_decision(
+        self, decision_id: str
+    ) -> list[DissentRow]:
+        stmt = (
+            select(DissentRow)
+            .where(DissentRow.decision_id == decision_id)
+            .order_by(DissentRow.created_at.asc())
+        )
+        return list((await self._session.execute(stmt)).scalars().all())
+
+    async def list_for_user_in_project(
+        self, *, project_id: str, user_id: str
+    ) -> list[DissentRow]:
+        """Dissents the user recorded across this project.
+
+        Joins through DecisionRow to filter by project_id — DissentRow
+        itself has no project column to keep the schema aligned with
+        the decision lineage (a dissent attaches to a decision, which
+        already has a project).
+        """
+        stmt = (
+            select(DissentRow)
+            .join(DecisionRow, DecisionRow.id == DissentRow.decision_id)
+            .where(DecisionRow.project_id == project_id)
+            .where(DissentRow.dissenter_user_id == user_id)
+            .order_by(DissentRow.created_at.desc())
+        )
+        return list((await self._session.execute(stmt)).scalars().all())
+
+    async def list_for_project(
+        self, project_id: str
+    ) -> list[DissentRow]:
+        stmt = (
+            select(DissentRow)
+            .join(DecisionRow, DecisionRow.id == DissentRow.decision_id)
+            .where(DecisionRow.project_id == project_id)
+            .order_by(DissentRow.created_at.desc())
+        )
+        return list((await self._session.execute(stmt)).scalars().all())
+
+    async def set_outcome(
+        self,
+        *,
+        dissent_id: str,
+        outcome: str,
+        evidence_id: str | None,
+    ) -> DissentRow | None:
+        row = await self.get(dissent_id)
+        if row is None:
+            return None
+        row.validated_by_outcome = outcome
+        if evidence_id:
+            evidence = list(row.outcome_evidence_ids or [])
+            if evidence_id not in evidence:
+                evidence.append(evidence_id)
+                row.outcome_evidence_ids = evidence
+        await self._session.flush()
+        return row

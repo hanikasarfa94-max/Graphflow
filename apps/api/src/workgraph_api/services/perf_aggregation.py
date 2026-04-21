@@ -32,6 +32,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker
 from workgraph_persistence import (
     AssignmentRow,
     DecisionRow,
+    DissentRow,
     MessageRow,
     ProjectMemberRepository,
     RiskRow,
@@ -177,6 +178,46 @@ class PerfAggregationService:
                         tasks_recent.append(tid)
                 tasks_total = len(seen_task_ids)
 
+                # Dissent accuracy — count the member's dissents on
+                # decisions within this project, bucketed by validation
+                # state. `still_open` is the explicit-null bucket so the
+                # UI can render (supported + refuted) / total as the
+                # judgment accuracy score.
+                dissent_rows = list(
+                    (
+                        await session.execute(
+                            select(DissentRow.validated_by_outcome)
+                            .join(
+                                DecisionRow,
+                                DecisionRow.id == DissentRow.decision_id,
+                            )
+                            .where(DecisionRow.project_id == project_id)
+                            .where(
+                                DissentRow.dissenter_user_id == m.user_id
+                            )
+                        )
+                    ).all()
+                )
+                dissent_bucket = {
+                    "total": 0,
+                    "supported": 0,
+                    "refuted": 0,
+                    "still_open": 0,
+                }
+                for (validated,) in dissent_rows:
+                    dissent_bucket["total"] += 1
+                    if validated == "supported":
+                        dissent_bucket["supported"] += 1
+                    elif validated == "refuted":
+                        dissent_bucket["refuted"] += 1
+                    else:
+                        # Treat both null (not yet observed) and the
+                        # explicit 'still_open' as still-open for the
+                        # panel view. Separate counting is a v2
+                        # concern; v1 has no code path that writes
+                        # 'still_open' anyway.
+                        dissent_bucket["still_open"] += 1
+
                 messages_30d = await self._count(
                     session,
                     select(func.count(MessageRow.id))
@@ -256,6 +297,7 @@ class PerfAggregationService:
                             "observed": len(observed_set),
                             "overlap": overlap,
                         },
+                        "dissent_accuracy": dissent_bucket,
                         "activity_last_30d": {
                             "messages": messages_30d,
                             "last_active_at": (

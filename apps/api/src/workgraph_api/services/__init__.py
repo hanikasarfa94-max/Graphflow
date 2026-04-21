@@ -24,6 +24,7 @@ from .commitments import CommitmentService, CommitmentValidationError
 from .conflicts import ConflictService
 from .decisions import DecisionError, DecisionService
 from .delivery import DeliveryError, DeliveryService
+from .dissent import DissentError, DissentService, MAX_STANCE_CHARS
 from .drift import DRIFT_RATE_LIMIT_SECONDS, DriftService
 from .graph_builder import GraphBuilderService
 from .handoff import HandoffService
@@ -76,6 +77,9 @@ __all__ = [
     "DecisionError",
     "DeliveryService",
     "DeliveryError",
+    "DissentError",
+    "DissentService",
+    "MAX_STANCE_CHARS",
     "DriftService",
     "DRIFT_RATE_LIMIT_SECONDS",
     "IMService",

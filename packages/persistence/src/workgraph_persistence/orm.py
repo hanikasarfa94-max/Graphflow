@@ -1121,6 +1121,64 @@ class LicenseAuditRow(Base):
     )
 
 
+class DissentRow(Base):
+    """Phase 2.A — recorded disagreement on a crystallized decision.
+
+    Members who disagree with a DecisionRow record their stance. When
+    downstream events vindicate or refute the dissent, the row flips
+    `validated_by_outcome` and appends the supporting event id to
+    `outcome_evidence_ids`. Rolled-up per-member accuracy feeds the
+    team perf panel — see services.perf_aggregation.
+
+    Uniqueness is enforced at (decision_id, dissenter_user_id): a
+    member can only hold one active dissent per decision. The service
+    upserts — a second POST replaces the stance_text and resets the
+    validation state — so historical stances are NOT preserved across
+    edits. EventRow writes on each upsert carry the before/after so
+    audit replay still works if anyone needs to reconstruct the
+    timeline.
+
+    `validated_by_outcome` values:
+      * None         — not yet validated (recent dissent, no triggering
+                        event observed)
+      * 'supported'  — a downstream event vindicated the dissent (e.g.
+                        the decision was superseded by a new decision on
+                        the same conflict)
+      * 'refuted'    — the decision's chosen direction bore fruit (e.g.
+                        the decision's apply_actions produced a concrete
+                        downstream status flip)
+      * 'still_open' — explicit "inconclusive" state for dissents whose
+                        decision hasn't yielded enough signal. Reserved
+                        for a v2 time-window sweep; v1 writes this only
+                        on explicit request.
+    """
+
+    __tablename__ = "dissents"
+    __table_args__ = (
+        UniqueConstraint(
+            "decision_id",
+            "dissenter_user_id",
+            name="uq_dissent_decision_user",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    decision_id: Mapped[str] = mapped_column(
+        ForeignKey("decisions.id", ondelete="CASCADE"), index=True
+    )
+    dissenter_user_id: Mapped[str] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    stance_text: Mapped[str] = mapped_column(String(500))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow
+    )
+    validated_by_outcome: Mapped[str | None] = mapped_column(
+        String(16), nullable=True, index=True
+    )
+    outcome_evidence_ids: Mapped[list] = mapped_column(JSON, default=list)
+
+
 class HandoffRow(Base):
     """A skill-succession record between two project members.
 

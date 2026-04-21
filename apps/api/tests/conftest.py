@@ -364,6 +364,7 @@ from workgraph_api.services import (
     ConflictService,
     DecisionService,
     DeliveryService,
+    DissentService,
     DriftService,
     HandoffService,
     IMService,
@@ -470,6 +471,14 @@ async def api_env():
         maker, routing_service, pre_answer_service
     )
     handoff_service = HandoffService(maker)
+    dissent_service = DissentService(maker, bus)
+    # Mirror the production subscription — drift uses fire-and-forget
+    # tasks, dissent validation piggybacks on the same event so tests
+    # that submit decisions see dissent-accuracy flips without
+    # invoking the service directly.
+    bus.subscribe(
+        "decision.applied", dissent_service.validate_on_decision_applied
+    )
     from workgraph_api.services.perf_aggregation import PerfAggregationService
 
     perf_service = PerfAggregationService(maker)
@@ -545,6 +554,7 @@ async def api_env():
     app.state.license_context_service = license_context_service
     app.state.leader_escalation_service = leader_escalation_service
     app.state.handoff_service = handoff_service
+    app.state.dissent_service = dissent_service
     app.state.perf_service = perf_service
 
     transport = ASGITransport(app=app)
