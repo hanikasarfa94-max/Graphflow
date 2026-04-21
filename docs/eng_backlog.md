@@ -1,3 +1,19 @@
+> ⚠️ **ARCHIVED 2026-04-21 — OUT OF DATE, DO NOT READ AS CURRENT BACKLOG.**
+>
+> This backlog describes the MVP "delivery engine" epics (A–O) against
+> `docs/dev.md`, which is itself archived. The referenced canonical flow
+> (Feishu intake → parse → plan → Base/Docs sync → conflict → decision →
+> delivery summary) is NOT the current product. v1 shipped + ByteDance
+> submission was 2026-04-20; v2 primitives (thesis-commit, cross-project
+> graph, time-cursor, routing_suggest, drift, why-chain, counterfactual,
+> skill atlas / pre-answer / handoff, observed profiles, SLA ladder, etc.)
+> have shipped past the framing in this file.
+>
+> For current product intent: `docs/north-star.md` + `docs/vision.md`.
+> Treat this file as historical record of the MVP backlog only.
+
+---
+
 # Engineering Backlog — WorkGraph AI
 Version: 1.0  
 Status: MVP delivery backlog  

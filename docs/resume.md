@@ -1,3 +1,12 @@
+> ⚠️ **STALE 2026-04-21 — SNAPSHOT FROM 2026-04-18, KEPT AS HISTORICAL RESUME NOTE.**
+>
+> This handoff was written mid-Phase-K of the chat-centered rebuild. Since
+> then v1 shipped + was submitted to ByteDance (2026-04-20) and a wide v2
+> feature set landed (see `git log`). Do not use this file to understand
+> current state.
+
+---
+
 # Resume after restart
 
 Session state as of 2026-04-18. Compact handoff so the next session picks up in <2 min.

@@ -1,3 +1,15 @@
+> ✅ **COMPLETE 2026-04-21 — PHASES A–K ALL SHIPPED. HISTORICAL RECORD.**
+>
+> This plan is done. v1 was submitted to ByteDance 2026-04-20; additional v2
+> primitives (thesis-commit, cross-project graph, time-cursor, routing_suggest,
+> drift auto-triggers, why-chain, counterfactual simulation, skill atlas +
+> pre-answer + handoff, observed profiles, SLA ladder, public landing) have
+> shipped past the Definition-of-done listed below. For current state read
+> `memory/project_state_20260421.md`; for product intent read
+> `docs/north-star.md`.
+
+---
+
 # PLAN-v2 — Chat-centered surface build
 
 **Status:** 2026-04-18. Supersedes `PLAN.md` Phases 11–13 for the web surface. Builds on the backend from Phases 1–10 (backend agents and signal-chain code stay live).

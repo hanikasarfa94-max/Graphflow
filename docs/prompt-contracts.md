@@ -1,3 +1,21 @@
+> ⚠️ **ARCHIVED 2026-04-21 — OUT OF DATE, DO NOT READ AS CURRENT AGENT CONTRACTS.**
+>
+> This file defines six MVP agents (Requirement / Clarification / Planning /
+> QA / Conflict Explanation / Delivery) with owner-role enums like
+> `pm|frontend|backend|qa|design|business`. That catalog does NOT match the
+> shipped v2 surface. Current backend under `apps/api/.../routers/` exposes
+> the edge-LLM + per-user sub-agent model with: `skill_atlas`, `pre_answer`,
+> `routing`, `why_chain` (via `collab`/graph), `drift`, `handoff`,
+> `simulation`, `membrane`, `render`, `commitments`, `personal`, etc.
+> The MVP agents described here are either absorbed into the edge LLM or
+> demoted to audit-only paths.
+>
+> For current product intent: `docs/north-star.md` + `docs/vision.md`.
+> If you need a v2 prompt-contract spec, write a new file; do not base it
+> on the JSON-only 6-agent shape below.
+
+---
+
 # Prompt Contracts — WorkGraph AI
 Version: 1.0  
 Status: MVP prompt and schema contract  

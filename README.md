@@ -2,7 +2,8 @@
 
 Coordination as a graph, not a document.
 
-See `PLAN.md` for the build plan, `AGENT.md` for conventions, `docs/dev.md` for the full spec.
+Current product intent: `docs/north-star.md` (operational) + `docs/vision.md` (depth).
+`PLAN.md`, `AGENT.md`, `docs/dev.md`, `docs/eng_backlog.md`, and `docs/prompt-contracts.md` carry archive banners — MVP-era historical record, not current spec.
 
 ## Quick start
 

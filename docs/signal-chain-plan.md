@@ -1,3 +1,11 @@
+> ✅ **COMPLETE 2026-04-21 — BUILT IN PHASES 7'/7''. HISTORICAL RECORD.**
+>
+> The counter / escalate routes, `source_suggestion_id` on DecisionRow, and
+> the 4-button SuggestionCard described below are live in the codebase.
+> Keep as reference for the contract shape; do not read as an open task list.
+
+---
+
 # Signal Chain — Build Plan
 
 **Scope:** the canonical signal chain from `docs/vision.md §6`. Two users, LLM-mediated decision crystallization over a shared graph, WS ripple. Minimum end-to-end.
