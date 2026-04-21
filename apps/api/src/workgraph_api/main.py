@@ -64,6 +64,7 @@ from workgraph_api.routers import projects as projects_router
 from workgraph_api.routers import render as render_router
 from workgraph_api.routers import routing as routing_router
 from workgraph_api.routers import handoff as handoff_router
+from workgraph_api.routers import perf as perf_router
 from workgraph_api.routers import pre_answer as pre_answer_router
 from workgraph_api.routers import simulation as simulation_router
 from workgraph_api.routers import skill_atlas as skill_atlas_router
@@ -444,6 +445,9 @@ async def lifespan(app: FastAPI):
         sessionmaker, skill_atlas_service, pre_answer_agent
     )
     handoff_service = HandoffService(sessionmaker)
+    from workgraph_api.services.perf_aggregation import PerfAggregationService
+
+    perf_service = PerfAggregationService(sessionmaker)
 
     app.state.engine = engine
     app.state.sessionmaker = sessionmaker
@@ -493,6 +497,7 @@ async def lifespan(app: FastAPI):
     app.state.pre_answer_agent = pre_answer_agent
     app.state.pre_answer_service = pre_answer_service
     app.state.handoff_service = handoff_service
+    app.state.perf_service = perf_service
 
     # Drift auto-trigger (Sprint 1c). Subscribe drift_service to the
     # event types that most reliably indicate "the project's surface
@@ -581,6 +586,7 @@ app.include_router(drift_router.router)
 app.include_router(commitments_router.router)
 app.include_router(simulation_router.router)
 app.include_router(skill_atlas_router.router)
+app.include_router(perf_router.router)
 app.include_router(pre_answer_router.router)
 app.include_router(handoff_router.router)
 app.include_router(events_router.router)

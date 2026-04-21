@@ -843,5 +843,24 @@
       "statusDraft": "draft",
       "statusFinalized": "finalized"
     }
+  },
+  "teamPerf": {
+    "title": "Team performance",
+    "subtitle": "Observable performance management — per-member counts drawn from the project graph on every load. Project admins only.",
+    "backToTeam": "Back to team room",
+    "forbidden": "You need project-admin access to see this panel.",
+    "unavailable": "Performance data unavailable. You may not be a member of this project.",
+    "cols": {
+      "member": "Member",
+      "decisions": "Decisions",
+      "routings": "Routings answered",
+      "risks": "Open risks owned",
+      "tasksDone": "Tasks done",
+      "skills": "Skills (declared / observed / overlap)",
+      "activity30d": "Messages (30d) · last active"
+    },
+    "linkToPanel": "Performance",
+    "lastActiveNever": "no recorded activity",
+    "empty": "No members yet."
   }
 }

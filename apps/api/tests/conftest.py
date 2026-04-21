@@ -457,6 +457,9 @@ async def api_env():
         maker, skill_atlas_service, pre_answer_agent
     )
     handoff_service = HandoffService(maker)
+    from workgraph_api.services.perf_aggregation import PerfAggregationService
+
+    perf_service = PerfAggregationService(maker)
     edge_agent = _SilenceEdgeAgent()
     skills_service = SkillsService(maker)
     personal_service = PersonalStreamService(
@@ -527,6 +530,7 @@ async def api_env():
     app.state.pre_answer_agent = pre_answer_agent
     app.state.pre_answer_service = pre_answer_service
     app.state.handoff_service = handoff_service
+    app.state.perf_service = perf_service
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:

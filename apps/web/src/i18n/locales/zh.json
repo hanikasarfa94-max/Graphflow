@@ -843,5 +843,24 @@
       "statusDraft": "草稿",
       "statusFinalized": "已定案"
     }
+  },
+  "teamPerf": {
+    "title": "团队绩效",
+    "subtitle": "可观测的绩效管理 —— 每次加载时从项目图谱实时汇总每位成员的数据。仅项目管理员可见。",
+    "backToTeam": "返回团队工作间",
+    "forbidden": "查看此面板需要项目管理员权限。",
+    "unavailable": "绩效数据不可用。你可能不是该项目的成员。",
+    "cols": {
+      "member": "成员",
+      "decisions": "决策",
+      "routings": "已回应派单",
+      "risks": "所持开放风险",
+      "tasksDone": "已完成任务",
+      "skills": "技能(声明 / 观察 / 重叠)",
+      "activity30d": "近 30 天消息 · 最近活跃"
+    },
+    "linkToPanel": "绩效",
+    "lastActiveNever": "暂无活动记录",
+    "empty": "尚无成员。"
   }
 }
