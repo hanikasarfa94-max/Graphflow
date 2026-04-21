@@ -387,6 +387,10 @@
         "accepted": "✓ 预答已采纳,未转路由",
         "rationaleLabel": "依据",
         "failed": "预读失败,你仍可转路由。"
+      },
+      "scrimmage": {
+        "toggle": "先让双方代理辩论",
+        "youLabel": "你"
       }
     },
     "inbound": {
@@ -880,6 +884,26 @@
       "supported": "已印证",
       "refuted": "已驳回",
       "stillOpen": "待观察"
+    }
+  },
+  "scrimmage": {
+    "running": {
+      "header": "代理对辩中",
+      "body": "{source} 与 {target} 的子代理正在辩论,暂不打扰双方本人……"
+    },
+    "converged": {
+      "header": "代理达成一致 —— 提案待批",
+      "approve": "作为决议批准",
+      "reject": "拒绝,直接询问 {name}"
+    },
+    "unresolved": {
+      "header": "代理未能达成一致",
+      "ask": "请 {name} 本人裁决"
+    },
+    "stance": {
+      "agree": "认可对方",
+      "compromise": "折中",
+      "hold": "坚持"
     }
   }
 }

@@ -21,12 +21,19 @@ import {
   confirmRouteProposal,
   fetchPreAnswer,
   parseRouteProposalFromBody,
+  runScrimmage,
   stripRouteProposalMarker,
   type PersonalMessage,
   type PersonalRouteTarget,
   type PreAnswerPayload,
+  type ScrimmageResult,
 } from "@/lib/api";
 
+import {
+  DebateSummaryCard,
+  DecisionProposalCard,
+  ScrimmageRunningCard,
+} from "./ScrimmageCards";
 import { relativeTime } from "./types";
 
 type Props = {
@@ -109,6 +116,23 @@ export function RouteProposalCard({
   const [pendingTargetId, setPendingTargetId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // Scrimmage toggle + run state (PLAN-v3 §2.B). `scrimmageEnabled` is a
+  // per-target checkbox — "Try scrimmage first". When set, "Ask X"
+  // triggers POST /api/projects/{id}/scrimmages instead of the classic
+  // route-proposal confirm endpoint. `scrimmageRunningFor` / `scrimmageResult`
+  // drive the in-flight + result cards.
+  const [scrimmageEnabled, setScrimmageEnabled] = useState<Record<string, boolean>>(
+    {},
+  );
+  const [scrimmageRunningFor, setScrimmageRunningFor] = useState<string | null>(
+    null,
+  );
+  const [scrimmageResult, setScrimmageResult] = useState<ScrimmageResult | null>(
+    null,
+  );
+  const [scrimmageTargetName, setScrimmageTargetName] = useState<string>("");
+  const [scrimmageError, setScrimmageError] = useState<string | null>(null);
+
   // Stage 2: pre-answer preview state. Keyed by target user id so each
   // "Preview X" button tracks its own fetch without clobbering siblings.
   const [previewingTargetId, setPreviewingTargetId] = useState<string | null>(
@@ -184,8 +208,45 @@ export function RouteProposalCard({
     setAcceptedTargetId(target.user_id);
   }
 
-  async function handleAsk(target: PersonalRouteTarget) {
-    if (pendingTargetId) return;
+  async function handleAsk(
+    target: PersonalRouteTarget,
+    options?: { forceClassic?: boolean },
+  ) {
+    if (pendingTargetId || scrimmageRunningFor) return;
+    const forceClassic = options?.forceClassic === true;
+
+    // Scrimmage branch — requires projectId so the /scrimmages route
+    // builds; silently degrades to classic confirm if projectId is
+    // absent (legacy callers).
+    if (!forceClassic && scrimmageEnabled[target.user_id] && projectId) {
+      setScrimmageRunningFor(target.user_id);
+      setScrimmageResult(null);
+      setScrimmageError(null);
+      setScrimmageTargetName(target.display_name);
+      const question =
+        (proposal?.framing && proposal.framing.trim()) ||
+        (message.body || "").trim() ||
+        target.rationale ||
+        "(no framing)";
+      try {
+        const res = await runScrimmage(projectId, target.user_id, question);
+        setScrimmageResult(res);
+      } catch (e) {
+        if (e instanceof ApiError) {
+          const detail =
+            typeof e.body === "object" && e.body && "detail" in e.body
+              ? String((e.body as { detail?: unknown }).detail ?? "")
+              : `error ${e.status}`;
+          setScrimmageError(detail || `error ${e.status}`);
+        } else {
+          setScrimmageError("scrimmage failed");
+        }
+      } finally {
+        setScrimmageRunningFor(null);
+      }
+      return;
+    }
+
     setPendingTargetId(target.user_id);
     setError(null);
     try {
@@ -204,6 +265,22 @@ export function RouteProposalCard({
         setError("ask failed");
       }
     }
+  }
+
+  async function handleAskDirectlyAfterScrimmage() {
+    // Unresolved path: user wants to route the original question
+    // through the classic flow. We synthesize a target from the stored
+    // scrimmage result + matching entry in `targets` so confirm lands.
+    if (!scrimmageResult) return;
+    const target = targets.find(
+      (tg) => tg.user_id === scrimmageResult.target_user_id,
+    );
+    if (!target) return;
+    // Force classic route even if toggle is still on — this is the
+    // "fall back to direct routing" path.
+    setScrimmageResult(null);
+    setScrimmageError(null);
+    await handleAsk(target, { forceClassic: true });
   }
 
   return (
@@ -359,6 +436,35 @@ export function RouteProposalCard({
                     </button>
                   ) : null}
                 </div>
+                {projectId ? (
+                  <label
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 6,
+                      fontSize: 11,
+                      fontFamily: "var(--wg-font-mono)",
+                      color: "var(--wg-ink-soft)",
+                      cursor: "pointer",
+                    }}
+                    data-testid="scrimmage-toggle-label"
+                    data-target-user-id={tg.user_id}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={scrimmageEnabled[tg.user_id] === true}
+                      onChange={(ev) =>
+                        setScrimmageEnabled((prev) => ({
+                          ...prev,
+                          [tg.user_id]: ev.target.checked,
+                        }))
+                      }
+                      data-testid="scrimmage-toggle"
+                      data-target-user-id={tg.user_id}
+                    />
+                    <span>{t("routeProposal.scrimmage.toggle")}</span>
+                  </label>
+                ) : null}
                 {previewError ? (
                   <span
                     role="alert"
@@ -397,6 +503,49 @@ export function RouteProposalCard({
         </div>
       )}
 
+      {scrimmageRunningFor && projectId ? (
+        <ScrimmageRunningCard
+          sourceName={t("routeProposal.scrimmage.youLabel")}
+          targetName={scrimmageTargetName}
+        />
+      ) : null}
+
+      {scrimmageResult && projectId ? (
+        scrimmageResult.outcome === "converged_proposal" ? (
+          <DecisionProposalCard
+            projectId={projectId}
+            result={scrimmageResult}
+            sourceName={t("routeProposal.scrimmage.youLabel")}
+            targetName={scrimmageTargetName}
+            onReject={() => {
+              setScrimmageResult(null);
+            }}
+          />
+        ) : scrimmageResult.outcome === "unresolved_crux" ? (
+          <DebateSummaryCard
+            projectId={projectId}
+            result={scrimmageResult}
+            sourceName={t("routeProposal.scrimmage.youLabel")}
+            targetName={scrimmageTargetName}
+            onAskDirectly={() => void handleAskDirectlyAfterScrimmage()}
+          />
+        ) : null
+      ) : null}
+
+      {scrimmageError ? (
+        <div
+          role="alert"
+          style={{
+            marginTop: 6,
+            fontSize: 11,
+            fontFamily: "var(--wg-font-mono)",
+            color: "var(--wg-accent)",
+          }}
+        >
+          {scrimmageError}
+        </div>
+      ) : null}
+
       {error && (
         <div
           role="alert"
@@ -410,6 +559,12 @@ export function RouteProposalCard({
           {error}
         </div>
       )}
+      <style>{`
+        @keyframes wgSpin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+      `}</style>
     </div>
   );
 }

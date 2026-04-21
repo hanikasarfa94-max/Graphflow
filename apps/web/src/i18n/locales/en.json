@@ -387,6 +387,10 @@
         "accepted": "✓ Answered by preview — not routed",
         "rationaleLabel": "Why",
         "failed": "Pre-answer failed. You can still route."
+      },
+      "scrimmage": {
+        "toggle": "Try scrimmage first",
+        "youLabel": "You"
       }
     },
     "inbound": {
@@ -880,6 +884,26 @@
       "supported": "supported",
       "refuted": "refuted",
       "stillOpen": "still open"
+    }
+  },
+  "scrimmage": {
+    "running": {
+      "header": "Agents deliberating",
+      "body": "{source}'s and {target}'s sub-agents are debating before we interrupt a human…"
+    },
+    "converged": {
+      "header": "Agents converged — proposal ready",
+      "approve": "Approve as decision",
+      "reject": "Reject and ask {name} directly"
+    },
+    "unresolved": {
+      "header": "Agents did not converge",
+      "ask": "Ask {name} to resolve"
+    },
+    "stance": {
+      "agree": "Agrees",
+      "compromise": "Compromise",
+      "hold": "Holds"
     }
   }
 }

@@ -334,6 +334,75 @@ export function fetchPreAnswer(
   });
 }
 
+// ---------- Scrimmage (PLAN-v3 §2.B agent-vs-agent debate) ----------
+//
+// Triggered from the routing composer ("Try scrimmage first" toggle).
+// The backend runs 2–3 turns of debate between the two sub-agents and
+// returns a transcript + outcome. Shapes mirror `_shape()` in
+// services/scrimmage.py.
+
+export type ScrimmageStance =
+  | "agree_with_other"
+  | "propose_compromise"
+  | "hold_position";
+
+export type ScrimmageOutcome =
+  | "converged_proposal"
+  | "unresolved_crux"
+  | "in_progress";
+
+export interface ScrimmageTurn {
+  turn: number;
+  speaker: "source" | "target";
+  text: string;
+  stance: ScrimmageStance;
+  proposal_summary: string | null;
+  citations: CitedClaim[];
+  confidence: "high" | "medium" | "low";
+  recommend_route: boolean;
+  rationale?: string;
+}
+
+export interface ScrimmageProposal {
+  proposal_text: string | null;
+  source_stance: ScrimmageStance | null;
+  target_stance: ScrimmageStance | null;
+  source_closing: string | null;
+  target_closing: string | null;
+  decision_id: string | null;
+}
+
+export interface ScrimmageResult {
+  id: string;
+  project_id: string;
+  routed_signal_id: string | null;
+  source_user_id: string;
+  target_user_id: string;
+  question_text: string;
+  transcript: ScrimmageTurn[];
+  outcome: ScrimmageOutcome;
+  proposal: ScrimmageProposal | null;
+  trace_id: string | null;
+  created_at: string | null;
+  completed_at: string | null;
+}
+
+export function runScrimmage(
+  projectId: string,
+  targetUserId: string,
+  questionText: string,
+  routedSignalId?: string,
+): Promise<ScrimmageResult> {
+  return api<ScrimmageResult>(`/api/projects/${projectId}/scrimmages`, {
+    method: "POST",
+    body: {
+      target_user_id: targetUserId,
+      question_text: questionText,
+      routed_signal_id: routedSignalId ?? null,
+    },
+  });
+}
+
 // ---------- Handoff (Stage 3 skill succession) ----------
 
 export interface HandoffRoutine {
