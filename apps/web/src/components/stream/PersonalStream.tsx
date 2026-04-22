@@ -1,19 +1,30 @@
 "use client";
 
-// PersonalStream — Phase N primary renderer.
+// PersonalStream — primary chat-stream renderer.
 //
 // Default view at `/projects/[id]` → the user's private conversation with
 // their sub-agent, scoped to this project (north-star §"Primary surface
-// after rebuild"). Messages are polymorphic cards dispatched off
-// `kind`:
+// after rebuild"). Layout language is iMessage / ChatGPT / Claude:
 //
-//   text               → HumanTurnCard (reused from Phase E)
-//   edge-answer        → EdgeReplyCard (warm-beige variant)
-//   edge-clarify       → EdgeReplyCard (amber variant)
-//   edge-thinking      → EdgeReplyCard (soft variant)
-//   edge-route-proposal→ RouteProposalCard (Ask [name] buttons)
-//   routed-inbound     → RoutedInboundCard (rich options core UX)
-//   routed-reply       → RoutedReplyCard (framed reply + DM link)
+//   * user-origin text     → right-aligned bubble, accent-soft tint
+//   * other-user text      → left-aligned bubble, raised surface
+//   * agent turns (edge-*) → left-aligned flat flowing prose (no card)
+//   * tool call / result   → flat single-line affordance under parent
+//   * structural events    → lightened card (sunk surface, no hard accent
+//                            border) because they carry actions or are
+//                            genuinely distinct from a conversation turn
+//
+// Dispatch by `kind`:
+//   text               → inline bubble (this file)
+//   edge-answer        → EdgeReplyCard (flat prose)
+//   edge-clarify       → EdgeReplyCard (flat prose, amber chip)
+//   edge-thinking      → EdgeReplyCard (flat prose, muted chip)
+//   edge-route-proposal→ RouteProposalCard (lightened card)
+//   routed-inbound     → RoutedInboundCard (lightened compact line)
+//   routed-reply       → RoutedReplyCard (lightened card)
+//   edge-tool-call     → ToolCallCard (flat single-line)
+//   edge-tool-result   → ToolResultCard (flat single-line)
+//   drift/sla/membrane → their existing cards (structurally distinct)
 //   unknown            → plain text fallback (forward-compat)
 //
 // Live delivery via `/ws/streams/{stream_id}`. The initial list is still
@@ -44,12 +55,10 @@ import {
   listPersonalMessages,
   postPersonalMessage,
   previewPersonalMessage,
-  type IMMessage,
   type PersonalMessage,
   type RehearsalPreview as RehearsalPreviewType,
 } from "@/lib/api";
 
-import { HumanTurnCard } from "./cards";
 import { DriftCard } from "./DriftCard";
 import { SlaCard } from "./SlaCard";
 import { EdgeReplyCard } from "./EdgeReplyCard";
@@ -79,19 +88,48 @@ const WS_BACKOFF_MAX_MS = 10_000;
 const PREVIEW_DEBOUNCE_MS = 1000;
 const PREVIEW_MIN_BODY_LENGTH = 10;
 
-// Adapter — HumanTurnCard was designed around IMMessage (Phase E team stream
-// shape). PersonalMessage is close enough that we lightly shim for reuse.
-function toIMMessageShape(m: PersonalMessage): IMMessage {
-  return {
-    id: m.id,
-    project_id: m.project_id ?? "",
-    author_id: m.author_id,
-    author_username: m.author_username ?? undefined,
-    author_display_name: m.author_display_name ?? undefined,
-    body: m.body,
-    created_at: m.created_at,
-    suggestion: null,
-  };
+// Author "lane" for the chat-stream layout.
+//   * "mine"   — the viewer's bubble, right-aligned
+//   * "human"  — another real user, left-aligned bubble
+//   * "agent"  — the sub-agent (edge/tool turns), left-aligned flat prose
+// Structural events (route-proposal, routed-inbound, routed-reply, etc.)
+// are also left-aligned but render as lightened cards; the lane helper
+// lumps them under "agent" for spacing purposes.
+type Lane = "mine" | "human" | "agent";
+
+function laneOf(m: PersonalMessage, viewerId: string): Lane {
+  if (m.kind === "text") {
+    return m.author_id === viewerId ? "mine" : "human";
+  }
+  return "agent";
+}
+
+// Chat-style author avatar — initial + presence dot. Only rendered for
+// left-side human bubbles when the previous turn was NOT from the same
+// author (iMessage pattern). Intentionally compact (20px) so the flow
+// stays dense.
+function MiniAvatar({ name }: { name: string }) {
+  const initial = (name || "?").trim().charAt(0).toUpperCase() || "?";
+  return (
+    <span
+      aria-hidden
+      style={{
+        display: "inline-flex",
+        width: 20,
+        height: 20,
+        borderRadius: "50%",
+        background: "var(--wg-line)",
+        color: "var(--wg-ink-soft)",
+        fontWeight: 600,
+        fontSize: 11,
+        alignItems: "center",
+        justifyContent: "center",
+        flexShrink: 0,
+      }}
+    >
+      {initial}
+    </span>
+  );
 }
 
 // Merge policy: prefer the server-fetched row (canonical id), but keep any
@@ -451,138 +489,221 @@ export function PersonalStream({ projectId, currentUserId, members }: Props) {
     }
   }
 
-  function renderCard(m: PersonalMessage) {
+  function renderCard(m: PersonalMessage, prev: PersonalMessage | null) {
     const mine = m.author_id === currentUserId;
     const author = memberById.get(m.author_id);
     const isOptimistic = m.id.startsWith("pending-");
+
+    // Spacing: tight gap (4px) when the previous turn is from the same
+    // "lane" (consecutive agent turns or consecutive same-user bubbles);
+    // 14px at lane boundaries. This is the iMessage stacking rule.
+    const lane = laneOf(m, currentUserId);
+    const prevLane = prev ? laneOf(prev, currentUserId) : null;
+    const sameAuthor =
+      !!prev &&
+      prev.author_id === m.author_id &&
+      prevLane === lane;
+    const marginTop = prev == null ? 0 : sameAuthor ? 4 : 14;
+
+    // Agent turn is a "continuation" only when the immediately prior
+    // message was from the same agent author on the agent lane. That
+    // suppresses the attribution chip so stacked turns read as one
+    // response.
+    const agentContinuation =
+      lane === "agent" &&
+      prevLane === "agent" &&
+      prev?.author_id === m.author_id;
+
+    const wrap = (inner: React.ReactNode, extra?: React.CSSProperties) => (
+      <div
+        key={m.id}
+        data-optimistic={isOptimistic ? "true" : undefined}
+        data-lane={lane}
+        style={{ marginTop, ...extra }}
+      >
+        {inner}
+      </div>
+    );
+
     switch (m.kind) {
-      case "text":
-        return (
-          <div key={m.id} data-optimistic={isOptimistic ? "true" : undefined}>
-            <HumanTurnCard
-              message={toIMMessageShape(m)}
-              mine={mine}
-              author={author}
-              crystallized={false}
-              counterNote={false}
-            />
+      case "text": {
+        // Chat-style bubble: mine on the right, others on the left.
+        const name =
+          author?.display_name ??
+          m.author_display_name ??
+          m.author_username ??
+          m.author_id.slice(0, 8);
+        // Show avatar + name only when the previous row was from a
+        // different author (iMessage stacking).
+        const showHeader = !mine && !sameAuthor;
+        const bubble = (
+          <div
+            data-testid="stream-human-card"
+            data-message-id={m.id}
+            data-mine={mine ? "true" : "false"}
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              alignItems: mine ? "flex-end" : "flex-start",
+              gap: 2,
+            }}
+          >
+            {showHeader && (
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 6,
+                  fontSize: 11,
+                  color: "var(--wg-ink-soft)",
+                  fontFamily: "var(--wg-font-mono)",
+                  marginBottom: 2,
+                }}
+              >
+                <MiniAvatar name={name} />
+                <strong style={{ color: "var(--wg-ink)", fontWeight: 600 }}>
+                  {name}
+                </strong>
+              </div>
+            )}
+            <div
+              style={{
+                maxWidth: "70%",
+                padding: "8px 12px",
+                background: mine
+                  ? "var(--wg-accent-soft)"
+                  : "var(--wg-surface-raised)",
+                border: mine
+                  ? "1px solid var(--wg-accent-ring, var(--wg-line))"
+                  : "1px solid var(--wg-line)",
+                // Classic speech-bubble asymmetry: small corner on the
+                // author's side so the bubble "points" at them.
+                borderRadius: mine
+                  ? "14px 14px 4px 14px"
+                  : "14px 14px 14px 4px",
+                fontSize: "var(--wg-fs-body)",
+                lineHeight: 1.45,
+                whiteSpace: "pre-wrap",
+                wordBreak: "break-word",
+                color: "var(--wg-ink)",
+              }}
+            >
+              {m.body}
+            </div>
+            <span
+              title={new Date(m.created_at).toLocaleString()}
+              style={{
+                fontSize: 10,
+                fontFamily: "var(--wg-font-mono)",
+                color: "var(--wg-ink-faint)",
+                padding: mine ? "0 4px 0 0" : "0 0 0 4px",
+              }}
+            >
+              {relativeTime(m.created_at)}
+            </span>
           </div>
         );
+        return wrap(bubble);
+      }
       case "edge-answer":
       case "edge-clarify":
       case "edge-thinking":
-        return (
+        return wrap(
           <EdgeReplyCard
-            key={m.id}
             message={m}
             projectId={projectId}
             onFollowUp={handleFollowUp}
-          />
+            continuation={agentContinuation}
+          />,
         );
       case "edge-route-proposal":
-        return (
+        return wrap(
           <RouteProposalCard
-            key={m.id}
             message={m}
             projectId={projectId}
             onConfirmed={() => void refresh()}
-          />
+          />,
         );
       case "routed-inbound":
         // Phase Q §Q.2 — NOT rendered as a full rich card inline. A
         // compact notification line + sidebar drawer badge is the new
         // shape. RoutedInboundCard is now the compact line; the rich
         // options surface lives in RoutedInboundDrawer.
-        return (
-          <RoutedInboundCard
-            key={m.id}
-            message={m}
-            memberById={memberById}
-          />
+        return wrap(
+          <RoutedInboundCard message={m} memberById={memberById} />,
         );
       case "edge-tool-call":
-        return <ToolCallCard key={m.id} message={m} />;
+        return wrap(<ToolCallCard message={m} />);
       case "edge-tool-result":
-        return <ToolResultCard key={m.id} message={m} />;
+        return wrap(<ToolResultCard message={m} />);
       case "routed-reply":
       case "edge-reply-frame":
         // edge-reply-frame is the source-side framed reply card emitted
         // by PersonalStreamService.handle_reply. routed-reply is the raw
         // RoutingService.reply mirror — either one should render the
         // same rich reply card because both reference a RoutedSignalRow.
-        return (
+        return wrap(
           <RoutedReplyCard
-            key={m.id}
             message={m}
             memberById={memberById}
             onFollowUp={handleFollowUp}
-          />
+          />,
         );
       case "drift-alert":
         // vision.md §5.8. The edge agent flagged divergence between
         // committed thesis/decisions and recent execution; DriftService
         // fanned the alert into each affected user's personal stream.
-        return (
-          <DriftCard
-            key={m.id}
-            message={m}
-            onDiscuss={handleFollowUp}
-          />
-        );
+        return wrap(<DriftCard message={m} onDiscuss={handleFollowUp} />);
       case "sla-alert":
         // Sprint 2b. SlaService fired because a commitment the viewer
         // owns crossed DUE-SOON or OVERDUE band. Body is a JSON
         // payload the card parses to render band + headline +
         // target_date + humanized "due in 4h" / "overdue 2d".
-        return <SlaCard key={m.id} message={m} />;
+        return wrap(<SlaCard message={m} />);
       case "membrane-signal":
         // vision.md §5.12. The membrane classifier ingested an external
         // signal (git commit, steam review, rss item, forwarded link)
         // and routed it here because this viewer's slice is relevant.
         // Rendered muted — ambient, not urgent.
-        return <MembraneCard key={m.id} message={m} />;
+        return wrap(<MembraneCard message={m} />);
       case "edge-route-confirmed":
         // Ambient "✓ asked X" follow-up posted after a successful route
         // confirm. Keep it compact so it doesn't compete with the real
         // reply card when that lands.
-        return (
+        return wrap(
           <div
-            key={m.id}
             data-testid="personal-route-confirmed"
             style={{
-              marginBottom: 8,
-              marginLeft: 42,
-              padding: "4px 10px",
+              padding: "2px 8px",
               fontSize: 11,
               fontFamily: "var(--wg-font-mono)",
               color: "var(--wg-ok, #2f8f4f)",
               display: "flex",
               justifyContent: "space-between",
+              marginRight: "20%",
             }}
           >
             <span>{m.body}</span>
             <span title={new Date(m.created_at).toLocaleString()}>
               {relativeTime(m.created_at)}
             </span>
-          </div>
+          </div>,
         );
       default:
         // Forward-compat: unknown kinds render as plain text so a new
         // backend kind never crashes the surface.
-        return (
+        return wrap(
           <div
-            key={m.id}
             data-testid="personal-unknown-card"
             data-kind={m.kind}
             style={{
-              marginBottom: 12,
-              marginLeft: 42,
               padding: "8px 12px",
-              background: "var(--wg-surface-raised)",
-              border: "1px solid var(--wg-line)",
+              background: "var(--wg-surface-sunk, var(--wg-surface-raised))",
+              border: "1px solid var(--wg-line-soft, var(--wg-line))",
               borderRadius: "var(--wg-radius)",
               fontSize: 13,
               color: "var(--wg-ink-soft)",
+              marginRight: "20%",
             }}
           >
             <div
@@ -601,7 +722,7 @@ export function PersonalStream({ projectId, currentUserId, members }: Props) {
             <div style={{ whiteSpace: "pre-wrap", color: "var(--wg-ink)" }}>
               {m.body}
             </div>
-          </div>
+          </div>,
         );
     }
   }
@@ -656,7 +777,9 @@ export function PersonalStream({ projectId, currentUserId, members }: Props) {
             {t("empty")}
           </div>
         )}
-        {messages.map(renderCard)}
+        {messages.map((m, idx) =>
+          renderCard(m, idx > 0 ? messages[idx - 1] : null),
+        )}
         <div ref={bottomRef} />
       </div>
 

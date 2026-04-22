@@ -409,18 +409,12 @@ export function ToolResultCard({
       data-call-id={message.linked_id ?? undefined}
       data-ok={ok ? "true" : "false"}
       style={{
-        marginBottom: 8,
-        marginLeft: 42,
-        padding: "8px 12px",
-        background: "var(--wg-surface-sunk, #faf8f4)",
-        border: "1px solid var(--wg-line)",
-        borderLeft: ok
-          ? "3px solid var(--wg-ok, #2f8f4f)"
-          : "3px solid var(--wg-accent)",
-        borderRadius: "0 var(--wg-radius) var(--wg-radius) 0",
+        // Flat single-line affordance, no card shell. Matches ToolCallCard.
+        padding: "2px 8px",
         fontFamily: "var(--wg-font-mono)",
-        fontSize: 12,
-        color: "var(--wg-ink-soft)",
+        fontSize: 11,
+        color: "var(--wg-ink-faint)",
+        marginRight: "20%",
       }}
     >
       <div
@@ -460,7 +454,7 @@ export function ToolResultCard({
         </span>
         <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
           <span
-            style={{ fontSize: 11, color: "var(--wg-ink-soft)" }}
+            style={{ fontSize: 10, color: "var(--wg-ink-faint)" }}
             title={new Date(message.created_at).toLocaleString()}
           >
             {relativeTime(message.created_at)}
@@ -472,13 +466,13 @@ export function ToolResultCard({
             data-testid="tool-result-expand"
             style={{
               background: "transparent",
-              border: "1px solid var(--wg-line)",
-              borderRadius: "var(--wg-radius-sm, 4px)",
-              padding: "2px 6px",
-              fontSize: 11,
+              border: "none",
+              padding: "0 4px",
+              fontSize: 10,
               fontFamily: "var(--wg-font-mono)",
-              color: "var(--wg-ink-soft)",
+              color: "var(--wg-ink-faint)",
               cursor: "pointer",
+              textDecoration: "underline",
             }}
           >
             {expanded ? t("collapse") : t("expand")}

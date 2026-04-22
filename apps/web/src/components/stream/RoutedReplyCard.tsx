@@ -228,13 +228,13 @@ export function RoutedReplyCard({ message, memberById, onFollowUp }: Props) {
       data-message-id={message.id}
       data-signal-id={signal?.id}
       style={{
-        marginBottom: 12,
-        marginLeft: 42,
-        padding: "10px 14px",
-        background: "#f7f3ed",
-        border: "1px solid var(--wg-line)",
-        borderLeft: "3px solid var(--wg-accent)",
-        borderRadius: "0 var(--wg-radius) var(--wg-radius) 0",
+        // Lightened: sunk surface, no hard accent border. Still a card
+        // because it carries action buttons (Accept / Counter / Escalate).
+        padding: "10px 12px",
+        marginRight: "20%",
+        background: "var(--wg-surface-sunk, #faf8f4)",
+        border: "1px solid var(--wg-line-soft, var(--wg-line))",
+        borderRadius: "var(--wg-radius)",
         fontSize: 13,
         display: "flex",
         flexDirection: "column",

@@ -95,11 +95,13 @@ export function RoutedInboundCard({ message, memberById }: StreamProps) {
       data-testid="personal-inbound-line"
       data-message-id={message.id}
       style={{
-        marginBottom: 8,
-        marginLeft: 42,
+        // Lightened: sunk surface + subtle dashed border so the pending
+        // decision still reads as structurally distinct without
+        // competing with the surrounding chat-flow.
         padding: "8px 12px",
-        background: "var(--wg-surface-raised, #faf8f4)",
-        border: "1px dashed var(--wg-line)",
+        marginRight: "20%",
+        background: "var(--wg-surface-sunk, #faf8f4)",
+        border: "1px dashed var(--wg-line-soft, var(--wg-line))",
         borderRadius: "var(--wg-radius)",
         fontSize: 13,
         color: "var(--wg-ink-soft)",

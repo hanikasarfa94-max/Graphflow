@@ -288,13 +288,15 @@ export function RouteProposalCard({
       data-testid="personal-route-proposal"
       data-message-id={message.id}
       style={{
-        marginBottom: 12,
-        marginLeft: 42,
-        padding: "10px 14px",
-        background: "var(--wg-accent-soft, #fdf4ec)",
-        border: "1px solid var(--wg-accent-ring, var(--wg-accent))",
-        borderLeft: "3px solid var(--wg-accent)",
-        borderRadius: "0 var(--wg-radius) var(--wg-radius) 0",
+        // Lightened card: sunk background, no hard accent border. This is
+        // a structural event (with action buttons) so the card shape
+        // survives, but the chrome steps back to match the flat chat-style
+        // surface around it.
+        padding: "10px 12px",
+        marginRight: "20%",
+        background: "var(--wg-surface-sunk, #faf8f4)",
+        border: "1px solid var(--wg-line-soft, var(--wg-line))",
+        borderRadius: "var(--wg-radius)",
         fontSize: 13,
       }}
     >

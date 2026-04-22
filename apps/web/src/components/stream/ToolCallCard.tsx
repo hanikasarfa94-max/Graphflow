@@ -88,16 +88,13 @@ export function ToolCallCard({
       data-testid="tool-call-card"
       data-call-id={message.linked_id ?? undefined}
       style={{
-        marginBottom: 8,
-        marginLeft: 42,
-        padding: "8px 12px",
-        background: "var(--wg-surface-sunk, #faf8f4)",
-        border: "1px solid var(--wg-line)",
-        borderLeft: "3px solid var(--wg-ink-faint, #d9d6cd)",
-        borderRadius: "0 var(--wg-radius) var(--wg-radius) 0",
+        // Flat single-line affordance, no card shell. Sits under the
+        // parent agent turn as ambient metadata.
+        padding: "2px 8px",
         fontFamily: "var(--wg-font-mono)",
-        fontSize: 12,
-        color: "var(--wg-ink-soft)",
+        fontSize: 11,
+        color: "var(--wg-ink-faint)",
+        marginRight: "20%",
       }}
     >
       <div
@@ -139,7 +136,7 @@ export function ToolCallCard({
         </span>
         <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
           <span
-            style={{ fontSize: 11, color: "var(--wg-ink-soft)" }}
+            style={{ fontSize: 10, color: "var(--wg-ink-faint)" }}
             title={new Date(message.created_at).toLocaleString()}
           >
             {relativeTime(message.created_at)}
@@ -152,13 +149,13 @@ export function ToolCallCard({
               data-testid="tool-call-expand"
               style={{
                 background: "transparent",
-                border: "1px solid var(--wg-line)",
-                borderRadius: "var(--wg-radius-sm, 4px)",
-                padding: "2px 6px",
-                fontSize: 11,
+                border: "none",
+                padding: "0 4px",
+                fontSize: 10,
                 fontFamily: "var(--wg-font-mono)",
-                color: "var(--wg-ink-soft)",
+                color: "var(--wg-ink-faint)",
                 cursor: "pointer",
+                textDecoration: "underline",
               }}
             >
               {expanded ? t("collapse") : t("expand")}

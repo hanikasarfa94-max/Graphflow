@@ -1,20 +1,20 @@
 "use client";
 
-// EdgeReplyCard — Phase N.
+// EdgeReplyCard — chat-stream refactor.
 //
 // Renders the sub-agent's direct reply in the user's personal project
 // stream (north-star §"The canonical interaction" → "Answer" and
 // "Clarify" outcomes). Two variants keyed by message kind:
 //
-//   * edge-answer   — neutral warm-beige card; the agent answered from
-//                     graph/KB knowledge.
-//   * edge-clarify  — amber-accented card; the agent is asking a
-//                     clarifying question back.
-//   * edge-thinking — soft placeholder "thinking" variant (unused in v1
-//                     but supported so streaming UX can drop in later).
+//   * edge-answer   — the agent answered from graph/KB knowledge
+//   * edge-clarify  — amber-tinted attribution; the agent is asking back
+//   * edge-thinking — placeholder "thinking" variant
 //
-// The "Follow up…" button pre-fills the composer with `Re: <first 40>`
-// via the `onFollowUp` callback. Parent owns the composer state.
+// Visual: flat-flowing prose, NOT a card. Small attribution chip at the
+// top-left, then the body flows left-aligned like ChatGPT/Claude. No
+// background, no border, no box. Reserved for conversational turns.
+//
+// The "Follow up…" button pre-fills the composer via `onFollowUp`.
 
 import { useTranslations } from "next-intl";
 
@@ -28,47 +28,40 @@ type Props = {
   message: PersonalMessage;
   projectId?: string;
   onFollowUp?: (prefill: string) => void;
+  // When true, this turn is consecutive with the previous agent turn
+  // (same author chain). We suppress the attribution chip so stacked
+  // turns read as one continuous response, like Claude streaming.
+  continuation?: boolean;
 };
 
-// Variant styling — answer is the default warm surface; clarify leans on
-// the amber token; thinking uses a faint surface with italic tone.
-function variantStyle(kind: PersonalMessage["kind"]): {
-  background: string;
-  borderLeft: string;
-  subLabelKey: "answer" | "clarify" | "thinking" | "unknown";
-} {
-  if (kind === "edge-clarify") {
-    return {
-      background: "#fdf6ea",
-      borderLeft: "3px solid var(--wg-amber)",
-      subLabelKey: "clarify",
-    };
-  }
-  if (kind === "edge-thinking") {
-    return {
-      background: "var(--wg-surface-sunk, #faf8f4)",
-      borderLeft: "3px solid var(--wg-ink-faint)",
-      subLabelKey: "thinking",
-    };
-  }
-  if (kind === "edge-answer") {
-    return {
-      background: "#f7f3ed",
-      borderLeft: "3px solid var(--wg-accent-ring, var(--wg-accent))",
-      subLabelKey: "answer",
-    };
-  }
-  return {
-    background: "#f7f3ed",
-    borderLeft: "3px solid var(--wg-ink-faint)",
-    subLabelKey: "unknown",
-  };
+function labelKey(
+  kind: PersonalMessage["kind"],
+): "answer" | "clarify" | "thinking" | "unknown" {
+  if (kind === "edge-clarify") return "clarify";
+  if (kind === "edge-thinking") return "thinking";
+  if (kind === "edge-answer") return "answer";
+  return "unknown";
 }
 
-export function EdgeReplyCard({ message, projectId, onFollowUp }: Props) {
+function chipColor(kind: PersonalMessage["kind"]): string {
+  if (kind === "edge-clarify") return "var(--wg-amber)";
+  if (kind === "edge-thinking") return "var(--wg-ink-faint)";
+  return "var(--wg-ink-soft)";
+}
+
+function chipIcon(kind: PersonalMessage["kind"]): string {
+  if (kind === "edge-clarify") return "❓";
+  return "🧠";
+}
+
+export function EdgeReplyCard({
+  message,
+  projectId,
+  onFollowUp,
+  continuation = false,
+}: Props) {
   const t = useTranslations("personal");
-  const variant = variantStyle(message.kind);
-  const subLabel = t(`edge.${variant.subLabelKey}`);
+  const subLabel = t(`edge.${labelKey(message.kind)}`);
   const effectiveProjectId = projectId ?? message.project_id ?? "";
   const claims = message.claims ?? [];
   const hasClaims = claims.length > 0;
@@ -86,36 +79,45 @@ export function EdgeReplyCard({ message, projectId, onFollowUp }: Props) {
       data-message-id={message.id}
       data-kind={message.kind}
       style={{
-        marginBottom: 10,
-        marginLeft: 42,
-        padding: "14px",
-        background: variant.background,
-        border: "1px solid var(--wg-line)",
-        borderLeft: variant.borderLeft,
-        borderRadius: "0 var(--wg-radius) var(--wg-radius) 0",
+        // No card shell — just left-aligned flowing prose. Padding keeps
+        // some breathing room on the left so text doesn't kiss the
+        // scroller edge. Right margin leaves ~30% gutter so the line
+        // length stays readable.
+        padding: "2px 4px",
+        marginRight: "20%",
         fontSize: "var(--wg-fs-body)",
       }}
     >
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          fontFamily: "var(--wg-font-mono)",
-          fontSize: 11,
-          color: "var(--wg-ink-soft)",
-          marginBottom: 6,
-        }}
-      >
-        <span>
-          <strong style={{ color: "var(--wg-ink)" }}>{t("edge.attribution")}</strong>
-          {" — "}
-          <span>{subLabel}</span>
-        </span>
-        <span title={new Date(message.created_at).toLocaleString()}>
-          {relativeTime(message.created_at)}
-        </span>
-      </div>
+      {!continuation && (
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            fontFamily: "var(--wg-font-mono)",
+            fontSize: 10,
+            letterSpacing: "0.06em",
+            textTransform: "uppercase",
+            color: chipColor(message.kind),
+            marginBottom: 4,
+          }}
+        >
+          <span>
+            <span aria-hidden>{chipIcon(message.kind)}</span>{" "}
+            <strong style={{ color: "var(--wg-ink)" }}>
+              {t("edge.attribution")}
+            </strong>
+            {" · "}
+            <span>{subLabel}</span>
+          </span>
+          <span
+            title={new Date(message.created_at).toLocaleString()}
+            style={{ color: "var(--wg-ink-faint)" }}
+          >
+            {relativeTime(message.created_at)}
+          </span>
+        </div>
+      )}
       {hasClaims ? (
         <CitedClaimList
           projectId={effectiveProjectId}
@@ -129,6 +131,7 @@ export function EdgeReplyCard({ message, projectId, onFollowUp }: Props) {
             fontStyle: isUncited ? "italic" : "normal",
             whiteSpace: "pre-wrap",
             wordBreak: "break-word",
+            lineHeight: 1.55,
           }}
         >
           {message.body}
@@ -140,7 +143,7 @@ export function EdgeReplyCard({ message, projectId, onFollowUp }: Props) {
           size="sm"
           onClick={handleFollowUp}
           data-testid="personal-follow-up-btn"
-          style={{ marginTop: 8 }}
+          style={{ marginTop: 6 }}
         >
           {t("followUp")}
         </Button>
