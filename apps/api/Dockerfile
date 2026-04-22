@@ -12,7 +12,7 @@ ENV UV_LINK_MODE=copy \
     # and bump the timeout. Override at build time with
     # `--build-arg UV_INDEX_URL=...` if a different mirror is needed.
     UV_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple \
-    UV_HTTP_TIMEOUT=600
+    UV_HTTP_TIMEOUT=1800
 
 WORKDIR /app
 
