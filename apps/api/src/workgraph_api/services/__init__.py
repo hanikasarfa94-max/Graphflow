@@ -34,6 +34,7 @@ from .leader_escalation import LEADER_DRAFT_OPTION_ID, LeaderEscalationService
 from .license_context import LicenseContextService, tighter_tier
 from .license_lint import extract_node_ids, lint_reply
 from .membrane import MembraneService
+from .membrane_ingest import MembraneIngestService, extract_first_url
 from .onboarding import VALID_CHECKPOINTS, OnboardingService
 from .personal import PersonalStreamService
 from .planning import NotReadyForPlanning, PlanningService, PlanValidationError
@@ -98,6 +99,8 @@ __all__ = [
     "extract_node_ids",
     "lint_reply",
     "MembraneService",
+    "MembraneIngestService",
+    "extract_first_url",
     "OnboardingService",
     "VALID_CHECKPOINTS",
     "PersonalStreamService",

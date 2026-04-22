@@ -378,6 +378,7 @@ from workgraph_api.services import (
     IntakeService,
     LeaderEscalationService,
     LicenseContextService,
+    MembraneIngestService,
     MembraneService,
     MessageService,
     NotificationService,
@@ -528,6 +529,9 @@ async def api_env():
     membrane_service = MembraneService(
         maker, bus, collab_hub, stream_service, membrane_agent
     )
+    membrane_ingest_service = MembraneIngestService(
+        maker, membrane_service, license_context_service
+    )
     render_agent = _StubRenderAgent()
     render_service = RenderService(maker, render_agent)
 
@@ -575,6 +579,7 @@ async def api_env():
     app.state.skills_service = skills_service
     app.state.membrane_agent = membrane_agent
     app.state.membrane_service = membrane_service
+    app.state.membrane_ingest_service = membrane_ingest_service
     app.state.render_agent = render_agent
     app.state.render_service = render_service
     app.state.commitment_service = commitment_service

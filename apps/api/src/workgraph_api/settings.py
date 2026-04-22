@@ -37,6 +37,15 @@ class Settings(BaseSettings):
             "in under a second and costs nothing."
         ),
     )
+    membrane_active_interval_minutes: int = Field(
+        default=0,
+        description=(
+            "Active-membrane cron interval (Phase 2.A). 0 disables the "
+            "in-process scheduler entirely — production points an "
+            "external cron at POST /api/projects/{id}/membrane/scan-now "
+            "instead. Dev can set e.g. 30 to exercise the pipeline."
+        ),
+    )
 
 
 def load_settings() -> Settings:

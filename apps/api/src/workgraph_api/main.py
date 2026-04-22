@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -92,6 +93,7 @@ from workgraph_api.services import (
     IntakeService,
     LeaderEscalationService,
     LicenseContextService,
+    MembraneIngestService,
     MembraneService,
     MessageService,
     NotificationService,
@@ -439,6 +441,11 @@ async def lifespan(app: FastAPI):
         stream_service,
         membrane_agent,
     )
+    membrane_ingest_service = MembraneIngestService(
+        sessionmaker,
+        membrane_service,
+        license_context_service,
+    )
 
     if settings.use_stubs:
         edge_agent = _SilentStubEdgeAgent()
@@ -526,6 +533,7 @@ async def lifespan(app: FastAPI):
     app.state.skills_service = skills_service
     app.state.membrane_service = membrane_service
     app.state.membrane_agent = membrane_agent
+    app.state.membrane_ingest_service = membrane_ingest_service
     app.state.commitment_service = commitment_service
     app.state.sla_service = sla_service
     app.state.simulation_service = simulation_service
@@ -607,10 +615,64 @@ async def lifespan(app: FastAPI):
     event_bus.subscribe("commitment.created", _sla_on_event)
     event_bus.subscribe("commitment.status_changed", _sla_on_event)
 
+    # Phase 2.A: optional active-membrane scheduler. Off by default (0) so
+    # prod hits it via an external cron; dev can flip
+    # WORKGRAPH_MEMBRANE_ACTIVE_INTERVAL_MINUTES=30 to exercise the loop
+    # in-process. Each tick walks every project the authenticated user
+    # set has joined and fires scan + RSS poll. Errors are swallowed so
+    # a single bad feed doesn't kill the loop.
+    membrane_task: asyncio.Task | None = None
+    if settings.membrane_active_interval_minutes > 0:
+        async def _membrane_scanner_loop() -> None:
+            interval_s = max(60, settings.membrane_active_interval_minutes * 60)
+            while True:
+                try:
+                    await asyncio.sleep(interval_s)
+                    # Enumerate every project cheaply — the project_id set is
+                    # bounded by the humans on the platform, so scanning all
+                    # of them is fine at v1 scale.
+                    from workgraph_persistence import (
+                        ProjectRow as _PR,
+                        session_scope as _scope,
+                    )
+                    from sqlalchemy import select as _select
+
+                    async with _scope(sessionmaker) as session:
+                        ids = list(
+                            (
+                                await session.execute(_select(_PR.id))
+                            ).scalars().all()
+                        )
+                    for pid in ids:
+                        try:
+                            await membrane_ingest_service.run_active_scan(pid)
+                            await membrane_ingest_service.poll_rss_subscriptions(
+                                pid
+                            )
+                        except Exception:
+                            _log.exception(
+                                "membrane active scan failed",
+                                extra={"project_id": pid},
+                            )
+                except asyncio.CancelledError:
+                    raise
+                except Exception:
+                    _log.exception("membrane scanner loop tick failed")
+
+        membrane_task = asyncio.create_task(
+            _membrane_scanner_loop(), name="membrane-active-scanner"
+        )
+
     _log.info("api boot ok", extra={"database_url": _sanitize(settings.database_url)})
     try:
         yield
     finally:
+        if membrane_task is not None:
+            membrane_task.cancel()
+            try:
+                await membrane_task
+            except (asyncio.CancelledError, Exception):
+                pass
         try:
             await im_service.drain()
         except Exception:

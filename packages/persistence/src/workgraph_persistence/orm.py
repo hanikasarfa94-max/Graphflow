@@ -1413,3 +1413,45 @@ class OnboardingStateRow(Base):
     walkthrough_generated_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+
+
+class MembraneSubscriptionRow(Base):
+    """Phase 2.A — per-project external signal subscription.
+
+    Vision §5.12 (active membrane). A subscription is a *recipe* the
+    cron agent runs periodically; each run emits MembraneSignalRow
+    proposals that still flow through MembraneAgent.classify + the
+    status='proposed' human-confirmable gate.
+
+    `kind`:
+      * 'rss'          — `url_or_query` is a feed URL; cron fetches new items
+      * 'search_query' — `url_or_query` is a fixed Tavily query string; cron
+                         fires it on each scan
+
+    The cron itself also invents queries on the fly from project context —
+    those writes don't need a subscription row. Subscription rows capture
+    owner-configured standing interests (e.g. a competitor's blog).
+    """
+
+    __tablename__ = "membrane_subscriptions"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    project_id: Mapped[str] = mapped_column(
+        ForeignKey("projects.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    # 'rss' | 'search_query'
+    kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    url_or_query: Mapped[str] = mapped_column(String(1000), nullable=False)
+    created_by_user_id: Mapped[str | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    last_polled_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, nullable=False
+    )

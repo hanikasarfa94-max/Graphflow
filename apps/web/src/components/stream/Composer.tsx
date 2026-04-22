@@ -17,6 +17,12 @@
 // PREVIEW_DEBOUNCE_MS after typing stops and fire the handler when the
 // draft is ≥PREVIEW_MIN_BODY_LENGTH characters. The parent owns the
 // RehearsalPreview render — we just surface the hook.
+//
+// Phase 2.A active membrane (vision §5.12): when the draft contains a
+// http(s) URL we surface an inline "Ingest as signal" action that POSTs
+// to /api/projects/{id}/membrane/paste. The action is a side-door — it
+// does NOT send the draft as a message. Signals land status='pending-
+// review' and still need human confirmation via the membrane card UX.
 
 import {
   forwardRef,
@@ -63,6 +69,16 @@ type Props = {
 const MAX_ROWS = 8;
 const LINE_HEIGHT_PX = 20;
 
+// Permissive URL extractor. Matches the server-side regex in
+// services/membrane_ingest.py so the two sides agree on what counts
+// as a paste-ingest candidate.
+const URL_RE = /https?:\/\/[^\s<>"'[\]{}]+/i;
+
+function extractFirstUrl(s: string): string | null {
+  const m = s.match(URL_RE);
+  return m ? m[0] : null;
+}
+
 export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
   {
     projectId,
@@ -76,10 +92,15 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
   ref,
 ) {
   const t = useTranslations("stream");
+  const tMembrane = useTranslations("membrane");
   const [value, setValue] = useState("");
   const [posting, setPosting] = useState(false);
+  const [ingesting, setIngesting] = useState(false);
+  const [ingestMessage, setIngestMessage] = useState<string | null>(null);
   const taRef = useRef<HTMLTextAreaElement | null>(null);
   const previewTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const detectedUrl = extractFirstUrl(value);
 
   // Debounce the preview fire so we don't hammer the endpoint while the
   // user is mid-type. Keep the effect isolated from autosize so a paste
@@ -217,8 +238,85 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
   // closure, so the current `value` is always used.
   useImperativeHandle(ref, () => ({ sendNow: () => void send() }));
 
+  async function ingestAsSignal() {
+    if (!detectedUrl || ingesting) return;
+    setIngesting(true);
+    setIngestMessage(null);
+    try {
+      await api(`/api/projects/${projectId}/membrane/paste`, {
+        method: "POST",
+        body: { url: detectedUrl, note: value.trim() || null },
+      });
+      setIngestMessage(tMembrane("ingestSuccess"));
+    } catch (e) {
+      const fallback = tMembrane("ingestFailed");
+      if (e instanceof ApiError) {
+        const detail =
+          typeof e.body === "object" && e.body && "message" in e.body
+            ? String((e.body as { message?: unknown }).message ?? fallback)
+            : fallback;
+        setIngestMessage(detail);
+      } else {
+        setIngestMessage(fallback);
+      }
+    } finally {
+      setIngesting(false);
+    }
+  }
+
   return (
-    <div style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+      {detectedUrl ? (
+        <div
+          data-testid="membrane-ingest-bar"
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            fontSize: 12,
+            color: "var(--wg-muted, #666)",
+            padding: "4px 8px",
+            background: "var(--wg-surface-subtle, #f6f6f6)",
+            border: "1px solid var(--wg-line)",
+            borderRadius: "var(--wg-radius)",
+          }}
+        >
+          <span>{tMembrane("detectedUrl")}</span>
+          <code
+            style={{
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+              maxWidth: 280,
+              flex: 1,
+            }}
+          >
+            {detectedUrl}
+          </code>
+          <button
+            type="button"
+            onClick={() => void ingestAsSignal()}
+            disabled={ingesting}
+            data-testid="membrane-ingest-btn"
+            style={{
+              padding: "2px 10px",
+              fontSize: 12,
+              border: "1px solid var(--wg-line)",
+              borderRadius: "var(--wg-radius)",
+              background: "var(--wg-surface)",
+              cursor: ingesting ? "wait" : "pointer",
+            }}
+          >
+            {ingesting ? tMembrane("ingesting") : tMembrane("ingestAsSignal")}
+          </button>
+          {ingestMessage ? (
+            <span style={{ color: "var(--wg-muted, #666)" }}>
+              {ingestMessage}
+            </span>
+          ) : null}
+        </div>
+      ) : null}
+      <div style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
       <textarea
         ref={taRef}
         value={value}
@@ -288,6 +386,7 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
         {t("actions.send")}
       </button>
       <style>{`@keyframes wg-spin { to { transform: rotate(360deg); } }`}</style>
+      </div>
     </div>
   );
 });

@@ -4,6 +4,13 @@
   * GET  /api/projects/{project_id}/membranes/recent — auth: project member
   * POST /api/membranes/{signal_id}/approve          — auth: project member
 
+Phase 2.A active-side additions (vision §5.12 active membrane):
+  * POST   /api/projects/{id}/membrane/paste                    — member
+  * POST   /api/projects/{id}/membrane/subscriptions            — owner
+  * GET    /api/projects/{id}/membrane/subscriptions            — member
+  * DELETE /api/projects/{id}/membrane/subscriptions/{sub_id}   — owner
+  * POST   /api/projects/{id}/membrane/scan-now                 — owner
+
 v1 only exposes user-drop / simulated webhook shapes. Actual GitHub OAuth
 webhook auth is a v2 concern — v1 trusts that anything hitting `/ingest`
 came from an authenticated project member.
@@ -17,12 +24,14 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from workgraph_persistence import (
     MembraneSignalRepository,
+    ProjectMemberRepository,
     session_scope,
 )
 
 from workgraph_api.deps import require_user
 from workgraph_api.services import (
     AuthenticatedUser,
+    MembraneIngestService,
     MembraneService,
     ProjectService,
 )
@@ -148,3 +157,168 @@ async def post_approve(
         }
         raise HTTPException(status_code=status_map.get(err, 400), detail=err)
     return result
+
+
+# ---------------------------------------------------------------------------
+# Phase 2.A — active membrane (user paste + subscriptions + scan-now)
+# ---------------------------------------------------------------------------
+
+
+class PasteRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    url: str = Field(min_length=1, max_length=2000)
+    note: str | None = Field(default=None, max_length=500)
+
+
+class SubscriptionCreateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["rss", "search_query"]
+    url_or_query: str = Field(min_length=1, max_length=1000)
+
+
+def _get_ingest_service(request: Request) -> MembraneIngestService:
+    return request.app.state.membrane_ingest_service
+
+
+async def _require_member(
+    request: Request, project_id: str, user_id: str
+) -> None:
+    project_service: ProjectService = request.app.state.project_service
+    if not await project_service.is_member(
+        project_id=project_id, user_id=user_id
+    ):
+        raise HTTPException(status_code=403, detail="not_a_project_member")
+
+
+async def _require_owner(
+    request: Request, project_id: str, user_id: str
+) -> None:
+    """Owner-only gate for mutation of the active-scan configuration.
+
+    Mirrors the role-check pattern used by silent_consensus / handoff /
+    skill_atlas. Any project member can paste a URL (`/paste`); only
+    owners configure feeds and trigger manual scans (`/subscriptions`,
+    `/scan-now`).
+    """
+    async with session_scope(request.app.state.sessionmaker) as session:
+        rows = await ProjectMemberRepository(session).list_for_project(
+            project_id
+        )
+    for r in rows:
+        if r.user_id == user_id and r.role == "owner":
+            return
+    # If the user isn't even a member, 403 with the standard detail.
+    raise HTTPException(status_code=403, detail="not_a_project_owner")
+
+
+@router.post("/projects/{project_id}/membrane/paste")
+async def post_paste(
+    project_id: str,
+    body: PasteRequest,
+    request: Request,
+    user: AuthenticatedUser = Depends(require_user),
+):
+    await _require_member(request, project_id, user.id)
+    service = _get_ingest_service(request)
+    result = await service.ingest_url(
+        project_id=project_id,
+        url=body.url,
+        source_user_id=user.id,
+        note=body.note,
+    )
+    if not result.get("ok"):
+        err = result.get("error", "ingest_failed")
+        status_map = {
+            "project_not_found": 404,
+            "fetch_failed": 400,
+        }
+        raise HTTPException(status_code=status_map.get(err, 400), detail=err)
+    return result
+
+
+@router.post("/projects/{project_id}/membrane/subscriptions")
+async def post_subscription(
+    project_id: str,
+    body: SubscriptionCreateRequest,
+    request: Request,
+    user: AuthenticatedUser = Depends(require_user),
+):
+    await _require_owner(request, project_id, user.id)
+    service = _get_ingest_service(request)
+    result = await service.create_subscription(
+        project_id=project_id,
+        kind=body.kind,
+        url_or_query=body.url_or_query,
+        created_by_user_id=user.id,
+    )
+    if not result.get("ok"):
+        err = result.get("error", "create_failed")
+        status_map = {
+            "project_not_found": 404,
+            "invalid_kind": 400,
+            "invalid_rss_url": 400,
+            "empty_value": 400,
+            "value_too_long": 400,
+        }
+        raise HTTPException(status_code=status_map.get(err, 400), detail=err)
+    return result
+
+
+@router.get("/projects/{project_id}/membrane/subscriptions")
+async def list_subscriptions(
+    project_id: str,
+    request: Request,
+    active_only: bool = Query(default=True),
+    user: AuthenticatedUser = Depends(require_user),
+):
+    await _require_member(request, project_id, user.id)
+    service = _get_ingest_service(request)
+    subs = await service.list_subscriptions(project_id, active_only=active_only)
+    return {"ok": True, "subscriptions": subs}
+
+
+@router.delete("/projects/{project_id}/membrane/subscriptions/{sub_id}")
+async def delete_subscription(
+    project_id: str,
+    sub_id: str,
+    request: Request,
+    user: AuthenticatedUser = Depends(require_user),
+):
+    await _require_owner(request, project_id, user.id)
+    service = _get_ingest_service(request)
+    result = await service.deactivate_subscription(
+        project_id=project_id, sub_id=sub_id
+    )
+    if not result.get("ok"):
+        err = result.get("error", "delete_failed")
+        status_map = {"not_found": 404}
+        raise HTTPException(status_code=status_map.get(err, 400), detail=err)
+    return result
+
+
+@router.post("/projects/{project_id}/membrane/scan-now")
+async def post_scan_now(
+    project_id: str,
+    request: Request,
+    user: AuthenticatedUser = Depends(require_user),
+):
+    """Manual trigger for the active-scan pipeline.
+
+    Production wires this via an external cron (Aliyun / Windows Task
+    Scheduler) so the scheduler itself stays infra, not code. See
+    services/membrane_ingest.py:MembraneIngestService.run_active_scan
+    for the contract.
+    """
+    await _require_owner(request, project_id, user.id)
+    service = _get_ingest_service(request)
+    scan = await service.run_active_scan(project_id)
+    rss = await service.poll_rss_subscriptions(project_id)
+    total_new = int(scan.get("new_signals", 0)) + int(rss.get("new_signals", 0))
+    return {
+        "ok": True,
+        "scan": scan,
+        "rss": rss,
+        "new_signals": total_new,
+    }

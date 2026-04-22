@@ -26,6 +26,7 @@ from .orm import (
     IntakeEventRow,
     LicenseAuditRow,
     MembraneSignalRow,
+    MembraneSubscriptionRow,
     MessageRow,
     MilestoneRow,
     NotificationRow,
@@ -2664,5 +2665,81 @@ class OnboardingStateRepository:
             return None
         row.walkthrough_json = walkthrough
         row.walkthrough_generated_at = datetime.now(timezone.utc)
+        await self._session.flush()
+        return row
+
+
+# ---- Phase 2.A — membrane subscription repository -----------------------
+
+
+class MembraneSubscriptionRepository:
+    """Phase 2.A — persistence for owner-configured external signal feeds.
+
+    Rows are soft-deactivated (active=False) rather than physically deleted,
+    so the audit log ("this feed was active from X to Y and produced these
+    signals") stays queryable via the MembraneSignalRow trail.
+    """
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def create(
+        self,
+        *,
+        project_id: str,
+        kind: str,
+        url_or_query: str,
+        created_by_user_id: str | None,
+    ) -> MembraneSubscriptionRow:
+        row = MembraneSubscriptionRow(
+            id=_new_id(),
+            project_id=project_id,
+            kind=kind,
+            url_or_query=url_or_query,
+            created_by_user_id=created_by_user_id,
+            active=True,
+        )
+        self._session.add(row)
+        await self._session.flush()
+        return row
+
+    async def get(self, sub_id: str) -> MembraneSubscriptionRow | None:
+        return (
+            await self._session.execute(
+                select(MembraneSubscriptionRow).where(
+                    MembraneSubscriptionRow.id == sub_id
+                )
+            )
+        ).scalar_one_or_none()
+
+    async def list_for_project(
+        self,
+        project_id: str,
+        *,
+        active_only: bool = True,
+    ) -> list[MembraneSubscriptionRow]:
+        stmt = select(MembraneSubscriptionRow).where(
+            MembraneSubscriptionRow.project_id == project_id
+        )
+        if active_only:
+            stmt = stmt.where(MembraneSubscriptionRow.active.is_(True))
+        stmt = stmt.order_by(MembraneSubscriptionRow.created_at.desc())
+        return list((await self._session.execute(stmt)).scalars().all())
+
+    async def deactivate(self, sub_id: str) -> MembraneSubscriptionRow | None:
+        row = await self.get(sub_id)
+        if row is None:
+            return None
+        row.active = False
+        await self._session.flush()
+        return row
+
+    async def mark_polled(
+        self, sub_id: str, *, when: datetime | None = None
+    ) -> MembraneSubscriptionRow | None:
+        row = await self.get(sub_id)
+        if row is None:
+            return None
+        row.last_polled_at = when or datetime.now(timezone.utc)
         await self._session.flush()
         return row
