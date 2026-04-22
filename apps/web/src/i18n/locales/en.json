@@ -919,5 +919,27 @@
     "ratified": "✓ Ratified",
     "rejected": "✗ Rejected",
     "errorGeneric": "Couldn't process. Retry."
+  },
+  "onboarding": {
+    "overlayTitle": "Day 1 walkthrough",
+    "subtitle": "Your 10-minute ambient tour of this project's graph slice.",
+    "progress": "Step {current} of {total}",
+    "next": "Next",
+    "done": "Done",
+    "skip": "Skip for now",
+    "restrictedNotice": "Restricted view — scoped to your license tier ({tier}).",
+    "replayLink": "Replay onboarding",
+    "replayHeading": "Onboarding",
+    "replayBody": "Re-open the Day 1 walkthrough on this project's next visit.",
+    "replayButton": "Replay onboarding",
+    "loading": "Loading walkthrough…",
+    "emptySection": "No content in this section yet.",
+    "sections": {
+      "vision": "Project thesis",
+      "decisions": "Recent decisions",
+      "teammates": "Adjacent teammates",
+      "your_tasks": "Your active tasks",
+      "open_risks": "Open risks"
+    }
   }
 }

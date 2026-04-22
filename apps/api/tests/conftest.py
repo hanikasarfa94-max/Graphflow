@@ -381,6 +381,7 @@ from workgraph_api.services import (
     MembraneService,
     MessageService,
     NotificationService,
+    OnboardingService,
     PersonalStreamService,
     PlanningService,
     ProjectService,
@@ -490,6 +491,9 @@ async def api_env():
     handoff_service = HandoffService(maker)
     dissent_service = DissentService(maker, bus)
     silent_consensus_service = SilentConsensusService(maker, bus)
+    onboarding_service = OnboardingService(
+        maker, license_context_service
+    )
     # Mirror the production subscription — drift uses fire-and-forget
     # tasks, dissent validation piggybacks on the same event so tests
     # that submit decisions see dissent-accuracy flips without
@@ -585,6 +589,7 @@ async def api_env():
     app.state.handoff_service = handoff_service
     app.state.dissent_service = dissent_service
     app.state.silent_consensus_service = silent_consensus_service
+    app.state.onboarding_service = onboarding_service
     app.state.perf_service = perf_service
 
     transport = ASGITransport(app=app)

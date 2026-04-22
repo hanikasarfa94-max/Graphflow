@@ -7,9 +7,10 @@
 // The team stream lives at `/projects/[id]/team`; nothing else about
 // the project layout / audit navigation changes.
 
+import { OnboardingOverlay } from "@/components/onboarding/OnboardingOverlay";
 import { PersonalStream } from "@/components/stream/PersonalStream";
 import type { StreamMember } from "@/components/stream/types";
-import type { ProjectState } from "@/lib/api";
+import type { OnboardingWalkthroughResponse, ProjectState } from "@/lib/api";
 import { requireUser, serverFetch } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
@@ -36,11 +37,37 @@ export default async function ProjectPersonalPage({
     role_in_stream: m.role,
   }));
 
+  // Phase 1.B — ambient Day-1 walkthrough. The server fetches state +
+  // script; if the overlay should open (neither completed nor
+  // dismissed), we render it above the stream. Swallowing errors keeps
+  // the main page loading even if the onboarding endpoint is down.
+  let onboarding: OnboardingWalkthroughResponse | null = null;
+  try {
+    onboarding = await serverFetch<OnboardingWalkthroughResponse>(
+      `/api/projects/${id}/onboarding/walkthrough`,
+    );
+  } catch {
+    onboarding = null;
+  }
+  const shouldShowOverlay =
+    onboarding !== null &&
+    !onboarding.state.walkthrough_completed_at &&
+    !onboarding.state.dismissed;
+
   return (
-    <PersonalStream
-      projectId={id}
-      currentUserId={user.id}
-      members={members}
-    />
+    <>
+      {shouldShowOverlay && onboarding ? (
+        <OnboardingOverlay
+          projectId={id}
+          walkthrough={onboarding.walkthrough}
+          initialState={onboarding.state}
+        />
+      ) : null}
+      <PersonalStream
+        projectId={id}
+        currentUserId={user.id}
+        members={members}
+      />
+    </>
   );
 }

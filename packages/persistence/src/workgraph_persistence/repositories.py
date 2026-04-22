@@ -29,6 +29,7 @@ from .orm import (
     MessageRow,
     MilestoneRow,
     NotificationRow,
+    OnboardingStateRow,
     ProjectMemberRow,
     ProjectRow,
     RequirementRow,
@@ -2533,3 +2534,135 @@ class SilentConsensusRepository:
         count = len(rows)
         recent = [r[0] for r in rows[:10]]
         return count, recent
+
+
+class OnboardingStateRepository:
+    """Phase 1.B — per (user, project) ambient onboarding state."""
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def get(
+        self, *, user_id: str, project_id: str
+    ) -> OnboardingStateRow | None:
+        stmt = select(OnboardingStateRow).where(
+            OnboardingStateRow.user_id == user_id,
+            OnboardingStateRow.project_id == project_id,
+        )
+        return (
+            await self._session.execute(stmt)
+        ).scalar_one_or_none()
+
+    async def create(
+        self, *, user_id: str, project_id: str
+    ) -> OnboardingStateRow:
+        """Create fresh state on first visit. Idempotent via the
+        unique constraint — a second caller racing in sees the
+        existing row rather than a duplicate."""
+        row = OnboardingStateRow(
+            id=str(uuid4()),
+            user_id=user_id,
+            project_id=project_id,
+            last_checkpoint="not_started",
+            dismissed=False,
+        )
+        self._session.add(row)
+        try:
+            await self._session.flush()
+        except IntegrityError:
+            await self._session.rollback()
+            existing = await self.get(
+                user_id=user_id, project_id=project_id
+            )
+            assert existing is not None
+            return existing
+        return row
+
+    async def get_or_create(
+        self, *, user_id: str, project_id: str
+    ) -> tuple[OnboardingStateRow, bool]:
+        """Return the row and a created=True|False flag.
+
+        Callers that need the "did we just create this" signal (e.g.
+        the GET walkthrough side effect) read the boolean rather
+        than re-querying.
+        """
+        existing = await self.get(
+            user_id=user_id, project_id=project_id
+        )
+        if existing is not None:
+            return existing, False
+        row = await self.create(
+            user_id=user_id, project_id=project_id
+        )
+        return row, True
+
+    async def set_checkpoint(
+        self,
+        *,
+        user_id: str,
+        project_id: str,
+        checkpoint: str,
+    ) -> OnboardingStateRow | None:
+        row = await self.get(
+            user_id=user_id, project_id=project_id
+        )
+        if row is None:
+            return None
+        row.last_checkpoint = checkpoint
+        now = datetime.now(timezone.utc)
+        if row.walkthrough_started_at is None and checkpoint != "not_started":
+            row.walkthrough_started_at = now
+        if checkpoint == "completed":
+            row.walkthrough_completed_at = now
+        await self._session.flush()
+        return row
+
+    async def dismiss(
+        self, *, user_id: str, project_id: str
+    ) -> OnboardingStateRow | None:
+        row = await self.get(
+            user_id=user_id, project_id=project_id
+        )
+        if row is None:
+            return None
+        row.dismissed = True
+        await self._session.flush()
+        return row
+
+    async def replay(
+        self, *, user_id: str, project_id: str
+    ) -> OnboardingStateRow | None:
+        """Reset the row so the overlay re-opens on the next visit.
+        Clears dismissed + completed; drops the cached walkthrough so
+        the narration is fresh against the latest graph state."""
+        row = await self.get(
+            user_id=user_id, project_id=project_id
+        )
+        if row is None:
+            return None
+        row.dismissed = False
+        row.walkthrough_completed_at = None
+        row.walkthrough_started_at = None
+        row.last_checkpoint = "not_started"
+        row.walkthrough_json = None
+        row.walkthrough_generated_at = None
+        await self._session.flush()
+        return row
+
+    async def cache_walkthrough(
+        self,
+        *,
+        user_id: str,
+        project_id: str,
+        walkthrough: dict,
+    ) -> OnboardingStateRow | None:
+        row = await self.get(
+            user_id=user_id, project_id=project_id
+        )
+        if row is None:
+            return None
+        row.walkthrough_json = walkthrough
+        row.walkthrough_generated_at = datetime.now(timezone.utc)
+        await self._session.flush()
+        return row

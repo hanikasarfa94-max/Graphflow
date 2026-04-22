@@ -1484,3 +1484,92 @@ export function getKbItem(
     { baseUrl },
   );
 }
+
+// ---------- Phase 1.B — ambient onboarding ----------
+
+export type OnboardingCheckpoint =
+  | "not_started"
+  | "vision"
+  | "decisions"
+  | "teammates"
+  | "your_tasks"
+  | "open_risks"
+  | "completed";
+
+export interface OnboardingState {
+  id: string;
+  user_id: string;
+  project_id: string;
+  first_seen_at: string | null;
+  walkthrough_started_at: string | null;
+  walkthrough_completed_at: string | null;
+  last_checkpoint: OnboardingCheckpoint;
+  dismissed: boolean;
+}
+
+export type OnboardingSectionKind =
+  | "vision"
+  | "decisions"
+  | "teammates"
+  | "your_tasks"
+  | "open_risks";
+
+export interface OnboardingSection {
+  kind: OnboardingSectionKind;
+  title: string;
+  body_md: string;
+  claims: CitedClaim[];
+}
+
+export interface OnboardingWalkthrough {
+  sections: OnboardingSection[];
+  user_id: string;
+  project_id: string;
+  generated_at: string;
+  license_tier: string;
+  scope_user_id: string;
+}
+
+export interface OnboardingWalkthroughResponse {
+  state: OnboardingState;
+  walkthrough: OnboardingWalkthrough;
+  valid_checkpoints: OnboardingCheckpoint[];
+}
+
+export function getOnboardingWalkthrough(
+  projectId: string,
+  baseUrl?: string,
+): Promise<OnboardingWalkthroughResponse> {
+  return api<OnboardingWalkthroughResponse>(
+    `/api/projects/${projectId}/onboarding/walkthrough`,
+    { baseUrl },
+  );
+}
+
+export function postOnboardingCheckpoint(
+  projectId: string,
+  checkpoint: OnboardingCheckpoint,
+): Promise<{ ok: boolean; state: OnboardingState }> {
+  return api(
+    `/api/projects/${projectId}/onboarding/checkpoint`,
+    { method: "POST", body: { checkpoint } },
+  );
+}
+
+export function postOnboardingDismiss(
+  projectId: string,
+): Promise<{ ok: boolean; state: OnboardingState }> {
+  return api(
+    `/api/projects/${projectId}/onboarding/dismiss`,
+    { method: "POST" },
+  );
+}
+
+export function postOnboardingReplay(
+  projectId: string,
+): Promise<{ ok: boolean; state: OnboardingState }> {
+  return api(
+    `/api/projects/${projectId}/onboarding/replay`,
+    { method: "POST" },
+  );
+}

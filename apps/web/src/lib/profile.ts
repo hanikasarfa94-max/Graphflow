@@ -74,6 +74,11 @@ export interface ProfileMessages {
   rolesEmpty: string;
   observedLabels: Record<keyof ProfileObserved, string>;
   signOut: string;
+  // Phase 1.B — ambient onboarding replay section.
+  onboardingHeading: string;
+  onboardingBody: string;
+  onboardingReplayButton: string;
+  onboardingNoProjects: string;
 }
 
 const EN: ProfileMessages = {
@@ -96,6 +101,11 @@ const EN: ProfileMessages = {
     projects_active: "Active projects",
   },
   signOut: "Sign out",
+  onboardingHeading: "Onboarding",
+  onboardingBody:
+    "Re-open the Day 1 walkthrough on a project's next visit.",
+  onboardingReplayButton: "Replay on this project",
+  onboardingNoProjects: "Not a member of any project yet.",
 };
 
 const ZH: ProfileMessages = {
@@ -117,6 +127,10 @@ const ZH: ProfileMessages = {
     projects_active: "活跃项目数",
   },
   signOut: "退出",
+  onboardingHeading: "入职导览",
+  onboardingBody: "下次进入该项目时再次打开第一天导览。",
+  onboardingReplayButton: "在该项目重放",
+  onboardingNoProjects: "尚未加入任何项目。",
 };
 
 export function profileMessages(locale: Locale): ProfileMessages {

@@ -1,7 +1,9 @@
 import { cookies, headers } from "next/headers";
 import Link from "next/link";
 
+import { ReplayButton } from "@/components/onboarding/ReplayButton";
 import { Button, Card, Heading, Text } from "@/components/ui";
+import type { ProjectSummary } from "@/lib/api";
 import { requireUser } from "@/lib/auth";
 import {
   PROFILE_OBSERVED_KEYS,
@@ -41,6 +43,23 @@ export default async function SettingsProfilePage() {
     API_BASE,
     cookieHeader,
   );
+
+  // Phase 1.B — "Replay onboarding" surface per project. We fetch the
+  // user's project list so each row can independently reset its
+  // OnboardingStateRow. Best-effort: if the list call fails we just
+  // hide the block.
+  let myProjects: ProjectSummary[] = [];
+  try {
+    const res = await fetch(`${API_BASE}/api/projects`, {
+      headers: cookieHeader ? { cookie: cookieHeader } : undefined,
+      cache: "no-store",
+    });
+    if (res.ok) {
+      myProjects = (await res.json()) as ProjectSummary[];
+    }
+  } catch {
+    myProjects = [];
+  }
 
   const observed = tallies?.observed ?? {
     messages_posted_7d: 0,
@@ -243,6 +262,39 @@ export default async function SettingsProfilePage() {
               </li>
             ))}
           </ul>
+        )}
+      </Card>
+
+      <Card
+        variant="raised"
+        style={{ marginTop: 20 }}
+        aria-labelledby="onboarding-heading"
+      >
+        <Heading
+          level={2}
+          id="onboarding-heading"
+          style={{ marginBottom: 4 }}
+        >
+          {t.onboardingHeading}
+        </Heading>
+        <Text as="p" variant="body" muted style={{ margin: "0 0 12px" }}>
+          {t.onboardingBody}
+        </Text>
+        {myProjects.length === 0 ? (
+          <Text as="p" variant="body" muted>
+            {t.onboardingNoProjects}
+          </Text>
+        ) : (
+          <div>
+            {myProjects.map((p) => (
+              <ReplayButton
+                key={p.id}
+                projectId={p.id}
+                projectTitle={p.title}
+                label={t.onboardingReplayButton}
+              />
+            ))}
+          </div>
         )}
       </Card>
     </main>

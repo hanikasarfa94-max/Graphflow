@@ -59,6 +59,7 @@ from workgraph_api.routers import intake as intake_router
 from workgraph_api.routers import kb as kb_router
 from workgraph_api.routers import membrane as membrane_router
 from workgraph_api.routers import observability as observability_router
+from workgraph_api.routers import onboarding as onboarding_router
 from workgraph_api.routers import personal as personal_router
 from workgraph_api.routers import plan as plan_router
 from workgraph_api.routers import projects as projects_router
@@ -94,6 +95,7 @@ from workgraph_api.services import (
     MembraneService,
     MessageService,
     NotificationService,
+    OnboardingService,
     PersonalStreamService,
     PlanningService,
     PreAnswerService,
@@ -476,6 +478,9 @@ async def lifespan(app: FastAPI):
     silent_consensus_service = SilentConsensusService(
         sessionmaker, event_bus
     )
+    onboarding_service = OnboardingService(
+        sessionmaker, license_context_service
+    )
     from workgraph_api.services.perf_aggregation import PerfAggregationService
 
     perf_service = PerfAggregationService(sessionmaker)
@@ -533,6 +538,7 @@ async def lifespan(app: FastAPI):
     app.state.handoff_service = handoff_service
     app.state.dissent_service = dissent_service
     app.state.silent_consensus_service = silent_consensus_service
+    app.state.onboarding_service = onboarding_service
     app.state.perf_service = perf_service
 
     # Drift auto-trigger (Sprint 1c). Subscribe drift_service to the
@@ -660,6 +666,7 @@ app.include_router(pre_answer_router.router)
 app.include_router(handoff_router.router)
 app.include_router(events_router.router)
 app.include_router(observability_router.router)
+app.include_router(onboarding_router.router)
 app.include_router(personal_router.router)
 app.include_router(render_router.router)
 app.include_router(routing_router.router)

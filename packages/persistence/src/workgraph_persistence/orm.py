@@ -1347,3 +1347,69 @@ class SilentConsensusRow(Base):
     ratified_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+
+
+class OnboardingStateRow(Base):
+    """Phase 1.B — ambient onboarding per (user, project).
+
+    One row is created the first time a member visits `/projects/[id]`.
+    The sub-agent-narrated walkthrough is rendered as a full-viewport
+    overlay until the user either completes the 5-step sequence or
+    dismisses it. Both outcomes persist so we never re-show it.
+
+    `last_checkpoint` values track the 5 narrated sections (in order)
+    plus the terminal states:
+        'not_started' — row just created, overlay will open at step 1
+        'vision'      — user advanced past the vision section
+        'decisions'   — past the recent-decisions section
+        'teammates'   — past the adjacent-teammates section
+        'your_tasks'  — past the active-tasks section
+        'open_risks'  — past the open-risks section (final step)
+        'completed'   — user hit 'Done' — sets walkthrough_completed_at
+
+    `dismissed=True` with completed_at still null is the 'Skip for now'
+    outcome — the user doesn't want the overlay, but we didn't pretend
+    they finished it. `/settings/profile > Replay onboarding` resets
+    `last_checkpoint='not_started'` + `dismissed=False` so the overlay
+    reopens on the next `/projects/[id]` visit.
+
+    `walkthrough_json` caches the structured script produced by
+    OnboardingService.build_walkthrough(). Cached per-row; regenerated
+    on replay or when the cached copy is older than 24h. This lets
+    re-visits during a single session skip the slice-build + narration
+    cost.
+    """
+
+    __tablename__ = "onboarding_state"
+    __table_args__ = (
+        UniqueConstraint(
+            "user_id", "project_id", name="uq_onboarding_user_project"
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    user_id: Mapped[str] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    project_id: Mapped[str] = mapped_column(
+        ForeignKey("projects.id", ondelete="CASCADE"), index=True
+    )
+    first_seen_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow
+    )
+    walkthrough_started_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    walkthrough_completed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    last_checkpoint: Mapped[str] = mapped_column(
+        String(24), default="not_started"
+    )
+    dismissed: Mapped[bool] = mapped_column(Boolean, default=False)
+    walkthrough_json: Mapped[dict | None] = mapped_column(
+        JSON, nullable=True
+    )
+    walkthrough_generated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
