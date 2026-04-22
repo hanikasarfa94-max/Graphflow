@@ -31,6 +31,8 @@ services:
       WORKGRAPH_DATABASE_URL: ${WORKGRAPH_DATABASE_URL:-sqlite+aiosqlite:////data/workgraph.db}
       WORKGRAPH_REDIS_URL: redis://redis:6379/0
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      DEEPSEEK_BASE_URL: ${DEEPSEEK_BASE_URL:-https://api.deepseek.com}
+      DEEPSEEK_MODEL: ${DEEPSEEK_MODEL:-deepseek-chat}
       WORKGRAPH_LOG_LEVEL: ${WORKGRAPH_LOG_LEVEL:-INFO}
     volumes:
       - api-data:/data
