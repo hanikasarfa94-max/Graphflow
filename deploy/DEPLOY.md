@@ -50,11 +50,24 @@ cd /opt/workgraph
 tar -xzf /opt/workgraph.tar.gz \
     --exclude='data' \
     --exclude='deploy/.env' \
-    --exclude='deploy/nginx/conf.d'   # preserves the port-80-only override below
+    --exclude='deploy/nginx/conf.d' \
+    --exclude='deploy/docker-compose.yml'   # preserves the 8080/8443 port patch
 ```
 Forgetting `deploy/nginx/conf.d` restores the stock TLS-enabled nginx
 conf, which crash-loops on a missing cert. If that happens, rewrite the
 file per §4 and `docker compose restart nginx`.
+
+Forgetting `deploy/docker-compose.yml` reverts nginx host-ports to
+`80:80` / `443:443`, which breaks the Cloudflare Tunnel upstream that
+points at `127.0.0.1:8080`. Recovery: re-apply the §4 sed patches and
+`docker compose up -d nginx`.
+
+**Heredoc trap for interactive deploys:** if you run a deploy block via
+`ssh root@vps <<'TAG' … TAG`, the closing `TAG` line must sit at
+column 0. Any leading whitespace makes bash swallow the terminator and
+you get `TAG: command not found` at the end. The commands inside still
+run — it's cosmetic — but the ssh session also won't cleanly close,
+which is confusing the first time.
 
 ## 2. Cloudflare DNS (one-time, in Cloudflare dashboard)
 
