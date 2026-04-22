@@ -38,16 +38,14 @@ jobs:
       - name: Install workspace
         run: uv sync --all-packages --dev
 
-      - name: Gate — fail fast if API key missing
-        run: |
-          if [ -z "$DEEPSEEK_API_KEY" ]; then
-            echo "::error::DEEPSEEK_API_KEY secret not set in repo settings"
-            exit 1
-          fi
+      - name: Skip notice — no API key
+        if: env.DEEPSEEK_API_KEY == ''
+        run: echo "::notice::DEEPSEEK_API_KEY not set — eval skipped. Set the secret in repo settings to run real LLM eval on each push."
 
       - name: Run eval suite (opt-in marker)
+        if: env.DEEPSEEK_API_KEY != ''
         run: uv run pytest -m eval -v
 
       - name: Emit summary on failure
-        if: failure()
+        if: failure() && env.DEEPSEEK_API_KEY != ''
         run: uv run python -m tests.eval.runner --fail-under 0 --fail-drift -1 || true
