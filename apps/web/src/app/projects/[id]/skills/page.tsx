@@ -275,7 +275,7 @@ function CollectiveBlock({
         padding: "16px 20px",
         background: "var(--wg-accent-soft)",
         border: "1px solid var(--wg-accent-ring)",
-        borderRadius: 8,
+        borderRadius: "var(--wg-radius-md)",
       }}
     >
       <h2
@@ -378,7 +378,7 @@ function MemberCard({
         padding: 18,
         background: "var(--wg-surface-raised)",
         border: "1px solid var(--wg-line)",
-        borderRadius: 8,
+        borderRadius: "var(--wg-radius-md)",
         display: "flex",
         flexDirection: "column",
         gap: 12,
@@ -547,7 +547,7 @@ function HandoffHistoryBlock({
         padding: "16px 20px",
         background: "var(--wg-surface-raised)",
         border: "1px solid var(--wg-line)",
-        borderRadius: 8,
+        borderRadius: "var(--wg-radius-md)",
       }}
     >
       <h2
@@ -665,7 +665,7 @@ function InheritedBlock({
         padding: "16px 20px",
         background: "var(--wg-accent-soft)",
         border: "1px solid var(--wg-accent-ring, var(--wg-accent))",
-        borderRadius: 8,
+        borderRadius: "var(--wg-radius-md)",
       }}
     >
       <h2

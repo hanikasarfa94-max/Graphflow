@@ -1,5 +1,7 @@
 import { getTranslations } from "next-intl/server";
 
+import { Heading } from "@/components/ui";
+
 import { MorphingGraphDemo } from "./MorphingGraphDemo";
 
 // Public-facing split layout. Left pane shows the live morphing-graph demo
@@ -28,21 +30,11 @@ export async function PublicSplit({ children }: { children: React.ReactNode }) {
           {tBrand("name")}
         </div>
 
-        <h1
-          style={{
-            fontSize: 40,
-            lineHeight: 1.1,
-            letterSpacing: "-0.01em",
-            fontWeight: 600,
-            margin: 0,
-            color: "var(--wg-ink)",
-            maxWidth: 560,
-          }}
-        >
+        <Heading level={1} variant="display" style={{ maxWidth: 560 }}>
           {t("title1")}
           <br />
           {t("title2")}
-        </h1>
+        </Heading>
 
         <MorphingGraphDemo />
       </section>

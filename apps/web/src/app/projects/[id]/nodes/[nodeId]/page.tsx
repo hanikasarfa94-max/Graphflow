@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 
 import { DissentList } from "@/components/decision/DissentList";
+import { Heading } from "@/components/ui";
 import type { DissentRecord, ProjectState, User } from "@/lib/api";
 import { optionalUser, serverFetch } from "@/lib/auth";
 
@@ -356,17 +357,9 @@ function Header({
       >
         {labels.kind}
       </div>
-      <h1
-        style={{
-          margin: 0,
-          fontSize: 24,
-          lineHeight: 1.3,
-          color: "var(--wg-ink)",
-          wordBreak: "break-word",
-        }}
-      >
+      <Heading level={1} variant="display" style={{ wordBreak: "break-word" }}>
         {node.title || "(no title)"}
-      </h1>
+      </Heading>
       <div
         style={{
           marginTop: 4,

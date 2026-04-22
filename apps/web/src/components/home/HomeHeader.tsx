@@ -34,7 +34,7 @@ export async function HomeHeader({ displayName }: { displayName: string }) {
           <span className="wg-dot" />
           {t("brand.name")}
         </Text>
-        <Heading level={1} style={{ margin: "8px 0 0" }}>
+        <Heading level={1} variant="display" style={{ margin: "8px 0 0" }}>
           {t("home.welcome", { name: displayName })}
         </Heading>
       </div>

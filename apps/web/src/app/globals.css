@@ -1,18 +1,25 @@
-/* WorkGraph design tokens — per /plan-design-review decision 4A.
-   Type: General Sans (UI), JetBrains Mono (graph labels, IDs, code).
-   Surface: warm off-white. Accent: single terracotta. No purple/indigo. */
+/* WorkGraph design tokens — per DESIGN.md v1 (warm-industrial + bio).
+   Type: Instrument Serif (display), General Sans (UI), JetBrains Mono
+   (graph labels, IDs, code). Surface: warm lab-notebook off-white.
+   Accent: single terracotta. No purple/indigo. */
 
 @import url("https://api.fontshare.com/v2/css?f[]=general-sans@400,600&display=swap");
 @import url("https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&display=swap");
+/* Instrument Serif — display only (hero, node-detail titles). Loaded via
+   Bunny Fonts so we keep the same @import pattern as General Sans and
+   don't cross the Google telemetry line for a purely decorative face. */
+@import url("https://fonts.bunny.net/css2?family=Instrument+Serif:ital@0;1&display=swap");
 
 :root {
-  /* Surface + ink */
-  --wg-surface: #fafaf7;
+  /* Surface + ink — warmer than the 2026-04-21 pass; lab notebook, not
+     sterile enterprise chrome. Keys align with DESIGN.md §Color. */
+  --wg-paper: #f7f2e8;
+  --wg-surface: #fbf7ed;
   --wg-surface-raised: #ffffff;
-  --wg-surface-sunk: #f3f0e8;
-  --wg-ink: #1a1a1a;
-  --wg-ink-soft: #5a5a5a;
-  --wg-ink-faint: #9a9a95;
+  --wg-surface-sunk: #ede7d6;
+  --wg-ink: #0f0e0d;
+  --wg-ink-soft: #5a5652;
+  --wg-ink-faint: #9a958c;
 
   /* Single accent — terracotta. No blue-to-purple anything. */
   --wg-accent: #c0471e;
@@ -25,14 +32,23 @@
 
   /* Success — muted sage, used sparingly. */
   --wg-ok: #4d7a4a;
+  --wg-ok-soft: rgba(77, 122, 74, 0.1);
+
+  /* Danger — reserved; use sparingly. Irreversible actions only. */
+  --wg-danger: #a33131;
 
   /* Hairlines + dividers. */
-  --wg-line: #e6e3db;
+  --wg-line: #e6ded0;
   --wg-line-soft: #efede6;
 
-  /* Geometry. */
-  --wg-radius: 6px;
+  /* Border-radius scale — chip 4px, card 6px, modal 12px, pill full.
+     Variation signals hierarchy (DESIGN.md §Layout). Legacy aliases
+     --wg-radius / --wg-radius-sm stay as-is for existing callers. */
   --wg-radius-sm: 4px;
+  --wg-radius-md: 6px;
+  --wg-radius-lg: 12px;
+  --wg-radius-full: 9999px;
+  --wg-radius: 6px;
   --wg-dot: 4px;
 
   /* Spacing scale (4px base). */
@@ -44,19 +60,30 @@
   --wg-s-6: 32px;
   --wg-s-7: 48px;
 
-  /* Type stack. No Inter/Roboto/Arial fallback in production. */
+  /* Type stack — Instrument Serif for display only; General Sans for
+     UI; JetBrains Mono for IDs, timestamps, eyebrows. No Inter. */
+  --wg-font-display:
+    "Instrument Serif", ui-serif, Georgia, "Times New Roman", serif;
   --wg-font-sans:
     "General Sans", ui-sans-serif, system-ui, -apple-system, sans-serif;
   --wg-font-mono:
-    "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+    "JetBrains Mono", ui-monospace, "Cascadia Code", "SF Mono", Menlo, monospace;
 
-  /* Motion. Short + linear-ish; no bouncy springs. */
+  /* Motion tokens — tokens only in this pass. Component-level motion
+     (the 5 load-bearing moments) lands in a later phase. */
+  --wg-ease-enter: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --wg-ease-exit: cubic-bezier(0.4, 0, 1, 1);
+  --wg-ease-move: cubic-bezier(0.4, 0, 0.2, 1);
+  --wg-dur-micro: 80ms;
+  --wg-dur-short: 180ms;
+  --wg-dur-medium: 320ms;
+  --wg-dur-long: 560ms;
+  /* Legacy aliases kept for callers that already reference them. */
   --wg-motion-fast: 120ms ease-out;
   --wg-motion-base: 200ms ease-out;
 
-  /* Type scale — single source of truth for headings + body + caption.
-     Numbers match the UI-primitives migration (2026-04-21). Mono
-     captions stay at 11px because they're fine as-is. */
+  /* Type scale — single source of truth. Numbers match DESIGN.md. */
+  --wg-fs-hero: 40px;
   --wg-fs-h1: 28px;
   --wg-fs-h2: 18px;
   --wg-fs-h3: 14px;
@@ -65,12 +92,69 @@
   --wg-fs-caption: 11px;
   --wg-lh-tight: 1.25;
   --wg-lh-normal: 1.5;
+  --wg-lh-display: 1.1;
 
-  /* Signal-color soft tokens — used by severity-bearing cards so they
-     never reach for hardcoded hex. `--wg-accent-soft` already exists
-     above (terracotta tint). `--wg-amber-soft` and `--wg-ok-soft`
-     fill the gap for medium + low-severity and ok surfaces. */
-  --wg-ok-soft: rgba(77, 122, 74, 0.1);
+  /* Paper-grain overlay — 6x6 turbulence noise, baseFrequency=0.9,
+     ~3% opacity. Tiled on body for the lab-notebook mood. Static SVG,
+     no animation — no reduced-motion concern. */
+  --wg-paper-grain: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.06  0 0 0 0 0.055  0 0 0 0 0.051  0 0 0 0.03 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+}
+
+/* Dark mode — authored as a full palette, not an inversion. Values per
+   DESIGN.md §Color dark-mode table. Token skeleton only in this pass;
+   component-level dark-mode polish is a separate phase. Both the media
+   query and the [data-theme="dark"] selector are covered so a future
+   manual toggle has a foundation. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --wg-paper: #0f0e0d;
+    --wg-surface: #171513;
+    --wg-surface-raised: #1f1c19;
+    --wg-surface-sunk: #0a0907;
+
+    --wg-ink: #f7f2e8;
+    --wg-ink-soft: #b8b0a3;
+    --wg-ink-faint: #6f6860;
+    --wg-line: #2a2622;
+    --wg-line-soft: #221e1a;
+
+    --wg-accent: #d85c33;
+    --wg-accent-soft: rgba(216, 92, 51, 0.18);
+    --wg-accent-ring: rgba(216, 92, 51, 0.35);
+
+    --wg-amber: #d09a3c;
+    --wg-amber-soft: rgba(208, 154, 60, 0.18);
+
+    --wg-ok: #6d9c69;
+    --wg-ok-soft: rgba(109, 156, 105, 0.18);
+
+    --wg-danger: #c75151;
+  }
+}
+
+[data-theme="dark"] {
+  --wg-paper: #0f0e0d;
+  --wg-surface: #171513;
+  --wg-surface-raised: #1f1c19;
+  --wg-surface-sunk: #0a0907;
+
+  --wg-ink: #f7f2e8;
+  --wg-ink-soft: #b8b0a3;
+  --wg-ink-faint: #6f6860;
+  --wg-line: #2a2622;
+  --wg-line-soft: #221e1a;
+
+  --wg-accent: #d85c33;
+  --wg-accent-soft: rgba(216, 92, 51, 0.18);
+  --wg-accent-ring: rgba(216, 92, 51, 0.35);
+
+  --wg-amber: #d09a3c;
+  --wg-amber-soft: rgba(208, 154, 60, 0.18);
+
+  --wg-ok: #6d9c69;
+  --wg-ok-soft: rgba(109, 156, 105, 0.18);
+
+  --wg-danger: #c75151;
 }
 
 * {
@@ -81,7 +165,11 @@ html,
 body {
   margin: 0;
   padding: 0;
-  background: var(--wg-surface);
+  background-color: var(--wg-surface);
+  /* Paper grain — layered on top of the solid surface color at a low
+     opacity via the SVG data-url. Repeating tile. Static, a11y-neutral. */
+  background-image: var(--wg-paper-grain);
+  background-repeat: repeat;
   color: var(--wg-ink);
   font-family: var(--wg-font-sans);
   font-weight: 400;
@@ -181,7 +269,7 @@ body {
   transition: box-shadow 200ms ease-out;
 }
 .react-flow__node:hover {
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+  box-shadow: 0 4px 12px rgba(15, 14, 13, 0.08);
 }
 
 /* Public split — landing + login side-by-side, stacks on narrow. */
@@ -236,4 +324,16 @@ body {
 }
 ::-webkit-scrollbar-thumb:hover {
   background: var(--wg-ink-faint);
+}
+
+/* Reduced-motion — drop animated treatments to opacity-only fades.
+   Paper grain is static and unaffected; only keyframe-driven things
+   go silent. */
+@media (prefers-reduced-motion: reduce) {
+  .wg-pulse,
+  .wg-edge-flow,
+  .react-flow__edge.animated .react-flow__edge-path,
+  .react-flow__node {
+    animation: none !important;
+  }
 }
