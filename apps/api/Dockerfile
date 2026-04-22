@@ -49,7 +49,12 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PATH="/app/.venv/bin:$PATH"
 
 # curl for healthchecks only. Everything else comes from the venv.
-RUN apt-get update \
+# Swap Debian mirrors to Aliyun first — mainland VPS → deb.debian.org is
+# unreliable. Handles both sources.list (pre-bookworm) and the deb822
+# sources.list.d/debian.sources layout (bookworm+).
+RUN sed -i 's@deb.debian.org@mirrors.aliyun.com@g; s@security.debian.org@mirrors.aliyun.com/debian-security@g' \
+        /etc/apt/sources.list /etc/apt/sources.list.d/debian.sources 2>/dev/null || true \
+    && apt-get update \
     && apt-get install -y --no-install-recommends curl \
     && rm -rf /var/lib/apt/lists/*
 
