@@ -253,6 +253,46 @@ class _StubRenderAgent:
         )
 
 
+class _ScriptableMeetingMetabolizer:
+    """Default MeetingMetabolizer stub for the api_env fixture.
+
+    Keyword-driven: default return is an empty MetabolizedSignals
+    (success outcome). Tests that need a specific extraction set
+    `next_signals` or `next_outcome`; tests that want a failure path
+    set `next_outcome='failed'`. Calls are recorded for assertions.
+    """
+
+    prompt_version = "stub.meeting.v1"
+
+    def __init__(self) -> None:
+        self.calls: list[dict] = []
+        self.next_signals = None
+        self.next_outcome: str = "ok"
+        self.next_error: str | None = None
+
+    async def metabolize(self, *, transcript_text, participant_context):
+        from workgraph_api.services.meeting_ingest import (
+            MetabolizedSignals,
+            MetabolizeOutcome,
+        )
+
+        self.calls.append(
+            {
+                "transcript_text": transcript_text,
+                "participant_context": participant_context,
+            }
+        )
+        signals = self.next_signals or MetabolizedSignals()
+        outcome = self.next_outcome
+        error = self.next_error
+        # Consume-once semantics so every test that sets `next_*`
+        # stays local to its own scenario.
+        self.next_signals = None
+        self.next_outcome = "ok"
+        self.next_error = None
+        return MetabolizeOutcome(signals=signals, outcome=outcome, error=error)
+
+
 class _SilenceEdgeAgent:
     """Default EdgeAgent stub for the `api_env` fixture — every turn is
     treated as 'silence' so tests that don't exercise the edge path stay
@@ -378,6 +418,7 @@ from workgraph_api.services import (
     IntakeService,
     LeaderEscalationService,
     LicenseContextService,
+    MeetingIngestService,
     MembraneIngestService,
     MembraneService,
     MessageService,
@@ -495,6 +536,10 @@ async def api_env():
     onboarding_service = OnboardingService(
         maker, license_context_service
     )
+    meeting_metabolizer = _ScriptableMeetingMetabolizer()
+    meeting_ingest_service = MeetingIngestService(
+        maker, bus, meeting_metabolizer
+    )
     # Mirror the production subscription — drift uses fire-and-forget
     # tasks, dissent validation piggybacks on the same event so tests
     # that submit decisions see dissent-accuracy flips without
@@ -595,6 +640,8 @@ async def api_env():
     app.state.dissent_service = dissent_service
     app.state.silent_consensus_service = silent_consensus_service
     app.state.onboarding_service = onboarding_service
+    app.state.meeting_ingest_service = meeting_ingest_service
+    app.state.meeting_metabolizer = meeting_metabolizer
     app.state.perf_service = perf_service
 
     transport = ASGITransport(app=app)
@@ -606,6 +653,10 @@ async def api_env():
         pass
     try:
         await conflict_service.drain()
+    except Exception:
+        pass
+    try:
+        await meeting_ingest_service.drain()
     except Exception:
         pass
     await collab_hub.stop()

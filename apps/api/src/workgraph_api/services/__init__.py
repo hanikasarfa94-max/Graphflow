@@ -33,6 +33,17 @@ from .intake import IntakeService
 from .leader_escalation import LEADER_DRAFT_OPTION_ID, LeaderEscalationService
 from .license_context import LicenseContextService, tighter_tier
 from .license_lint import extract_node_ids, lint_reply
+from .meeting_ingest import (
+    LLMBackedMetabolizer,
+    MAX_TRANSCRIPT_CHARS as MEETING_MAX_TRANSCRIPT_CHARS,
+    MIN_TRANSCRIPT_CHARS as MEETING_MIN_TRANSCRIPT_CHARS,
+    METABOLIZE_PROMPT_VERSION as MEETING_METABOLIZE_PROMPT_VERSION,
+    MeetingIngestError,
+    MeetingIngestService,
+    MeetingMetabolizer,
+    MetabolizeOutcome,
+    MetabolizedSignals,
+)
 from .membrane import MembraneService
 from .membrane_ingest import MembraneIngestService, extract_first_url
 from .onboarding import VALID_CHECKPOINTS, OnboardingService
@@ -98,6 +109,15 @@ __all__ = [
     "tighter_tier",
     "extract_node_ids",
     "lint_reply",
+    "LLMBackedMetabolizer",
+    "MEETING_MAX_TRANSCRIPT_CHARS",
+    "MEETING_MIN_TRANSCRIPT_CHARS",
+    "MEETING_METABOLIZE_PROMPT_VERSION",
+    "MeetingIngestError",
+    "MeetingIngestService",
+    "MeetingMetabolizer",
+    "MetabolizeOutcome",
+    "MetabolizedSignals",
     "MembraneService",
     "MembraneIngestService",
     "extract_first_url",

@@ -25,6 +25,7 @@ from .orm import (
     IMSuggestionRow,
     IntakeEventRow,
     LicenseAuditRow,
+    MeetingTranscriptRow,
     MembraneSignalRow,
     MembraneSubscriptionRow,
     MessageRow,
@@ -2741,5 +2742,104 @@ class MembraneSubscriptionRepository:
         if row is None:
             return None
         row.last_polled_at = when or datetime.now(timezone.utc)
+        await self._session.flush()
+        return row
+
+
+# ---- Phase 2.B — meeting transcript repository --------------------------
+
+
+class MeetingTranscriptRepository:
+    """Phase 2.B — uploaded meeting transcripts + extracted signals."""
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def create(
+        self,
+        *,
+        project_id: str,
+        uploader_user_id: str,
+        title: str,
+        transcript_text: str,
+        participant_user_ids: list[str],
+    ) -> MeetingTranscriptRow:
+        row = MeetingTranscriptRow(
+            id=_new_id(),
+            project_id=project_id,
+            uploader_user_id=uploader_user_id,
+            title=title,
+            transcript_text=transcript_text,
+            participant_user_ids=list(participant_user_ids or []),
+            metabolism_status="pending",
+            extracted_signals={},
+        )
+        self._session.add(row)
+        await self._session.flush()
+        return row
+
+    async def get(self, transcript_id: str) -> MeetingTranscriptRow | None:
+        return (
+            await self._session.execute(
+                select(MeetingTranscriptRow).where(
+                    MeetingTranscriptRow.id == transcript_id
+                )
+            )
+        ).scalar_one_or_none()
+
+    async def list_for_project(
+        self, project_id: str, *, limit: int = 100
+    ) -> list[MeetingTranscriptRow]:
+        stmt = (
+            select(MeetingTranscriptRow)
+            .where(MeetingTranscriptRow.project_id == project_id)
+            .order_by(MeetingTranscriptRow.uploaded_at.desc())
+            .limit(limit)
+        )
+        return list((await self._session.execute(stmt)).scalars().all())
+
+    async def mark_metabolism_started(
+        self, transcript_id: str
+    ) -> MeetingTranscriptRow | None:
+        row = await self.get(transcript_id)
+        if row is None:
+            return None
+        row.metabolism_started_at = datetime.now(timezone.utc)
+        await self._session.flush()
+        return row
+
+    async def finalize_metabolism(
+        self,
+        transcript_id: str,
+        *,
+        status: str,
+        extracted_signals: dict,
+        error_message: str | None = None,
+    ) -> MeetingTranscriptRow | None:
+        row = await self.get(transcript_id)
+        if row is None:
+            return None
+        row.metabolism_status = status
+        row.extracted_signals = extracted_signals or {}
+        row.metabolism_completed_at = datetime.now(timezone.utc)
+        row.error_message = error_message
+        await self._session.flush()
+        return row
+
+    async def reset_for_remetabolism(
+        self, transcript_id: str
+    ) -> MeetingTranscriptRow | None:
+        """Clear extracted_signals + status so a fresh metabolism run
+        can repopulate them. Used by the owner-only `remetabolize`
+        endpoint when the original run failed or returned nothing useful.
+        """
+        row = await self.get(transcript_id)
+        if row is None:
+            return None
+        row.metabolism_status = "pending"
+        row.metabolism_started_at = None
+        row.metabolism_completed_at = None
+        row.extracted_signals = {}
+        row.error_message = None
         await self._session.flush()
         return row

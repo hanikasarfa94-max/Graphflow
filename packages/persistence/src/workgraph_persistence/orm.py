@@ -1455,3 +1455,79 @@ class MembraneSubscriptionRow(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_utcnow, nullable=False
     )
+
+
+class MeetingTranscriptRow(Base):
+    """Phase 2.B — uploaded meeting transcript + its metabolized signals.
+
+    Upload-only; no real-time ASR. Users paste plain text or upload a
+    `.txt` / `.md` / `.srt` / `.vtt` file (service strips SRT/VTT
+    timestamps client-side before POST). The edge LLM then extracts
+    four signal kinds from the raw text:
+
+        * decisions  — explicit choices reached during the meeting
+        * tasks      — action items, ideally with a suggested owner
+        * risks      — concerns or hazards raised
+        * stances    — per-participant positions on unresolved topics
+
+    These are *proposals*: the row is inert until a member clicks
+    "Accept" on a specific signal, which routes through the existing
+    DecisionRow / TaskRow / RiskRow creation paths. The meeting row
+    is never the source of truth for graph state — it's provenance.
+
+    `metabolism_status` lifecycle:
+        'pending'  — row just created, background task queued
+        'done'     — edge LLM returned structured JSON; signals populated
+        'failed'   — LLM output malformed after retries or agent raised;
+                     error_message populated, signals left empty. User
+                     can hit `remetabolize` (owner-only) to retry.
+
+    `extracted_signals` shape once metabolism completes:
+        {
+            "decisions": [{"text": str, "rationale"?: str}, ...],
+            "tasks":     [{"title": str, "suggested_owner_hint"?: str,
+                           "description"?: str}, ...],
+            "risks":     [{"title": str, "severity"?: "low"|"medium"|"high",
+                           "content"?: str}, ...],
+            "stances":   [{"participant_hint": str, "topic": str,
+                           "stance": str}, ...],
+        }
+
+    `participant_user_ids` is best-effort. v1 expects the uploader to
+    pass a list (pulled from a `@mention` parse or manual tagging on the
+    upload form). Empty list is fine — the metabolism prompt can still
+    infer participant stances by whatever hints the transcript itself
+    carries (e.g. speaker labels).
+
+    License tier is inherited from the parent project — transcripts are
+    as confidential as the project that owns them, same as KB items.
+    """
+
+    __tablename__ = "meeting_transcripts"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    project_id: Mapped[str] = mapped_column(
+        ForeignKey("projects.id", ondelete="CASCADE"), index=True
+    )
+    uploader_user_id: Mapped[str] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), index=True, nullable=True
+    )
+    title: Mapped[str] = mapped_column(String(500), default="")
+    transcript_text: Mapped[str] = mapped_column(String, default="")
+    participant_user_ids: Mapped[list] = mapped_column(JSON, default=list)
+    uploaded_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow
+    )
+    metabolism_status: Mapped[str] = mapped_column(
+        String(16), default="pending", index=True
+    )
+    metabolism_started_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    metabolism_completed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    extracted_signals: Mapped[dict] = mapped_column(JSON, default=dict)
+    error_message: Mapped[str | None] = mapped_column(
+        String(2000), nullable=True
+    )

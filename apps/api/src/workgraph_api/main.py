@@ -58,6 +58,7 @@ from workgraph_api.routers import events_stream as events_router
 from workgraph_api.routers import graph as graph_router
 from workgraph_api.routers import intake as intake_router
 from workgraph_api.routers import kb as kb_router
+from workgraph_api.routers import meetings as meetings_router
 from workgraph_api.routers import membrane as membrane_router
 from workgraph_api.routers import observability as observability_router
 from workgraph_api.routers import onboarding as onboarding_router
@@ -93,6 +94,8 @@ from workgraph_api.services import (
     IntakeService,
     LeaderEscalationService,
     LicenseContextService,
+    LLMBackedMetabolizer,
+    MeetingIngestService,
     MembraneIngestService,
     MembraneService,
     MessageService,
@@ -488,6 +491,28 @@ async def lifespan(app: FastAPI):
     onboarding_service = OnboardingService(
         sessionmaker, license_context_service
     )
+    # Phase 2.B — meeting transcript upload + metabolism. Uses the edge
+    # LLM via a dedicated prompt; in stub mode we fall back to a trivial
+    # metabolizer that returns empty signals (so tests / demo don't hit
+    # DeepSeek). Real tests pass their own scripted metabolizer via
+    # app.state.meeting_metabolizer before exercising the upload path.
+    if settings.use_stubs:
+        class _EmptyMetabolizer:
+            async def metabolize(self, *, transcript_text, participant_context):
+                from workgraph_api.services.meeting_ingest import (
+                    MetabolizedSignals,
+                    MetabolizeOutcome,
+                )
+                return MetabolizeOutcome(
+                    signals=MetabolizedSignals(), outcome="ok"
+                )
+
+        meeting_metabolizer = _EmptyMetabolizer()
+    else:
+        meeting_metabolizer = LLMBackedMetabolizer()
+    meeting_ingest_service = MeetingIngestService(
+        sessionmaker, event_bus, meeting_metabolizer
+    )
     from workgraph_api.services.perf_aggregation import PerfAggregationService
 
     perf_service = PerfAggregationService(sessionmaker)
@@ -547,6 +572,8 @@ async def lifespan(app: FastAPI):
     app.state.dissent_service = dissent_service
     app.state.silent_consensus_service = silent_consensus_service
     app.state.onboarding_service = onboarding_service
+    app.state.meeting_ingest_service = meeting_ingest_service
+    app.state.meeting_metabolizer = meeting_metabolizer
     app.state.perf_service = perf_service
 
     # Drift auto-trigger (Sprint 1c). Subscribe drift_service to the
@@ -682,6 +709,10 @@ async def lifespan(app: FastAPI):
         except Exception:
             _log.exception("conflict drain failed during shutdown")
         try:
+            await meeting_ingest_service.drain()
+        except Exception:
+            _log.exception("meeting ingest drain failed during shutdown")
+        try:
             await collab_hub.stop()
         except Exception:
             _log.exception("collab hub stop failed during shutdown")
@@ -709,6 +740,7 @@ app = FastAPI(title="WorkGraph API", version="0.1.0", lifespan=lifespan)
 app.include_router(auth_router.router)
 app.include_router(intake_router.router)
 app.include_router(kb_router.router)
+app.include_router(meetings_router.router)
 app.include_router(membrane_router.router)
 app.include_router(clarification_router.router)
 app.include_router(graph_router.router)
