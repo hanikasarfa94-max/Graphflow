@@ -166,6 +166,51 @@ async def test_folder_create(api_env):
 
 
 @pytest.mark.asyncio
+async def test_folder_create_full_tier_non_owner_allowed(api_env):
+    """v4 dogfood: a full-tier non-owner member must be able to add KB
+    folders — matches the existing flat-KB behavior before hierarchy.
+    The gate is `license_tier == 'full'`, NOT `role == 'owner'`; observer
+    tier is rejected regardless of role. This regression test pins that
+    contract so a future tightening can't silently lock demo members
+    out again.
+    """
+    client, maker, *_ = api_env
+    pid = await _mk_project(maker)
+
+    owner = await _register(client, "kh_fc_owner")
+    await _add_member(maker, pid, owner, role="owner", license_tier="full")
+
+    # Bootstrap the project root so the member can target a parent.
+    r = await client.get(f"/api/projects/{pid}/kb/tree")
+    assert r.status_code == 200, r.text
+    root_id = r.json()["root_id"]
+
+    # Full-tier member (role='member') — the common demo-user shape —
+    # MUST get 200.
+    member = await _register(client, "kh_fc_member")
+    await _add_member(maker, pid, member, role="member", license_tier="full")
+    await _login(client, "kh_fc_member")
+    r = await client.post(
+        f"/api/projects/{pid}/kb/folders",
+        json={"name": "design-notes", "parent_folder_id": root_id},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["folder"]["name"] == "design-notes"
+
+    # Observer-tier member → 403 (forbidden), NOT 200.
+    observer = await _register(client, "kh_fc_observer")
+    await _add_member(
+        maker, pid, observer, role="member", license_tier="observer"
+    )
+    await _login(client, "kh_fc_observer")
+    r = await client.post(
+        f"/api/projects/{pid}/kb/folders",
+        json={"name": "audit", "parent_folder_id": root_id},
+    )
+    assert r.status_code == 403
+
+
+@pytest.mark.asyncio
 async def test_folder_move(api_env):
     """Case 2: owner reparents a folder; tree reflects the new edge."""
     client, maker, *_ = api_env

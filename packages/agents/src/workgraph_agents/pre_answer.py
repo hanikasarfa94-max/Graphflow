@@ -31,7 +31,7 @@ from .llm import LLMClient, LLMResult, ParseFailure
 
 _log = logging.getLogger("workgraph.agents.pre_answer")
 
-PRE_ANSWER_PROMPT_VERSION = "2026-04-20.stage2.v1"
+PRE_ANSWER_PROMPT_VERSION = "2026-04-21.stage2.v2"
 
 _PROMPT_DIR = Path(__file__).parent / "prompts" / "edge"
 

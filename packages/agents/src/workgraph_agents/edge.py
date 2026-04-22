@@ -51,9 +51,9 @@ from .llm import LLMClient, LLMResult, ParseFailure
 
 _log = logging.getLogger("workgraph.agents.edge")
 
-PROMPT_VERSION = "2026-04-18.phaseQ.v1"
+PROMPT_VERSION = "2026-04-21.phaseQ.v2"
 OPTIONS_PROMPT_VERSION = "2026-04-18.phaseQ.v1"
-REPLY_FRAME_PROMPT_VERSION = "2026-04-18.phaseM.v1"
+REPLY_FRAME_PROMPT_VERSION = "2026-04-21.phaseM.v2"
 
 # Skill catalog exposed to the EdgeAgent respond prompt. Kept in code so
 # the backend dispatcher and the prompt text reference the same list —

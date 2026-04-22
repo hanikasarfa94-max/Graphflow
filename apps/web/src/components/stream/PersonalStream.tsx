@@ -136,6 +136,39 @@ function MiniAvatar({ name }: { name: string }) {
 // Merge policy: prefer the server-fetched row (canonical id), but keep any
 // pending optimistic ids the server doesn't know about yet. Deduping is by
 // id; optimistic ids are prefixed "pending-".
+//
+// Extra dedupe pass for routed-reply / edge-reply-frame: the backend posts
+// BOTH kinds into the source's stream (RoutingService.reply writes the
+// "routed-reply" summary line, PersonalStreamService.handle_reply writes
+// the richer "edge-reply-frame" card), each with different ids but the
+// same `linked_id` (signal id). Both render as RoutedReplyCard, so
+// rendering both shows the card twice. When we see both for the same
+// signal, keep edge-reply-frame (richer, claims attached) and drop the
+// routed-reply row.
+const REPLY_CARD_KINDS = new Set(["routed-reply", "edge-reply-frame"]);
+
+function dedupeReplyCards(merged: PersonalMessage[]): PersonalMessage[] {
+  // Group by (kind-family, linked_id). Keep edge-reply-frame over
+  // routed-reply when both exist for the same signal.
+  const frameBySignal = new Map<string, PersonalMessage>();
+  for (const m of merged) {
+    if (m.kind === "edge-reply-frame" && m.linked_id) {
+      frameBySignal.set(m.linked_id, m);
+    }
+  }
+  if (frameBySignal.size === 0) return merged;
+  return merged.filter((m) => {
+    if (
+      m.kind === "routed-reply" &&
+      m.linked_id &&
+      frameBySignal.has(m.linked_id)
+    ) {
+      return false;
+    }
+    return true;
+  });
+}
+
 function mergeMessages(
   existing: PersonalMessage[],
   incoming: PersonalMessage[],
@@ -149,7 +182,11 @@ function mergeMessages(
     const tb = new Date(b.created_at).getTime();
     return ta - tb;
   });
-  return merged;
+  // Keep the set of kinds limited to routed-reply / edge-reply-frame —
+  // do not accidentally dedupe other linked-id-carrying kinds like
+  // edge-route-confirmed.
+  const needsReplyDedupe = merged.some((m) => REPLY_CARD_KINDS.has(m.kind));
+  return needsReplyDedupe ? dedupeReplyCards(merged) : merged;
 }
 
 export function PersonalStream({ projectId, currentUserId, members }: Props) {

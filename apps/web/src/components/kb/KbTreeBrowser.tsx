@@ -157,10 +157,19 @@ export function KbTreeBrowser({
   };
 
   const handleCreateFolder = async () => {
-    if (!canCreateFolder) return;
+    if (!canCreateFolder) {
+      // Button is disabled in this state, but keep a defensive toast so
+      // a non-full-tier caller who somehow got here sees why. Matches
+      // the backend's 403 `forbidden` response on the same gate.
+      flashToast(t("kb.folder.requireFullTier"));
+      return;
+    }
     const parent =
       selectedFolderId ?? tree.root_id ?? null;
-    if (!parent) return;
+    if (!parent) {
+      flashToast(t("kb.folder.createFailed"));
+      return;
+    }
     const name = window.prompt(
       t("kb.folder.newPlaceholder"),
       "",
@@ -178,8 +187,14 @@ export function KbTreeBrowser({
         return next;
       });
     } catch (err) {
+      // Surface EVERY backend error as a toast — before, only 409 had a
+      // user-visible message and other failures (403 forbidden, 400
+      // name_required, network errors) silently no-op'd, which is the
+      // "fails silently" bug users reported in v4 dogfood.
       if (err instanceof ApiError && err.status === 409) {
         flashToast(t("kb.folder.nameConflict"));
+      } else if (err instanceof ApiError && err.status === 403) {
+        flashToast(t("kb.folder.requireFullTier"));
       } else {
         flashToast(t("kb.folder.createFailed"));
       }
@@ -337,8 +352,13 @@ export function KbTreeBrowser({
             >
               {t("kb.folder.new")}
             </Button>
+            {/* "New item" previously linked to /projects/[id]/membrane,
+                but that route doesn't exist — the click 404'd silently.
+                Ingest is managed from the project settings page (where
+                external signal subscriptions + paste live), so redirect
+                there. */}
             <Link
-              href={`/projects/${projectId}/membrane`}
+              href={`/projects/${projectId}/settings`}
               style={{ textDecoration: "none" }}
             >
               <Button variant="ghost" size="sm">

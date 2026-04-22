@@ -807,10 +807,20 @@ async def test_reply_posts_edge_reply_frame_in_source_stream(api_env):
             rows_by_kind.setdefault(r.kind, []).append(r)
 
         # The raw routed-reply mirror still lands (we didn't move it).
-        assert len(rows_by_kind.get("routed-reply", [])) == 1
+        routed_reply_msgs = rows_by_kind.get("routed-reply", [])
+        assert len(routed_reply_msgs) == 1
         # AND the source-side framed card landed.
         frame_msgs = rows_by_kind.get("edge-reply-frame", [])
         assert len(frame_msgs) == 1
         assert frame_msgs[0].linked_id == signal_id
         assert frame_msgs[0].author_id == EDGE_AGENT_SYSTEM_USER_ID
         assert "halve" in frame_msgs[0].body.lower() or "boss" in frame_msgs[0].body.lower()
+
+        # Routed-reply dedupe contract (v4 dogfood bug fix): both rows
+        # carry the SAME linked_id = signal_id. Both kinds render as
+        # RoutedReplyCard on the frontend; the frontend uses this shared
+        # linked_id to dedupe (keeps edge-reply-frame, drops routed-
+        # reply). If the backend ever stops tagging both with signal.id,
+        # the frontend dedupe breaks — fail early here.
+        assert routed_reply_msgs[0].linked_id == signal_id
+        assert routed_reply_msgs[0].linked_id == frame_msgs[0].linked_id
