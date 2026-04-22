@@ -45,6 +45,10 @@ interface PerfRecord {
     refuted: number;
     still_open: number;
   };
+  silent_consensus_ratified: {
+    count: number;
+    ids: string[];
+  };
   activity_last_30d: {
     messages: number;
     last_active_at: string | null;
@@ -189,6 +193,7 @@ function PerfTable({
             <Th align="right">{t("cols.tasksDone")}</Th>
             <Th>{t("cols.skills")}</Th>
             <Th>{t("cols.dissentAccuracy")}</Th>
+            <Th align="right">{t("cols.silentConsensusRatified")}</Th>
             <Th>{t("cols.activity30d")}</Th>
           </tr>
         </thead>
@@ -251,6 +256,12 @@ function PerfTable({
               </Td>
               <Td>
                 <DissentCell bucket={row.dissent_accuracy} />
+              </Td>
+              <Td align="right">
+                <CountCell
+                  count={row.silent_consensus_ratified.count}
+                  href={null}
+                />
               </Td>
               <Td>
                 <Text as="div" variant="mono">

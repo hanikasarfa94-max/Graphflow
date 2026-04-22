@@ -67,6 +67,7 @@ import { RehearsalPreview } from "./RehearsalPreview";
 import { RouteProposalCard } from "./RouteProposalCard";
 import { RoutedInboundCard } from "./RoutedInboundCard";
 import { RoutedReplyCard } from "./RoutedReplyCard";
+import { SilentConsensusCard } from "./SilentConsensusCard";
 import { ToolCallCard } from "./ToolCallCard";
 import { ToolResultCard } from "./ToolResultCard";
 import type { StreamMember } from "./types";
@@ -666,6 +667,17 @@ export function PersonalStream({ projectId, currentUserId, members }: Props) {
         // and routed it here because this viewer's slice is relevant.
         // Rendered muted — ambient, not urgent.
         return wrap(<MembraneCard message={m} />);
+      case "silent-consensus-proposal":
+        // Phase 1.A — behavioral-agreement proposal emitted by the
+        // silent-consensus scanner. Rendered as a lightened card
+        // (sunk surface) with member chips + ratify / reject.
+        return wrap(
+          <SilentConsensusCard
+            message={m}
+            projectId={projectId}
+            onResolved={() => void refresh()}
+          />,
+        );
       case "edge-route-confirmed":
         // Ambient "✓ asked X" follow-up posted after a successful route
         // confirm. Keep it compact so it doesn't compete with the real

@@ -37,6 +37,7 @@ from workgraph_persistence import (
     ProjectMemberRepository,
     RiskRow,
     RoutedSignalRow,
+    SilentConsensusRepository,
     TaskRow,
     UserRepository,
     session_scope,
@@ -218,6 +219,17 @@ class PerfAggregationService:
                         # 'still_open' anyway.
                         dissent_bucket["still_open"] += 1
 
+                # Phase 1.A — silent-consensus ratified count.
+                # Ratification IS the action being measured here: the
+                # ratifier crystallized group agreement into a decision.
+                # Stored on DecisionRow.resolver_id, joined through
+                # SilentConsensusRow.ratified_decision_id.
+                sc_count, sc_recent = await SilentConsensusRepository(
+                    session
+                ).count_ratified_by_user_in_project(
+                    project_id=project_id, user_id=m.user_id
+                )
+
                 messages_30d = await self._count(
                     session,
                     select(func.count(MessageRow.id))
@@ -298,6 +310,10 @@ class PerfAggregationService:
                             "overlap": overlap,
                         },
                         "dissent_accuracy": dissent_bucket,
+                        "silent_consensus_ratified": {
+                            "count": sc_count,
+                            "ids": sc_recent,
+                        },
                         "activity_last_30d": {
                             "messages": messages_30d,
                             "last_active_at": (

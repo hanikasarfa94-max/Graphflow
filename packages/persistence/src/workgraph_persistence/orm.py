@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Integer, String, UniqueConstraint
+from sqlalchemy import JSON, Boolean, DateTime, Float, ForeignKey, Integer, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .db import Base
@@ -1294,5 +1294,56 @@ class HandoffRow(Base):
         DateTime(timezone=True), default=_utcnow
     )
     finalized_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+
+class SilentConsensusRow(Base):
+    """Phase 1.A — behavioral-agreement proposal.
+
+    When N members act consistently on a topic within a short window AND
+    no dissent / counter-decision is recorded, the scanner emits a pending
+    SilentConsensusRow. A project owner / full-tier reader ratifies it →
+    DecisionRow is created with lineage pointing back to the supporting
+    actions, and the row flips to 'ratified'. Rejection flips 'rejected'
+    without producing a decision.
+
+    `supporting_action_ids` shape:
+        list[{kind: 'task_status'|'decision'|'commit', id: str}]
+
+    `member_user_ids` is the set of distinct members whose actions
+    underpinned the proposal. `confidence` is a float 0–1 keyed off
+    member-count × action-consistency.
+
+    Topic identity: v1 uses `topic_text` string match — two scans on the
+    same deliverable produce the same topic_text, so the "no existing
+    pending" guard works as a dedupe key. Not a DB uniqueness constraint
+    because rejected / ratified rows on the same topic remain valid
+    history (someone may ratify a similar shape later).
+    """
+
+    __tablename__ = "silent_consensus"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    project_id: Mapped[str] = mapped_column(
+        ForeignKey("projects.id", ondelete="CASCADE"), index=True
+    )
+    topic_text: Mapped[str] = mapped_column(String(500))
+    supporting_action_ids: Mapped[list] = mapped_column(JSON, default=list)
+    inferred_decision_summary: Mapped[str] = mapped_column(String(4000), default="")
+    member_user_ids: Mapped[list] = mapped_column(JSON, default=list)
+    confidence: Mapped[float] = mapped_column(Float, default=0.0)
+    status: Mapped[str] = mapped_column(
+        String(16), default="pending", index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow
+    )
+    ratified_decision_id: Mapped[str | None] = mapped_column(
+        ForeignKey("decisions.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    ratified_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )

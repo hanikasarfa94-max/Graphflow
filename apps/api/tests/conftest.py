@@ -388,6 +388,7 @@ from workgraph_api.services import (
     RoutingService,
     PreAnswerService,
     ScrimmageService,
+    SilentConsensusService,
     SignalTallyService,
     SimulationService,
     SkillAtlasService,
@@ -488,12 +489,23 @@ async def api_env():
     )
     handoff_service = HandoffService(maker)
     dissent_service = DissentService(maker, bus)
+    silent_consensus_service = SilentConsensusService(maker, bus)
     # Mirror the production subscription — drift uses fire-and-forget
     # tasks, dissent validation piggybacks on the same event so tests
     # that submit decisions see dissent-accuracy flips without
     # invoking the service directly.
     bus.subscribe(
         "decision.applied", dissent_service.validate_on_decision_applied
+    )
+    # Mirror production subscriptions for silent-consensus so tests
+    # that exercise the event-bus path (e.g. dissent-suppresses-
+    # proposal) see the same re-scan behavior as prod. The scanner
+    # itself is idempotent (pending-dedupe guard), so the extra wakeup
+    # from dissent.recorded after a dissent write is safe.
+    bus.subscribe("decision.applied", silent_consensus_service.on_event)
+    bus.subscribe("dissent.recorded", silent_consensus_service.on_event)
+    bus.subscribe(
+        "task.status_changed", silent_consensus_service.on_event
     )
     from workgraph_api.services.perf_aggregation import PerfAggregationService
 
@@ -572,6 +584,7 @@ async def api_env():
     app.state.scrimmage_service = scrimmage_service
     app.state.handoff_service = handoff_service
     app.state.dissent_service = dissent_service
+    app.state.silent_consensus_service = silent_consensus_service
     app.state.perf_service = perf_service
 
     transport = ASGITransport(app=app)

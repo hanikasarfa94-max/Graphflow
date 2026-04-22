@@ -43,6 +43,7 @@ from .orm import (
     TaskRow,
     UserRow,
 )
+from .orm import SilentConsensusRow
 
 
 class DuplicateIntakeError(Exception):
@@ -2403,3 +2404,132 @@ class DissentRepository:
                 row.outcome_evidence_ids = evidence
         await self._session.flush()
         return row
+
+
+class SilentConsensusRepository:
+    """Phase 1.A — silent-consensus proposal CRUD.
+
+    A silent-consensus proposal is derived state: the scanner in
+    services/silent_consensus.py emits a row when N members act
+    consistently on a topic. Persisted as pending until a human
+    ratifies (→ DecisionRow) or rejects.
+    """
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def create(
+        self,
+        *,
+        project_id: str,
+        topic_text: str,
+        supporting_action_ids: list[dict],
+        inferred_decision_summary: str,
+        member_user_ids: list[str],
+        confidence: float,
+    ) -> SilentConsensusRow:
+        row = SilentConsensusRow(
+            id=_new_id(),
+            project_id=project_id,
+            topic_text=topic_text,
+            supporting_action_ids=list(supporting_action_ids),
+            inferred_decision_summary=inferred_decision_summary,
+            member_user_ids=list(member_user_ids),
+            confidence=float(confidence),
+            status="pending",
+        )
+        self._session.add(row)
+        await self._session.flush()
+        return row
+
+    async def get(self, sc_id: str) -> SilentConsensusRow | None:
+        return (
+            await self._session.execute(
+                select(SilentConsensusRow).where(SilentConsensusRow.id == sc_id)
+            )
+        ).scalar_one_or_none()
+
+    async def list_pending_for_project(
+        self, project_id: str
+    ) -> list[SilentConsensusRow]:
+        stmt = (
+            select(SilentConsensusRow)
+            .where(SilentConsensusRow.project_id == project_id)
+            .where(SilentConsensusRow.status == "pending")
+            .order_by(SilentConsensusRow.created_at.desc())
+        )
+        return list((await self._session.execute(stmt)).scalars().all())
+
+    async def list_all_for_project(
+        self, project_id: str
+    ) -> list[SilentConsensusRow]:
+        stmt = (
+            select(SilentConsensusRow)
+            .where(SilentConsensusRow.project_id == project_id)
+            .order_by(SilentConsensusRow.created_at.desc())
+        )
+        return list((await self._session.execute(stmt)).scalars().all())
+
+    async def find_pending_by_topic(
+        self, *, project_id: str, topic_text: str
+    ) -> SilentConsensusRow | None:
+        """Used by the scanner dedupe guard: if a pending row already
+        exists for the same topic we skip emitting a duplicate."""
+        stmt = (
+            select(SilentConsensusRow)
+            .where(SilentConsensusRow.project_id == project_id)
+            .where(SilentConsensusRow.topic_text == topic_text)
+            .where(SilentConsensusRow.status == "pending")
+        )
+        return (await self._session.execute(stmt)).scalar_one_or_none()
+
+    async def mark_ratified(
+        self,
+        *,
+        sc_id: str,
+        decision_id: str,
+    ) -> SilentConsensusRow | None:
+        row = await self.get(sc_id)
+        if row is None:
+            return None
+        row.status = "ratified"
+        row.ratified_decision_id = decision_id
+        row.ratified_at = datetime.now(timezone.utc)
+        await self._session.flush()
+        return row
+
+    async def mark_rejected(
+        self, *, sc_id: str
+    ) -> SilentConsensusRow | None:
+        row = await self.get(sc_id)
+        if row is None:
+            return None
+        row.status = "rejected"
+        await self._session.flush()
+        return row
+
+    async def count_ratified_by_user_in_project(
+        self, *, project_id: str, user_id: str
+    ) -> tuple[int, list[str]]:
+        """Count of silent-consensus rows ratified by this user and the
+        up-to-10 most recent ratified decision ids. Used by perf
+        aggregation to surface the "silent_consensus_ratified" column.
+
+        Ratifier identity is stored indirectly: the ratified DecisionRow
+        has resolver_id == ratifier. We join through decisions.
+        """
+        stmt = (
+            select(SilentConsensusRow.id, SilentConsensusRow.ratified_decision_id)
+            .join(
+                DecisionRow,
+                DecisionRow.id == SilentConsensusRow.ratified_decision_id,
+            )
+            .where(SilentConsensusRow.project_id == project_id)
+            .where(SilentConsensusRow.status == "ratified")
+            .where(DecisionRow.resolver_id == user_id)
+            .order_by(SilentConsensusRow.ratified_at.desc())
+        )
+        rows = list((await self._session.execute(stmt)).all())
+        count = len(rows)
+        recent = [r[0] for r in rows[:10]]
+        return count, recent

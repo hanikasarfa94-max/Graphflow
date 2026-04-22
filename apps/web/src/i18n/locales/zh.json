@@ -862,7 +862,8 @@
       "tasksDone": "已完成任务",
       "skills": "技能(声明 / 观察 / 重叠)",
       "activity30d": "近 30 天消息 · 最近活跃",
-      "dissentAccuracy": "异议准确率"
+      "dissentAccuracy": "异议准确率",
+      "silentConsensusRatified": "隐性共识批准数"
     },
     "linkToPanel": "绩效",
     "lastActiveNever": "暂无活动记录",
@@ -905,5 +906,18 @@
       "compromise": "折中",
       "hold": "坚持"
     }
+  },
+  "silentConsensus": {
+    "header": "检测到隐性共识",
+    "bodyPrefix": "以下成员的行为已趋于一致:",
+    "showActions": "展开支持行为",
+    "hideActions": "收起支持行为",
+    "ratify": "批准为决议",
+    "reject": "驳回",
+    "ratifying": "批准中…",
+    "rejecting": "驳回中…",
+    "ratified": "✓ 已批准",
+    "rejected": "✗ 已驳回",
+    "errorGeneric": "处理失败,请重试。"
   }
 }

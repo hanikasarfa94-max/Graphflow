@@ -39,6 +39,12 @@ from .planning import NotReadyForPlanning, PlanningService, PlanValidationError
 from .pre_answer import PreAnswerService
 from .project import ProjectService
 from .scrimmage import ScrimmageError, ScrimmageService
+from .silent_consensus import (
+    MIN_MEMBERS as SILENT_CONSENSUS_MIN_MEMBERS,
+    SilentConsensusError,
+    SilentConsensusService,
+    WINDOW_DAYS as SILENT_CONSENSUS_WINDOW_DAYS,
+)
 from .render import RenderError, RenderService
 from .routing import RoutingService
 from .signal_tally import SIGNAL_KINDS, SignalTallyService
@@ -96,6 +102,10 @@ __all__ = [
     "ProjectService",
     "ScrimmageError",
     "ScrimmageService",
+    "SilentConsensusError",
+    "SilentConsensusService",
+    "SILENT_CONSENSUS_MIN_MEMBERS",
+    "SILENT_CONSENSUS_WINDOW_DAYS",
     "RenderService",
     "RenderError",
     "RoutingService",

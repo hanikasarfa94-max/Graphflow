@@ -65,6 +65,7 @@ from workgraph_api.routers import projects as projects_router
 from workgraph_api.routers import render as render_router
 from workgraph_api.routers import routing as routing_router
 from workgraph_api.routers import scrimmage as scrimmage_router
+from workgraph_api.routers import silent_consensus as silent_consensus_router
 from workgraph_api.routers import handoff as handoff_router
 from workgraph_api.routers import perf as perf_router
 from workgraph_api.routers import pre_answer as pre_answer_router
@@ -98,6 +99,7 @@ from workgraph_api.services import (
     PreAnswerService,
     ProjectService,
     ScrimmageService,
+    SilentConsensusService,
     RenderService,
     RoutingService,
     SignalTallyService,
@@ -471,6 +473,9 @@ async def lifespan(app: FastAPI):
     )
     handoff_service = HandoffService(sessionmaker)
     dissent_service = DissentService(sessionmaker, event_bus)
+    silent_consensus_service = SilentConsensusService(
+        sessionmaker, event_bus
+    )
     from workgraph_api.services.perf_aggregation import PerfAggregationService
 
     perf_service = PerfAggregationService(sessionmaker)
@@ -527,6 +532,7 @@ async def lifespan(app: FastAPI):
     app.state.scrimmage_service = scrimmage_service
     app.state.handoff_service = handoff_service
     app.state.dissent_service = dissent_service
+    app.state.silent_consensus_service = silent_consensus_service
     app.state.perf_service = perf_service
 
     # Drift auto-trigger (Sprint 1c). Subscribe drift_service to the
@@ -557,6 +563,23 @@ async def lifespan(app: FastAPI):
 
     event_bus.subscribe(
         "decision.applied", _dissent_on_decision_applied
+    )
+
+    # Silent-consensus scanner (Phase 1.A). Re-scan on every
+    # graph-event that could either add or invalidate a pending
+    # proposal: a decision applying, a dissent arriving, a task
+    # status flipping (task events aren't emitted in v1 — the
+    # scanner reads TaskRow directly on each run, so it catches
+    # up on the next decision.applied / dissent.recorded instead).
+    async def _silent_consensus_on_event(
+        payload: dict[str, object],
+    ) -> None:
+        await silent_consensus_service.on_event(payload)
+
+    event_bus.subscribe("decision.applied", _silent_consensus_on_event)
+    event_bus.subscribe("dissent.recorded", _silent_consensus_on_event)
+    event_bus.subscribe(
+        "task.status_changed", _silent_consensus_on_event
     )
 
     # SLA auto-trigger (Sprint 2b). Same pattern as drift — sweep a
@@ -641,6 +664,7 @@ app.include_router(personal_router.router)
 app.include_router(render_router.router)
 app.include_router(routing_router.router)
 app.include_router(scrimmage_router.router)
+app.include_router(silent_consensus_router.router)
 app.include_router(streams_router.router)
 app.include_router(users_router.router)
 app.include_router(ws_router.router)

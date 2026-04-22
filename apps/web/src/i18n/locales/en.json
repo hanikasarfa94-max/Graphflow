@@ -862,7 +862,8 @@
       "tasksDone": "Tasks done",
       "skills": "Skills (declared / observed / overlap)",
       "activity30d": "Messages (30d) · last active",
-      "dissentAccuracy": "Dissent accuracy"
+      "dissentAccuracy": "Dissent accuracy",
+      "silentConsensusRatified": "Silent consensus ratified"
     },
     "linkToPanel": "Performance",
     "lastActiveNever": "no recorded activity",
@@ -905,5 +906,18 @@
       "compromise": "Compromise",
       "hold": "Holds"
     }
+  },
+  "silentConsensus": {
+    "header": "Silent consensus detected",
+    "bodyPrefix": "These members have been acting in agreement:",
+    "showActions": "Show supporting actions",
+    "hideActions": "Hide supporting actions",
+    "ratify": "Ratify as decision",
+    "reject": "Reject",
+    "ratifying": "Ratifying…",
+    "rejecting": "Rejecting…",
+    "ratified": "✓ Ratified",
+    "rejected": "✗ Rejected",
+    "errorGeneric": "Couldn't process. Retry."
   }
 }

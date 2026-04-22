@@ -516,6 +516,64 @@ export function recordDissent(
   });
 }
 
+// ---------- Silent consensus (Phase 1.A) ----------
+
+export interface SilentConsensusMember {
+  user_id: string;
+  display_name: string;
+}
+
+export interface SilentConsensusSupportingAction {
+  kind: "task_status" | "decision" | "commit" | string;
+  id: string;
+}
+
+export interface SilentConsensusProposal {
+  id: string;
+  project_id: string;
+  topic_text: string;
+  supporting_action_ids: SilentConsensusSupportingAction[];
+  inferred_decision_summary: string;
+  members: SilentConsensusMember[];
+  member_user_ids: string[];
+  confidence: number;
+  status: "pending" | "ratified" | "rejected";
+  created_at: string | null;
+  ratified_decision_id: string | null;
+  ratified_at: string | null;
+}
+
+export function listSilentConsensus(
+  projectId: string,
+  baseUrl?: string,
+): Promise<{ ok: boolean; proposals: SilentConsensusProposal[] }> {
+  return api(`/api/projects/${projectId}/silent-consensus`, { baseUrl });
+}
+
+export function ratifySilentConsensus(
+  projectId: string,
+  scId: string,
+): Promise<{
+  ok: boolean;
+  proposal: SilentConsensusProposal;
+  decision_id: string;
+}> {
+  return api(
+    `/api/projects/${projectId}/silent-consensus/${scId}/ratify`,
+    { method: "POST" },
+  );
+}
+
+export function rejectSilentConsensus(
+  projectId: string,
+  scId: string,
+): Promise<{ ok: boolean; proposal: SilentConsensusProposal }> {
+  return api(
+    `/api/projects/${projectId}/silent-consensus/${scId}/reject`,
+    { method: "POST" },
+  );
+}
+
 export interface ConflictOption {
   label: string;
   detail: string;
@@ -901,6 +959,7 @@ export type PersonalMessageKind =
   | "routed-dm-log"
   | "drift-alert"
   | "membrane-signal"
+  | "silent-consensus-proposal"
   | string;
 
 // Raw shape from the backend's route-proposal marker (see personal.py
