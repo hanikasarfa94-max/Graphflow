@@ -30,6 +30,12 @@ from .graph_builder import GraphBuilderService
 from .handoff import HandoffService
 from .im import IMService
 from .intake import IntakeService
+from .kb_hierarchy import (
+    ALLOWED_TIERS as KB_ALLOWED_TIERS,
+    KbHierarchyError,
+    KbHierarchyService,
+    ROOT_NAME as KB_ROOT_NAME,
+)
 from .leader_escalation import LEADER_DRAFT_OPTION_ID, LeaderEscalationService
 from .license_context import LicenseContextService, tighter_tier
 from .license_lint import extract_node_ids, lint_reply
@@ -103,6 +109,10 @@ __all__ = [
     "DriftService",
     "DRIFT_RATE_LIMIT_SECONDS",
     "IMService",
+    "KB_ALLOWED_TIERS",
+    "KB_ROOT_NAME",
+    "KbHierarchyError",
+    "KbHierarchyService",
     "LEADER_DRAFT_OPTION_ID",
     "LeaderEscalationService",
     "LicenseContextService",

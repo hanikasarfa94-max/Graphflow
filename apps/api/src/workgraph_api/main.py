@@ -92,6 +92,7 @@ from workgraph_api.services import (
     HandoffService,
     IMService,
     IntakeService,
+    KbHierarchyService,
     LeaderEscalationService,
     LicenseContextService,
     LLMBackedMetabolizer,
@@ -491,6 +492,7 @@ async def lifespan(app: FastAPI):
     onboarding_service = OnboardingService(
         sessionmaker, license_context_service
     )
+    kb_hierarchy_service = KbHierarchyService(sessionmaker)
     # Phase 2.B — meeting transcript upload + metabolism. Uses the edge
     # LLM via a dedicated prompt; in stub mode we fall back to a trivial
     # metabolizer that returns empty signals (so tests / demo don't hit
@@ -572,6 +574,7 @@ async def lifespan(app: FastAPI):
     app.state.dissent_service = dissent_service
     app.state.silent_consensus_service = silent_consensus_service
     app.state.onboarding_service = onboarding_service
+    app.state.kb_hierarchy_service = kb_hierarchy_service
     app.state.meeting_ingest_service = meeting_ingest_service
     app.state.meeting_metabolizer = meeting_metabolizer
     app.state.perf_service = perf_service

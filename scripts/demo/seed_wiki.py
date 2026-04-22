@@ -32,6 +32,7 @@ sys.path.insert(0, str(REPO / "apps" / "api" / "src"))
 
 from workgraph_persistence.db import build_engine, build_sessionmaker  # noqa: E402
 from workgraph_persistence.orm import (  # noqa: E402
+    KbFolderRow,
     MembraneSignalRow,
     ProjectRow,
     UserRow,
@@ -73,6 +74,72 @@ async def _existing_source_ids(session: AsyncSession, project_id: str) -> set[st
     return {r for r in rows if r}
 
 
+def _folder_for_page(tags: list[str]) -> str:
+    """Phase 3.A — pick a default folder bucket per wiki page based on
+    its tags. Keeps the demo tree non-empty without hand-mapping every
+    page. Falls back to root when no tag matches.
+    """
+    lowered = {t.lower() for t in tags}
+    if any(t in lowered for t in ("design", "ux", "ui", "visual")):
+        return "design"
+    if any(
+        t in lowered for t in ("engineering", "eng", "backend", "api", "tech")
+    ):
+        return "engineering"
+    if any(t in lowered for t in ("lore", "story", "world", "narrative")):
+        return "lore"
+    return ""
+
+
+async def _ensure_folder(
+    session: AsyncSession, *, project_id: str, name: str
+) -> KbFolderRow:
+    """Idempotent folder creation. Root is found/created first; named
+    folders nest directly under it.
+    """
+    from sqlalchemy import select as _select
+
+    # Root lookup / create (parent_folder_id IS NULL).
+    root = (
+        await session.execute(
+            _select(KbFolderRow).where(
+                KbFolderRow.project_id == project_id,
+                KbFolderRow.parent_folder_id.is_(None),
+            )
+        )
+    ).scalar_one_or_none()
+    if root is None:
+        root = KbFolderRow(
+            id=str(uuid.uuid4()),
+            project_id=project_id,
+            parent_folder_id=None,
+            name="/",
+        )
+        session.add(root)
+        await session.flush()
+    if not name:
+        return root
+    child = (
+        await session.execute(
+            _select(KbFolderRow).where(
+                KbFolderRow.project_id == project_id,
+                KbFolderRow.parent_folder_id == root.id,
+                KbFolderRow.name == name,
+            )
+        )
+    ).scalar_one_or_none()
+    if child is None:
+        child = KbFolderRow(
+            id=str(uuid.uuid4()),
+            project_id=project_id,
+            parent_folder_id=root.id,
+            name=name,
+        )
+        session.add(child)
+        await session.flush()
+    return child
+
+
 async def _insert_page(
     session: AsyncSession,
     *,
@@ -82,6 +149,10 @@ async def _insert_page(
 ) -> None:
     owner = await _user_by_username(session, page["owner_user_id"])
     tags = list(page.get("tags") or []) + [f"lang:{language}"]
+    folder_name = _folder_for_page(tags)
+    folder = await _ensure_folder(
+        session, project_id=project_id, name=folder_name
+    )
     classification = {
         "is_relevant": True,
         "tags": tags,
@@ -109,6 +180,7 @@ async def _insert_page(
         status="approved",
         ingested_by_user_id=owner.id if owner else None,
         approved_by_user_id=owner.id if owner else None,
+        folder_id=folder.id,
     )
     session.add(row)
 

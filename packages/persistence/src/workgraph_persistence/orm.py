@@ -891,6 +891,16 @@ class MembraneSignalRow(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_utcnow
     )
+    # Phase 3.A — hierarchical KB. Nullable because every pre-3.A row
+    # lived flat; migration 0013 backfills each into its project's root
+    # folder. Post-backfill, new rows always carry a folder_id, but the
+    # column stays nullable so cross-project membrane ingests (project_id
+    # null) don't need a fictional folder target.
+    folder_id: Mapped[str | None] = mapped_column(
+        ForeignKey("kb_folders.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
 
 
 class StatusTransitionRow(Base):
@@ -1530,4 +1540,92 @@ class MeetingTranscriptRow(Base):
     extracted_signals: Mapped[dict] = mapped_column(JSON, default=dict)
     error_message: Mapped[str | None] = mapped_column(
         String(2000), nullable=True
+    )
+
+
+# ---- Phase 3.A — hierarchical KB ----------------------------------------
+#
+# KB was flat (MembraneSignalRow on its own) through V3. V4 turns it
+# into a tree so enterprises can express per-folder ACLs and so book
+# rendering has a meaningful unit to recurse on. We keep the existing
+# MembraneSignalRow as the leaf (audit URLs stable), add a per-project
+# folder tree, and layer an optional per-item license override. The
+# service layer does cycle detection on reparent; the DB does not (a
+# cycle constraint is not enforceable in sqlite and adds complexity
+# with no payoff — the service is the only writer).
+
+
+class KbFolderRow(Base):
+    """One folder in a project's hierarchical KB.
+
+    Root folders have parent_folder_id = NULL. Migration 0013 backfills
+    a single root folder per project and places every pre-existing KB
+    item (MembraneSignalRow) there, so the tree is always non-empty
+    once the migration has run.
+
+    name is unique within (project_id, parent_folder_id) — no two
+    siblings share a label. Enforced in the service (the UniqueConstraint
+    would trip with NULL semantics inconsistently across dialects).
+    """
+
+    __tablename__ = "kb_folders"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    project_id: Mapped[str] = mapped_column(
+        ForeignKey("projects.id", ondelete="CASCADE"), index=True
+    )
+    parent_folder_id: Mapped[str | None] = mapped_column(
+        ForeignKey("kb_folders.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
+    name: Mapped[str] = mapped_column(String(200))
+    created_by_user_id: Mapped[str | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, onupdate=_utcnow
+    )
+
+
+class KbItemLicenseRow(Base):
+    """Per-KB-item license tier override.
+
+    Absence of a row for a given item_id means "inherit the project-level
+    tier for the viewing member" (the existing license_context flow).
+    Presence means "this specific item is clamped to `license_tier`,
+    regardless of how much access the member would otherwise have at
+    the project level." Only project owners set/clear overrides; the
+    enforcement layer is routers/kb.py + service-side filtering on
+    the tree listing.
+
+    Allowed license_tier values mirror ProjectMemberRow.license_tier:
+    'full' | 'task_scoped' | 'observer'.
+    """
+
+    __tablename__ = "kb_item_licenses"
+    __table_args__ = (
+        UniqueConstraint("item_id", name="uq_kb_item_license_item"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    # item_id mirrors membrane_signals.id. We use SET NULL on FK cascade
+    # so a deleted signal leaves the override row as dangling audit
+    # history rather than silently vanishing — consistent with how the
+    # rest of the codebase treats user-authored records.
+    item_id: Mapped[str] = mapped_column(
+        ForeignKey("membrane_signals.id", ondelete="CASCADE"), index=True
+    )
+    license_tier: Mapped[str] = mapped_column(String(16))
+    set_by_user_id: Mapped[str | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, onupdate=_utcnow
     )

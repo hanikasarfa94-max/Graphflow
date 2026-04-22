@@ -416,6 +416,7 @@ from workgraph_api.services import (
     HandoffService,
     IMService,
     IntakeService,
+    KbHierarchyService,
     LeaderEscalationService,
     LicenseContextService,
     MeetingIngestService,
@@ -536,6 +537,7 @@ async def api_env():
     onboarding_service = OnboardingService(
         maker, license_context_service
     )
+    kb_hierarchy_service = KbHierarchyService(maker)
     meeting_metabolizer = _ScriptableMeetingMetabolizer()
     meeting_ingest_service = MeetingIngestService(
         maker, bus, meeting_metabolizer
@@ -640,6 +642,7 @@ async def api_env():
     app.state.dissent_service = dissent_service
     app.state.silent_consensus_service = silent_consensus_service
     app.state.onboarding_service = onboarding_service
+    app.state.kb_hierarchy_service = kb_hierarchy_service
     app.state.meeting_ingest_service = meeting_ingest_service
     app.state.meeting_metabolizer = meeting_metabolizer
     app.state.perf_service = perf_service

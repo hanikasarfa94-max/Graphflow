@@ -24,6 +24,8 @@ from .orm import (
     GoalRow,
     IMSuggestionRow,
     IntakeEventRow,
+    KbFolderRow,
+    KbItemLicenseRow,
     LicenseAuditRow,
     MeetingTranscriptRow,
     MembraneSignalRow,
@@ -2843,3 +2845,244 @@ class MeetingTranscriptRepository:
         row.error_message = None
         await self._session.flush()
         return row
+
+
+# ---- Phase 3.A — hierarchical KB folders + per-item license overrides ---
+#
+# Why two dedicated repos rather than inlining SQL in the service: the
+# tree / listing code has to run three separate table reads (folders,
+# items, licenses) and join the results in Python; centralising each
+# table's fetch here keeps the service readable and makes tests target
+# the right layer (repo tests prove CRUD; service tests prove cycle
+# detection + inherit/override).
+
+
+class KbFolderRepository:
+    """Phase 3.A — CRUD for KB folder tree nodes.
+
+    Cycle detection is NOT in this layer — the service does it before
+    calling `set_parent`, since detecting a cycle requires walking the
+    current tree and comparing the candidate edge. If the service ever
+    grows a second writer, that writer must also cycle-check.
+    """
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def create(
+        self,
+        *,
+        project_id: str,
+        name: str,
+        parent_folder_id: str | None,
+        created_by_user_id: str | None,
+    ) -> KbFolderRow:
+        row = KbFolderRow(
+            id=_new_id(),
+            project_id=project_id,
+            parent_folder_id=parent_folder_id,
+            name=name,
+            created_by_user_id=created_by_user_id,
+        )
+        self._session.add(row)
+        await self._session.flush()
+        return row
+
+    async def get(self, folder_id: str) -> KbFolderRow | None:
+        return (
+            await self._session.execute(
+                select(KbFolderRow).where(KbFolderRow.id == folder_id)
+            )
+        ).scalar_one_or_none()
+
+    async def list_for_project(
+        self, project_id: str
+    ) -> list[KbFolderRow]:
+        stmt = (
+            select(KbFolderRow)
+            .where(KbFolderRow.project_id == project_id)
+            .order_by(KbFolderRow.created_at)
+        )
+        return list((await self._session.execute(stmt)).scalars().all())
+
+    async def find_root(
+        self, project_id: str
+    ) -> KbFolderRow | None:
+        """The project's first NULL-parent folder, if any.
+
+        Migration 0013 creates a root per project named "/"; this
+        helper lets subsequent code find it without remembering the
+        name. Ordering matches `list_for_project` (by created_at) so
+        the oldest root wins in the degenerate case of multiple roots.
+        """
+        stmt = (
+            select(KbFolderRow)
+            .where(KbFolderRow.project_id == project_id)
+            .where(KbFolderRow.parent_folder_id.is_(None))
+            .order_by(KbFolderRow.created_at)
+            .limit(1)
+        )
+        return (
+            await self._session.execute(stmt)
+        ).scalar_one_or_none()
+
+    async def find_by_name(
+        self,
+        *,
+        project_id: str,
+        parent_folder_id: str | None,
+        name: str,
+    ) -> KbFolderRow | None:
+        stmt = (
+            select(KbFolderRow)
+            .where(KbFolderRow.project_id == project_id)
+            .where(KbFolderRow.name == name)
+        )
+        if parent_folder_id is None:
+            stmt = stmt.where(KbFolderRow.parent_folder_id.is_(None))
+        else:
+            stmt = stmt.where(
+                KbFolderRow.parent_folder_id == parent_folder_id
+            )
+        return (
+            await self._session.execute(stmt)
+        ).scalar_one_or_none()
+
+    async def set_parent(
+        self,
+        folder_id: str,
+        *,
+        parent_folder_id: str | None,
+    ) -> KbFolderRow | None:
+        row = await self.get(folder_id)
+        if row is None:
+            return None
+        row.parent_folder_id = parent_folder_id
+        row.updated_at = datetime.now(timezone.utc)
+        await self._session.flush()
+        return row
+
+    async def delete(self, folder_id: str) -> bool:
+        row = await self.get(folder_id)
+        if row is None:
+            return False
+        await self._session.delete(row)
+        await self._session.flush()
+        return True
+
+    async def count_children(self, folder_id: str) -> int:
+        stmt = select(KbFolderRow).where(
+            KbFolderRow.parent_folder_id == folder_id
+        )
+        rows = (await self._session.execute(stmt)).scalars().all()
+        return len(list(rows))
+
+    async def count_items(self, folder_id: str) -> int:
+        stmt = select(MembraneSignalRow).where(
+            MembraneSignalRow.folder_id == folder_id
+        )
+        rows = (await self._session.execute(stmt)).scalars().all()
+        return len(list(rows))
+
+    async def set_item_folder(
+        self, item_id: str, *, folder_id: str | None
+    ) -> MembraneSignalRow | None:
+        """Move an existing KB item (MembraneSignalRow) to a new folder.
+
+        Lives on the folder repo rather than MembraneSignalRepository
+        because moving items is tree-management; keeping the call
+        co-located with the rest of the hierarchy API is less confusing.
+        """
+        row = (
+            await self._session.execute(
+                select(MembraneSignalRow).where(
+                    MembraneSignalRow.id == item_id
+                )
+            )
+        ).scalar_one_or_none()
+        if row is None:
+            return None
+        row.folder_id = folder_id
+        await self._session.flush()
+        return row
+
+
+class KbItemLicenseRepository:
+    """Phase 3.A — per-item license tier override CRUD.
+
+    No row = inherit the project-level tier (the existing
+    LicenseContextService flow). Presence clamps the item to a
+    specific tier. Only owners write through this layer; readers
+    consume via `get_map_for_items` to bulk-attach overrides to a
+    list payload without N+1 reads.
+    """
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def get(self, item_id: str) -> KbItemLicenseRow | None:
+        stmt = select(KbItemLicenseRow).where(
+            KbItemLicenseRow.item_id == item_id
+        )
+        return (
+            await self._session.execute(stmt)
+        ).scalar_one_or_none()
+
+    async def get_map_for_items(
+        self, item_ids: list[str]
+    ) -> dict[str, str]:
+        """Bulk fetch of {item_id: license_tier} for a list of item_ids.
+
+        Used by the tree/listing endpoint to paint per-item license
+        badges without re-querying per row. Missing items are simply
+        absent from the returned map (caller falls back to inherit).
+        """
+        if not item_ids:
+            return {}
+        stmt = select(KbItemLicenseRow).where(
+            KbItemLicenseRow.item_id.in_(item_ids)
+        )
+        rows = list((await self._session.execute(stmt)).scalars().all())
+        return {r.item_id: r.license_tier for r in rows}
+
+    async def upsert(
+        self,
+        *,
+        item_id: str,
+        license_tier: str,
+        set_by_user_id: str | None,
+    ) -> KbItemLicenseRow:
+        existing = await self.get(item_id)
+        if existing is not None:
+            existing.license_tier = license_tier
+            existing.set_by_user_id = set_by_user_id
+            existing.updated_at = datetime.now(timezone.utc)
+            await self._session.flush()
+            return existing
+        row = KbItemLicenseRow(
+            id=_new_id(),
+            item_id=item_id,
+            license_tier=license_tier,
+            set_by_user_id=set_by_user_id,
+        )
+        self._session.add(row)
+        try:
+            await self._session.flush()
+        except IntegrityError:
+            # Race: another request wrote the same item_id between
+            # get + flush. Return the existing row (now with the
+            # losing write's values — the winner's view becomes the
+            # source of truth).
+            await self._session.rollback()
+            fresh = await self.get(item_id)
+            assert fresh is not None
+            return fresh
+        return row
+
+    async def clear(self, item_id: str) -> bool:
+        row = await self.get(item_id)
+        if row is None:
+            return False
+        await self._session.delete(row)
+        await self._session.flush()
+        return True

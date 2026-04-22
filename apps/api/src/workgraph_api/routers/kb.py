@@ -1,19 +1,24 @@
-"""Phase Q — KB browseable endpoints (north-star Q.6).
+"""Phase Q / 3.A — KB browseable + hierarchical endpoints.
 
-Earlier v1 decision deferred `/kb` browsing to v2. Phase Q corrects that:
-KB is user-facing, not just an LLM corpus. v1 sources KB items from the
-MembraneSignalRepository (ingested external signals + pasted artifacts);
-future KB tables can plug into the same shape without breaking the API.
+Phase Q shipped flat listing (north-star Q.6). Phase 3.A layers a
+folder tree + per-item license overrides on top:
 
-  * GET /api/projects/{project_id}/kb              — list KB items
-  * GET /api/projects/{project_id}/kb/{item_id}    — item detail
+  * GET    /api/projects/{pid}/kb                      — flat list (Q.6)
+  * GET    /api/projects/{pid}/kb/{item_id}            — item detail (Q.6)
+  * POST   /api/projects/{pid}/kb/folders              — create folder (full-tier)
+  * GET    /api/projects/{pid}/kb/tree                 — tree payload
+  * PATCH  /api/projects/{pid}/kb/items/{item_id}/folder       — move item (member)
+  * PATCH  /api/projects/{pid}/kb/folders/{fid}/parent — reparent (owner; 409 on cycle)
+  * DELETE /api/projects/{pid}/kb/folders/{fid}        — delete (owner; 409 if non-empty)
+  * PUT    /api/projects/{pid}/kb/items/{item_id}/license      — license override (owner)
 
-Auth: project member required (observer-tier can read).
-Filters on list: `query` (substring), `source_kind`, `limit`.
+Auth: project member required (observer-tier can read). Owner/full-tier
+gates live in KbHierarchyService; the router translates structured
+service errors into status codes.
 """
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request
 
 from workgraph_persistence import (
     MembraneSignalRepository,
@@ -22,9 +27,42 @@ from workgraph_persistence import (
 )
 
 from workgraph_api.deps import require_user
-from workgraph_api.services import AuthenticatedUser, ProjectService
+from workgraph_api.services import (
+    AuthenticatedUser,
+    KbHierarchyService,
+    ProjectService,
+)
 
 router = APIRouter(prefix="/api", tags=["kb"])
+
+
+# Mapping from service-layer error codes → HTTP status. Owner /
+# full-tier gates surface as 403; name conflicts and non-empty-delete
+# / cycle-reject surface as 409 so the frontend can distinguish
+# permission failures from legitimate preconditions.
+_KB_ERROR_STATUS: dict[str, int] = {
+    "not_a_member": 403,
+    "forbidden": 403,
+    "folder_not_found": 404,
+    "parent_not_found": 404,
+    "item_not_found": 404,
+    "cannot_delete_root": 409,
+    "folder_not_empty": 409,
+    "name_conflict": 409,
+    "cycle": 409,
+    "name_required": 400,
+    "name_too_long": 400,
+    "invalid_tier": 400,
+}
+
+
+def _handle_kb(result: dict) -> dict:
+    if not result.get("ok"):
+        err = result.get("error") or "unknown"
+        raise HTTPException(
+            status_code=_KB_ERROR_STATUS.get(err, 400), detail=err
+        )
+    return result
 
 
 def _kb_list_payload(row: MembraneSignalRow) -> dict:
@@ -125,6 +163,169 @@ async def get_kb_list(
         "items": [_kb_list_payload(r) for r in rows],
         "count": len(rows),
     }
+
+
+# NOTE: the /kb/tree + /kb/folders + /kb/items/... routes below MUST
+# be registered before the catch-all /kb/{item_id}, otherwise FastAPI
+# treats 'tree' / 'folders' / 'items' as item_ids and hands back 404.
+# The Phase 3.A additions at the end of this file stay paired with
+# this comment — if another route lands between, check ordering first.
+
+
+def _kb_service(request: Request) -> KbHierarchyService:
+    return request.app.state.kb_hierarchy_service
+
+
+@router.get("/projects/{project_id}/kb/tree")
+async def get_kb_tree(
+    project_id: str,
+    request: Request,
+    user: AuthenticatedUser = Depends(require_user),
+):
+    """Return the folder tree + placed items for a project.
+
+    Members only. Flat list with parent_id pointers — the client
+    nests in-memory. See KbHierarchyService.get_tree for the payload
+    shape.
+    """
+    service = _kb_service(request)
+    return _handle_kb(
+        await service.get_tree(
+            project_id=project_id, user_id=user.id
+        )
+    )
+
+
+@router.post("/projects/{project_id}/kb/folders")
+async def create_kb_folder(
+    project_id: str,
+    request: Request,
+    payload: dict = Body(...),
+    user: AuthenticatedUser = Depends(require_user),
+):
+    """Create a folder. Full-tier member required.
+
+    Body: {name: str, parent_folder_id: str|null}
+    """
+    name = payload.get("name") or ""
+    parent_folder_id = payload.get("parent_folder_id")
+    service = _kb_service(request)
+    return _handle_kb(
+        await service.create_folder(
+            project_id=project_id,
+            user_id=user.id,
+            name=str(name),
+            parent_folder_id=(
+                str(parent_folder_id)
+                if parent_folder_id is not None
+                else None
+            ),
+        )
+    )
+
+
+@router.patch("/projects/{project_id}/kb/folders/{folder_id}/parent")
+async def reparent_kb_folder(
+    project_id: str,
+    folder_id: str,
+    request: Request,
+    payload: dict = Body(...),
+    user: AuthenticatedUser = Depends(require_user),
+):
+    """Move a folder under a new parent. Owner only.
+
+    Cycle detection lives in the service; we forward 409 to the
+    client without re-checking — the service is the single writer
+    and a second check here would just be duplicated logic that
+    could drift.
+
+    Body: {new_parent_id: str|null}
+    """
+    new_parent_id = payload.get("new_parent_id")
+    service = _kb_service(request)
+    return _handle_kb(
+        await service.reparent_folder(
+            project_id=project_id,
+            user_id=user.id,
+            folder_id=folder_id,
+            new_parent_id=(
+                str(new_parent_id)
+                if new_parent_id is not None
+                else None
+            ),
+        )
+    )
+
+
+@router.delete("/projects/{project_id}/kb/folders/{folder_id}")
+async def delete_kb_folder(
+    project_id: str,
+    folder_id: str,
+    request: Request,
+    user: AuthenticatedUser = Depends(require_user),
+):
+    """Delete an empty folder. Owner only. 409 if non-empty or root."""
+    service = _kb_service(request)
+    return _handle_kb(
+        await service.delete_folder(
+            project_id=project_id,
+            user_id=user.id,
+            folder_id=folder_id,
+        )
+    )
+
+
+@router.patch("/projects/{project_id}/kb/items/{item_id}/folder")
+async def move_kb_item(
+    project_id: str,
+    item_id: str,
+    request: Request,
+    payload: dict = Body(...),
+    user: AuthenticatedUser = Depends(require_user),
+):
+    """Move a KB item to a different folder. Member required.
+
+    Body: {folder_id: str}
+    """
+    folder_id = payload.get("folder_id")
+    if not folder_id:
+        raise HTTPException(status_code=400, detail="folder_id_required")
+    service = _kb_service(request)
+    return _handle_kb(
+        await service.move_item(
+            project_id=project_id,
+            user_id=user.id,
+            item_id=item_id,
+            folder_id=str(folder_id),
+        )
+    )
+
+
+@router.put("/projects/{project_id}/kb/items/{item_id}/license")
+async def set_kb_item_license(
+    project_id: str,
+    item_id: str,
+    request: Request,
+    payload: dict = Body(...),
+    user: AuthenticatedUser = Depends(require_user),
+):
+    """Set or clear a per-item license tier override. Owner only.
+
+    Body: {license_tier: 'full'|'task_scoped'|'observer'|null}
+    Passing null clears the override (item reverts to project tier).
+    """
+    license_tier = payload.get("license_tier")
+    service = _kb_service(request)
+    return _handle_kb(
+        await service.set_item_license(
+            project_id=project_id,
+            user_id=user.id,
+            item_id=item_id,
+            license_tier=(
+                str(license_tier) if license_tier is not None else None
+            ),
+        )
+    )
 
 
 @router.get("/projects/{project_id}/kb/{item_id}")

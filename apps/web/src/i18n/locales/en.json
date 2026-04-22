@@ -325,6 +325,7 @@
     "notAvailable": "Knowledge base will be available soon.",
     "filters": {
       "all": "All",
+      "wiki": "Wiki",
       "git": "Git",
       "steam": "Steam",
       "rss": "RSS",
@@ -336,6 +337,44 @@
       "ingestedBy": "Ingested by",
       "classification": "Classification",
       "status": "Status"
+    },
+    "folder": {
+      "treeTitle": "Folders",
+      "root": "/",
+      "empty": "No folders yet.",
+      "new": "+ New folder",
+      "newItem": "+ New item",
+      "newPlaceholder": "Folder name",
+      "selectPrompt": "Select a folder",
+      "delete": "Delete folder",
+      "confirmDelete": "Delete this folder?",
+      "expand": "Expand",
+      "collapse": "Collapse",
+      "cycleRejected": "Moving there would create a cycle.",
+      "nameConflict": "A folder with that name already exists here.",
+      "notEmpty": "Folder isn't empty — move its contents first.",
+      "createFailed": "Could not create folder.",
+      "deleteFailed": "Could not delete folder.",
+      "moveFailed": "Move failed.",
+      "requireFullTier": "Full-tier members only.",
+      "itemsTable": "Items",
+      "colTitle": "Title",
+      "colKind": "Kind",
+      "colUpdated": "Updated",
+      "colLicense": "License"
+    },
+    "license": {
+      "label": "Per-item license override",
+      "help": "Overrides the project default for this item only.",
+      "inherit": "Inherit",
+      "save": "Save",
+      "saving": "Saving…",
+      "cancel": "Cancel",
+      "tier": {
+        "full": "Full",
+        "task_scoped": "Task-scoped",
+        "observer": "Observer"
+      }
     }
   },
   "personal": {

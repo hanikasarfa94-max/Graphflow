@@ -13,9 +13,14 @@ import type { KbItemDetail as KbItemDetailT } from "@/lib/api";
 export async function KbItemDetail({
   projectId,
   item,
+  licenseControl,
 }: {
   projectId: string;
   item: KbItemDetailT;
+  // Phase 3.A — rendered in the sidebar when the viewer is a project
+  // owner. The server component composes it conditionally so
+  // non-owners never ship the client bundle.
+  licenseControl?: React.ReactNode;
 }) {
   const t = await getTranslations();
   const cls =
@@ -241,6 +246,8 @@ export async function KbItemDetail({
               {item.status}
             </div>
           </MetaPanel>
+
+          {licenseControl}
         </aside>
       </div>
     </div>

@@ -1485,6 +1485,112 @@ export function getKbItem(
   );
 }
 
+// ---------- Phase 3.A — hierarchical KB ----------
+//
+// Folder tree on top of the flat KB. The tree endpoint returns folders
+// + items as two flat arrays with parent_id pointers; the client nests
+// in memory. Cycle detection + per-item license override live on the
+// backend (see apps/api/src/workgraph_api/services/kb_hierarchy.py).
+
+export type LicenseTier = "full" | "task_scoped" | "observer";
+
+export interface KbFolderNode {
+  id: string;
+  project_id: string;
+  parent_folder_id: string | null;
+  name: string;
+  created_by_user_id: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export interface KbTreeItem {
+  id: string;
+  folder_id: string | null;
+  title: string;
+  summary: string;
+  source_kind: string;
+  source_identifier: string | null;
+  status: KbItemStatus;
+  tags: string[];
+  created_at: string | null;
+  updated_at: string | null;
+  license_tier_override: LicenseTier | null;
+  ingested_by_username: string | null;
+}
+
+export interface KbTreeResponse {
+  ok: true;
+  folders: KbFolderNode[];
+  items: KbTreeItem[];
+  root_id: string | null;
+}
+
+export function getKbTree(
+  projectId: string,
+  baseUrl?: string,
+): Promise<KbTreeResponse> {
+  return api<KbTreeResponse>(`/api/projects/${projectId}/kb/tree`, {
+    baseUrl,
+  });
+}
+
+export function createKbFolder(
+  projectId: string,
+  body: { name: string; parent_folder_id: string | null },
+): Promise<{ ok: true; folder: KbFolderNode }> {
+  return api(`/api/projects/${projectId}/kb/folders`, {
+    method: "POST",
+    body,
+  });
+}
+
+export function reparentKbFolder(
+  projectId: string,
+  folderId: string,
+  newParentId: string | null,
+): Promise<{ ok: true; folder: KbFolderNode }> {
+  return api(
+    `/api/projects/${projectId}/kb/folders/${folderId}/parent`,
+    { method: "PATCH", body: { new_parent_id: newParentId } },
+  );
+}
+
+export function deleteKbFolder(
+  projectId: string,
+  folderId: string,
+): Promise<{ ok: true; deleted_id: string }> {
+  return api(`/api/projects/${projectId}/kb/folders/${folderId}`, {
+    method: "DELETE",
+  });
+}
+
+export function moveKbItem(
+  projectId: string,
+  itemId: string,
+  folderId: string,
+): Promise<{ ok: true; item_id: string; folder_id: string | null }> {
+  return api(
+    `/api/projects/${projectId}/kb/items/${itemId}/folder`,
+    { method: "PATCH", body: { folder_id: folderId } },
+  );
+}
+
+export function setKbItemLicense(
+  projectId: string,
+  itemId: string,
+  licenseTier: LicenseTier | null,
+): Promise<{
+  ok: true;
+  item_id: string;
+  license_tier: LicenseTier | null;
+}> {
+  return api(
+    `/api/projects/${projectId}/kb/items/${itemId}/license`,
+    { method: "PUT", body: { license_tier: licenseTier } },
+  );
+}
+
 // ---------- Phase 1.B — ambient onboarding ----------
 
 export type OnboardingCheckpoint =

@@ -325,6 +325,7 @@
     "notAvailable": "知识库即将上线。",
     "filters": {
       "all": "全部",
+      "wiki": "Wiki",
       "git": "Git",
       "steam": "Steam",
       "rss": "RSS",
@@ -336,6 +337,44 @@
       "ingestedBy": "录入者",
       "classification": "分类",
       "status": "状态"
+    },
+    "folder": {
+      "treeTitle": "文件夹",
+      "root": "/",
+      "empty": "还没有文件夹。",
+      "new": "+ 新建文件夹",
+      "newItem": "+ 新建条目",
+      "newPlaceholder": "文件夹名称",
+      "selectPrompt": "请选择一个文件夹",
+      "delete": "删除文件夹",
+      "confirmDelete": "确定删除此文件夹?",
+      "expand": "展开",
+      "collapse": "折叠",
+      "cycleRejected": "此操作会产生循环,已拒绝。",
+      "nameConflict": "同级已存在同名文件夹。",
+      "notEmpty": "文件夹不为空 —— 请先移走其中内容。",
+      "createFailed": "无法创建文件夹。",
+      "deleteFailed": "无法删除文件夹。",
+      "moveFailed": "移动失败。",
+      "requireFullTier": "仅限完整权限成员。",
+      "itemsTable": "条目",
+      "colTitle": "标题",
+      "colKind": "类型",
+      "colUpdated": "更新时间",
+      "colLicense": "授权"
+    },
+    "license": {
+      "label": "单项授权覆盖",
+      "help": "仅针对此条目覆盖项目默认授权。",
+      "inherit": "继承项目",
+      "save": "保存",
+      "saving": "保存中…",
+      "cancel": "取消",
+      "tier": {
+        "full": "完整",
+        "task_scoped": "任务范围",
+        "observer": "观察者"
+      }
     }
   },
   "personal": {
