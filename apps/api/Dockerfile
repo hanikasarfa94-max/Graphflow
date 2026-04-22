@@ -8,10 +8,11 @@ ENV UV_LINK_MODE=copy \
     UV_COMPILE_BYTECODE=1 \
     UV_PYTHON_DOWNLOADS=never \
     PYTHONDONTWRITEBYTECODE=1 \
-    # Mainland VPS → PyPI is slow/unreliable; use the Tsinghua mirror
-    # and bump the timeout. Override at build time with
-    # `--build-arg UV_INDEX_URL=...` if a different mirror is needed.
-    UV_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple \
+    # Mainland VPS → PyPI: use the Aliyun mirror (same provider as the
+    # VPS → fastest) with Tsinghua as fallback, and a generous timeout.
+    # Override either at build time with `--build-arg UV_INDEX_URL=...`.
+    UV_INDEX_URL=https://mirrors.aliyun.com/pypi/simple \
+    UV_EXTRA_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple \
     UV_HTTP_TIMEOUT=1800
 
 WORKDIR /app
@@ -39,7 +40,11 @@ COPY packages/agents/src packages/agents/src
 COPY packages/orchestrator/src packages/orchestrator/src
 COPY packages/feishu_adapter/src packages/feishu_adapter/src
 
-RUN uv sync --frozen --package workgraph-api --no-dev
+# BuildKit cache mount on uv's wheel cache survives `--no-cache` image
+# rebuilds — critical for recovering from a mainland-PyPI transient
+# failure without re-downloading every package from scratch.
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --package workgraph-api --no-dev
 
 # ---------- runtime ----------
 FROM python:3.11-slim-bookworm AS runtime
