@@ -413,6 +413,7 @@ from workgraph_api.services import (
     DeliveryService,
     DissentService,
     DriftService,
+    GatedProposalService,
     HandoffService,
     IMService,
     IntakeService,
@@ -533,6 +534,9 @@ async def api_env():
     )
     handoff_service = HandoffService(maker)
     dissent_service = DissentService(maker, bus)
+    gated_proposals_service = GatedProposalService(
+        maker, stream_service, bus
+    )
     silent_consensus_service = SilentConsensusService(maker, bus)
     onboarding_service = OnboardingService(
         maker, license_context_service
@@ -640,6 +644,7 @@ async def api_env():
     app.state.scrimmage_service = scrimmage_service
     app.state.handoff_service = handoff_service
     app.state.dissent_service = dissent_service
+    app.state.gated_proposals_service = gated_proposals_service
     app.state.silent_consensus_service = silent_consensus_service
     app.state.onboarding_service = onboarding_service
     app.state.kb_hierarchy_service = kb_hierarchy_service

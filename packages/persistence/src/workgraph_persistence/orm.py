@@ -31,6 +31,14 @@ class ProjectRow(Base):
         order_by="RequirementRow.version",
     )
 
+    # Migration 0014 — Scene 2 routing gate. Per-project map
+    # `{decision_class: user_id}` naming the gate-keeper whose sign-off is
+    # required before a decision of that class crystallizes. Empty map =
+    # no gates apply. Managed via project settings UI + the
+    # `GatedProposalService` flow. NOT NULL server-default '{}' so
+    # existing projects stamp clean on migration.
+    gate_keeper_map: Mapped[dict] = mapped_column(JSON, default=dict)
+
 
 class RequirementRow(Base):
     """Versioned requirement. v1 from intake; each clarify-reply yields v2+.
@@ -478,11 +486,19 @@ class MessageRow(Base):
     (`[[routed-signal:id]]`) because structured columns are cheaper to
     filter (e.g. inbox queries) and don't break when body is localized.
     `kind` values in v1:
-      * 'text'            — default human / edge turn (body is the payload)
-      * 'routed-inbound'  — target's personal stream received a routing ask
-      * 'routed-reply'    — source's personal stream received the reply
-      * 'routed-dm-log'   — DM mirror summary of a routed flow
-    `linked_id` points at `routed_signals.id` when kind starts with 'routed-'.
+      * 'text'                     — default human / edge turn
+      * 'routed-inbound'           — target's personal stream received a routing ask
+      * 'routed-reply'             — source's personal stream received the reply
+      * 'routed-dm-log'            — DM mirror summary of a routed flow
+      * 'gated-proposal-pending'   — gate-keeper's stream: a new gated
+                                     decision is awaiting their sign-off
+                                     (linked_id → gated_proposals.id)
+      * 'gated-proposal-resolved'  — proposer's stream: the gate-keeper
+                                     approved / denied / (rare) the
+                                     proposer withdrew the proposal
+                                     (linked_id → gated_proposals.id)
+    `linked_id` points at `routed_signals.id` when kind starts with
+    'routed-', or `gated_proposals.id` when kind starts with 'gated-'.
     """
 
     __tablename__ = "messages"
@@ -686,6 +702,81 @@ class DecisionRow(Base):
         DateTime(timezone=True), default=_utcnow
     )
     applied_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    # Migration 0014 — Scene 2 routing gate. `decision_class` is the
+    # taxonomy bucket (budget / legal / hire / scope_cut …); copied from
+    # the source GatedProposalRow on approve. Non-gated decisions leave
+    # both NULL. `gated_via_proposal_id` points at the GatedProposalRow
+    # that produced this decision; SET NULL on delete so audit history
+    # survives proposal cleanup.
+    decision_class: Mapped[str | None] = mapped_column(
+        String(32), nullable=True
+    )
+    gated_via_proposal_id: Mapped[str | None] = mapped_column(
+        ForeignKey("gated_proposals.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+
+
+class GatedProposalRow(Base):
+    """Migration 0014 — Scene 2 routing: a decision proposal sitting in
+    front of a gate-keeper's sign-off.
+
+    When the edge agent classifies a user utterance as a decision of a
+    gated class (budget, legal, hire, scope_cut, …) AND the project has
+    a named gate-keeper for that class in `projects.gate_keeper_map`,
+    the source user's sub-agent offers a `route_kind='gated'` proposal.
+    On "send for sign-off", a GatedProposalRow is created and a routed
+    signal lands in the gate-keeper's sidebar with approve/deny/edit.
+
+    Crystallization contract: `status` transitions
+        pending → approved | denied | withdrawn
+    On `approved`, `GatedProposalService.approve` creates a DecisionRow
+    whose `gated_via_proposal_id` points back here and runs
+    `apply_actions` exactly once. On `denied` or `withdrawn`, no
+    DecisionRow is created — the project's graph state never moves on
+    this proposal.
+
+    Non-goals:
+      * NOT a transport primitive for every routed signal — reuse
+        RoutedSignalRow for discovery / handoff / leader-escalation.
+      * NOT a denial-of-service guard: rate-limiting lives in the
+        service layer, not the schema.
+
+    Lineage: the reverse direction (decision → proposal) lives on
+    DecisionRow.gated_via_proposal_id to avoid a circular FK.
+    """
+
+    __tablename__ = "gated_proposals"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    project_id: Mapped[str] = mapped_column(
+        ForeignKey("projects.id", ondelete="CASCADE"), index=True
+    )
+    proposer_user_id: Mapped[str] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    gate_keeper_user_id: Mapped[str] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    decision_class: Mapped[str] = mapped_column(String(32))
+    proposal_body: Mapped[str] = mapped_column(String(4000))
+    # Same shape as DecisionRow.apply_actions — a list of
+    # structured mutation ops the service replays on approve.
+    apply_actions: Mapped[list] = mapped_column(JSON, default=list)
+    status: Mapped[str] = mapped_column(String(16), default="pending")
+    resolution_note: Mapped[str | None] = mapped_column(
+        String(2000), nullable=True
+    )
+    trace_id: Mapped[str | None] = mapped_column(
+        String(64), nullable=True, index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow
+    )
+    resolved_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
 

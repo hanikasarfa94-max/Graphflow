@@ -26,6 +26,13 @@ from .decisions import DecisionError, DecisionService
 from .delivery import DeliveryError, DeliveryService
 from .dissent import DissentError, DissentService, MAX_STANCE_CHARS
 from .drift import DRIFT_RATE_LIMIT_SECONDS, DriftService
+from .gated_proposals import (
+    DECISION_CLASS_LABELS,
+    GatedProposalError,
+    GatedProposalService,
+    VALID_DECISION_CLASSES,
+    get_gate_keeper,
+)
 from .graph_builder import GraphBuilderService
 from .handoff import HandoffService
 from .im import IMService
@@ -108,6 +115,11 @@ __all__ = [
     "MAX_STANCE_CHARS",
     "DriftService",
     "DRIFT_RATE_LIMIT_SECONDS",
+    "DECISION_CLASS_LABELS",
+    "GatedProposalError",
+    "GatedProposalService",
+    "VALID_DECISION_CLASSES",
+    "get_gate_keeper",
     "IMService",
     "KB_ALLOWED_TIERS",
     "KB_ROOT_NAME",

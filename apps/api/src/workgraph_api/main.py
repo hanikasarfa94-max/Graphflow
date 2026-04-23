@@ -54,6 +54,7 @@ from workgraph_api.routers import delivery as delivery_router
 from workgraph_api.routers import demo as demo_router
 from workgraph_api.routers import dissent as dissent_router
 from workgraph_api.routers import drift as drift_router
+from workgraph_api.routers import gated_proposals as gated_proposals_router
 from workgraph_api.routers import events_stream as events_router
 from workgraph_api.routers import graph as graph_router
 from workgraph_api.routers import intake as intake_router
@@ -89,6 +90,7 @@ from workgraph_api.services import (
     DeliveryService,
     DissentService,
     DriftService,
+    GatedProposalService,
     HandoffService,
     IMService,
     IntakeService,
@@ -486,6 +488,9 @@ async def lifespan(app: FastAPI):
     )
     handoff_service = HandoffService(sessionmaker)
     dissent_service = DissentService(sessionmaker, event_bus)
+    gated_proposals_service = GatedProposalService(
+        sessionmaker, stream_service, event_bus
+    )
     silent_consensus_service = SilentConsensusService(
         sessionmaker, event_bus
     )
@@ -572,6 +577,7 @@ async def lifespan(app: FastAPI):
     app.state.scrimmage_service = scrimmage_service
     app.state.handoff_service = handoff_service
     app.state.dissent_service = dissent_service
+    app.state.gated_proposals_service = gated_proposals_service
     app.state.silent_consensus_service = silent_consensus_service
     app.state.onboarding_service = onboarding_service
     app.state.kb_hierarchy_service = kb_hierarchy_service
@@ -755,6 +761,7 @@ app.include_router(delivery_router.router)
 app.include_router(demo_router.router)
 app.include_router(dissent_router.router)
 app.include_router(drift_router.router)
+app.include_router(gated_proposals_router.router)
 app.include_router(commitments_router.router)
 app.include_router(simulation_router.router)
 app.include_router(skill_atlas_router.router)

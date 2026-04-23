@@ -20,6 +20,7 @@ from .orm import (
     DeliverySummaryRow,
     DissentRow,
     EventRow,
+    GatedProposalRow,
     HandoffRow,
     GoalRow,
     IMSuggestionRow,
@@ -1276,6 +1277,8 @@ class DecisionRepository:
         source_suggestion_id: str | None = None,
         apply_outcome: str = "pending",
         apply_detail: dict | None = None,
+        decision_class: str | None = None,
+        gated_via_proposal_id: str | None = None,
     ) -> DecisionRow:
         """Persist a decision.
 
@@ -1283,6 +1286,12 @@ class DecisionRepository:
         from a suggestion directly (vision §6, signal-chain). In that case the
         caller passes `source_suggestion_id` instead. `apply_outcome`/`apply_detail`
         can be set at create-time for synchronous crystallization.
+
+        `decision_class` + `gated_via_proposal_id` are Scene-2 gated-decision
+        lineage (migration 0014). Non-gated decisions leave both NULL; the
+        `GatedProposalService.approve` path sets both on approve. v0 does not
+        enforce "gated-class decisions must have a proposal id" at this layer —
+        that hardening is Option 2 (see GatedProposalService docstring).
         """
         row = DecisionRow(
             id=_new_id(),
@@ -1297,6 +1306,8 @@ class DecisionRepository:
             apply_detail=apply_detail or {},
             trace_id=trace_id,
             source_suggestion_id=source_suggestion_id,
+            decision_class=decision_class,
+            gated_via_proposal_id=gated_via_proposal_id,
         )
         self._session.add(row)
         await self._session.flush()
@@ -1352,6 +1363,114 @@ class DecisionRepository:
             .limit(1)
         )
         return (await self._session.execute(stmt)).scalar_one_or_none()
+
+
+class GatedProposalRepository:
+    """Migration 0014 — Scene 2 routing transport.
+
+    State machine enforced at the repository layer (service layer
+    double-checks but this is the safety net):
+        pending → approved | denied | withdrawn     (terminal)
+    Terminal → anything is rejected with InvalidProposalStateError.
+    """
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def create(
+        self,
+        *,
+        project_id: str,
+        proposer_user_id: str,
+        gate_keeper_user_id: str,
+        decision_class: str,
+        proposal_body: str,
+        apply_actions: list,
+        trace_id: str | None = None,
+    ) -> GatedProposalRow:
+        row = GatedProposalRow(
+            id=_new_id(),
+            project_id=project_id,
+            proposer_user_id=proposer_user_id,
+            gate_keeper_user_id=gate_keeper_user_id,
+            decision_class=decision_class,
+            proposal_body=proposal_body,
+            apply_actions=apply_actions,
+            status="pending",
+            trace_id=trace_id,
+        )
+        self._session.add(row)
+        await self._session.flush()
+        return row
+
+    async def get(self, proposal_id: str) -> GatedProposalRow | None:
+        return (
+            await self._session.execute(
+                select(GatedProposalRow).where(
+                    GatedProposalRow.id == proposal_id
+                )
+            )
+        ).scalar_one_or_none()
+
+    async def list_for_gate_keeper(
+        self,
+        gate_keeper_user_id: str,
+        *,
+        status: str | None = None,
+        limit: int = 50,
+    ) -> list[GatedProposalRow]:
+        stmt = select(GatedProposalRow).where(
+            GatedProposalRow.gate_keeper_user_id == gate_keeper_user_id
+        )
+        if status is not None:
+            stmt = stmt.where(GatedProposalRow.status == status)
+        stmt = stmt.order_by(GatedProposalRow.created_at.desc()).limit(limit)
+        return list((await self._session.execute(stmt)).scalars().all())
+
+    async def list_for_project(
+        self,
+        project_id: str,
+        *,
+        status: str | None = None,
+        limit: int = 50,
+    ) -> list[GatedProposalRow]:
+        stmt = select(GatedProposalRow).where(
+            GatedProposalRow.project_id == project_id
+        )
+        if status is not None:
+            stmt = stmt.where(GatedProposalRow.status == status)
+        stmt = stmt.order_by(GatedProposalRow.created_at.desc()).limit(limit)
+        return list((await self._session.execute(stmt)).scalars().all())
+
+    async def resolve(
+        self,
+        proposal_id: str,
+        *,
+        status: str,
+        resolution_note: str | None = None,
+    ) -> GatedProposalRow | None:
+        """Transition pending → {approved, denied, withdrawn}. Returns
+        None if the row doesn't exist; raises InvalidProposalStateError
+        if the row is already terminal.
+        """
+        if status not in {"approved", "denied", "withdrawn"}:
+            raise ValueError(f"invalid resolve status: {status}")
+        row = await self.get(proposal_id)
+        if row is None:
+            return None
+        if row.status != "pending":
+            raise InvalidProposalStateError(
+                f"proposal {proposal_id} is already {row.status}"
+            )
+        row.status = status
+        row.resolution_note = resolution_note
+        row.resolved_at = datetime.now(timezone.utc)
+        await self._session.flush()
+        return row
+
+
+class InvalidProposalStateError(Exception):
+    """GatedProposalRepository.resolve called on a non-pending row."""
 
 
 class DeliverySummaryRepository:
