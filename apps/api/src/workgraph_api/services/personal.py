@@ -29,6 +29,9 @@ from typing import Any
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from workgraph_agents import EdgeAgent
+from workgraph_agents import (
+    VALID_DECISION_CLASSES as EDGE_VALID_DECISION_CLASSES,
+)
 from workgraph_agents.citations import (
     CitedClaim,
     claims_payload,
@@ -621,7 +624,12 @@ class PersonalStreamService:
             }
 
         # route_proposal — encode targets inline in body so the frontend
-        # can render "Ask X" buttons without a new ORM table.
+        # can render "Ask X" / "Send for sign-off" buttons without a new
+        # ORM table. `route_kind` + `decision_class` (Phase v4, Scene 2)
+        # go into the marker so the frontend picks the right variant
+        # and the right click-target endpoint:
+        #   route_kind='discovery'  → POST /api/routing/confirm
+        #   route_kind='gated'      → POST /api/projects/{id}/gated-proposals
         if kind == "route_proposal":
             targets_payload = [
                 {
@@ -640,6 +648,12 @@ class PersonalStreamService:
             claims = list(response.claims) or wrap_uncited(human_body)
             claims_json = claims_payload(claims)
             uncited_flag = is_uncited(claims)
+            route_kind_value = response.route_kind or "discovery"
+            decision_class_value = (
+                response.decision_class
+                if route_kind_value == "gated"
+                else None
+            )
             marker = {
                 "message_id": message_id,  # self-pointer back to the user turn
                 "source_user_id": user_id,
@@ -648,6 +662,8 @@ class PersonalStreamService:
                 "background": context.get("background", []),
                 "targets": targets_payload,
                 "status": "pending",
+                "route_kind": route_kind_value,
+                "decision_class": decision_class_value,
             }
             body_with_claims = _encode_claims_body(human_body, claims_json)
             encoded = _encode_route_proposal_body(body_with_claims, marker)
@@ -667,6 +683,8 @@ class PersonalStreamService:
                     "body": human_body,
                     "route_proposal_id": proposal_id,
                     "targets": targets_payload,
+                    "route_kind": route_kind_value,
+                    "decision_class": decision_class_value,
                     "claims": claims_json,
                     "uncited": uncited_flag,
                 },
@@ -1014,6 +1032,37 @@ class PersonalStreamService:
                     }
                 )
 
+            # Phase v4 — Scene 2 routing context. Pull the project's
+            # gate_keeper_map so the prompt knows which decision classes
+            # are gated and by whom. Filter out stale entries where the
+            # gate-keeper is no longer a project member; filter out a
+            # self-gate (caller == gate-keeper) so the prompt doesn't try
+            # to emit a gated route to the reader. Empty map falls through
+            # — no gated routing can fire without a class mapping.
+            project_row = (
+                await session.execute(
+                    select(ProjectRow).where(ProjectRow.id == project_id)
+                )
+            ).scalar_one_or_none()
+            raw_map = (
+                dict(project_row.gate_keeper_map)
+                if project_row and project_row.gate_keeper_map
+                else {}
+            )
+            current_member_ids = {
+                m.user_id
+                for m in members
+                if m.user_id != EDGE_AGENT_SYSTEM_USER_ID
+            }
+            gate_keeper_map: dict[str, str] = {
+                cls: uid
+                for cls, uid in raw_map.items()
+                if cls in EDGE_VALID_DECISION_CLASSES
+                and isinstance(uid, str)
+                and uid in current_member_ids
+                and uid != user_id
+            }
+
             msg_rows = await MessageRepository(session).list_for_stream(
                 stream_id, limit=5
             )
@@ -1048,6 +1097,10 @@ class PersonalStreamService:
                 "id": project_id,
                 "title": project_title,
                 "member_summaries": member_summaries,
+                "gate_keeper_map": gate_keeper_map,
+                "valid_decision_classes": sorted(
+                    EDGE_VALID_DECISION_CLASSES
+                ),
             },
             "teammates": member_summaries,  # legacy alias; keep until tests migrate
             "recent_messages": recent_messages,

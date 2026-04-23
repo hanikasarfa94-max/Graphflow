@@ -51,7 +51,7 @@ from .llm import LLMClient, LLMResult, ParseFailure
 
 _log = logging.getLogger("workgraph.agents.edge")
 
-PROMPT_VERSION = "2026-04-22.phaseQ.v3"
+PROMPT_VERSION = "2026-04-23.phaseR.v1"
 OPTIONS_PROMPT_VERSION = "2026-04-18.phaseQ.v1"
 REPLY_FRAME_PROMPT_VERSION = "2026-04-21.phaseM.v2"
 
@@ -89,6 +89,15 @@ SkillName = Literal[
     "why_chain",
     "routing_suggest",
 ]
+# Phase v4 — Scene 2 routing taxonomy. Only two kinds in v0:
+#   'discovery' — graph-signal-grounded candidate surfacing (Scene 1)
+#   'gated'     — decision-class sign-off (Scene 2; decision_class set)
+RouteKind = Literal["discovery", "gated"]
+# Mirrors gated_proposals.VALID_DECISION_CLASSES — kept in the agent
+# package so edge prompt tests can reference it without importing the
+# api package. Adding a class requires both edges to be in sync.
+VALID_DECISION_CLASSES = frozenset({"budget", "legal", "hire", "scope_cut"})
+DecisionClass = Literal["budget", "legal", "hire", "scope_cut"]
 
 
 # ---------------------------------------------------------------------------
@@ -141,6 +150,14 @@ class EdgeResponse(BaseModel):
     reasoning: str = Field(default="", max_length=240)
     tool_call: ToolCall | None = None
     route_targets: list[RouteTarget] = Field(default_factory=list)
+    # Phase v4 — Scene 2 routing. `route_kind` is only meaningful when
+    # `kind == 'route_proposal'`. `decision_class` is only meaningful
+    # when `route_kind == 'gated'`. Both null otherwise. Cross-field
+    # invariants (gated → class-in-enum, gated → exactly 1 target)
+    # live in `_coerce_response_invariants` so one-field mistakes
+    # degrade cleanly instead of blowing up the whole response.
+    route_kind: RouteKind | None = None
+    decision_class: DecisionClass | None = None
     claims: list[CitedClaim] = Field(default_factory=list, max_length=8)
 
     @field_validator("route_targets")
@@ -621,26 +638,33 @@ def _coerce_response_invariants(resp: EdgeResponse) -> EdgeResponse:
         if the LLM missed it, degrade to `clarify` so the user isn't
         shown an action they can't take.
     """
-    if resp.kind == "silence":
-        if (
-            resp.body is not None
-            or resp.tool_call is not None
-            or resp.route_targets
-        ):
-            return resp.model_copy(
-                update={"body": None, "tool_call": None, "route_targets": []}
-            )
-        return resp
-    if resp.kind in ("answer", "clarify"):
-        if resp.tool_call is not None or resp.route_targets:
-            return resp.model_copy(
-                update={"tool_call": None, "route_targets": []}
-            )
-        return resp
-    if resp.kind == "tool_call":
+    # Non-routing kinds: route_kind + decision_class MUST both be null.
+    # Tool_call / answer / clarify / silence don't carry routing state.
+    if resp.kind != "route_proposal":
+        updates: dict[str, Any] = {}
+        if resp.route_kind is not None:
+            updates["route_kind"] = None
+        if resp.decision_class is not None:
+            updates["decision_class"] = None
+
+        if resp.kind == "silence":
+            if (
+                resp.body is not None
+                or resp.tool_call is not None
+                or resp.route_targets
+            ):
+                updates.update(
+                    {"body": None, "tool_call": None, "route_targets": []}
+                )
+            return resp.model_copy(update=updates) if updates else resp
+        if resp.kind in ("answer", "clarify"):
+            if resp.tool_call is not None or resp.route_targets:
+                updates.update({"tool_call": None, "route_targets": []})
+            return resp.model_copy(update=updates) if updates else resp
+        # tool_call
         if resp.tool_call is None or not (resp.body or "").strip():
-            return resp.model_copy(
-                update={
+            updates.update(
+                {
                     "kind": "clarify",
                     "body": (
                         resp.body
@@ -654,25 +678,63 @@ def _coerce_response_invariants(resp: EdgeResponse) -> EdgeResponse:
                     )[:240],
                 }
             )
+            return resp.model_copy(update=updates)
         if resp.route_targets:
-            return resp.model_copy(update={"route_targets": []})
-        return resp
-    # route_proposal
+            updates["route_targets"] = []
+        return resp.model_copy(update=updates) if updates else resp
+
+    # ---- route_proposal path ------------------------------------------
+    # Must carry at least one target.
     if not resp.route_targets:
         return resp.model_copy(
             update={
                 "kind": "clarify",
                 "tool_call": None,
                 "route_targets": [],
+                "route_kind": None,
+                "decision_class": None,
                 "reasoning": (
                     (resp.reasoning or "")
                     + " [degraded: route_proposal without targets]"
                 )[:240],
             }
         )
+
+    updates: dict[str, Any] = {}
     if resp.tool_call is not None:
-        return resp.model_copy(update={"tool_call": None})
-    return resp
+        updates["tool_call"] = None
+
+    # v4: route_kind MUST be set on route_proposal. Missing route_kind
+    # is treated as 'discovery' (the backwards-compat default) so the
+    # service still renders a routing card instead of dropping the turn.
+    route_kind = resp.route_kind or "discovery"
+    if resp.route_kind is None:
+        updates["route_kind"] = "discovery"
+
+    if route_kind == "gated":
+        # Gated requires exactly one target + a valid decision_class.
+        # Degrade to discovery if class is missing/invalid — we can't
+        # safely dispatch a gated-proposal without knowing the class.
+        if (
+            resp.decision_class is None
+            or resp.decision_class not in VALID_DECISION_CLASSES
+        ):
+            updates["route_kind"] = "discovery"
+            updates["decision_class"] = None
+            updates["reasoning"] = (
+                (resp.reasoning or "")
+                + " [degraded: gated route missing valid decision_class]"
+            )[:240]
+        elif len(resp.route_targets) != 1:
+            # Keep only the first target — gated is single-target by
+            # contract (the gate-keeper named in gate_keeper_map).
+            updates["route_targets"] = resp.route_targets[:1]
+    else:
+        # discovery — class MUST be null (class only meaningful for gated).
+        if resp.decision_class is not None:
+            updates["decision_class"] = None
+
+    return resp.model_copy(update=updates) if updates else resp
 
 
 def _apply_profile_weighting(
@@ -735,6 +797,7 @@ __all__ = [
     "OPTIONS_PROMPT_VERSION",
     "REPLY_FRAME_PROMPT_VERSION",
     "ALLOWED_SKILLS",
+    "VALID_DECISION_CLASSES",
     "EdgeAgent",
     "EdgeResponse",
     "EdgeResponseOutcome",
@@ -749,4 +812,6 @@ __all__ = [
     "OptionKind",
     "ActionHint",
     "SkillName",
+    "RouteKind",
+    "DecisionClass",
 ]

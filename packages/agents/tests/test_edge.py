@@ -845,12 +845,17 @@ async def test_respond_silence_strips_stray_tool_call():
     assert out.response.body is None
 
 
-def test_allowed_skills_contains_expected_four():
+def test_allowed_skills_contains_expected_six():
+    # Skill catalog grew in Phase N (why_chain) and Phase O (routing_suggest).
+    # The prompt text + SkillsService dispatcher + this set must stay in
+    # sync; the Literal SkillName type in edge.py is the source of truth.
     assert ALLOWED_SKILLS == {
         "kb_search",
         "recent_decisions",
         "risk_scan",
         "member_profile",
+        "why_chain",
+        "routing_suggest",
     }
 
 
