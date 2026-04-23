@@ -960,6 +960,11 @@ export type PersonalMessageKind =
   | "drift-alert"
   | "membrane-signal"
   | "silent-consensus-proposal"
+  // Migration 0014 — Scene 2 gated proposals. `-pending` lands in the
+  // gate-keeper's stream with linked_id → gated_proposals.id;
+  // `-resolved` lands in the proposer's stream after approve/deny.
+  | "gated-proposal-pending"
+  | "gated-proposal-resolved"
   | string;
 
 // Raw shape from the backend's route-proposal marker (see personal.py
@@ -971,6 +976,18 @@ export interface PersonalRouteTarget {
   rationale?: string;
 }
 
+// Phase R v1 — Scene 2 routing taxonomy. See
+// packages/agents/src/workgraph_agents/prompts/edge/v1.md §"Output schema".
+// Kept as a string union (not a Literal-cast'd enum) so a future
+// backend that ships a new route kind doesn't crash the frontend.
+export type RouteKind = "discovery" | "gated" | string;
+export type DecisionClass =
+  | "budget"
+  | "legal"
+  | "hire"
+  | "scope_cut"
+  | string;
+
 export interface PersonalRouteProposalMetadata {
   framing: string;
   targets: PersonalRouteTarget[];
@@ -980,6 +997,10 @@ export interface PersonalRouteProposalMetadata {
     reference_id?: string | null;
   }>;
   status: string;
+  // Optional so older messages (before migration 0014) deserialize
+  // cleanly. Default behavior for missing route_kind = "discovery".
+  route_kind?: RouteKind;
+  decision_class?: DecisionClass | null;
 }
 
 // Phase 1.B — provenance chips for edge-LLM claims. `kind` mirrors
@@ -1308,6 +1329,8 @@ export function parseRouteProposalFromBody(
       }>;
       background?: PersonalRouteProposalMetadata["background"];
       status?: string;
+      route_kind?: string;
+      decision_class?: string | null;
     };
     const targets = (parsed.targets ?? [])
       .filter(
@@ -1326,6 +1349,8 @@ export function parseRouteProposalFromBody(
       targets,
       background: parsed.background ?? [],
       status: parsed.status ?? "pending",
+      route_kind: parsed.route_kind ?? "discovery",
+      decision_class: parsed.decision_class ?? null,
     };
   } catch {
     return null;
@@ -1677,5 +1702,166 @@ export function postOnboardingReplay(
   return api(
     `/api/projects/${projectId}/onboarding/replay`,
     { method: "POST" },
+  );
+}
+
+// ---------- Gated proposals (migration 0014, Scene 2) ----------
+//
+// Backend: apps/api/src/workgraph_api/routers/gated_proposals.py. See
+// the edge prompt v4 (`prompts/edge/v1.md` §"4b. route_kind: 'gated'")
+// for when the edge agent emits a gated route and the frontend hits
+// `createGatedProposal` instead of `confirmRouteProposal`.
+
+export type GatedProposalStatus =
+  | "pending"
+  | "approved"
+  | "denied"
+  | "withdrawn"
+  | string;
+
+export interface GatedProposal {
+  id: string;
+  project_id: string;
+  proposer_user_id: string;
+  gate_keeper_user_id: string;
+  decision_class: DecisionClass;
+  proposal_body: string;
+  apply_actions: Array<Record<string, unknown>>;
+  status: GatedProposalStatus;
+  resolution_note: string | null;
+  trace_id: string | null;
+  created_at: string;
+  resolved_at: string | null;
+}
+
+// Convenience: DECISION_CLASSES mirrors the backend enum. Use this in
+// the settings editor (to iterate the allowed classes) instead of
+// hard-coding strings at multiple call sites.
+export const DECISION_CLASSES: DecisionClass[] = [
+  "budget",
+  "legal",
+  "hire",
+  "scope_cut",
+];
+
+export interface GatedProposalResponse {
+  ok: boolean;
+  proposal: GatedProposal;
+  decision_id?: string;
+}
+
+export function createGatedProposal(
+  projectId: string,
+  input: {
+    decision_class: DecisionClass;
+    proposal_body: string;
+    // Shape matches DecisionRow.apply_actions on the backend: list of
+    // structured dicts. In v0 the edge-agent emits an empty list, but
+    // the shape is preserved so Option 2 hardening (wiring to
+    // DecisionService._apply) doesn't require a schema change here.
+    apply_actions?: Array<Record<string, string | number | boolean | null>>;
+  },
+): Promise<GatedProposalResponse> {
+  return api<GatedProposalResponse>(
+    `/api/projects/${projectId}/gated-proposals`,
+    {
+      method: "POST",
+      body: {
+        decision_class: input.decision_class,
+        proposal_body: input.proposal_body,
+        apply_actions: input.apply_actions ?? [],
+      },
+    },
+  );
+}
+
+export function approveGatedProposal(
+  proposalId: string,
+  rationale?: string,
+): Promise<GatedProposalResponse> {
+  return api<GatedProposalResponse>(
+    `/api/gated-proposals/${proposalId}/approve`,
+    {
+      method: "POST",
+      body: { rationale: rationale ?? null },
+    },
+  );
+}
+
+export function denyGatedProposal(
+  proposalId: string,
+  resolutionNote?: string,
+): Promise<GatedProposalResponse> {
+  return api<GatedProposalResponse>(
+    `/api/gated-proposals/${proposalId}/deny`,
+    {
+      method: "POST",
+      body: { resolution_note: resolutionNote ?? null },
+    },
+  );
+}
+
+export function withdrawGatedProposal(
+  proposalId: string,
+): Promise<GatedProposalResponse> {
+  return api<GatedProposalResponse>(
+    `/api/gated-proposals/${proposalId}/withdraw`,
+    { method: "POST" },
+  );
+}
+
+export function listGatedProposalsForProject(
+  projectId: string,
+  status?: GatedProposalStatus,
+): Promise<{ ok: boolean; proposals: GatedProposal[] }> {
+  const qs = status ? `?status=${encodeURIComponent(status)}` : "";
+  return api<{ ok: boolean; proposals: GatedProposal[] }>(
+    `/api/projects/${projectId}/gated-proposals${qs}`,
+  );
+}
+
+export function listPendingGatedProposalsForMe(): Promise<{
+  ok: boolean;
+  proposals: GatedProposal[];
+}> {
+  return api<{ ok: boolean; proposals: GatedProposal[] }>(
+    `/api/gated-proposals/pending`,
+  );
+}
+
+export function getGatedProposal(
+  proposalId: string,
+): Promise<{ ok: boolean; proposal: GatedProposal }> {
+  return api<{ ok: boolean; proposal: GatedProposal }>(
+    `/api/gated-proposals/${proposalId}`,
+  );
+}
+
+// ---------- Gate-keeper map (per-project Scene 2 settings) ----------
+
+export interface GateKeeperMapResponse {
+  ok: boolean;
+  map: Record<string, string>;
+  valid_classes: string[];
+}
+
+export function getGateKeeperMap(
+  projectId: string,
+): Promise<GateKeeperMapResponse> {
+  return api<GateKeeperMapResponse>(
+    `/api/projects/${projectId}/gate-keeper-map`,
+  );
+}
+
+export function putGateKeeperMap(
+  projectId: string,
+  map: Record<string, string>,
+): Promise<{ ok: boolean; map: Record<string, string> }> {
+  return api<{ ok: boolean; map: Record<string, string> }>(
+    `/api/projects/${projectId}/gate-keeper-map`,
+    {
+      method: "PUT",
+      body: { map },
+    },
   );
 }

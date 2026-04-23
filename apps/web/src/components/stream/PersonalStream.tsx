@@ -65,6 +65,7 @@ import { EdgeReplyCard } from "./EdgeReplyCard";
 import { MembraneCard } from "./MembraneCard";
 import { RehearsalPreview } from "./RehearsalPreview";
 import { RouteProposalCard } from "./RouteProposalCard";
+import { GatedProposalPendingCard } from "./GatedProposalPendingCard";
 import { RoutedInboundCard } from "./RoutedInboundCard";
 import { RoutedReplyCard } from "./RoutedReplyCard";
 import { SilentConsensusCard } from "./SilentConsensusCard";
@@ -661,6 +662,34 @@ export function PersonalStream({ projectId, currentUserId, members }: Props) {
             projectId={projectId}
             onConfirmed={() => void refresh()}
           />,
+        );
+      case "gated-proposal-pending":
+        // Migration 0014 — gate-keeper sees a pending approval card in
+        // their personal stream. Approve/deny actions happen inline;
+        // resolution event lands as a separate 'gated-proposal-resolved'
+        // card in the proposer's stream.
+        return wrap(
+          <GatedProposalPendingCard message={m} memberById={memberById} />,
+        );
+      case "gated-proposal-resolved":
+        // Compact ambient line in the proposer's stream — the
+        // approve/deny card lived in the gate-keeper's stream; on this
+        // side we just echo the outcome. The body already carries the
+        // human-readable text ("Your scope_cut proposal was approved").
+        return wrap(
+          <div
+            data-testid="personal-gated-proposal-resolved"
+            data-proposal-id={m.linked_id ?? undefined}
+            style={{
+              padding: "2px 8px",
+              fontSize: 11,
+              fontFamily: "var(--wg-font-mono)",
+              color: "var(--wg-ok)",
+              marginLeft: 42,
+            }}
+          >
+            ✓ {m.body}
+          </div>,
         );
       case "routed-inbound":
         // Phase Q §Q.2 — NOT rendered as a full rich card inline. A

@@ -12,6 +12,7 @@ import { use, useCallback, useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
 
 import { ApiError, api } from "@/lib/api";
+import { GateKeeperMapSection } from "@/components/settings/GateKeeperMapSection";
 
 type Subscription = {
   id: string;
@@ -130,6 +131,8 @@ export default function ProjectSettingsPage({
   return (
     <main style={{ padding: 32, maxWidth: 800 }}>
       <h1 style={{ marginBottom: 24 }}>Settings</h1>
+
+      <GateKeeperMapSection projectId={id} />
 
       <section
         data-testid="membrane-subscriptions"

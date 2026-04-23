@@ -432,6 +432,26 @@
         "youLabel": "你"
       }
     },
+    "gatedProposal": {
+      "header": "Edge — 需要审批",
+      "gateKeeper": "审批人:{name}",
+      "send": "送交 {name} 审批",
+      "sending": "发送中……",
+      "sent": "✓ 已送交 {name} 审批",
+      "awaiting": "等待审批",
+      "approve": "通过",
+      "approving": "通过中……",
+      "deny": "驳回",
+      "denying": "驳回中……",
+      "approved": "✓ 已通过",
+      "denied": "✓ 已驳回",
+      "resolutionNotePlaceholder": "原因(可选)……",
+      "proposerPrefix": "来自 {name}",
+      "classBudget": "预算",
+      "classLegal": "法务",
+      "classHire": "招聘",
+      "classScopeCut": "范围"
+    },
     "inbound": {
       "from": "{name} 通过 Edge 询问",
       "inlineLine": "来自 {name} 的新路由询问",
@@ -726,6 +746,21 @@
       "low": "低",
       "medium": "中",
       "high": "高"
+    }
+  },
+  "gateKeeperMap": {
+    "heading": "审批人设置",
+    "help": "以下类型的决策在落库之前需要指定成员审批。不指定则该类型不启用审批。",
+    "unassigned": "— 未指定 —",
+    "saving": "保存中……",
+    "saved": "✓ 已保存",
+    "noGateKeeper": "未设置审批人;该类型决策直接落库,无需审批。",
+    "currentlyMapped": "角色:{role}",
+    "class": {
+      "budget": "预算 / 支出 / 供应商",
+      "legal": "法务 / IP / 合规",
+      "hire": "招聘 / 薪酬 / 职位变更",
+      "scope_cut": "范围收缩 / 特性砍除"
     }
   },
   "membrane": {

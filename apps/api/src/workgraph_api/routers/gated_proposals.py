@@ -182,6 +182,31 @@ async def list_pending_for_me(
     return {"ok": True, "proposals": proposals}
 
 
+@router.get("/api/gated-proposals/{proposal_id}")
+async def get_proposal(
+    proposal_id: str,
+    request: Request,
+    user: AuthenticatedUser = Depends(require_user),
+) -> dict[str, Any]:
+    """Single-proposal fetch for the pending-approval and resolved
+    cards in the gate-keeper / proposer streams. Visibility: proposer,
+    gate-keeper, and any full-tier project member can read (audit).
+    """
+    service = _get_service(request)
+    proposal = await service.get(proposal_id=proposal_id)
+    if proposal is None:
+        raise HTTPException(status_code=404, detail="proposal_not_found")
+    # Visibility: proposer + gate-keeper always; other project members
+    # allowed so the audit / list flows work from the same endpoint.
+    sessionmaker = request.app.state.sessionmaker
+    async with session_scope(sessionmaker) as session:
+        if not await ProjectMemberRepository(session).is_member(
+            proposal["project_id"], user.id
+        ):
+            raise HTTPException(status_code=403, detail="not_a_member")
+    return {"ok": True, "proposal": proposal}
+
+
 # --------------------------------------------------------------- map CRUD
 
 

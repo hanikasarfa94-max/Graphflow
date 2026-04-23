@@ -432,6 +432,26 @@
         "youLabel": "You"
       }
     },
+    "gatedProposal": {
+      "header": "Edge — sign-off required",
+      "gateKeeper": "Gate-keeper: {name}",
+      "send": "Send to {name} for sign-off",
+      "sending": "Sending to {name}…",
+      "sent": "✓ Sent to {name} for sign-off",
+      "awaiting": "Awaiting approval",
+      "approve": "Approve",
+      "approving": "Approving…",
+      "deny": "Deny",
+      "denying": "Denying…",
+      "approved": "✓ Approved",
+      "denied": "✓ Denied",
+      "resolutionNotePlaceholder": "Reason (optional)…",
+      "proposerPrefix": "From {name}",
+      "classBudget": "Budget",
+      "classLegal": "Legal",
+      "classHire": "Hire",
+      "classScopeCut": "Scope"
+    },
     "inbound": {
       "from": "{name} asked (via edge)",
       "inlineLine": "New routed question from {name}",
@@ -726,6 +746,21 @@
       "low": "Low",
       "medium": "Medium",
       "high": "High"
+    }
+  },
+  "gateKeeperMap": {
+    "heading": "Sign-off gate-keepers",
+    "help": "Decisions of these classes route to the named teammate for sign-off before they crystallize. Leave unassigned to skip gating for that class.",
+    "unassigned": "— unassigned —",
+    "saving": "Saving…",
+    "saved": "✓ Saved",
+    "noGateKeeper": "No gate-keeper set; decisions of this class crystallize without sign-off.",
+    "currentlyMapped": "Role: {role}",
+    "class": {
+      "budget": "Budget / spend / vendor",
+      "legal": "Legal / IP / compliance",
+      "hire": "Hiring / compensation / role change",
+      "scope_cut": "Scope cut / feature drop"
     }
   },
   "membrane": {

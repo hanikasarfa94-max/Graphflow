@@ -19,10 +19,12 @@ import { useTranslations } from "next-intl";
 import {
   ApiError,
   confirmRouteProposal,
+  createGatedProposal,
   fetchPreAnswer,
   parseRouteProposalFromBody,
   runScrimmage,
   stripRouteProposalMarker,
+  type DecisionClass,
   type PersonalMessage,
   type PersonalRouteTarget,
   type PreAnswerPayload,
@@ -101,6 +103,30 @@ export function RouteProposalCard({
     () => proposal?.targets ?? [],
     [proposal],
   );
+
+  // Phase R v1 — branch to the gated-variant renderer when the edge
+  // agent classified this turn as a decision-sign-off ask. The gated
+  // surface is structurally different enough (single-target only,
+  // different endpoint, different CTA label, different headline icon)
+  // that reusing the discovery card would require ~6 inline conditionals.
+  // A dedicated branch keeps the discovery path simple and the gated
+  // path readable.
+  if (
+    proposal?.route_kind === "gated" &&
+    proposal.decision_class &&
+    projectId &&
+    targets.length > 0
+  ) {
+    return (
+      <GatedProposalCard
+        message={message}
+        projectId={projectId}
+        proposal={proposal}
+        target={targets[0]}
+        onConfirmed={onConfirmed}
+      />
+    );
+  }
 
   // If the backend stripped the marker for us, use body as-is; otherwise
   // strip defensively. Prefer proposal.framing when present because that
@@ -761,6 +787,283 @@ function PreAnswerPanel({
         </button>
       </div>
     </div>
+  );
+}
+
+// Phase R v1 — Scene 2 gated-proposal renderer.
+//
+// Distinct surface from the discovery card:
+//  * single CTA (⚖ "Send for sign-off") instead of N "Ask X" buttons
+//  * decision-class chip rendered in amber (signals "something needs
+//    attention" — DESIGN.md §"Semantic usage")
+//  * no scrimmage toggle, no pre-answer preview — this is authority
+//    gating, not expertise discovery
+//  * click lands on POST /api/projects/{id}/gated-proposals instead of
+//    the routing-confirm endpoint
+function GatedProposalCard({
+  message,
+  projectId,
+  proposal,
+  target,
+  onConfirmed,
+}: {
+  message: PersonalMessage;
+  projectId: string;
+  proposal: NonNullable<PersonalMessage["route_proposal"]>;
+  target: PersonalRouteTarget;
+  onConfirmed?: (signalId: string) => void;
+}) {
+  const t = useTranslations("personal");
+  const [pending, setPending] = useState(false);
+  const [dismissed, setDismissed] = useState(false);
+  const [sentProposalId, setSentProposalId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const decisionClass = (proposal.decision_class ??
+    "budget") as DecisionClass;
+  const framing = useMemo(() => {
+    if (proposal.framing) return proposal.framing;
+    return stripRouteProposalMarker(message.body);
+  }, [message.body, proposal.framing]);
+
+  if (dismissed) {
+    return (
+      <div
+        data-testid="personal-gated-proposal-dismissed"
+        style={{
+          marginBottom: 8,
+          marginLeft: 42,
+          padding: "4px 10px",
+          fontSize: 11,
+          fontFamily: "var(--wg-font-mono)",
+          color: "var(--wg-ink-soft)",
+        }}
+      >
+        {t("routeProposal.dismissed")}
+      </div>
+    );
+  }
+
+  async function handleSend() {
+    if (pending || sentProposalId) return;
+    setPending(true);
+    setError(null);
+    try {
+      const res = await createGatedProposal(projectId, {
+        decision_class: decisionClass,
+        proposal_body: framing,
+      });
+      setSentProposalId(res.proposal.id);
+      onConfirmed?.(res.proposal.id);
+    } catch (e) {
+      if (e instanceof ApiError) {
+        const body = e.body as
+          | { message?: unknown; detail?: unknown }
+          | undefined;
+        const msg =
+          (body && typeof body.message === "string" && body.message) ||
+          (body && typeof body.detail === "string" && body.detail) ||
+          `error ${e.status}`;
+        setError(String(msg));
+      } else {
+        setError("send failed");
+      }
+    } finally {
+      setPending(false);
+    }
+  }
+
+  return (
+    <div
+      data-testid="personal-gated-proposal"
+      data-message-id={message.id}
+      data-decision-class={decisionClass}
+      style={{
+        padding: "10px 12px",
+        marginRight: "20%",
+        background: "var(--wg-surface-sunk, var(--wg-surface))",
+        border: "1px solid var(--wg-amber)",
+        borderLeft: "3px solid var(--wg-amber)",
+        borderRadius: "var(--wg-radius)",
+        fontSize: 13,
+      }}
+    >
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          fontFamily: "var(--wg-font-mono)",
+          fontSize: 11,
+          color: "var(--wg-amber)",
+          letterSpacing: "0.04em",
+          textTransform: "uppercase",
+          fontWeight: 600,
+          marginBottom: 6,
+          gap: 8,
+        }}
+      >
+        <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <span aria-hidden="true">⚖</span>
+          <span>{t("gatedProposal.header")}</span>
+          <DecisionClassChip decisionClass={decisionClass} />
+        </span>
+        <span
+          title={new Date(message.created_at).toLocaleString()}
+          style={{
+            color: "var(--wg-ink-soft)",
+            textTransform: "none",
+            fontWeight: 400,
+          }}
+        >
+          {relativeTime(message.created_at)}
+        </span>
+      </div>
+
+      {framing && (
+        <div
+          style={{
+            color: "var(--wg-ink)",
+            marginBottom: 10,
+            whiteSpace: "pre-wrap",
+            wordBreak: "break-word",
+          }}
+        >
+          {framing}
+        </div>
+      )}
+
+      <div
+        style={{
+          fontSize: 12,
+          color: "var(--wg-ink-soft)",
+          marginBottom: 10,
+          fontFamily: "var(--wg-font-mono)",
+        }}
+      >
+        {t("gatedProposal.gateKeeper", { name: target.display_name })}
+      </div>
+
+      {sentProposalId ? (
+        <div
+          data-testid="personal-gated-proposal-sent"
+          style={{
+            fontFamily: "var(--wg-font-mono)",
+            fontSize: 12,
+            color: "var(--wg-ok)",
+            fontWeight: 600,
+          }}
+        >
+          {t("gatedProposal.sent", { name: target.display_name })}
+        </div>
+      ) : (
+        <div
+          style={{
+            display: "flex",
+            gap: 8,
+            alignItems: "center",
+            flexWrap: "wrap",
+          }}
+        >
+          <button
+            type="button"
+            disabled={pending}
+            onClick={() => void handleSend()}
+            data-testid="personal-gated-send-btn"
+            style={{
+              padding: "6px 12px",
+              background: "var(--wg-amber)",
+              color: "#fff",
+              border: "none",
+              borderRadius: "var(--wg-radius)",
+              fontSize: 12,
+              fontWeight: 600,
+              cursor: pending ? "progress" : "pointer",
+              opacity: pending ? 0.6 : 1,
+            }}
+            title={target.rationale ?? ""}
+          >
+            {pending
+              ? t("gatedProposal.sending", { name: target.display_name })
+              : t("gatedProposal.send", { name: target.display_name })}
+          </button>
+          <button
+            type="button"
+            onClick={() => setDismissed(true)}
+            aria-label={t("routeProposal.dismiss")}
+            title={t("routeProposal.dismiss")}
+            data-testid="personal-gated-dismiss-btn"
+            style={{
+              padding: "2px 8px",
+              background: "transparent",
+              color: "var(--wg-ink-soft)",
+              border: "1px solid var(--wg-line)",
+              borderRadius: "var(--wg-radius-sm, 4px)",
+              fontSize: 11,
+              fontFamily: "var(--wg-font-mono)",
+              cursor: "pointer",
+            }}
+          >
+            ×
+          </button>
+        </div>
+      )}
+
+      {error ? (
+        <div
+          role="alert"
+          style={{
+            marginTop: 6,
+            fontSize: 11,
+            fontFamily: "var(--wg-font-mono)",
+            color: "var(--wg-accent)",
+          }}
+        >
+          {error}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function DecisionClassChip({
+  decisionClass,
+}: {
+  decisionClass: DecisionClass;
+}) {
+  // Label-only helper; actual i18n lives in the personal messages file.
+  // Kept inline here because the classes are a fixed v0 set (4 values)
+  // and pulling in a shared enum module for one chip would be noise.
+  const labels: Record<string, { en: string; zh: string }> = {
+    budget: { en: "Budget", zh: "预算" },
+    legal: { en: "Legal", zh: "法务" },
+    hire: { en: "Hire", zh: "招聘" },
+    scope_cut: { en: "Scope", zh: "范围" },
+  };
+  const entry = labels[decisionClass] ?? {
+    en: decisionClass,
+    zh: decisionClass,
+  };
+  return (
+    <span
+      data-testid="decision-class-chip"
+      data-decision-class={decisionClass}
+      style={{
+        padding: "1px 6px",
+        background: "var(--wg-amber-soft)",
+        color: "var(--wg-amber)",
+        border: "1px solid var(--wg-amber)",
+        borderRadius: "var(--wg-radius-sm, 4px)",
+        fontSize: 10,
+        fontFamily: "var(--wg-font-mono)",
+        textTransform: "uppercase",
+        letterSpacing: "0.04em",
+        fontWeight: 600,
+        marginLeft: 4,
+      }}
+    >
+      {entry.en}
+    </span>
   );
 }
 
