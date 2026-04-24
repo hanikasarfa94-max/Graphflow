@@ -24,6 +24,7 @@ audience, so their license is the ceiling regardless of who drafted it.
 """
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from sqlalchemy import select
@@ -42,18 +43,50 @@ from workgraph_persistence import (
 )
 
 
+_log = logging.getLogger("workgraph.api.license_context")
+
 # Tightness ordering — the bigger number wins when comparing two tiers.
+# `observer` is the most restrictive; any unknown/corrupt tier value is
+# coerced to `observer` at resolution time so the system fails CLOSED.
 _TIER_TIGHTNESS = {"full": 0, "task_scoped": 1, "observer": 2}
+_MOST_RESTRICTIVE_TIER = "observer"
+KNOWN_TIERS: frozenset[str] = frozenset(_TIER_TIGHTNESS.keys())
+
+
+def _coerce_known_tier(value: str | None, *, context: str) -> str:
+    """Normalize a tier string to one of the known tiers.
+
+    Unknown/None/empty values collapse to the most-restrictive tier
+    (`observer`) and emit a warning so ops can notice schema drift,
+    test-injected bogus values, or forward-compat tiers that the code
+    does not yet understand. This is the explicit fail-CLOSED policy
+    for license-tier resolution.
+    """
+    if value in KNOWN_TIERS:
+        return value  # type: ignore[return-value]
+    _log.warning(
+        "license tier %r is not in known set %s (context=%s); "
+        "coercing to most-restrictive tier %r",
+        value,
+        sorted(KNOWN_TIERS),
+        context,
+        _MOST_RESTRICTIVE_TIER,
+    )
+    return _MOST_RESTRICTIVE_TIER
 
 
 def tighter_tier(a: str, b: str) -> str:
-    """Return whichever tier is more restrictive. Falls back to `full`
-    for unknown inputs (fail-open is wrong here, but we don't have a
-    sane alternative when the DB returns a bogus tier — the filter
-    still runs and gates what the 'full' path serves)."""
-    ra = _TIER_TIGHTNESS.get(a, 0)
-    rb = _TIER_TIGHTNESS.get(b, 0)
-    return a if ra >= rb else b
+    """Return whichever tier is more restrictive.
+
+    Any unrecognized tier (None, empty, typo, future tier value, test
+    injection) is coerced to the most-restrictive tier (`observer`)
+    before comparison — i.e. fail CLOSED. A warning is logged so the
+    drift is visible."""
+    a_safe = _coerce_known_tier(a, context="tighter_tier.a")
+    b_safe = _coerce_known_tier(b, context="tighter_tier.b")
+    ra = _TIER_TIGHTNESS[a_safe]
+    rb = _TIER_TIGHTNESS[b_safe]
+    return a_safe if ra >= rb else b_safe
 
 
 class LicenseContextService:
@@ -64,14 +97,39 @@ class LicenseContextService:
         self, *, project_id: str, user_id: str
     ) -> str | None:
         """Return the user's license_tier for this project, or None if
-        they are not a project member."""
+        they are not a project member.
+
+        Any non-null tier value that isn't in the known-tier set is
+        coerced to the most-restrictive tier and a warning is logged
+        (see `_coerce_known_tier`). Returning `None` here is still
+        meaningful: it signals non-membership so the caller can apply
+        observer semantics at the audience boundary."""
         async with session_scope(self._sessionmaker) as session:
             rows = await ProjectMemberRepository(session).list_for_project(
                 project_id
             )
             for r in rows:
                 if r.user_id == user_id:
-                    return str(r.license_tier or "full")
+                    raw = r.license_tier
+                    if raw is None:
+                        # NULL → unknown → fail closed. Persisted schema
+                        # defaults to "full" at INSERT, so this branch
+                        # only fires if the column was explicitly nulled
+                        # or loaded from legacy data.
+                        return _coerce_known_tier(
+                            None,
+                            context=(
+                                f"_member_tier(project={project_id},"
+                                f"user={user_id}):null"
+                            ),
+                        )
+                    return _coerce_known_tier(
+                        str(raw),
+                        context=(
+                            f"_member_tier(project={project_id},"
+                            f"user={user_id})"
+                        ),
+                    )
         return None
 
     async def resolve_effective_tier(

@@ -438,6 +438,84 @@ def test_tighter_tier_resolves_correctly():
     assert tighter_tier("full", "full") == "full"
 
 
+def test_tighter_tier_unknown_value_fails_closed(caplog):
+    """Unknown tier strings (corruption, forward-compat, test injection)
+    must collapse to the most-restrictive tier (`observer`), NOT grant
+    full-tier access. A warning must be emitted so ops can notice."""
+    import logging
+
+    caplog.set_level(logging.WARNING, logger="workgraph.api.license_context")
+
+    # Against a known lower-tightness tier: unknown should win as observer.
+    assert tighter_tier("nonexistent_tier", "full") == "observer"
+    # Against observer (already most-restrictive): still observer.
+    assert tighter_tier("nonexistent_tier", "observer") == "observer"
+    # Both unknown: observer.
+    assert tighter_tier("bogus_a", "bogus_b") == "observer"
+    # None / empty / other falsy values fail closed too.
+    assert tighter_tier(None, "full") == "observer"  # type: ignore[arg-type]
+    assert tighter_tier("", "task_scoped") == "observer"
+    # Case sensitivity — "FULL" is not "full"; fail closed.
+    assert tighter_tier("FULL", "full") == "observer"
+
+    # At least one warning was emitted for the unknown value.
+    assert any(
+        "nonexistent_tier" in rec.getMessage() for rec in caplog.records
+    ), "expected a warning log for the unrecognized tier"
+
+
+@pytest.mark.asyncio
+async def test_resolve_effective_tier_unknown_db_value_fails_closed(
+    api_env, caplog
+):
+    """If the DB returns a bogus license_tier value (schema drift, manual
+    patch, test-injection), resolve_effective_tier must coerce it to the
+    most-restrictive tier rather than granting full access."""
+    import logging
+
+    _, maker, *_ = api_env
+    project_id = await _mk_project(maker)
+    user_id = await _mk_user(maker, "bogus_tier_user")
+    # Insert the member with a bogus tier straight into the row.
+    async with session_scope(maker) as session:
+        member = await ProjectMemberRepository(session).add(
+            project_id=project_id, user_id=user_id, role="member"
+        )
+        member.license_tier = "nonexistent_tier"
+        await session.flush()
+
+    caplog.set_level(logging.WARNING, logger="workgraph.api.license_context")
+    svc = LicenseContextService(maker)
+    tier = await svc.resolve_effective_tier(
+        project_id=project_id,
+        viewer_user_id=user_id,
+        audience_user_id=None,
+    )
+    assert tier == "observer", (
+        "unknown tier must fail closed to the most-restrictive tier "
+        "(observer), not grant full access"
+    )
+    assert any(
+        "nonexistent_tier" in rec.getMessage() for rec in caplog.records
+    ), "expected a warning log when the DB returns an unknown tier"
+
+    # And the slice we build for such a user must actually apply the
+    # observer filter (not fall through unfiltered).
+    ids = await _seed_graph_plan(maker, project_id=project_id)
+    slice_ = await svc.build_slice(
+        project_id=project_id,
+        viewer_user_id=user_id,
+        audience_user_id=None,
+    )
+    assert slice_["license_tier"] == "observer"
+    # User has no assignments — observer view is empty.
+    assert slice_["plan"]["tasks"] == []
+    assert slice_["graph"]["deliverables"] == []
+    visible = svc.collect_visible_node_ids(slice_)
+    assert ids["task_mine"] not in visible
+    assert ids["task_theirs"] not in visible
+
+
 def test_extract_node_ids_catches_shortcuts_and_uuids():
     body = "See D#12 and T#7 — also refer to task "
     uid = "00000000-0000-0000-0000-000000000042"
