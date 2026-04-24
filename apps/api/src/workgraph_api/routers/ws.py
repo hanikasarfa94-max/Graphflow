@@ -29,6 +29,9 @@ from workgraph_persistence import (
 )
 
 from workgraph_api.services import SESSION_COOKIE
+from workgraph_api.settings import load_settings
+
+_settings = load_settings()
 
 _log = logging.getLogger("workgraph.api.ws")
 
@@ -218,6 +221,11 @@ async def stream_ws(
         ACTIVE_STREAM_WS["count"] = max(0, ACTIVE_STREAM_WS["count"] - 1)
 
 
-@router.get("/ws/_debug/active_count")
-async def active_ws_count() -> dict:
-    return {"count": ACTIVE_WS["count"], "stream_count": ACTIVE_STREAM_WS["count"]}
+# Introspection of live WS subscriber counts. The same counters are already
+# exposed (un-authed) via /health for ops probes, so this route is purely a
+# dev aid. Registered ONLY when env == "dev" — in staging/prod the route is
+# absent from the schema.
+if _settings.env == "dev":
+    @router.get("/ws/_debug/active_count")
+    async def active_ws_count() -> dict:
+        return {"count": ACTIVE_WS["count"], "stream_count": ACTIVE_STREAM_WS["count"]}

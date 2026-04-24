@@ -21,6 +21,9 @@ from workgraph_persistence import EventRepository, ProjectRow, session_scope
 
 from workgraph_api.deps import maybe_user, require_user
 from workgraph_api.services import AuthenticatedUser, ProjectService
+from workgraph_api.settings import load_settings
+
+_settings = load_settings()
 
 _log = logging.getLogger("workgraph.api.events_stream")
 
@@ -130,6 +133,11 @@ async def stream_events(
     )
 
 
-@router.get("/_debug/active_count")
-async def active_count() -> dict[str, Any]:
-    return {"count": ACTIVE_STREAMS["count"]}
+# Introspection of the live SSE tail-counter. The same counter is already
+# exposed (un-authed) via /health for ops probes, so this route is purely a
+# dev aid for poking at counter behaviour during test runs. Registered ONLY
+# when env == "dev" — in staging/prod the route is absent from the schema.
+if _settings.env == "dev":
+    @router.get("/_debug/active_count")
+    async def active_count() -> dict[str, Any]:
+        return {"count": ACTIVE_STREAMS["count"]}

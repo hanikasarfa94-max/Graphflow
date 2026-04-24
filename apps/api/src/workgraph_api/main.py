@@ -855,7 +855,12 @@ async def health() -> dict:
     }
 
 
-@app.get("/_debug/boom")
-async def _debug_boom() -> None:
-    """Deliberately raise an unhandled error — used by Phase 1 validation."""
-    raise RuntimeError("intentional boom for ApiError verification")
+# `/_debug/boom` is a dev aid: it deliberately raises an unhandled error so
+# the ApiError envelope + trace_id propagation can be verified end-to-end.
+# Registered ONLY when env == "dev". In staging/prod the route is absent
+# from the app (and from the OpenAPI schema) — better than a runtime 403.
+if settings.env == "dev":
+    @app.get("/_debug/boom")
+    async def _debug_boom() -> None:
+        """Deliberately raise an unhandled error — used by Phase 1 validation."""
+        raise RuntimeError("intentional boom for ApiError verification")
