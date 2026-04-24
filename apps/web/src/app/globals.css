@@ -326,6 +326,152 @@ body {
   background: var(--wg-ink-faint);
 }
 
+/* --------------------------------------------------------------------------
+   Load-bearing motion — the 5 moments from DESIGN.md §Motion.
+   Each moment uses the --wg-ease-* / --wg-dur-* tokens above. No new
+   easings or durations introduced. Every effect is opt-in via a class
+   (or an inline `animation:` referencing the keyframe name) and drops
+   to no-op under prefers-reduced-motion: reduce.
+   -------------------------------------------------------------------------- */
+
+/* 1 — Decision crystallization. Terracotta ring pulse + scale-up once,
+   when a DecisionRow is minted. Never on replays: the class is applied
+   on mount only. */
+@keyframes wg-decision-crystallize {
+  0% {
+    transform: scale(0.97);
+    box-shadow: 0 0 0 0 var(--wg-accent-ring);
+  }
+  60% {
+    transform: scale(1);
+    box-shadow: 0 0 0 8px rgba(216, 92, 51, 0);
+  }
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(216, 92, 51, 0);
+  }
+}
+.wg-motion-crystallize {
+  animation: wg-decision-crystallize var(--wg-dur-long) var(--wg-ease-enter) both;
+  transform-origin: left center;
+  will-change: transform, box-shadow;
+}
+
+/* 2 — Drift emergence. Float up from the affected node: subtle translate
+   + opacity + shadow expansion. Feels like the organism noticing. One
+   shot, on mount. */
+@keyframes wg-drift-emerge {
+  0% {
+    opacity: 0;
+    transform: translateY(6px);
+    box-shadow: 0 0 0 0 rgba(216, 92, 51, 0);
+  }
+  60% {
+    opacity: 1;
+    transform: translateY(0);
+    box-shadow: 0 6px 18px rgba(216, 92, 51, 0.14);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+    box-shadow: 0 2px 6px rgba(15, 14, 13, 0.04);
+  }
+}
+.wg-motion-drift-emerge {
+  animation: wg-drift-emerge var(--wg-dur-long) var(--wg-ease-enter) both;
+  will-change: opacity, transform, box-shadow;
+}
+
+/* 3 — Citation chip activation. Brief amber glow as each chip enters,
+   then settles to neutral. Staggered by caller via animation-delay. */
+@keyframes wg-citation-glow {
+  0% {
+    background: var(--wg-amber-soft);
+    border-color: var(--wg-amber);
+    box-shadow: 0 0 0 2px var(--wg-amber-soft);
+  }
+  100% {
+    background: var(--wg-surface-sunk, #faf8f4);
+    border-color: var(--wg-line);
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+.wg-motion-citation-glow {
+  animation: wg-citation-glow var(--wg-dur-short) var(--wg-ease-exit) both;
+}
+
+/* 4 — Scrimmage glyphs. Two small circles orbit a central axis while
+   agents debate. Stops naturally when the component unmounts (converged
+   proposal replaces the running card). Uses `move` easing because this
+   is continuous motion, not an enter/exit. */
+@keyframes wg-scrimmage-orbit-a {
+  from {
+    transform: rotate(0deg) translateX(5px) rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg) translateX(5px) rotate(-360deg);
+  }
+}
+@keyframes wg-scrimmage-orbit-b {
+  from {
+    transform: rotate(180deg) translateX(5px) rotate(-180deg);
+  }
+  to {
+    transform: rotate(540deg) translateX(5px) rotate(-540deg);
+  }
+}
+.wg-motion-scrimmage {
+  position: relative;
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  vertical-align: middle;
+}
+.wg-motion-scrimmage::before,
+.wg-motion-scrimmage::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 6px;
+  height: 6px;
+  margin: -3px 0 0 -3px;
+  border-radius: 50%;
+  border: 1.5px solid var(--wg-accent);
+}
+.wg-motion-scrimmage::before {
+  background: var(--wg-accent);
+  animation: wg-scrimmage-orbit-a 1.6s var(--wg-ease-move) infinite;
+}
+.wg-motion-scrimmage::after {
+  background: transparent;
+  animation: wg-scrimmage-orbit-b 1.6s var(--wg-ease-move) infinite;
+}
+
+/* 5 — Silent-consensus avatar assembly. Members converge from slightly
+   outward positions into their final cluster. Stagger 60ms per avatar
+   via inline --wg-motion-index on each chip. */
+@keyframes wg-consensus-assemble {
+  0% {
+    opacity: 0;
+    transform: translate(
+      calc(var(--wg-motion-dx, 0) * 1px),
+      calc(var(--wg-motion-dy, 6) * 1px)
+    )
+      scale(0.9);
+  }
+  100% {
+    opacity: 1;
+    transform: translate(0, 0) scale(1);
+  }
+}
+.wg-motion-consensus-chip {
+  animation: wg-consensus-assemble var(--wg-dur-medium) var(--wg-ease-enter) both;
+  animation-delay: calc(var(--wg-motion-index, 0) * 60ms);
+  will-change: opacity, transform;
+}
+
 /* Reduced-motion — drop animated treatments to opacity-only fades.
    Paper grain is static and unaffected; only keyframe-driven things
    go silent. */
@@ -333,7 +479,24 @@ body {
   .wg-pulse,
   .wg-edge-flow,
   .react-flow__edge.animated .react-flow__edge-path,
-  .react-flow__node {
+  .react-flow__node,
+  .wg-motion-crystallize,
+  .wg-motion-drift-emerge,
+  .wg-motion-citation-glow,
+  .wg-motion-scrimmage::before,
+  .wg-motion-scrimmage::after,
+  .wg-motion-consensus-chip {
     animation: none !important;
+  }
+  .wg-motion-crystallize,
+  .wg-motion-drift-emerge {
+    /* Fall back to instant final state — no transform, no shadow pulse. */
+    transform: none !important;
+    box-shadow: none !important;
+    opacity: 1 !important;
+  }
+  .wg-motion-consensus-chip {
+    opacity: 1 !important;
+    transform: none !important;
   }
 }

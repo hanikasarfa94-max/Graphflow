@@ -192,11 +192,28 @@ export function SilentConsensusCard({ message, projectId, onResolved }: Props) {
         >
           <span style={{ marginRight: 6 }}>{t("bodyPrefix")}</span>
           <span style={{ display: "inline-flex", gap: 4, flexWrap: "wrap" }}>
-            {proposal.members.map((m) => (
-              <span key={m.user_id} style={chipStyle}>
-                {m.display_name}
-              </span>
-            ))}
+            {proposal.members.map((m, i) => {
+              // Stagger + per-chip origin direction. Odd chips drift from
+              // the right, even from the left, all lift from below — gives
+              // the "members converging" feel DESIGN.md §Motion calls for
+              // without needing each chip's real graph position.
+              const dx = i % 2 === 0 ? -6 : 6;
+              const chipMotionStyle = {
+                ...chipStyle,
+                ["--wg-motion-index" as string]: String(i),
+                ["--wg-motion-dx" as string]: String(dx),
+                ["--wg-motion-dy" as string]: "6",
+              } as CSSProperties;
+              return (
+                <span
+                  key={m.user_id}
+                  className="wg-motion-consensus-chip"
+                  style={chipMotionStyle}
+                >
+                  {m.display_name}
+                </span>
+              );
+            })}
           </span>
         </div>
 

@@ -583,6 +583,7 @@ export function DecisionCard({
   return (
     <div
       data-testid="stream-decision-card"
+      className="wg-motion-crystallize"
       style={{
         marginBottom: 10,
         marginLeft: 42,

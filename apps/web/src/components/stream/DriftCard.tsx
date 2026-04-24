@@ -185,6 +185,7 @@ export function DriftCard({ message, onDiscuss }: Props) {
       <div
         data-testid="personal-drift-card-fallback"
         data-message-id={message.id}
+        className="wg-motion-drift-emerge"
         style={{
           marginBottom: 10,
           marginLeft: 42,
@@ -224,6 +225,7 @@ export function DriftCard({ message, onDiscuss }: Props) {
       data-testid="personal-drift-card"
       data-message-id={message.id}
       data-severity={parsed.severity}
+      className="wg-motion-drift-emerge"
       style={{
         marginBottom: 10,
         marginLeft: 42,

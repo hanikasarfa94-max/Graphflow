@@ -95,7 +95,7 @@ export function ScrimmageRunningCard({
           color: "var(--wg-ink)",
         }}
       >
-        <Spinner />
+        <ScrimmageGlyphs />
         <span>
           {t("running.body", { source: sourceName, target: targetName })}
         </span>
@@ -117,6 +117,19 @@ function Spinner() {
         animation: "wgSpin 0.8s linear infinite",
         display: "inline-block",
       }}
+    />
+  );
+}
+
+// DESIGN.md §Motion moment 4: scrimmage running glyphs — filled + empty
+// circle rotating around a central axis while the two agents debate.
+// Stops naturally on convergence when the parent unmounts this card.
+function ScrimmageGlyphs() {
+  return (
+    <span
+      aria-hidden
+      className="wg-motion-scrimmage"
+      data-testid="scrimmage-glyphs"
     />
   );
 }

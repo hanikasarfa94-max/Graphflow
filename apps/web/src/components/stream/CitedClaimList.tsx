@@ -100,7 +100,11 @@ export function CitedClaimList({ projectId, claims }: Props) {
               <Link
                 key={`${c.node_id}-${cIdx}`}
                 href={`/projects/${projectId}/nodes/${c.node_id}`}
-                style={chipStyle}
+                className="wg-motion-citation-glow"
+                style={{
+                  ...chipStyle,
+                  animationDelay: `${(idx * 2 + cIdx) * 80}ms`,
+                }}
                 data-testid="citation-chip"
                 data-node-id={c.node_id}
                 data-kind={c.kind}

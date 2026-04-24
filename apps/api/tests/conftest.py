@@ -652,7 +652,23 @@ async def api_env():
     app.state.meeting_metabolizer = meeting_metabolizer
     app.state.perf_service = perf_service
 
-    transport = ASGITransport(app=app)
+    class _DrainingTransport(ASGITransport):
+        """ASGI transport that drains EventBus subscriber tasks after
+        every request. Test-only: with the shared aiosqlite StaticPool
+        (one connection) a subscriber from request N can still be
+        holding that connection when request N+1's session_scope tries
+        to commit, silently rolling the commit back. Awaiting drain
+        between requests makes the race impossible."""
+
+        async def handle_async_request(self, request):  # type: ignore[override]
+            response = await super().handle_async_request(request)
+            try:
+                await bus.drain()
+            except Exception:
+                pass
+            return response
+
+    transport = _DrainingTransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         yield client, maker, bus, req_agent, clar_agent, plan_agent
     try:
@@ -665,6 +681,15 @@ async def api_env():
         pass
     try:
         await meeting_ingest_service.drain()
+    except Exception:
+        pass
+    # Drain EventBus subscriber tasks before teardown so fire-and-forget
+    # transactions don't race the next test's commits on the shared
+    # aiosqlite StaticPool connection. Production treats subscribers as
+    # fire-and-forget; tests need this barrier because requests N and N+1
+    # share one pooled connection.
+    try:
+        await bus.drain()
     except Exception:
         pass
     await collab_hub.stop()
