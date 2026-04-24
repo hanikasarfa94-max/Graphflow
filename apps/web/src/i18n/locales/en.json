@@ -447,6 +447,7 @@
       "denied": "✓ Denied",
       "resolutionNotePlaceholder": "Reason (optional)…",
       "proposerPrefix": "From {name}",
+      "rawUtteranceLabel": "What they said",
       "classBudget": "Budget",
       "classLegal": "Legal",
       "classHire": "Hire",

@@ -852,6 +852,7 @@ function GatedProposalCard({
       const res = await createGatedProposal(projectId, {
         decision_class: decisionClass,
         proposal_body: framing,
+        decision_text: proposal.decision_text ?? null,
       });
       setSentProposalId(res.proposal.id);
       onConfirmed?.(res.proposal.id);

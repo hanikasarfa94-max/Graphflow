@@ -1001,6 +1001,10 @@ export interface PersonalRouteProposalMetadata {
   // cleanly. Default behavior for missing route_kind = "discovery".
   route_kind?: RouteKind;
   decision_class?: DecisionClass | null;
+  // v0.5 — user's raw utterance; only populated for gated routes so
+  // the gate-keeper card can render the literal text the proposer
+  // committed to. Null for discovery routes and pre-0015 markers.
+  decision_text?: string | null;
 }
 
 // Phase 1.B — provenance chips for edge-LLM claims. `kind` mirrors
@@ -1331,6 +1335,7 @@ export function parseRouteProposalFromBody(
       status?: string;
       route_kind?: string;
       decision_class?: string | null;
+      decision_text?: string | null;
     };
     const targets = (parsed.targets ?? [])
       .filter(
@@ -1351,6 +1356,7 @@ export function parseRouteProposalFromBody(
       status: parsed.status ?? "pending",
       route_kind: parsed.route_kind ?? "discovery",
       decision_class: parsed.decision_class ?? null,
+      decision_text: parsed.decision_text ?? null,
     };
   } catch {
     return null;
@@ -1726,6 +1732,9 @@ export interface GatedProposal {
   gate_keeper_user_id: string;
   decision_class: DecisionClass;
   proposal_body: string;
+  // v0.5 — raw user utterance. Null on pre-0015 rows + callers that
+  // don't supply it (e.g. programmatic proposals).
+  decision_text: string | null;
   apply_actions: Array<Record<string, unknown>>;
   status: GatedProposalStatus;
   resolution_note: string | null;
@@ -1755,6 +1764,10 @@ export function createGatedProposal(
   input: {
     decision_class: DecisionClass;
     proposal_body: string;
+    // v0.5 — user's raw utterance. Optional so programmatic callers
+    // (scripts, tests without an edge-LLM turn) keep working; the
+    // route-proposal card fills it in from the marker metadata.
+    decision_text?: string | null;
     // Shape matches DecisionRow.apply_actions on the backend: list of
     // structured dicts. In v0 the edge-agent emits an empty list, but
     // the shape is preserved so Option 2 hardening (wiring to
@@ -1769,6 +1782,7 @@ export function createGatedProposal(
       body: {
         decision_class: input.decision_class,
         proposal_body: input.proposal_body,
+        decision_text: input.decision_text ?? null,
         apply_actions: input.apply_actions ?? [],
       },
     },

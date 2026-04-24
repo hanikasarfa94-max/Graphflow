@@ -654,6 +654,15 @@ class PersonalStreamService:
                 if route_kind_value == "gated"
                 else None
             )
+            # v0.5 — carry the user's raw utterance alongside the
+            # agent's framing so the gate-keeper card can surface both.
+            # Only meaningful for gated routes; discovery routes don't
+            # need it (no sign-off step in between).
+            decision_text_value = (
+                (body or "").strip()
+                if route_kind_value == "gated"
+                else None
+            ) or None
             marker = {
                 "message_id": message_id,  # self-pointer back to the user turn
                 "source_user_id": user_id,
@@ -664,6 +673,7 @@ class PersonalStreamService:
                 "status": "pending",
                 "route_kind": route_kind_value,
                 "decision_class": decision_class_value,
+                "decision_text": decision_text_value,
             }
             body_with_claims = _encode_claims_body(human_body, claims_json)
             encoded = _encode_route_proposal_body(body_with_claims, marker)

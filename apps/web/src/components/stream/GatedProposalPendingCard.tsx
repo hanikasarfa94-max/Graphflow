@@ -193,6 +193,52 @@ export function GatedProposalPendingCard({ message, memberById }: Props) {
         </span>
       </div>
 
+      {/*
+        v0.5 — when the proposer's raw utterance is captured, render it
+        first so the gate-keeper approves what the human actually said,
+        not the agent's paraphrase. Suppressed when missing (pre-0015
+        rows / programmatic callers) or when it's identical to
+        message.body (no duplicative noise).
+      */}
+      {proposal?.decision_text &&
+      proposal.decision_text.trim() !== message.body.trim() ? (
+        <div
+          data-testid="personal-gated-decision-text"
+          style={{
+            marginBottom: 10,
+            padding: "8px 10px",
+            background: "var(--wg-surface-raised, var(--wg-surface))",
+            borderLeft: "2px solid var(--wg-ink-faint)",
+            borderRadius: "var(--wg-radius-sm, 4px)",
+          }}
+        >
+          <div
+            style={{
+              fontFamily: "var(--wg-font-mono)",
+              fontSize: 10,
+              color: "var(--wg-ink-faint)",
+              letterSpacing: "0.04em",
+              textTransform: "uppercase",
+              fontWeight: 600,
+              marginBottom: 4,
+            }}
+          >
+            {t("rawUtteranceLabel")}
+          </div>
+          <div
+            style={{
+              color: "var(--wg-ink)",
+              whiteSpace: "pre-wrap",
+              wordBreak: "break-word",
+              lineHeight: 1.5,
+              fontSize: 13,
+            }}
+          >
+            {proposal.decision_text}
+          </div>
+        </div>
+      ) : null}
+
       <div
         style={{
           color: "var(--wg-ink)",

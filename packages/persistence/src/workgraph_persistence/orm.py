@@ -763,6 +763,18 @@ class GatedProposalRow(Base):
     )
     decision_class: Mapped[str] = mapped_column(String(32))
     proposal_body: Mapped[str] = mapped_column(String(4000))
+    # v0.5 polish — the user's raw utterance that triggered the
+    # gated route. `proposal_body` is the edge agent's framing
+    # ("Scope cut — Maya gates scope decisions…") which is useful
+    # context for the gate-keeper, but the gate-keeper is actually
+    # approving what the PROPOSER committed to, not the agent's
+    # paraphrase. Rendering both preserves attribution + avoids the
+    # "LLM put words in my mouth" failure mode. Nullable because
+    # pre-0015 rows have no captured raw text and older callers may
+    # omit it.
+    decision_text: Mapped[str | None] = mapped_column(
+        String(4000), nullable=True
+    )
     # Same shape as DecisionRow.apply_actions — a list of
     # structured mutation ops the service replays on approve.
     apply_actions: Mapped[list] = mapped_column(JSON, default=list)

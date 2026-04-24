@@ -1386,6 +1386,7 @@ class GatedProposalRepository:
         decision_class: str,
         proposal_body: str,
         apply_actions: list,
+        decision_text: str | None = None,
         trace_id: str | None = None,
     ) -> GatedProposalRow:
         row = GatedProposalRow(
@@ -1395,6 +1396,7 @@ class GatedProposalRepository:
             gate_keeper_user_id=gate_keeper_user_id,
             decision_class=decision_class,
             proposal_body=proposal_body,
+            decision_text=decision_text,
             apply_actions=apply_actions,
             status="pending",
             trace_id=trace_id,

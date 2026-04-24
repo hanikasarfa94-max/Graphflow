@@ -98,6 +98,10 @@ class ProposeRequest(BaseModel):
 
     decision_class: str = Field(min_length=1, max_length=32)
     proposal_body: str = Field(min_length=1, max_length=4000)
+    # v0.5 polish — raw utterance that triggered the gated route.
+    # Optional so older clients + programmatic callers keep working;
+    # the edge-LLM flow now threads it through.
+    decision_text: str | None = Field(default=None, max_length=4000)
     apply_actions: list[dict[str, Any]] = Field(default_factory=list)
 
 
@@ -139,6 +143,7 @@ async def post_propose(
             decision_class=body.decision_class,
             proposal_body=body.proposal_body,
             apply_actions=body.apply_actions,
+            decision_text=body.decision_text,
         )
     except GatedProposalError as exc:
         raise _map_error(exc) from exc

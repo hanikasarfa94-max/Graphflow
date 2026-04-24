@@ -155,6 +155,76 @@ async def test_propose_creates_row_and_notifies_gate_keeper(api_env):
     assert pending_cards[0].linked_id == proposal_id
 
 
+# ---- 1b. decision_text round-trip (v0.5 polish) ------------------------
+
+
+@pytest.mark.asyncio
+async def test_propose_persists_and_returns_decision_text(api_env):
+    """When the proposer supplies decision_text (the raw user utterance),
+    it is persisted on the row and surfaced in every read path the
+    gate-keeper UI relies on: POST response, GET /gated-proposals/{id},
+    and the project listing."""
+    client, maker, *_ = api_env
+
+    pid = await _mk_project(maker)
+    proposer_id = await _register_and_login(client, "gp_dt_proposer")
+    gate_id = await _register_and_login(client, "gp_dt_gate")
+    await _login(client, "gp_dt_proposer")
+    await _add_member(maker, project_id=pid, user_id=proposer_id, role="owner")
+    await _add_member(maker, project_id=pid, user_id=gate_id, role="member")
+    await _set_gate_keeper_map(maker, project_id=pid, map_={"scope_cut": gate_id})
+
+    raw = "let's cut auth from v1 — it's blocking the demo"
+    framing = "Scope cut — Maya gates scope decisions; sending for sign-off."
+    r = await client.post(
+        f"/api/projects/{pid}/gated-proposals",
+        json={
+            "decision_class": "scope_cut",
+            "proposal_body": framing,
+            "decision_text": raw,
+        },
+    )
+    assert r.status_code == 200, r.text
+    proposal_id = r.json()["proposal"]["id"]
+    assert r.json()["proposal"]["decision_text"] == raw
+    assert r.json()["proposal"]["proposal_body"] == framing
+
+    # Single-proposal GET echoes it.
+    g = await client.get(f"/api/gated-proposals/{proposal_id}")
+    assert g.status_code == 200
+    assert g.json()["proposal"]["decision_text"] == raw
+
+    # Project listing echoes it.
+    lst = await client.get(f"/api/projects/{pid}/gated-proposals")
+    assert lst.status_code == 200
+    rows = lst.json()["proposals"]
+    assert any(
+        p["id"] == proposal_id and p["decision_text"] == raw for p in rows
+    )
+
+
+@pytest.mark.asyncio
+async def test_decision_text_optional_defaults_to_null(api_env):
+    """Omitted decision_text deserializes as null everywhere — covers the
+    legacy / programmatic path where no raw utterance was captured."""
+    client, maker, *_ = api_env
+
+    pid = await _mk_project(maker)
+    proposer_id = await _register_and_login(client, "gp_dtnull_proposer")
+    gate_id = await _register_and_login(client, "gp_dtnull_gate")
+    await _login(client, "gp_dtnull_proposer")
+    await _add_member(maker, project_id=pid, user_id=proposer_id, role="owner")
+    await _add_member(maker, project_id=pid, user_id=gate_id, role="member")
+    await _set_gate_keeper_map(maker, project_id=pid, map_={"budget": gate_id})
+
+    r = await client.post(
+        f"/api/projects/{pid}/gated-proposals",
+        json={"decision_class": "budget", "proposal_body": "X"},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["proposal"]["decision_text"] is None
+
+
 # ---- 2. approve ---------------------------------------------------------
 
 

@@ -145,6 +145,7 @@ class GatedProposalService:
         decision_class: str,
         proposal_body: str,
         apply_actions: list[dict[str, Any]] | None = None,
+        decision_text: str | None = None,
         trace_id: str | None = None,
     ) -> dict[str, Any]:
         proposal_body = (proposal_body or "").strip()
@@ -152,6 +153,14 @@ class GatedProposalService:
             raise GatedProposalError("empty_proposal_body")
         if decision_class not in VALID_DECISION_CLASSES:
             raise GatedProposalError("invalid_decision_class")
+        # decision_text is optional but if supplied must be non-empty
+        # and bounded. Treat bare whitespace as "not supplied".
+        if decision_text is not None:
+            decision_text = decision_text.strip()
+            if not decision_text:
+                decision_text = None
+            elif len(decision_text) > 4000:
+                decision_text = decision_text[:4000]
 
         async with session_scope(self._sessionmaker) as session:
             project = (
@@ -189,6 +198,7 @@ class GatedProposalService:
                 gate_keeper_user_id=gate_keeper_id,
                 decision_class=decision_class,
                 proposal_body=proposal_body,
+                decision_text=decision_text,
                 apply_actions=list(apply_actions or []),
                 trace_id=trace_id,
             )
@@ -491,6 +501,7 @@ class GatedProposalService:
             "gate_keeper_user_id": row.gate_keeper_user_id,
             "decision_class": row.decision_class,
             "proposal_body": row.proposal_body,
+            "decision_text": row.decision_text,
             "apply_actions": list(row.apply_actions or []),
             "status": row.status,
             "resolution_note": row.resolution_note,
