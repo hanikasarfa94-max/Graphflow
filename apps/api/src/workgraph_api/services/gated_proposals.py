@@ -67,6 +67,7 @@ from workgraph_persistence import (
     InvalidProposalStateError,
     ProjectMemberRepository,
     ProjectRow,
+    StreamRepository,
     VoteRepository,
     session_scope,
 )
@@ -498,6 +499,24 @@ class GatedProposalService:
             project_id = proposal.project_id
             decision_class = proposal.decision_class
 
+        # Group-stream runtime log: the team sees "Vote opened on X
+        # (threshold 2/3)". Must land before emit() so subscriber races
+        # don't drop it.
+        class_label = DECISION_CLASS_LABELS.get(decision_class, {}).get(
+            "en"
+        ) or decision_class
+        threshold = self._threshold(voter_pool)
+        await self._log_to_group_stream(
+            project_id=project_id,
+            body=(
+                f"🗳 Vote opened on {class_label.lower()}: "
+                f"{payload['proposal_body']} "
+                f"(threshold {threshold}/{len(voter_pool)})"
+            ),
+            kind="vote-opened",
+            linked_id=proposal_id,
+        )
+
         await self._event_bus.emit(
             "gated_proposal.vote_opened",
             {
@@ -506,11 +525,11 @@ class GatedProposalService:
                 "decision_class": decision_class,
                 "opener": acting_user_id,
                 "voter_pool": voter_pool,
-                "threshold": self._threshold(voter_pool),
+                "threshold": threshold,
             },
         )
 
-        return {"ok": True, "proposal": payload, "threshold": self._threshold(voter_pool)}
+        return {"ok": True, "proposal": payload, "threshold": threshold}
 
     async def cast_vote(
         self,
@@ -642,6 +661,9 @@ class GatedProposalService:
 
         # Side effects AFTER session closes: stream posts + events.
         if resolved_as is not None:
+            # Loop-closure: proposer's personal stream gets the outcome
+            # so the thread started in their stream naturally concludes
+            # there (matches the 1-to-1 route-back-to-origin pattern).
             await self._notify_proposer(
                 project_id=project_id,
                 proposer_id=proposer_id,
@@ -649,6 +671,27 @@ class GatedProposalService:
                 decision_class=decision_class,
                 status=resolved_as,
                 rationale=payload.get("resolution_note") if payload else None,
+            )
+            # Group-stream runtime log: vote is group-layer, so the
+            # team room gets a canonical resolution entry alongside
+            # decisions / drift / commitments.
+            class_label = DECISION_CLASS_LABELS.get(decision_class, {}).get(
+                "en"
+            ) or decision_class
+            verdict_icon = "✓" if resolved_as == "approved" else "✗"
+            abstain_frag = (
+                f", {tally['abstain']} abstain" if tally["abstain"] else ""
+            )
+            body = (
+                f"{verdict_icon} Vote {resolved_as} — {class_label.lower()}: "
+                f"{tally['approve']} approve, {tally['deny']} deny"
+                f"{abstain_frag} of {tally['pool_size']}"
+            )
+            await self._log_to_group_stream(
+                project_id=project_id,
+                body=body,
+                kind=f"vote-resolved-{resolved_as}",
+                linked_id=proposal_id,
             )
             await self._event_bus.emit(
                 f"gated_proposal.{resolved_as}",
@@ -806,6 +849,42 @@ class GatedProposalService:
             body=body,
             kind="gated-proposal-resolved",
             linked_id=proposal_id,
+        )
+
+    async def _log_to_group_stream(
+        self,
+        *,
+        project_id: str,
+        body: str,
+        kind: str,
+        linked_id: str,
+    ) -> None:
+        """Post a runtime-log system message into the project's shared
+        group stream. Vote activity is group-layer by definition —
+        opening + resolving get a canonical audit entry in the team
+        feed alongside decisions / drift / commitments.
+
+        Silent no-op if the project stream doesn't exist (shouldn't
+        happen after boot backfill, but the service treats its absence
+        as non-fatal — the proposal row itself is the source of truth).
+        """
+        async with session_scope(self._sessionmaker) as session:
+            stream_row = await StreamRepository(session).get_for_project(
+                project_id
+            )
+            stream_id = stream_row.id if stream_row is not None else None
+        if stream_id is None:
+            _log.warning(
+                "gated_proposal group-stream log: no project stream",
+                extra={"project_id": project_id, "linked_id": linked_id},
+            )
+            return
+        await self._streams.post_system_message(
+            stream_id=stream_id,
+            author_id=EDGE_AGENT_SYSTEM_USER_ID,
+            body=body,
+            kind=kind,
+            linked_id=linked_id,
         )
 
     def _payload(self, row: GatedProposalRow) -> dict[str, Any]:

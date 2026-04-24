@@ -30,6 +30,7 @@ from workgraph_persistence import (
     ProjectRow,
     StreamRepository,
     UserRepository,
+    backfill_streams_from_projects,
     session_scope,
 )
 
@@ -654,6 +655,11 @@ async def _seed_vote_ready_project(client, maker, suffix: str):
     Returns (project_id, {label: user_id}).
     """
     pid = await _mk_project(maker)
+    # Manually-inserted ProjectRows bypass the app's boot-time
+    # backfill, so the project/team stream + personal streams are
+    # absent. Seed them explicitly — vote-opened / vote-resolved
+    # runtime logs depend on the project stream existing.
+    await backfill_streams_from_projects(maker)
     a = await _register_and_login(client, f"gp_owner_a_{suffix}")
     b = await _register_and_login(client, f"gp_owner_b_{suffix}")
     c = await _register_and_login(client, f"gp_owner_c_{suffix}")
@@ -886,6 +892,57 @@ async def test_invalid_verdict_rejected(api_env):
     )
     assert r.status_code == 400
     assert r.json()["message"] == "invalid_verdict"
+
+
+@pytest.mark.asyncio
+async def test_vote_opened_and_resolved_post_to_group_stream(api_env):
+    """open_to_vote posts 'vote-opened' to the project/team stream;
+    threshold-approve resolution posts 'vote-resolved-approved'
+    alongside the proposer's personal-stream notification."""
+    client, maker, *_ = api_env
+    pid, u = await _seed_vote_ready_project(client, maker, "v9")
+
+    r = await client.post(
+        f"/api/projects/{pid}/gated-proposals",
+        json={"decision_class": "scope_cut", "proposal_body": "trim payments"},
+    )
+    proposal_id = r.json()["proposal"]["id"]
+    await client.post(f"/api/gated-proposals/{proposal_id}/open-to-vote", json={})
+
+    # Group-stream opened card.
+    async with session_scope(maker) as session:
+        stream = await StreamRepository(session).get_for_project(pid)
+        assert stream is not None
+        msgs = await MessageRepository(session).list_for_stream(
+            stream_id=stream.id, limit=50
+        )
+        opened = [m for m in msgs if m.kind == "vote-opened"]
+    assert len(opened) == 1
+    assert opened[0].linked_id == proposal_id
+    assert "Vote opened" in opened[0].body
+
+    # Drive through to resolution: b (already logged in) + c both approve.
+    r = await client.post(
+        f"/api/gated-proposals/{proposal_id}/votes", json={"verdict": "approve"}
+    )
+    assert r.status_code == 200
+    await _login(client, "gp_owner_c_v9")
+    r = await client.post(
+        f"/api/gated-proposals/{proposal_id}/votes", json={"verdict": "approve"}
+    )
+    assert r.status_code == 200
+    assert r.json()["resolved_as"] == "approved"
+
+    # Group-stream resolved card.
+    async with session_scope(maker) as session:
+        stream = await StreamRepository(session).get_for_project(pid)
+        msgs = await MessageRepository(session).list_for_stream(
+            stream_id=stream.id, limit=50
+        )
+        resolved = [m for m in msgs if m.kind == "vote-resolved-approved"]
+    assert len(resolved) == 1
+    assert resolved[0].linked_id == proposal_id
+    assert "2 approve" in resolved[0].body
 
 
 @pytest.mark.asyncio
