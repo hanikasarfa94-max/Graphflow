@@ -21,6 +21,7 @@ import {
   confirmRouteProposal,
   createGatedProposal,
   fetchPreAnswer,
+  openGatedProposalToVote,
   parseRouteProposalFromBody,
   runScrimmage,
   stripRouteProposalMarker,
@@ -844,6 +845,9 @@ function GatedProposalCard({
     );
   }
 
+  const [openedToVote, setOpenedToVote] = useState(false);
+  const canOpenToVote = proposal.can_open_to_vote === true;
+
   async function handleSend() {
     if (pending || sentProposalId) return;
     setPending(true);
@@ -868,6 +872,41 @@ function GatedProposalCard({
         setError(String(msg));
       } else {
         setError("send failed");
+      }
+    } finally {
+      setPending(false);
+    }
+  }
+
+  async function handleOpenToVote() {
+    // "Open to vote" skips the single-approver flow: create the
+    // proposal AND immediately convert it to vote mode. Proposer stays
+    // in control — the proposal never sat in a sign-off inbox.
+    if (pending || sentProposalId) return;
+    setPending(true);
+    setError(null);
+    try {
+      const created = await createGatedProposal(projectId, {
+        decision_class: decisionClass,
+        proposal_body: framing,
+        decision_text: proposal.decision_text ?? null,
+      });
+      await openGatedProposalToVote(created.proposal.id);
+      setSentProposalId(created.proposal.id);
+      setOpenedToVote(true);
+      onConfirmed?.(created.proposal.id);
+    } catch (e) {
+      if (e instanceof ApiError) {
+        const body = e.body as
+          | { message?: unknown; detail?: unknown }
+          | undefined;
+        const msg =
+          (body && typeof body.message === "string" && body.message) ||
+          (body && typeof body.detail === "string" && body.detail) ||
+          `error ${e.status}`;
+        setError(String(msg));
+      } else {
+        setError("open-to-vote failed");
       }
     } finally {
       setPending(false);
@@ -955,7 +994,9 @@ function GatedProposalCard({
             fontWeight: 600,
           }}
         >
-          {t("gatedProposal.sent", { name: target.display_name })}
+          {openedToVote
+            ? t("gatedProposal.openedToVote")
+            : t("gatedProposal.sent", { name: target.display_name })}
         </div>
       ) : (
         <div
@@ -988,6 +1029,28 @@ function GatedProposalCard({
               ? t("gatedProposal.sending", { name: target.display_name })
               : t("gatedProposal.send", { name: target.display_name })}
           </button>
+          {canOpenToVote ? (
+            <button
+              type="button"
+              disabled={pending}
+              onClick={() => void handleOpenToVote()}
+              data-testid="personal-gated-open-vote-btn"
+              title={t("gatedProposal.openToVoteHint")}
+              style={{
+                padding: "6px 12px",
+                background: "transparent",
+                color: "var(--wg-amber)",
+                border: "1px solid var(--wg-amber)",
+                borderRadius: "var(--wg-radius)",
+                fontSize: 12,
+                fontWeight: 600,
+                cursor: pending ? "progress" : "pointer",
+                opacity: pending ? 0.6 : 1,
+              }}
+            >
+              {t("gatedProposal.openToVote")}
+            </button>
+          ) : null}
           <button
             type="button"
             onClick={() => setDismissed(true)}

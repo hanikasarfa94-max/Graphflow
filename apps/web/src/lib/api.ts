@@ -1005,6 +1005,11 @@ export interface PersonalRouteProposalMetadata {
   // the gate-keeper card can render the literal text the proposer
   // committed to. Null for discovery routes and pre-0015 markers.
   decision_text?: string | null;
+  // Phase S — true when the project has ≥2 authority holders for
+  // this decision_class (owners ∪ gate_keeper). The proposer's card
+  // renders an [🗳 Open to vote] affordance next to [Send for
+  // sign-off]. Default false on pre-Phase-S markers.
+  can_open_to_vote?: boolean;
 }
 
 // Phase 1.B — provenance chips for edge-LLM claims. `kind` mirrors
@@ -1336,6 +1341,7 @@ export function parseRouteProposalFromBody(
       route_kind?: string;
       decision_class?: string | null;
       decision_text?: string | null;
+      can_open_to_vote?: boolean;
     };
     const targets = (parsed.targets ?? [])
       .filter(
@@ -1357,6 +1363,7 @@ export function parseRouteProposalFromBody(
       route_kind: parsed.route_kind ?? "discovery",
       decision_class: parsed.decision_class ?? null,
       decision_text: parsed.decision_text ?? null,
+      can_open_to_vote: parsed.can_open_to_vote ?? false,
     };
   } catch {
     return null;
@@ -1798,6 +1805,61 @@ export function approveGatedProposal(
     {
       method: "POST",
       body: { rationale: rationale ?? null },
+    },
+  );
+}
+
+// Phase S — open a pending single-approver proposal to a vote-mode
+// resolution. The caller must be the proposer, a project owner, or
+// the named gate-keeper; voter pool must be ≥ 2. On success the
+// proposal transitions to status='in_vote' and voters get inbox cards.
+export function openGatedProposalToVote(
+  proposalId: string,
+  rationale?: string,
+): Promise<{
+  ok: boolean;
+  proposal: GatedProposal;
+  threshold: number;
+}> {
+  return api(
+    `/api/gated-proposals/${proposalId}/open-to-vote`,
+    {
+      method: "POST",
+      body: { rationale: rationale ?? null },
+    },
+  );
+}
+
+// Phase S — cast a verdict on an in-vote proposal. Voters can change
+// their verdict until the proposal resolves; upserts the VoteRow.
+// `verdict ∈ {approve, deny, abstain}`.
+export type VoteVerdict = "approve" | "deny" | "abstain";
+
+export function castGatedProposalVote(
+  proposalId: string,
+  input: { verdict: VoteVerdict; rationale?: string },
+): Promise<{
+  ok: boolean;
+  proposal: GatedProposal;
+  tally: {
+    approve: number;
+    deny: number;
+    abstain: number;
+    outstanding: number;
+    pool_size: number;
+    threshold: number;
+  };
+  resolved_as: "approved" | "denied" | null;
+  decision_id: string | null;
+}> {
+  return api(
+    `/api/gated-proposals/${proposalId}/votes`,
+    {
+      method: "POST",
+      body: {
+        verdict: input.verdict,
+        rationale: input.rationale ?? null,
+      },
     },
   );
 }

@@ -663,6 +663,22 @@ class PersonalStreamService:
                 if route_kind_value == "gated"
                 else None
             ) or None
+            # Phase S — the [🗳 Open to vote] button affordance on the
+            # proposer's card. True when ≥2 authority holders exist
+            # for this class on this project (owners ∪ gate_keeper).
+            # Computed at context-build time from
+            # project.authority_pool_sizes. Conservative mode: LLM
+            # doesn't infer authority from profile; pool is declared
+            # via roles + gate_keeper_map.
+            project_pool_sizes = (
+                (context.get("project") or {}).get("authority_pool_sizes")
+                or {}
+            )
+            can_open_to_vote = (
+                route_kind_value == "gated"
+                and isinstance(decision_class_value, str)
+                and int(project_pool_sizes.get(decision_class_value, 0)) >= 2
+            )
             marker = {
                 "message_id": message_id,  # self-pointer back to the user turn
                 "source_user_id": user_id,
@@ -674,6 +690,7 @@ class PersonalStreamService:
                 "route_kind": route_kind_value,
                 "decision_class": decision_class_value,
                 "decision_text": decision_text_value,
+                "can_open_to_vote": can_open_to_vote,
             }
             body_with_claims = _encode_claims_body(human_body, claims_json)
             encoded = _encode_route_proposal_body(body_with_claims, marker)
@@ -1073,6 +1090,27 @@ class PersonalStreamService:
                 and uid != user_id
             }
 
+            # Phase S — per-class authority pool size. A gated class is
+            # eligible for "open to vote" when the pool of current
+            # authority holders is ≥ 2. Pool = project owners ∪
+            # {gate_keeper if mapped}; same derivation as
+            # GatedProposalService.open_to_vote.
+            owner_ids = {
+                m.user_id
+                for m in members
+                if m.role == "owner" and m.user_id != EDGE_AGENT_SYSTEM_USER_ID
+            }
+            authority_pool_sizes: dict[str, int] = {}
+            for cls in EDGE_VALID_DECISION_CLASSES:
+                pool = set(owner_ids)
+                gk = raw_map.get(cls)
+                if (
+                    isinstance(gk, str)
+                    and gk in current_member_ids
+                ):
+                    pool.add(gk)
+                authority_pool_sizes[cls] = len(pool)
+
             msg_rows = await MessageRepository(session).list_for_stream(
                 stream_id, limit=5
             )
@@ -1111,6 +1149,7 @@ class PersonalStreamService:
                 "valid_decision_classes": sorted(
                     EDGE_VALID_DECISION_CLASSES
                 ),
+                "authority_pool_sizes": authority_pool_sizes,
             },
             "teammates": member_summaries,  # legacy alias; keep until tests migrate
             "recent_messages": recent_messages,
