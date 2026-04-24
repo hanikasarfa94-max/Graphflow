@@ -249,6 +249,53 @@ export function simulateDropTask(
   });
 }
 
+// ---------- Gated-proposal counterfactual ("if approved") ----------
+
+export interface CounterfactualReassignment {
+  task_id: string;
+  task_title: string;
+  from_user_id: string | null;
+  from_display_name: string | null;
+  to_user_id: string | null;
+  to_display_name: string | null;
+}
+
+export interface CounterfactualEffectRef {
+  id: string;
+  title: string;
+}
+
+export interface CounterfactualMilestoneSlip {
+  id: string;
+  title: string;
+  slip_days: number;
+}
+
+export interface Counterfactual {
+  empty: boolean;
+  reason: string | null;
+  proposal_id: string;
+  status: string;
+  action_count: number;
+  advisory_count: number;
+  reassignments: CounterfactualReassignment[];
+  unblocks: CounterfactualEffectRef[];
+  blocks: CounterfactualEffectRef[];
+  milestone_slips: CounterfactualMilestoneSlip[];
+  total_effects: number;
+  project_id?: string;
+}
+
+export async function getGatedProposalCounterfactual(
+  proposalId: string,
+): Promise<Counterfactual> {
+  const res = await api<{ ok: true; counterfactual: Counterfactual }>(
+    `/api/gated-proposals/${proposalId}/counterfactual`,
+    { method: "GET" },
+  );
+  return res.counterfactual;
+}
+
 // ---------- Skill atlas (/projects/[id]/skills) ----------
 
 export interface SkillAtlasMemberCard {

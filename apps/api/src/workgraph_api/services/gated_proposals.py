@@ -54,12 +54,16 @@ Safety invariants that ARE enforced:
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import Any, TYPE_CHECKING
 
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
+if TYPE_CHECKING:
+    from .simulation import SimulationService
+
 from workgraph_domain import EventBus
 from workgraph_persistence import (
+    AssignmentRepository,
     DecisionRepository,
     EDGE_AGENT_SYSTEM_USER_ID,
     GatedProposalRepository,
@@ -68,6 +72,8 @@ from workgraph_persistence import (
     ProjectMemberRepository,
     ProjectRow,
     StreamRepository,
+    TaskRow,
+    UserRow,
     VoteRepository,
     session_scope,
 )
@@ -134,11 +140,15 @@ class GatedProposalService:
         stream_service: StreamService,
         event_bus: EventBus,
         signal_tally: SignalTallyService | None = None,
+        simulation_service: "SimulationService | None" = None,
     ) -> None:
         self._sessionmaker = sessionmaker
         self._streams = stream_service
         self._event_bus = event_bus
         self._signal_tally = signal_tally
+        # Optional — absence is fine; counterfactual endpoint will
+        # return an empty payload with reason='simulation_unavailable'.
+        self._simulation = simulation_service
 
     # --------------------------------------------------------------- propose
 
@@ -773,6 +783,192 @@ class GatedProposalService:
         if not pool:
             return 0
         return len(pool) // 2 + 1
+
+    # -------------------------------------------------------- counterfactual
+
+    async def counterfactual(self, *, proposal_id: str) -> dict[str, Any]:
+        """Predict the graph-shape effects of approving this proposal.
+
+        The marquee view on a vote-pending card: "if this passes, here's
+        what changes." Read-only. No writes, no events.
+
+        Shape:
+          {
+            empty: bool,
+            reason: str | None,       # 'advisory_only' | 'no_actions'
+                                      # | 'proposal_resolved' | None
+            proposal_id: str,
+            status: str,              # current proposal.status for context
+            action_count: int,
+            advisory_count: int,
+            reassignments: [{task_id, task_title, from_user_id,
+                             from_display_name, to_user_id,
+                             to_display_name}],
+            unblocks: [{id, title}],          # reserved — empty in v0
+            blocks: [{id, title}],            # reserved — empty in v0
+            milestone_slips: [{id, title, slip_days}],  # reserved — empty
+            total_effects: int,
+          }
+
+        Adapter contract — apply_actions → effect categories:
+          * {kind: 'assign_task', task_id, user_id} → reassignment entry
+            (delta against the *current* active assignment, if any).
+          * {kind: 'advisory', ...}                 → advisory_count++
+          * any other kind                          → action_count++ only
+                                                      (generic — no
+                                                      structured preview
+                                                      available yet)
+
+        Note: the v1 simulation primitive (`drop_task`) is orthogonal to
+        today's apply_actions (which are additive: assign_task /
+        advisory). When a future apply_action kind ('drop_task',
+        'delay_milestone') lands, plumb it through by calling
+        self._simulation.simulate(...) here and folding the result into
+        unblocks / blocks / milestone_slips.
+        """
+        async with session_scope(self._sessionmaker) as session:
+            proposal = await GatedProposalRepository(session).get(proposal_id)
+            if proposal is None:
+                raise GatedProposalError("proposal_not_found", status=404)
+
+            actions: list[dict[str, Any]] = list(proposal.apply_actions or [])
+            status = proposal.status
+            project_id = proposal.project_id
+
+            # Short-circuit: no actions at all, or only advisory entries
+            # → empty preview, but with a distinguishing reason so the
+            # card can render "advisory decision; no graph mutations
+            # predicted" gracefully.
+            if not actions:
+                return {
+                    "empty": True,
+                    "reason": "no_actions",
+                    "proposal_id": proposal_id,
+                    "status": status,
+                    "action_count": 0,
+                    "advisory_count": 0,
+                    "reassignments": [],
+                    "unblocks": [],
+                    "blocks": [],
+                    "milestone_slips": [],
+                    "total_effects": 0,
+                }
+
+            advisory_count = sum(
+                1 for a in actions if a.get("kind") == "advisory"
+            )
+            assign_actions = [
+                a for a in actions if a.get("kind") == "assign_task"
+            ]
+            if not assign_actions and advisory_count == len(actions):
+                # All advisory — honest "no mechanical effects" case.
+                return {
+                    "empty": True,
+                    "reason": "advisory_only",
+                    "proposal_id": proposal_id,
+                    "status": status,
+                    "action_count": len(actions),
+                    "advisory_count": advisory_count,
+                    "reassignments": [],
+                    "unblocks": [],
+                    "blocks": [],
+                    "milestone_slips": [],
+                    "total_effects": 0,
+                }
+
+            # Resolve task + user details for assign_task previews. Batch
+            # the selects so we don't do 2N round-trips for N actions.
+            task_ids = [
+                a.get("task_id") for a in assign_actions if a.get("task_id")
+            ]
+            to_user_ids = [
+                a.get("user_id") for a in assign_actions if a.get("user_id")
+            ]
+
+            task_by_id: dict[str, TaskRow] = {}
+            if task_ids:
+                rows = (
+                    await session.execute(
+                        select(TaskRow).where(TaskRow.id.in_(task_ids))
+                    )
+                ).scalars().all()
+                task_by_id = {r.id: r for r in rows}
+
+            # Current active assignment per task — used to render the
+            # reassignment delta ("from" side).
+            assign_repo = AssignmentRepository(session)
+            current_owner: dict[str, str | None] = {}
+            for tid in task_ids:
+                active = await assign_repo.active_for_task(tid)
+                current_owner[tid] = active.user_id if active else None
+
+            # Resolve display names in one hop — union of "from" owners
+            # and proposed "to" users.
+            user_ids_needed: set[str] = {
+                uid for uid in current_owner.values() if uid
+            }
+            user_ids_needed.update(uid for uid in to_user_ids if uid)
+            user_by_id: dict[str, UserRow] = {}
+            if user_ids_needed:
+                rows = (
+                    await session.execute(
+                        select(UserRow).where(UserRow.id.in_(user_ids_needed))
+                    )
+                ).scalars().all()
+                user_by_id = {r.id: r for r in rows}
+
+        def _name(uid: str | None) -> str | None:
+            if not uid:
+                return None
+            u = user_by_id.get(uid)
+            if u is None:
+                return None
+            return u.display_name or u.username
+
+        reassignments: list[dict[str, Any]] = []
+        for action in assign_actions:
+            tid = action.get("task_id") or ""
+            to_uid = action.get("user_id") or ""
+            task = task_by_id.get(tid)
+            from_uid = current_owner.get(tid)
+            # Skip no-op reassignments (already owned by target) — not
+            # worth rendering as a "change."
+            if from_uid == to_uid and from_uid:
+                continue
+            reassignments.append(
+                {
+                    "task_id": tid,
+                    "task_title": (task.title if task else "") or "",
+                    "from_user_id": from_uid,
+                    "from_display_name": _name(from_uid),
+                    "to_user_id": to_uid or None,
+                    "to_display_name": _name(to_uid),
+                }
+            )
+
+        total_effects = len(reassignments)
+        empty = total_effects == 0 and advisory_count == len(actions)
+
+        return {
+            "empty": empty,
+            "reason": "advisory_only" if empty else None,
+            "proposal_id": proposal_id,
+            "status": status,
+            "action_count": len(actions),
+            "advisory_count": advisory_count,
+            "reassignments": reassignments,
+            # Reserved categories — kept in the shape so the frontend
+            # doesn't have to feature-flag their rendering. These light
+            # up once apply_actions grow a drop_task / delay_milestone
+            # kind.
+            "unblocks": [],
+            "blocks": [],
+            "milestone_slips": [],
+            "total_effects": total_effects,
+            # project_id is useful context for any follow-up fetch (e.g.
+            # the full-graph simulation overlay on hover).
+            "project_id": project_id,
+        }
 
     # --------------------------------------------------------------- listing
 

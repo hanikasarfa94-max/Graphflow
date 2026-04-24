@@ -448,3 +448,30 @@ async def get_tally(
         return await service.tally(proposal_id=proposal_id)
     except GatedProposalError as exc:
         raise _map_error(exc) from exc
+
+
+@router.get("/api/gated-proposals/{proposal_id}/counterfactual")
+async def get_counterfactual(
+    proposal_id: str,
+    request: Request,
+    user: AuthenticatedUser = Depends(require_user),
+) -> dict[str, Any]:
+    """Counterfactual preview for the vote-pending card — "if this
+    passes, here's what changes." Read-only. Scoped to project members
+    (audit visibility matches /gated-proposals/{id}).
+    """
+    service = _get_service(request)
+    proposal = await service.get(proposal_id=proposal_id)
+    if proposal is None:
+        raise HTTPException(status_code=404, detail="proposal_not_found")
+    sessionmaker = request.app.state.sessionmaker
+    async with session_scope(sessionmaker) as session:
+        if not await ProjectMemberRepository(session).is_member(
+            proposal["project_id"], user.id
+        ):
+            raise HTTPException(status_code=403, detail="not_a_member")
+    try:
+        result = await service.counterfactual(proposal_id=proposal_id)
+    except GatedProposalError as exc:
+        raise _map_error(exc) from exc
+    return {"ok": True, "counterfactual": result}

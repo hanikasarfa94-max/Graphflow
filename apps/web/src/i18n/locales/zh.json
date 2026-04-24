@@ -731,7 +731,17 @@
     "yourDeny": "✗ 你投了反对",
     "yourAbstain": "~ 你投了弃权",
     "openedGroupEyebrow": "已发起投票",
-    "resolvedGroupEyebrow": "投票已结束"
+    "resolvedGroupEyebrow": "投票已结束",
+    "counterfactualEyebrow": "若通过",
+    "counterfactualEmpty": "决议性 —— 不会触发图变更。",
+    "counterfactualLoading": "正在计算影响……",
+    "counterfactualError": "无法计算影响。",
+    "counterfactualUnblocks": "解锁 {n} 项任务",
+    "counterfactualBlocks": "阻塞 {n} 项任务",
+    "counterfactualMilestone": "{name} 延后 {days} 天",
+    "counterfactualReassign": "重新指派 {title} → {to}",
+    "counterfactualReassignFrom": "重新指派 {title}({from} → {to})",
+    "counterfactualReassignN": "重新指派 {n} 项任务"
   },
   "tool": {
     "calling": "调用技能",

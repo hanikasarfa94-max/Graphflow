@@ -731,7 +731,17 @@
     "yourDeny": "✗ Your deny",
     "yourAbstain": "~ Your abstain",
     "openedGroupEyebrow": "Vote opened",
-    "resolvedGroupEyebrow": "Vote resolved"
+    "resolvedGroupEyebrow": "Vote resolved",
+    "counterfactualEyebrow": "If approved",
+    "counterfactualEmpty": "Advisory — no mechanical effects predicted.",
+    "counterfactualLoading": "Computing effects…",
+    "counterfactualError": "Could not compute effects.",
+    "counterfactualUnblocks": "Unblocks {n} task(s)",
+    "counterfactualBlocks": "Blocks {n} task(s)",
+    "counterfactualMilestone": "Slip {days}d on {name}",
+    "counterfactualReassign": "Reassign {title} → {to}",
+    "counterfactualReassignFrom": "Reassign {title} ({from} → {to})",
+    "counterfactualReassignN": "Reassigns {n} task(s)"
   },
   "tool": {
     "calling": "Calling skill",

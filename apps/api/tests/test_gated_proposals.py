@@ -1052,3 +1052,165 @@ async def test_cast_vote_bumps_votes_cast_tally(api_env):
         json={"verdict": "deny"},
     )
     assert await _votes_cast(proposer_id) == 2
+
+
+# ---- 12. counterfactual ("if approved") --------------------------------
+
+
+@pytest.mark.asyncio
+async def test_counterfactual_empty_for_advisory_only_proposal(api_env):
+    """v0 proposals frequently have apply_actions=[] (advisory-only).
+    The endpoint returns empty=True with reason='no_actions' so the
+    frontend can render a graceful "no mechanical effects predicted"
+    card instead of an empty box."""
+    client, maker, *_ = api_env
+
+    pid = await _mk_project(maker)
+    proposer_id = await _register_and_login(client, "cf_proposer_1")
+    gate_id = await _register_and_login(client, "cf_gate_1")
+    await _add_member(maker, project_id=pid, user_id=proposer_id, role="owner")
+    await _add_member(maker, project_id=pid, user_id=gate_id, role="member")
+    await _set_gate_keeper_map(maker, project_id=pid, map_={"budget": gate_id})
+
+    await _login(client, "cf_proposer_1")
+    r = await client.post(
+        f"/api/projects/{pid}/gated-proposals",
+        json={
+            "decision_class": "budget",
+            "proposal_body": "Freeze hiring for Q3",
+            # apply_actions intentionally omitted — default empty list.
+        },
+    )
+    assert r.status_code == 200
+    proposal_id = r.json()["proposal"]["id"]
+
+    r = await client.get(
+        f"/api/gated-proposals/{proposal_id}/counterfactual"
+    )
+    assert r.status_code == 200, r.text
+    cf = r.json()["counterfactual"]
+    assert cf["empty"] is True
+    assert cf["reason"] == "no_actions"
+    assert cf["action_count"] == 0
+    assert cf["reassignments"] == []
+    assert cf["total_effects"] == 0
+    assert cf["proposal_id"] == proposal_id
+
+
+@pytest.mark.asyncio
+async def test_counterfactual_renders_assign_task_reassignment(api_env):
+    """Proposal with apply_actions=[{kind:'assign_task', task_id, user_id}]
+    surfaces a reassignment entry with from/to user display names."""
+    from workgraph_persistence import (
+        AssignmentRepository,
+        RequirementRow,
+        TaskRow,
+    )
+
+    client, maker, *_ = api_env
+
+    pid = await _mk_project(maker)
+    proposer_id = await _register_and_login(client, "cf_proposer_2")
+    gate_id = await _register_and_login(client, "cf_gate_2")
+    current_owner_id = await _register_and_login(client, "cf_owner_cur")
+    next_owner_id = await _register_and_login(client, "cf_owner_next")
+    await _add_member(maker, project_id=pid, user_id=proposer_id, role="owner")
+    await _add_member(maker, project_id=pid, user_id=gate_id, role="member")
+    await _add_member(maker, project_id=pid, user_id=current_owner_id, role="member")
+    await _add_member(maker, project_id=pid, user_id=next_owner_id, role="member")
+    await _set_gate_keeper_map(maker, project_id=pid, map_={"scope_cut": gate_id})
+
+    # Seed a requirement + task and assign it to current_owner.
+    req_id = str(uuid.uuid4())
+    task_id = str(uuid.uuid4())
+    async with session_scope(maker) as session:
+        session.add(
+            RequirementRow(
+                id=req_id,
+                project_id=pid,
+                version=1,
+                raw_text="stub",
+                parse_outcome="ok",
+            )
+        )
+        session.add(
+            TaskRow(
+                id=task_id,
+                project_id=pid,
+                requirement_id=req_id,
+                sort_order=0,
+                title="Ship login flow",
+            )
+        )
+        await session.flush()
+        await AssignmentRepository(session).set_assignment(
+            project_id=pid, task_id=task_id, user_id=current_owner_id
+        )
+
+    await _login(client, "cf_proposer_2")
+    r = await client.post(
+        f"/api/projects/{pid}/gated-proposals",
+        json={
+            "decision_class": "scope_cut",
+            "proposal_body": "Hand login flow to next_owner",
+            "apply_actions": [
+                {
+                    "kind": "assign_task",
+                    "task_id": task_id,
+                    "user_id": next_owner_id,
+                },
+                {"kind": "advisory", "rule": "discuss_with_pm"},
+            ],
+        },
+    )
+    assert r.status_code == 200, r.text
+    proposal_id = r.json()["proposal"]["id"]
+
+    r = await client.get(
+        f"/api/gated-proposals/{proposal_id}/counterfactual"
+    )
+    assert r.status_code == 200, r.text
+    cf = r.json()["counterfactual"]
+    assert cf["empty"] is False
+    assert cf["action_count"] == 2
+    assert cf["advisory_count"] == 1
+    assert cf["total_effects"] == 1
+    assert len(cf["reassignments"]) == 1
+    rx = cf["reassignments"][0]
+    assert rx["task_id"] == task_id
+    assert rx["task_title"] == "Ship login flow"
+    assert rx["from_user_id"] == current_owner_id
+    assert rx["to_user_id"] == next_owner_id
+    # Display names resolve to usernames when no display_name set.
+    assert rx["from_display_name"] == "cf_owner_cur"
+    assert rx["to_display_name"] == "cf_owner_next"
+
+
+@pytest.mark.asyncio
+async def test_counterfactual_requires_project_membership(api_env):
+    """Non-members can't read the counterfactual payload — scoped to
+    project-audit visibility."""
+    client, maker, *_ = api_env
+
+    pid = await _mk_project(maker)
+    proposer_id = await _register_and_login(client, "cf_member_1")
+    gate_id = await _register_and_login(client, "cf_gate_3")
+    outsider_id = await _register_and_login(client, "cf_outsider")
+    await _add_member(maker, project_id=pid, user_id=proposer_id, role="owner")
+    await _add_member(maker, project_id=pid, user_id=gate_id, role="member")
+    await _set_gate_keeper_map(maker, project_id=pid, map_={"budget": gate_id})
+
+    await _login(client, "cf_member_1")
+    r = await client.post(
+        f"/api/projects/{pid}/gated-proposals",
+        json={"decision_class": "budget", "proposal_body": "$"},
+    )
+    proposal_id = r.json()["proposal"]["id"]
+
+    await _login(client, "cf_outsider")
+    r = await client.get(
+        f"/api/gated-proposals/{proposal_id}/counterfactual"
+    )
+    assert r.status_code == 403
+    # outsider_id is only used to confirm we're logged in as them
+    assert outsider_id

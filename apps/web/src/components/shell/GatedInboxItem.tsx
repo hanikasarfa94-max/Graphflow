@@ -24,7 +24,9 @@ import {
   approveGatedProposal,
   castGatedProposalVote,
   denyGatedProposal,
+  getGatedProposalCounterfactual,
   getGatedProposalTally,
+  type Counterfactual,
   type GatedInboxItem as GatedInboxItemType,
   type TallySnapshot,
   type VoteVerdict,
@@ -210,6 +212,12 @@ function VoteItem({
   const [resolvedAs, setResolvedAs] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [rationale, setRationale] = useState(item.my_vote?.rationale ?? "");
+  // Counterfactual preview — the "if approved" block between the tally
+  // row and the rationale textarea. Loading / error are local so a
+  // counterfactual fetch failure never blocks voting.
+  const [cf, setCf] = useState<Counterfactual | null>(null);
+  const [cfLoading, setCfLoading] = useState(true);
+  const [cfFailed, setCfFailed] = useState(false);
 
   // Refresh tally on mount so the drawer shows live counts if someone
   // else voted between preload and drawer open.
@@ -221,6 +229,31 @@ function VoteItem({
         if (!cancelled) setTally(snap);
       } catch {
         /* non-fatal */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [item.proposal.id]);
+
+  // Fetch counterfactual on mount. Independent from tally so a slow
+  // simulate call doesn't delay showing live counts.
+  useEffect(() => {
+    let cancelled = false;
+    setCfLoading(true);
+    setCfFailed(false);
+    (async () => {
+      try {
+        const res = await getGatedProposalCounterfactual(item.proposal.id);
+        if (!cancelled) {
+          setCf(res);
+          setCfLoading(false);
+        }
+      } catch {
+        if (!cancelled) {
+          setCfFailed(true);
+          setCfLoading(false);
+        }
       }
     })();
     return () => {
@@ -333,6 +366,7 @@ function VoteItem({
         {item.proposal.proposal_body}
       </div>
       {tallyRow}
+      <CounterfactualBlock cf={cf} loading={cfLoading} failed={cfFailed} />
       {resolvedAs ? (
         <ResolvedBadge status={resolvedAs} />
       ) : (
@@ -532,6 +566,134 @@ function VerdictBtn({
     >
       {isBusy ? "…" : label}
     </button>
+  );
+}
+
+// ---- counterfactual ("if approved") ------------------------------------
+//
+// Reads the GET /api/gated-proposals/{id}/counterfactual payload and
+// renders a compact "if this passes, here's what changes" block. Three
+// states: loading (shimmer line), error (silent-but-visible), payload.
+// For v0 the most common payload is `empty: true, reason: 'no_actions'
+// | 'advisory_only'` — we render one muted line for those, not an empty
+// bullet list.
+function CounterfactualBlock({
+  cf,
+  loading,
+  failed,
+}: {
+  cf: Counterfactual | null;
+  loading: boolean;
+  failed: boolean;
+}) {
+  const t = useTranslations("vote");
+
+  const containerStyle: React.CSSProperties = {
+    marginBottom: 10,
+    padding: "6px 10px",
+    background: "var(--wg-surface-raised, var(--wg-surface))",
+    borderLeft: "2px solid var(--wg-ink-faint)",
+    borderRadius: "var(--wg-radius-sm, 4px)",
+    fontSize: 11,
+    lineHeight: 1.5,
+  };
+  const eyebrowStyle: React.CSSProperties = {
+    fontFamily: "var(--wg-font-mono)",
+    fontSize: 10,
+    color: "var(--wg-ink-faint)",
+    letterSpacing: "0.04em",
+    textTransform: "uppercase",
+    fontWeight: 600,
+    marginBottom: 2,
+  };
+  const mutedLine: React.CSSProperties = {
+    color: "var(--wg-ink-soft)",
+    fontStyle: "italic",
+  };
+  const bulletRow: React.CSSProperties = {
+    display: "flex",
+    gap: 6,
+    alignItems: "baseline",
+    color: "var(--wg-ink)",
+    wordBreak: "break-word",
+  };
+
+  if (loading) {
+    return (
+      <div data-testid="gated-inbox-counterfactual" style={containerStyle}>
+        <div style={eyebrowStyle}>{t("counterfactualEyebrow")}</div>
+        <div style={mutedLine}>{t("counterfactualLoading")}</div>
+      </div>
+    );
+  }
+
+  if (failed || !cf) {
+    // Silent-fail: show a tiny line but don't scream. Voting still
+    // works regardless.
+    return (
+      <div data-testid="gated-inbox-counterfactual" style={containerStyle}>
+        <div style={eyebrowStyle}>{t("counterfactualEyebrow")}</div>
+        <div style={mutedLine}>{t("counterfactualError")}</div>
+      </div>
+    );
+  }
+
+  const hasEffects =
+    cf.reassignments.length > 0 ||
+    cf.unblocks.length > 0 ||
+    cf.blocks.length > 0 ||
+    cf.milestone_slips.length > 0;
+
+  if (!hasEffects) {
+    return (
+      <div data-testid="gated-inbox-counterfactual" style={containerStyle}>
+        <div style={eyebrowStyle}>{t("counterfactualEyebrow")}</div>
+        <div style={mutedLine}>{t("counterfactualEmpty")}</div>
+      </div>
+    );
+  }
+
+  return (
+    <div data-testid="gated-inbox-counterfactual" style={containerStyle}>
+      <div style={eyebrowStyle}>{t("counterfactualEyebrow")}</div>
+      {cf.unblocks.length > 0 ? (
+        <div style={bulletRow} data-testid="cf-unblocks">
+          <span style={{ color: "var(--wg-ok)", fontWeight: 600 }}>✓</span>
+          <span>{t("counterfactualUnblocks", { n: cf.unblocks.length })}</span>
+        </div>
+      ) : null}
+      {cf.blocks.length > 0 ? (
+        <div style={bulletRow} data-testid="cf-blocks">
+          <span style={{ color: "var(--wg-accent)", fontWeight: 600 }}>✗</span>
+          <span>{t("counterfactualBlocks", { n: cf.blocks.length })}</span>
+        </div>
+      ) : null}
+      {cf.milestone_slips.map((slip) => (
+        <div style={bulletRow} key={slip.id} data-testid="cf-milestone-slip">
+          <span style={{ color: "var(--wg-amber)", fontWeight: 600 }}>⚠</span>
+          <span>
+            {t("counterfactualMilestone", {
+              days: slip.slip_days,
+              name: slip.title,
+            })}
+          </span>
+        </div>
+      ))}
+      {cf.reassignments.map((rx) => {
+        const to = rx.to_display_name ?? "—";
+        const from = rx.from_display_name;
+        const title = rx.task_title || rx.task_id;
+        const line = from
+          ? t("counterfactualReassignFrom", { title, from, to })
+          : t("counterfactualReassign", { title, to });
+        return (
+          <div style={bulletRow} key={rx.task_id} data-testid="cf-reassign">
+            <span style={{ color: "var(--wg-accent)", fontWeight: 600 }}>→</span>
+            <span>{line}</span>
+          </div>
+        );
+      })}
+    </div>
   );
 }
 
