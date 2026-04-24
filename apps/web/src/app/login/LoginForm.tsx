@@ -11,7 +11,14 @@ type Mode = "login" | "register";
 export function LoginForm() {
   const router = useRouter();
   const search = useSearchParams();
-  const next = search.get("next") ?? "/projects";
+  // Default post-login destination is the personal home (`/`), which
+  // shows pending signals + active task + projects + DMs in one view.
+  // Pre-Phase-F this defaulted to `/projects`, but `/` now subsumes
+  // the projects list as one of its sections — landing there gives
+  // the user the full "what's waiting on me" picture instead of just
+  // a project picker. The `?next=` query param still wins (covers
+  // "you were trying to view /projects/[id]/team and got bounced").
+  const next = search.get("next") ?? "/";
   const t = useTranslations();
 
   const [mode, setMode] = useState<Mode>("login");

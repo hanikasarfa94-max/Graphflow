@@ -357,6 +357,9 @@ export function AppSidebar({
   const pathname = usePathname();
   const t = useTranslations();
   const homeActive = isActive(pathname, "/", true);
+  // Match /projects exactly (the all-projects list page) but NOT
+  // /projects/[id]/* — those highlight the per-project tree below.
+  const projectsActive = isActive(pathname, "/projects", true);
 
   return (
     <aside
@@ -408,7 +411,7 @@ export function AppSidebar({
           padding: "8px 6px",
         }}
       >
-        {/* Home */}
+        {/* Home + global nav */}
         <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
           <li>
             <Link
@@ -425,6 +428,33 @@ export function AppSidebar({
             >
               <span aria-hidden>🏠</span>
               <span>{t("shell.home")}</span>
+            </Link>
+          </li>
+          <li>
+            {/*
+              All-projects page entry. The Home view shows projects as
+              one of its sections; this link gives a dedicated all-
+              projects surface for users who want to see / create
+              projects without the rest of the home noise — and is the
+              answer to "I quit a project, where do I go to find
+              another one."
+            */}
+            <Link
+              href="/projects"
+              data-testid="sidebar-projects-link"
+              style={{
+                ...linkBase,
+                background: projectsActive
+                  ? "var(--wg-accent-soft, #fdf4ec)"
+                  : "transparent",
+                color: projectsActive
+                  ? "var(--wg-accent)"
+                  : "var(--wg-ink)",
+                fontWeight: projectsActive ? 600 : 400,
+              }}
+            >
+              <span aria-hidden>🗂</span>
+              <span>{t("nav.projects")}</span>
             </Link>
           </li>
           <li>
