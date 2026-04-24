@@ -39,6 +39,16 @@ import {
 import { MessageProfilePopover } from "./MessageProfilePopover";
 import { RehearsalPreview } from "./RehearsalPreview";
 import type { StreamMember } from "./types";
+import { VoteGroupCard } from "./VoteGroupCard";
+
+// Structural system-message kinds rendered as dedicated cards in the
+// group stream instead of as human chat bubbles. Extend here when new
+// team-room runtime-log message kinds land.
+const VOTE_GROUP_KINDS = new Set([
+  "vote-opened",
+  "vote-resolved-approved",
+  "vote-resolved-denied",
+]);
 
 // WS frames broadcast by the API — shape matches collab.py ws_broadcast calls.
 type WsFrame = {
@@ -527,6 +537,18 @@ export function StreamView({ projectId, currentUserId, members, streamId }: Prop
           </div>
         )}
         {messages.map((m) => {
+          // Phase S — vote runtime-log messages get a typed card
+          // (VoteGroupCard) instead of the default human-turn bubble.
+          // The body is already self-describing; the card adds
+          // structure (status palette, class chip, icon, motion).
+          if (m.kind && VOTE_GROUP_KINDS.has(m.kind)) {
+            return (
+              <div key={m.id}>
+                <VoteGroupCard message={m} />
+              </div>
+            );
+          }
+
           const sug = m.suggestion ?? null;
           const author = memberById.get(m.author_id);
           const mine = m.author_id === currentUserId;

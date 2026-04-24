@@ -519,6 +519,11 @@ class MessageService:
                     "author_id": r.author_id,
                     "author_username": authors.get(r.author_id),
                     "body": r.body,
+                    # `kind` lets the web switch on structural
+                    # message kinds (vote-opened, vote-resolved-*)
+                    # to render typed cards instead of chat bubbles.
+                    "kind": r.kind,
+                    "linked_id": r.linked_id,
                     "created_at": r.created_at.isoformat(),
                 }
                 for r in rows

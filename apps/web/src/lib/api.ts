@@ -655,6 +655,12 @@ export interface IMMessage {
   author_username?: string;
   author_display_name?: string;
   body: string;
+  // Phase S — lets the group-stream renderer switch on structural
+  // kinds (vote-opened, vote-resolved-approved, vote-resolved-denied,
+  // gated-proposal-resolved, …) and render typed cards instead of the
+  // default chat bubble. Absent on pre-Phase-S cached rows.
+  kind?: string;
+  linked_id?: string | null;
   created_at: string;
   suggestion?: IMSuggestion | null;
 }
