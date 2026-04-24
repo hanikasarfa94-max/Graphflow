@@ -66,12 +66,17 @@ async def test_api_intake_rejects_empty_text(api_env):
     assert r.json()["code"] == "validation_error"
 
 
+_FEISHU_TEST_TOKEN = "test-verification-token"
+
+
 @pytest.mark.asyncio
-async def test_feishu_webhook_creates_project(api_env):
+async def test_feishu_webhook_creates_project(api_env, monkeypatch):
+    monkeypatch.setenv("FEISHU_VERIFICATION_TOKEN", _FEISHU_TEST_TOKEN)
     client, _, _, _, _, _ = api_env
     r = await client.post(
         "/api/intake/feishu/webhook",
         json={
+            "token": _FEISHU_TEST_TOKEN,
             "event_id": "fs-evt-100",
             "message_text": CANONICAL_TEXT,
             "sender_id": "ou_abc",
@@ -86,9 +91,14 @@ async def test_feishu_webhook_creates_project(api_env):
 
 
 @pytest.mark.asyncio
-async def test_feishu_webhook_dedup_on_event_id(api_env):
+async def test_feishu_webhook_dedup_on_event_id(api_env, monkeypatch):
+    monkeypatch.setenv("FEISHU_VERIFICATION_TOKEN", _FEISHU_TEST_TOKEN)
     client, _, _, _, _, _ = api_env
-    payload = {"event_id": "fs-dup-1", "message_text": "hello"}
+    payload = {
+        "token": _FEISHU_TEST_TOKEN,
+        "event_id": "fs-dup-1",
+        "message_text": "hello",
+    }
     r1 = await client.post("/api/intake/feishu/webhook", json=payload)
     r2 = await client.post("/api/intake/feishu/webhook", json=payload)
     assert r1.json()["deduplicated"] is False
@@ -97,8 +107,9 @@ async def test_feishu_webhook_dedup_on_event_id(api_env):
 
 
 @pytest.mark.asyncio
-async def test_api_and_feishu_produce_identical_domain_shape(api_env):
+async def test_api_and_feishu_produce_identical_domain_shape(api_env, monkeypatch):
     """AC: API path and Feishu path produce the same domain result."""
+    monkeypatch.setenv("FEISHU_VERIFICATION_TOKEN", _FEISHU_TEST_TOKEN)
     client, _, _, _, _, _ = api_env
     r_api = await client.post(
         "/api/intake/message",
@@ -106,7 +117,11 @@ async def test_api_and_feishu_produce_identical_domain_shape(api_env):
     )
     r_fs = await client.post(
         "/api/intake/feishu/webhook",
-        json={"event_id": "parity-fs", "message_text": CANONICAL_TEXT},
+        json={
+            "token": _FEISHU_TEST_TOKEN,
+            "event_id": "parity-fs",
+            "message_text": CANONICAL_TEXT,
+        },
     )
     api_body = r_api.json()
     fs_body = r_fs.json()

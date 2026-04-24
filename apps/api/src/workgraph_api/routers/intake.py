@@ -1,15 +1,19 @@
 from __future__ import annotations
 
+import json
 from typing import Any
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends
-from pydantic import BaseModel, ConfigDict, Field
+from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from workgraph_domain import IntakeResult
+from workgraph_feishu_adapter import verify_signature, verify_token
 
 from workgraph_api.deps import get_intake_service, maybe_user
 from workgraph_api.services import AuthenticatedUser, IntakeService
+from workgraph_api.settings import load_settings
 
 router = APIRouter(prefix="/api/intake", tags=["intake"])
 
@@ -53,9 +57,10 @@ async def post_message(
 
 
 # ---------- Feishu webhook path -------------------------------------------
-# Phase 2: accepts a normalized shape. Real Feishu SDK signature verification
-# + event envelope parsing lands in Phase 7 (Feishu State Sync). The pivot
-# decision on Feishu-native vs custom collab surface is deferred to CEO review.
+# Phase 2: accepts a normalized shape behind a webhook-authenticity gate.
+# Real Feishu SDK signature verification + event envelope parsing lands in
+# Phase 7 (Feishu State Sync). The pivot decision on Feishu-native vs
+# custom collab surface is deferred to CEO review.
 
 
 class FeishuWebhookRequest(BaseModel):
@@ -68,12 +73,89 @@ class FeishuWebhookRequest(BaseModel):
     raw: dict[str, Any] = Field(default_factory=dict)
 
 
-@router.post("/feishu/webhook", response_model=IntakeResult)
+def _auth_gate(
+    *,
+    raw_body: bytes,
+    headers,  # type: ignore[no-untyped-def]
+) -> dict[str, Any]:
+    """Verify webhook authenticity and return the parsed JSON payload.
+
+    Raises HTTPException(401) on auth failure, HTTPException(503) when
+    Feishu is not configured at all (safer than silently accepting
+    unsigned traffic), HTTPException(400) on unparseable JSON.
+    """
+    settings = load_settings()
+    secret = settings.feishu_app_secret
+    token = settings.feishu_verification_token
+
+    if not secret and not token:
+        raise HTTPException(
+            status_code=503, detail="feishu webhook not configured"
+        )
+
+    if secret:
+        timestamp = headers.get("x-lark-request-timestamp")
+        nonce = headers.get("x-lark-request-nonce")
+        signature = headers.get("x-lark-signature")
+        if not (timestamp and nonce and signature):
+            raise HTTPException(
+                status_code=401, detail="missing signature headers"
+            )
+        if not verify_signature(
+            timestamp=timestamp,
+            nonce=nonce,
+            body=raw_body,
+            signature=signature,
+            secret=secret,
+        ):
+            raise HTTPException(status_code=401, detail="invalid signature")
+
+    # Parse body regardless — we need it for the handshake + payload.
+    try:
+        payload = json.loads(raw_body.decode("utf-8") or "null")
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise HTTPException(status_code=400, detail="invalid json body") from exc
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=400, detail="body must be a JSON object")
+
+    if not secret and token:
+        if not verify_token(payload=payload, expected_token=token):
+            raise HTTPException(status_code=401, detail="invalid token")
+
+    return payload
+
+
+@router.post("/feishu/webhook")
 async def post_feishu_webhook(
-    body: FeishuWebhookRequest,
+    request: Request,
     service: IntakeService = Depends(get_intake_service),
-) -> IntakeResult:
-    return await service.receive(
+):
+    raw_body = await request.body()
+    payload = _auth_gate(raw_body=raw_body, headers=request.headers)
+
+    # Lark URL-verification handshake: once auth passes, echo the challenge.
+    if payload.get("type") == "url_verification":
+        challenge = payload.get("challenge")
+        if not isinstance(challenge, str):
+            raise HTTPException(
+                status_code=400, detail="url_verification missing challenge"
+            )
+        return JSONResponse({"challenge": challenge})
+
+    # Phase-2 normalized shape: validate after the auth gate. The `token`
+    # key (used for token-mode auth above) and Lark envelope fields
+    # (`type`, `header`) are stripped so they don't trip extra="forbid".
+    normalized = {
+        k: v
+        for k, v in payload.items()
+        if k not in {"token", "type", "header", "schema"}
+    }
+    try:
+        body = FeishuWebhookRequest.model_validate(normalized)
+    except ValidationError as exc:
+        raise HTTPException(status_code=422, detail=exc.errors()) from exc
+
+    result = await service.receive(
         source="feishu",
         source_event_id=body.event_id,
         title=_default_title(body.message_text),
@@ -86,3 +168,4 @@ async def post_feishu_webhook(
             "raw": body.raw,
         },
     )
+    return JSONResponse(result.model_dump(mode="json"))

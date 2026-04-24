@@ -47,6 +47,32 @@ class Settings(BaseSettings):
         ),
     )
 
+    # --- Feishu webhook authenticity -------------------------------------
+    # These env vars are NOT WORKGRAPH_-prefixed — they match Feishu's own
+    # dashboard naming so ops can copy them verbatim from Lark.
+    feishu_app_id: str | None = Field(
+        default=None,
+        validation_alias="FEISHU_APP_ID",
+        description="Feishu/Lark app id. Informational — not used for auth.",
+    )
+    feishu_app_secret: str | None = Field(
+        default=None,
+        validation_alias="FEISHU_APP_SECRET",
+        description=(
+            "Feishu/Lark encryption secret. When set, webhooks must carry "
+            "X-Lark-Request-Timestamp / X-Lark-Request-Nonce / "
+            "X-Lark-Signature headers that verify via HMAC-SHA256."
+        ),
+    )
+    feishu_verification_token: str | None = Field(
+        default=None,
+        validation_alias="FEISHU_VERIFICATION_TOKEN",
+        description=(
+            "Feishu/Lark verification token. Used when signature mode is "
+            "not configured — payload.token must match exactly."
+        ),
+    )
+
 
 def load_settings() -> Settings:
     try:
