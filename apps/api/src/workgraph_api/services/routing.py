@@ -364,6 +364,10 @@ class RoutingService:
                 linked_id=signal.id,
             )
 
+        # Tally before emit — see decisions.py for the concurrency
+        # hazard when subscribers run in parallel sessions.
+        if self._signal_tally is not None:
+            await self._signal_tally.increment(replier_user_id, "routings_answered")
         await self._event_bus.emit(
             "routing.replied",
             {
@@ -374,8 +378,6 @@ class RoutingService:
                 "has_custom_text": bool(custom_text),
             },
         )
-        if self._signal_tally is not None:
-            await self._signal_tally.increment(replier_user_id, "routings_answered")
 
         # Audit trail for the reply. Covers the three non-denied
         # outcomes: clean lint, edited ship (lint_decision='edit' or

@@ -156,6 +156,11 @@ class DecisionService:
                 else None
             )
 
+        # Tally must increment BEFORE emit: event_bus schedules
+        # subscribers via asyncio.create_task, whose concurrent sessions
+        # race the tally commit on aiosqlite and silently drop the write.
+        if self._signal_tally is not None:
+            await self._signal_tally.increment(actor_id, "decisions_resolved")
         await self._event_bus.emit(
             "decision.applied",
             {
@@ -168,8 +173,6 @@ class DecisionService:
                 "trace_id": trace_id,
             },
         )
-        if self._signal_tally is not None:
-            await self._signal_tally.increment(actor_id, "decisions_resolved")
         if conflict_payload is not None:
             await self._hub.publish(
                 project_id, {"type": "conflict", "payload": conflict_payload}

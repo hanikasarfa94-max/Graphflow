@@ -459,10 +459,12 @@ class MessageService:
             "body": body,
             "created_at": row.created_at.isoformat(),
         }
-        await self._event_bus.emit("message.posted", payload)
-        await self._hub.publish(project_id, _broadcast_payload("message", payload))
+        # Tally before emit — see decisions.py for the concurrency
+        # hazard when subscribers run in parallel sessions.
         if self._signal_tally is not None:
             await self._signal_tally.increment(author_id, "messages_posted")
+        await self._event_bus.emit("message.posted", payload)
+        await self._hub.publish(project_id, _broadcast_payload("message", payload))
         for uid in member_ids:
             await self._notifications.notify(
                 user_id=uid,
