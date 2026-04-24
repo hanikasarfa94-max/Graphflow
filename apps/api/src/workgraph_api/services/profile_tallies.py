@@ -42,6 +42,7 @@ from workgraph_persistence import (
     ProjectMemberRow,
     RiskRow,
     UserRow,
+    VoteRow,
 )
 
 
@@ -55,6 +56,14 @@ class ProfileObserved:
     risks_owned: int
     routings_answered_30d: int
     projects_active: int
+    # Phase S — governance participation. votes_cast_30d counts all
+    # verdicts (approve / deny / abstain); the split lets
+    # voting_profile consumers distinguish engaged-but-critical voters
+    # (many denies) from engaged-and-approving voters (many approves).
+    votes_cast_30d: int
+    votes_approve_30d: int
+    votes_deny_30d: int
+    votes_abstain_30d: int
 
 
 @dataclass(frozen=True)
@@ -79,6 +88,10 @@ class ProfileTallies:
                 "risks_owned": self.observed.risks_owned,
                 "routings_answered_30d": self.observed.routings_answered_30d,
                 "projects_active": self.observed.projects_active,
+                "votes_cast_30d": self.observed.votes_cast_30d,
+                "votes_approve_30d": self.observed.votes_approve_30d,
+                "votes_deny_30d": self.observed.votes_deny_30d,
+                "votes_abstain_30d": self.observed.votes_abstain_30d,
             },
             "last_activity_at": (
                 self.last_activity_at.isoformat() if self.last_activity_at else None
@@ -187,6 +200,25 @@ async def compute_profile(
         ),
     )
 
+    # -- votes (30d) — Phase S governance participation -----------------
+    # One query, returns per-verdict counts in the window. GROUP BY
+    # verdict keeps it to a single round-trip; Python bucket after.
+    vote_rows = (
+        await session.execute(
+            select(VoteRow.verdict, func.count(VoteRow.id))
+            .where(
+                VoteRow.voter_user_id == user_id,
+                VoteRow.updated_at >= window_30d,
+            )
+            .group_by(VoteRow.verdict)
+        )
+    ).all()
+    vote_counts = {verdict: int(n) for verdict, n in vote_rows}
+    votes_approve_30d = vote_counts.get("approve", 0)
+    votes_deny_30d = vote_counts.get("deny", 0)
+    votes_abstain_30d = vote_counts.get("abstain", 0)
+    votes_cast_30d = votes_approve_30d + votes_deny_30d + votes_abstain_30d
+
     # -- last activity --------------------------------------------------
     # MAX across the three tables the user can write to directly. We
     # fold NULLs by filtering inside each subquery, then take Python max
@@ -226,6 +258,10 @@ async def compute_profile(
             risks_owned=risks_owned,
             routings_answered_30d=routings_30d,
             projects_active=projects_active,
+            votes_cast_30d=votes_cast_30d,
+            votes_approve_30d=votes_approve_30d,
+            votes_deny_30d=votes_deny_30d,
+            votes_abstain_30d=votes_abstain_30d,
         ),
         last_activity_at=last_activity_at,
     )

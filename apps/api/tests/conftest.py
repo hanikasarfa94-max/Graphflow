@@ -535,7 +535,7 @@ async def api_env():
     handoff_service = HandoffService(maker)
     dissent_service = DissentService(maker, bus)
     gated_proposals_service = GatedProposalService(
-        maker, stream_service, bus
+        maker, stream_service, bus, signal_tally_service
     )
     silent_consensus_service = SilentConsensusService(maker, bus)
     onboarding_service = OnboardingService(

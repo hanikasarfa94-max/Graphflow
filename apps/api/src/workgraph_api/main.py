@@ -489,7 +489,7 @@ async def lifespan(app: FastAPI):
     handoff_service = HandoffService(sessionmaker)
     dissent_service = DissentService(sessionmaker, event_bus)
     gated_proposals_service = GatedProposalService(
-        sessionmaker, stream_service, event_bus
+        sessionmaker, stream_service, event_bus, signal_tally_service
     )
     silent_consensus_service = SilentConsensusService(
         sessionmaker, event_bus

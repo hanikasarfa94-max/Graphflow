@@ -886,3 +886,43 @@ async def test_invalid_verdict_rejected(api_env):
     )
     assert r.status_code == 400
     assert r.json()["message"] == "invalid_verdict"
+
+
+@pytest.mark.asyncio
+async def test_cast_vote_bumps_votes_cast_tally(api_env):
+    """Casting a vote bumps signal_tally.votes_cast on the voter,
+    regardless of verdict. Verdict re-casts still bump (governance
+    participation = engagement, not just decisiveness)."""
+    client, maker, *_ = api_env
+    pid, u = await _seed_vote_ready_project(client, maker, "v8")
+
+    r = await client.post(
+        f"/api/projects/{pid}/gated-proposals",
+        json={"decision_class": "scope_cut", "proposal_body": "x"},
+    )
+    proposal_id = r.json()["proposal"]["id"]
+    await client.post(f"/api/gated-proposals/{proposal_id}/open-to-vote", json={})
+
+    async def _votes_cast(uid: str) -> int:
+        async with session_scope(maker) as session:
+            row = await UserRepository(session).get(uid)
+            if row is None:
+                return 0
+            return int(((row.profile or {}).get("signal_tally") or {}).get("votes_cast", 0))
+
+    proposer_id = u["b"]
+    assert await _votes_cast(proposer_id) == 0
+
+    # First cast: approve → tally bumps to 1.
+    await client.post(
+        f"/api/gated-proposals/{proposal_id}/votes",
+        json={"verdict": "approve"},
+    )
+    assert await _votes_cast(proposer_id) == 1
+
+    # Flip verdict: still a cast → tally bumps to 2.
+    await client.post(
+        f"/api/gated-proposals/{proposal_id}/votes",
+        json={"verdict": "deny"},
+    )
+    assert await _votes_cast(proposer_id) == 2

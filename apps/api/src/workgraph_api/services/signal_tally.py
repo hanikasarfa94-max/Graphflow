@@ -37,6 +37,11 @@ SIGNAL_KINDS: frozenset[str] = frozenset(
         "decisions_resolved",
         "routings_answered",
         "risks_owned",
+        # Phase S — governance participation. Bumps on every cast_vote
+        # regardless of verdict (approve / deny / abstain). Feeds
+        # `voting_profile` in compute_profile → future authority
+        # inference reads this as evidence of engaged voters.
+        "votes_cast",
     }
 )
 

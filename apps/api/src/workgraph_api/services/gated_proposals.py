@@ -72,6 +72,7 @@ from workgraph_persistence import (
 )
 from sqlalchemy import select
 
+from .signal_tally import SignalTallyService
 from .streams import StreamService
 
 _log = logging.getLogger("workgraph.api.gated_proposals")
@@ -131,10 +132,12 @@ class GatedProposalService:
         sessionmaker: async_sessionmaker,
         stream_service: StreamService,
         event_bus: EventBus,
+        signal_tally: SignalTallyService | None = None,
     ) -> None:
         self._sessionmaker = sessionmaker
         self._streams = stream_service
         self._event_bus = event_bus
+        self._signal_tally = signal_tally
 
     # --------------------------------------------------------------- propose
 
@@ -628,6 +631,14 @@ class GatedProposalService:
             "pool_size": len(pool),
             "threshold": threshold,
         }
+
+        # Bump the voter's profile tally BEFORE any emit() — the
+        # emit-then-write race (see commit d0bf1fe / decisions.py) would
+        # otherwise silently drop this. votes_cast counts every
+        # verdict (approve / deny / abstain) — governance participation,
+        # not just decisiveness.
+        if self._signal_tally is not None:
+            await self._signal_tally.increment(voter_user_id, "votes_cast")
 
         # Side effects AFTER session closes: stream posts + events.
         if resolved_as is not None:
