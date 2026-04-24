@@ -177,9 +177,11 @@ class AssignmentService:
             "assignment_id": row.id if row is not None else None,
             "actor_id": actor_id,
         }
-        await self._event_bus.emit("assignment.changed", payload)
-        await self._hub.publish(project_id, _broadcast_payload("assignment", payload))
-
+        # Notify BEFORE emit — see signal_tally / decisions.py precedent
+        # (commit d0bf1fe). EventBus.emit() schedules subscribers via
+        # asyncio.create_task whose concurrent aiosqlite sessions race
+        # any follow-up DB write and silently drop it. The notification
+        # row must land first so fresh-session reads see it.
         if user_id and user_id != actor_id:
             await self._notifications.notify(
                 user_id=user_id,
@@ -189,6 +191,8 @@ class AssignmentService:
                 target_kind="task",
                 target_id=task_id,
             )
+        await self._event_bus.emit("assignment.changed", payload)
+        await self._hub.publish(project_id, _broadcast_payload("assignment", payload))
         return {"ok": True, **payload}
 
     async def list_for_project(self, project_id: str) -> list[dict]:
@@ -317,12 +321,12 @@ class CommentService:
             assignee_user_id = tgt.assignee_user_id
             target_title = tgt.title
 
-        await self._event_bus.emit("comment.posted", payload)
-        await self._hub.publish(
-            payload["project_id"], _broadcast_payload("comment", payload)
-        )
-
-        # Notify assignee (if any, not self) + mentioned users (deduped).
+        # Notify BEFORE emit — see signal_tally / decisions.py precedent
+        # (commit d0bf1fe). EventBus.emit() schedules subscribers via
+        # asyncio.create_task whose concurrent aiosqlite sessions race
+        # any follow-up DB write and silently drop it. Notification rows
+        # must land first so fresh-session reads (e.g. assignee/mentioned
+        # user's /api/notifications GET) see them.
         notified: set[str] = set()
         if (
             assignee_user_id
@@ -351,6 +355,10 @@ class CommentService:
                 target_kind=target_kind,
                 target_id=target_id,
             )
+        await self._event_bus.emit("comment.posted", payload)
+        await self._hub.publish(
+            payload["project_id"], _broadcast_payload("comment", payload)
+        )
         return {"ok": True, **payload}
 
     async def list_for_target(
@@ -459,12 +467,14 @@ class MessageService:
             "body": body,
             "created_at": row.created_at.isoformat(),
         }
-        # Tally before emit — see decisions.py for the concurrency
-        # hazard when subscribers run in parallel sessions.
+        # Tally + notify before emit — see decisions.py / signal_tally
+        # precedent (commit d0bf1fe). EventBus.emit() schedules
+        # subscribers via asyncio.create_task whose concurrent aiosqlite
+        # sessions race any follow-up DB write and silently drop it.
+        # Both the tally and the fanout notification rows must land
+        # before control hands off to fire-and-forget subscribers.
         if self._signal_tally is not None:
             await self._signal_tally.increment(author_id, "messages_posted")
-        await self._event_bus.emit("message.posted", payload)
-        await self._hub.publish(project_id, _broadcast_payload("message", payload))
         for uid in member_ids:
             await self._notifications.notify(
                 user_id=uid,
@@ -474,6 +484,8 @@ class MessageService:
                 target_kind="message",
                 target_id=row.id,
             )
+        await self._event_bus.emit("message.posted", payload)
+        await self._hub.publish(project_id, _broadcast_payload("message", payload))
         return {"ok": True, **payload}
 
     async def list_recent(self, project_id: str, limit: int = 100) -> list[dict]:
