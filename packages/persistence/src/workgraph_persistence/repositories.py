@@ -48,6 +48,7 @@ from .orm import (
     TaskDependencyRow,
     TaskRow,
     UserRow,
+    VoteRow,
 )
 from .orm import SilentConsensusRow
 
@@ -1451,16 +1452,20 @@ class GatedProposalRepository:
         status: str,
         resolution_note: str | None = None,
     ) -> GatedProposalRow | None:
-        """Transition pending → {approved, denied, withdrawn}. Returns
-        None if the row doesn't exist; raises InvalidProposalStateError
-        if the row is already terminal.
+        """Transition {pending, in_vote} → {approved, denied, withdrawn}.
+
+        Returns None if the row doesn't exist; raises
+        InvalidProposalStateError if the row is already in a terminal
+        state (approved / denied / withdrawn). `in_vote` was added in
+        Phase S — accepting it here means cast_vote's threshold-driven
+        resolution uses the same atomic transition as approve/deny.
         """
         if status not in {"approved", "denied", "withdrawn"}:
             raise ValueError(f"invalid resolve status: {status}")
         row = await self.get(proposal_id)
         if row is None:
             return None
-        if row.status != "pending":
+        if row.status not in ("pending", "in_vote"):
             raise InvalidProposalStateError(
                 f"proposal {proposal_id} is already {row.status}"
             )
@@ -1473,6 +1478,107 @@ class GatedProposalRepository:
 
 class InvalidProposalStateError(Exception):
     """GatedProposalRepository.resolve called on a non-pending row."""
+
+
+class VoteRepository:
+    """Migration 0016 — votes as first-class graph nodes.
+
+    Verdict lifecycle: verdicts are writes (never "pending"); the
+    absence of a row means the voter hasn't weighed in. Re-voting
+    UPDATEs the existing row rather than inserting a second row —
+    the `(subject_kind, subject_id, voter_user_id)` unique index
+    enforces this. `upsert` is the only write path.
+    """
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def upsert(
+        self,
+        *,
+        subject_kind: str,
+        subject_id: str,
+        voter_user_id: str,
+        verdict: str,
+        rationale: str | None = None,
+        trace_id: str | None = None,
+    ) -> tuple[VoteRow, bool]:
+        """Insert a new vote or update the existing one.
+
+        Returns (row, created) — created=True means a new vote was
+        inserted (first time voter weighs in on this subject);
+        created=False means verdict/rationale was changed.
+        """
+        existing = (
+            await self._session.execute(
+                select(VoteRow)
+                .where(VoteRow.subject_kind == subject_kind)
+                .where(VoteRow.subject_id == subject_id)
+                .where(VoteRow.voter_user_id == voter_user_id)
+            )
+        ).scalar_one_or_none()
+        if existing is not None:
+            existing.verdict = verdict
+            existing.rationale = rationale
+            existing.updated_at = datetime.now(timezone.utc)
+            if trace_id is not None:
+                existing.trace_id = trace_id
+            await self._session.flush()
+            return existing, False
+
+        row = VoteRow(
+            id=_new_id(),
+            subject_kind=subject_kind,
+            subject_id=subject_id,
+            voter_user_id=voter_user_id,
+            verdict=verdict,
+            rationale=rationale,
+            trace_id=trace_id,
+        )
+        self._session.add(row)
+        await self._session.flush()
+        return row, True
+
+    async def get_for_voter(
+        self,
+        *,
+        subject_kind: str,
+        subject_id: str,
+        voter_user_id: str,
+    ) -> VoteRow | None:
+        return (
+            await self._session.execute(
+                select(VoteRow)
+                .where(VoteRow.subject_kind == subject_kind)
+                .where(VoteRow.subject_id == subject_id)
+                .where(VoteRow.voter_user_id == voter_user_id)
+            )
+        ).scalar_one_or_none()
+
+    async def list_for_subject(
+        self,
+        *,
+        subject_kind: str,
+        subject_id: str,
+    ) -> list[VoteRow]:
+        result = await self._session.execute(
+            select(VoteRow)
+            .where(VoteRow.subject_kind == subject_kind)
+            .where(VoteRow.subject_id == subject_id)
+            .order_by(VoteRow.created_at.asc())
+        )
+        return list(result.scalars().all())
+
+    async def list_for_voter(
+        self, voter_user_id: str, *, limit: int = 100
+    ) -> list[VoteRow]:
+        result = await self._session.execute(
+            select(VoteRow)
+            .where(VoteRow.voter_user_id == voter_user_id)
+            .order_by(VoteRow.updated_at.desc())
+            .limit(limit)
+        )
+        return list(result.scalars().all())
 
 
 class DeliverySummaryRepository:

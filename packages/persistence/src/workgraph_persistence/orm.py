@@ -778,10 +778,23 @@ class GatedProposalRow(Base):
     # Same shape as DecisionRow.apply_actions — a list of
     # structured mutation ops the service replays on approve.
     apply_actions: Mapped[list] = mapped_column(JSON, default=list)
+    # Status lifecycle:
+    #   pending  — single-approver path: waiting on gate_keeper
+    #   in_vote  — multi-voter path (Phase S): opened to a voter pool,
+    #              waiting for threshold on approve or deny_unreachable
+    #   approved — DecisionRow created, apply_actions run (advisory in v0)
+    #   denied   — no DecisionRow; proposal shelved
+    #   withdrawn— proposer pulled it back before resolution
     status: Mapped[str] = mapped_column(String(16), default="pending")
     resolution_note: Mapped[str | None] = mapped_column(
         String(2000), nullable=True
     )
+    # Phase S voting — populated when status transitions to 'in_vote'.
+    # Each entry is a user_id eligible to cast a verdict on this
+    # proposal. Threshold is ceil(len(voter_pool)/2) (simple majority).
+    # NULL on pre-vote proposals + on proposals that resolve via the
+    # single-approver path without ever entering vote mode.
+    voter_pool: Mapped[list | None] = mapped_column(JSON, nullable=True)
     trace_id: Mapped[str | None] = mapped_column(
         String(64), nullable=True, index=True
     )
@@ -790,6 +803,73 @@ class GatedProposalRow(Base):
     )
     resolved_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
+    )
+
+
+class VoteRow(Base):
+    """Migration 0016 — Phase S: votes as first-class graph nodes.
+
+    A vote is not a transient tally — it is a persisted node on the
+    graph. Each row captures one voter's verdict on one subject, plus
+    the rationale they offered. The shape is deliberately polymorphic
+    via (subject_kind, subject_id) so voting can extend beyond gated
+    proposals later (votes on decisions, commitments, drift alerts)
+    without another migration.
+
+    Contract:
+      * One row per (subject_kind, subject_id, voter_user_id) —
+        enforced by the composite unique index. Voters can change
+        their verdict until the subject resolves; that UPDATEs the
+        existing row (setting updated_at) rather than inserting a
+        second row.
+      * `verdict ∈ {approve, deny, abstain}`. Pending state is
+        represented by the *absence* of a row — we don't seed pending
+        rows on open, so query counts reflect actual participation.
+      * Votes feed the voter's observed profile: every cast bumps
+        the `votes_cast` key in UserRow.profile.signal_tally and
+        contributes to the `voting_profile` slice in compute_profile.
+
+    Non-goals:
+      * NOT a transport primitive. The voter's inbox card is backed
+        by RoutedSignalRow (reuses the existing fan-out plumbing);
+        VoteRow only stores the verdict.
+      * NOT the threshold-resolution state. Resolution lives on the
+        subject row (e.g. GatedProposalRow.status goes 'in_vote' →
+        'approved' | 'denied'); VoteRow is the raw input.
+    """
+
+    __tablename__ = "votes"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    # Polymorphic reference. No FK because it crosses tables; integrity
+    # is maintained at the service layer (the subject must exist +
+    # be in a vote-open state before a row can be created).
+    subject_kind: Mapped[str] = mapped_column(String(32), index=True)
+    subject_id: Mapped[str] = mapped_column(String(36), index=True)
+    voter_user_id: Mapped[str] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    verdict: Mapped[str] = mapped_column(String(16))
+    rationale: Mapped[str | None] = mapped_column(
+        String(2000), nullable=True
+    )
+    trace_id: Mapped[str | None] = mapped_column(
+        String(64), nullable=True, index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "subject_kind",
+            "subject_id",
+            "voter_user_id",
+            name="uq_votes_subject_voter",
+        ),
     )
 
 

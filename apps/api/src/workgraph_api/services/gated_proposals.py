@@ -67,6 +67,7 @@ from workgraph_persistence import (
     InvalidProposalStateError,
     ProjectMemberRepository,
     ProjectRow,
+    VoteRepository,
     session_scope,
 )
 from sqlalchemy import select
@@ -416,6 +417,309 @@ class GatedProposalService:
 
         return {"ok": True, "proposal": payload}
 
+    # ----------------------------------------------------- vote mode (Phase S)
+    #
+    # When a proposal's authority is held by ≥2 members (owners ∪
+    # gate-keeper), any of the following actors can convert the
+    # single-approver proposal into a vote-mode proposal by calling
+    # `open_to_vote`:
+    #   * the proposer (always — it's *their* proposal)
+    #   * any project owner (leader-requested vote)
+    #   * the named gate-keeper, if any
+    #
+    # After conversion, status transitions pending → in_vote. Voters
+    # cast via `cast_vote`. Threshold = ceil(len(voter_pool) / 2).
+    # Resolution happens automatically inside `cast_vote` when the
+    # threshold is reached on approve, or when remaining voters can no
+    # longer reach threshold (deny-lock). On resolve, the normal
+    # approved/denied flow fires — DecisionRow minted on approve,
+    # proposer notified, existing event hooks fire.
+    #
+    # VoteRow is the first-class record. One row per (proposal, voter);
+    # voters can change their verdict until resolution (upsert-style).
+
+    _VOTE_SUBJECT_KIND = "gated_proposal"
+    _VOTE_VERDICTS: frozenset[str] = frozenset({"approve", "deny", "abstain"})
+
+    async def open_to_vote(
+        self,
+        *,
+        proposal_id: str,
+        acting_user_id: str,
+        rationale: str | None = None,
+    ) -> dict[str, Any]:
+        """Convert a pending single-approver proposal to vote mode.
+
+        Permission: proposer, any project owner, or the named gate-keeper.
+        Voter pool: project owners ∪ {gate_keeper} (dedup; proposer is
+        included if they're an owner). A pool of <2 is rejected —
+        single-approver is still the right flow there.
+        """
+        async with session_scope(self._sessionmaker) as session:
+            repo = GatedProposalRepository(session)
+            proposal = await repo.get(proposal_id)
+            if proposal is None:
+                raise GatedProposalError("proposal_not_found", status=404)
+            if proposal.status != "pending":
+                raise GatedProposalError("already_resolved", status=409)
+
+            pm_repo = ProjectMemberRepository(session)
+            members = await pm_repo.list_for_project(proposal.project_id)
+            owner_ids = {m.user_id for m in members if m.role == "owner"}
+            all_member_ids = {m.user_id for m in members}
+
+            # Permission check.
+            allowed = (
+                acting_user_id == proposal.proposer_user_id
+                or acting_user_id in owner_ids
+                or acting_user_id == proposal.gate_keeper_user_id
+            )
+            if not allowed:
+                raise GatedProposalError("not_authorized_to_open_vote", status=403)
+
+            # Build voter pool.
+            pool = set(owner_ids)
+            if proposal.gate_keeper_user_id in all_member_ids:
+                pool.add(proposal.gate_keeper_user_id)
+            # Only members can vote (guards against gate_keeper who left).
+            pool &= all_member_ids
+            voter_pool = sorted(pool)
+            if len(voter_pool) < 2:
+                raise GatedProposalError("insufficient_voters", status=409)
+
+            proposal.status = "in_vote"
+            proposal.voter_pool = voter_pool
+
+            proposal_refreshed = await repo.get(proposal_id)
+            payload = self._payload(proposal_refreshed)
+            project_id = proposal.project_id
+            decision_class = proposal.decision_class
+
+        await self._event_bus.emit(
+            "gated_proposal.vote_opened",
+            {
+                "proposal_id": proposal_id,
+                "project_id": project_id,
+                "decision_class": decision_class,
+                "opener": acting_user_id,
+                "voter_pool": voter_pool,
+                "threshold": self._threshold(voter_pool),
+            },
+        )
+
+        return {"ok": True, "proposal": payload, "threshold": self._threshold(voter_pool)}
+
+    async def cast_vote(
+        self,
+        *,
+        proposal_id: str,
+        voter_user_id: str,
+        verdict: str,
+        rationale: str | None = None,
+        trace_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Voter casts / updates their verdict on an in-vote proposal.
+
+        Returns the refreshed proposal payload plus a `tally` snapshot
+        (approve/deny/abstain counts, threshold, whether the proposal
+        resolved as a side effect of this cast).
+
+        Idempotent: re-casting the same verdict is a no-op on the
+        tally; changing verdict UPDATEs the existing VoteRow.
+        """
+        if verdict not in self._VOTE_VERDICTS:
+            raise GatedProposalError("invalid_verdict")
+
+        # Hold everything in one session so tally + (optional) resolve
+        # are atomic. Threshold resolution happens inline; DecisionRow
+        # minting mirrors the single-approver approve path.
+        resolved_as: str | None = None
+        decision_id: str | None = None
+
+        async with session_scope(self._sessionmaker) as session:
+            repo = GatedProposalRepository(session)
+            vote_repo = VoteRepository(session)
+
+            proposal = await repo.get(proposal_id)
+            if proposal is None:
+                raise GatedProposalError("proposal_not_found", status=404)
+            if proposal.status != "in_vote":
+                raise GatedProposalError("not_in_vote", status=409)
+            pool = list(proposal.voter_pool or [])
+            if voter_user_id not in pool:
+                raise GatedProposalError("not_in_voter_pool", status=403)
+
+            await vote_repo.upsert(
+                subject_kind=self._VOTE_SUBJECT_KIND,
+                subject_id=proposal_id,
+                voter_user_id=voter_user_id,
+                verdict=verdict,
+                rationale=rationale,
+                trace_id=trace_id,
+            )
+
+            votes = await vote_repo.list_for_subject(
+                subject_kind=self._VOTE_SUBJECT_KIND, subject_id=proposal_id
+            )
+            approve = sum(1 for v in votes if v.verdict == "approve")
+            deny = sum(1 for v in votes if v.verdict == "deny")
+            abstain = sum(1 for v in votes if v.verdict == "abstain")
+            outstanding = len(pool) - len(votes)
+            threshold = self._threshold(pool)
+
+            # Resolution: approve threshold reached?
+            if approve >= threshold:
+                decision = await DecisionRepository(session).create(
+                    conflict_id=None,
+                    project_id=proposal.project_id,
+                    resolver_id=voter_user_id,  # the tipping vote
+                    option_index=None,
+                    custom_text=proposal.proposal_body,
+                    rationale=f"Approved by vote ({approve}/{len(pool)})",
+                    apply_actions=list(proposal.apply_actions or []),
+                    trace_id=proposal.trace_id,
+                    source_suggestion_id=None,
+                    apply_outcome="advisory",
+                    apply_detail={
+                        "reason": "v0 gated proposal resolved by vote",
+                        "approve": approve,
+                        "deny": deny,
+                        "abstain": abstain,
+                        "pool_size": len(pool),
+                    },
+                    decision_class=proposal.decision_class,
+                    gated_via_proposal_id=proposal.id,
+                )
+                decision_id = decision.id
+                try:
+                    await repo.resolve(
+                        proposal_id,
+                        status="approved",
+                        resolution_note=f"Vote: {approve}/{len(pool)} approved",
+                    )
+                    resolved_as = "approved"
+                except InvalidProposalStateError:
+                    # Race with another caller. Rollback.
+                    raise GatedProposalError("already_resolved", status=409)
+
+            # Resolution: deny-lock (remaining voters cannot reach threshold)?
+            elif approve + outstanding < threshold:
+                try:
+                    await repo.resolve(
+                        proposal_id,
+                        status="denied",
+                        resolution_note=f"Vote: {deny} denied, threshold unreachable",
+                    )
+                    resolved_as = "denied"
+                except InvalidProposalStateError:
+                    raise GatedProposalError("already_resolved", status=409)
+
+            proposal_refreshed = await repo.get(proposal_id)
+            payload = self._payload(proposal_refreshed)
+            project_id = proposal.project_id
+            proposer_id = proposal.proposer_user_id
+            decision_class = proposal.decision_class
+
+        tally = {
+            "approve": approve,
+            "deny": deny,
+            "abstain": abstain,
+            "outstanding": outstanding,
+            "pool_size": len(pool),
+            "threshold": threshold,
+        }
+
+        # Side effects AFTER session closes: stream posts + events.
+        if resolved_as is not None:
+            await self._notify_proposer(
+                project_id=project_id,
+                proposer_id=proposer_id,
+                proposal_id=proposal_id,
+                decision_class=decision_class,
+                status=resolved_as,
+                rationale=payload.get("resolution_note") if payload else None,
+            )
+            await self._event_bus.emit(
+                f"gated_proposal.{resolved_as}",
+                {
+                    "proposal_id": proposal_id,
+                    "project_id": project_id,
+                    "decision_class": decision_class,
+                    "proposer": proposer_id,
+                    "via": "vote",
+                    "tally": tally,
+                    "decision_id": decision_id,
+                },
+            )
+        else:
+            await self._event_bus.emit(
+                "gated_proposal.vote_cast",
+                {
+                    "proposal_id": proposal_id,
+                    "project_id": project_id,
+                    "decision_class": decision_class,
+                    "voter": voter_user_id,
+                    "verdict": verdict,
+                    "tally": tally,
+                },
+            )
+
+        return {
+            "ok": True,
+            "proposal": payload,
+            "tally": tally,
+            "resolved_as": resolved_as,
+            "decision_id": decision_id,
+        }
+
+    async def tally(self, *, proposal_id: str) -> dict[str, Any]:
+        """Read-only tally snapshot. Safe to call on any proposal;
+        returns threshold=None and pool_size=0 for non-vote proposals.
+        """
+        async with session_scope(self._sessionmaker) as session:
+            repo = GatedProposalRepository(session)
+            proposal = await repo.get(proposal_id)
+            if proposal is None:
+                raise GatedProposalError("proposal_not_found", status=404)
+            pool = list(proposal.voter_pool or [])
+            votes = await VoteRepository(session).list_for_subject(
+                subject_kind=self._VOTE_SUBJECT_KIND, subject_id=proposal_id
+            )
+        approve = sum(1 for v in votes if v.verdict == "approve")
+        deny = sum(1 for v in votes if v.verdict == "deny")
+        abstain = sum(1 for v in votes if v.verdict == "abstain")
+        return {
+            "approve": approve,
+            "deny": deny,
+            "abstain": abstain,
+            "outstanding": len(pool) - len(votes),
+            "pool_size": len(pool),
+            "threshold": self._threshold(pool) if pool else None,
+            "votes": [
+                {
+                    "voter_user_id": v.voter_user_id,
+                    "verdict": v.verdict,
+                    "rationale": v.rationale,
+                    "created_at": v.created_at.isoformat() if v.created_at else None,
+                    "updated_at": v.updated_at.isoformat() if v.updated_at else None,
+                }
+                for v in votes
+            ],
+        }
+
+    @staticmethod
+    def _threshold(pool: list[str]) -> int:
+        """Strict-majority threshold: floor(n/2) + 1.
+
+        Pool sizes map to: 2→2, 3→2, 4→3, 5→3, 6→4, 7→4. More than half
+        must approve for the proposal to pass — a tied vote (e.g. pool=4,
+        approve=2, deny=2) does NOT resolve on approve, which matches
+        intuition: a tie is not a win.
+        """
+        if not pool:
+            return 0
+        return len(pool) // 2 + 1
+
     # --------------------------------------------------------------- listing
 
     async def list_pending_for_gate_keeper(
@@ -505,6 +809,7 @@ class GatedProposalService:
             "apply_actions": list(row.apply_actions or []),
             "status": row.status,
             "resolution_note": row.resolution_note,
+            "voter_pool": list(row.voter_pool or []) if row.voter_pool else None,
             "trace_id": row.trace_id,
             "created_at": (
                 row.created_at.isoformat() if row.created_at else None
@@ -521,4 +826,9 @@ __all__ = [
     "VALID_DECISION_CLASSES",
     "DECISION_CLASS_LABELS",
     "get_gate_keeper",
+    "VOTE_SUBJECT_KIND",
 ]
+
+# Exported for downstream consumers (e.g. voting_profile in
+# compute_profile, cast_vote skill in workgraph_agents).
+VOTE_SUBJECT_KIND = GatedProposalService._VOTE_SUBJECT_KIND

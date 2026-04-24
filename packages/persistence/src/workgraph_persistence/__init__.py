@@ -48,6 +48,7 @@ from .orm import (
     TaskDependencyRow,
     TaskRow,
     UserRow,
+    VoteRow,
 )
 from .repositories import (
     AgentRunLogRepository,
@@ -87,6 +88,7 @@ from .repositories import (
     StreamMemberRepository,
     StreamRepository,
     UserRepository,
+    VoteRepository,
 )
 from .stage import Stage, StageInfo, project_stage
 from .streams_backfill import (
@@ -144,6 +146,7 @@ __all__ = [
     "TaskDependencyRow",
     "TaskRow",
     "UserRow",
+    "VoteRow",
     "AgentRunLogRepository",
     "AssignmentRepository",
     "ClarificationQuestionRepository",
@@ -176,6 +179,7 @@ __all__ = [
     "StreamMemberRepository",
     "StreamRepository",
     "UserRepository",
+    "VoteRepository",
     "EventRepository",
     "GatedProposalRepository",
     "HandoffRepository",

@@ -66,16 +66,21 @@ _ERROR_STATUS: dict[str, int] = {
     "empty_proposal_body": 400,
     "invalid_decision_class": 400,
     "invalid_map_entry": 400,
+    "invalid_verdict": 400,
     "project_not_found": 404,
     "proposal_not_found": 404,
     "proposer_not_member": 403,
     "not_gate_keeper": 403,
     "not_proposer": 403,
     "not_owner": 403,
+    "not_authorized_to_open_vote": 403,
+    "not_in_voter_pool": 403,
     "no_gate_keeper": 409,
     "proposer_is_gate_keeper": 409,
     "gate_keeper_not_member": 409,
     "already_resolved": 409,
+    "not_in_vote": 409,
+    "insufficient_voters": 409,
 }
 
 
@@ -350,5 +355,71 @@ async def post_withdraw(
         return await service.withdraw(
             proposal_id=proposal_id, acting_user_id=user.id
         )
+    except GatedProposalError as exc:
+        raise _map_error(exc) from exc
+
+
+# ------------------------------------------------------------ vote mode (Phase S)
+
+
+class OpenToVoteRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    rationale: str | None = Field(default=None, max_length=2000)
+
+
+class CastVoteRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    verdict: str = Field(min_length=1, max_length=16)
+    rationale: str | None = Field(default=None, max_length=2000)
+
+
+@router.post("/api/gated-proposals/{proposal_id}/open-to-vote")
+async def post_open_to_vote(
+    proposal_id: str,
+    body: OpenToVoteRequest,
+    request: Request,
+    user: AuthenticatedUser = Depends(require_user),
+) -> dict[str, Any]:
+    service = _get_service(request)
+    try:
+        return await service.open_to_vote(
+            proposal_id=proposal_id,
+            acting_user_id=user.id,
+            rationale=body.rationale,
+        )
+    except GatedProposalError as exc:
+        raise _map_error(exc) from exc
+
+
+@router.post("/api/gated-proposals/{proposal_id}/votes")
+async def post_cast_vote(
+    proposal_id: str,
+    body: CastVoteRequest,
+    request: Request,
+    user: AuthenticatedUser = Depends(require_user),
+) -> dict[str, Any]:
+    service = _get_service(request)
+    try:
+        return await service.cast_vote(
+            proposal_id=proposal_id,
+            voter_user_id=user.id,
+            verdict=body.verdict,
+            rationale=body.rationale,
+        )
+    except GatedProposalError as exc:
+        raise _map_error(exc) from exc
+
+
+@router.get("/api/gated-proposals/{proposal_id}/tally")
+async def get_tally(
+    proposal_id: str,
+    request: Request,
+    user: AuthenticatedUser = Depends(require_user),
+) -> dict[str, Any]:
+    service = _get_service(request)
+    try:
+        return await service.tally(proposal_id=proposal_id)
     except GatedProposalError as exc:
         raise _map_error(exc) from exc
