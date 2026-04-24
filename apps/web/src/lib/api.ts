@@ -1745,6 +1745,10 @@ export interface GatedProposal {
   apply_actions: Array<Record<string, unknown>>;
   status: GatedProposalStatus;
   resolution_note: string | null;
+  // Phase S — populated when status transitions to 'in_vote'.
+  // List of voter user_ids; threshold derived as floor(n/2)+1.
+  // Null for proposals that never entered vote mode.
+  voter_pool: string[] | null;
   trace_id: string | null;
   created_at: string;
   resolved_at: string | null;
@@ -1911,6 +1915,62 @@ export function getGatedProposal(
   return api<{ ok: boolean; proposal: GatedProposal }>(
     `/api/gated-proposals/${proposalId}`,
   );
+}
+
+// Phase S — unified sidebar inbox feed for the caller's gated
+// workload. Returns both kinds mixed (sorted most-recent-first):
+//   kind='gate-sign-off' — caller is the named gate-keeper on a
+//                          status=pending proposal.
+//   kind='vote-pending'  — caller is in voter_pool on a
+//                          status=in_vote proposal. my_vote is
+//                          non-null if they've already cast.
+
+export type GatedInboxItemKind = "gate-sign-off" | "vote-pending";
+
+export interface GatedInboxVote {
+  verdict: VoteVerdict;
+  rationale: string | null;
+  updated_at: string | null;
+}
+
+export interface GatedInboxItem {
+  kind: GatedInboxItemKind;
+  created_at: string | null;
+  proposal: GatedProposal;
+  my_vote: GatedInboxVote | null;
+}
+
+export function listGatedInbox(
+  opts: { limit?: number } = {},
+): Promise<{ ok: boolean; items: GatedInboxItem[] }> {
+  const params = new URLSearchParams();
+  if (opts.limit !== undefined) params.set("limit", String(opts.limit));
+  const qs = params.toString() ? `?${params.toString()}` : "";
+  return api<{ ok: boolean; items: GatedInboxItem[] }>(
+    `/api/inbox/gated${qs}`,
+  );
+}
+
+export interface TallySnapshot {
+  approve: number;
+  deny: number;
+  abstain: number;
+  outstanding: number;
+  pool_size: number;
+  threshold: number | null;
+  votes: Array<{
+    voter_user_id: string;
+    verdict: VoteVerdict;
+    rationale: string | null;
+    created_at: string | null;
+    updated_at: string | null;
+  }>;
+}
+
+export function getGatedProposalTally(
+  proposalId: string,
+): Promise<TallySnapshot> {
+  return api<TallySnapshot>(`/api/gated-proposals/${proposalId}/tally`);
 }
 
 // ---------- Gate-keeper map (per-project Scene 2 settings) ----------

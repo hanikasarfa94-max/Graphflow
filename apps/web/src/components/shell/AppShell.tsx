@@ -57,16 +57,25 @@ async function fetchJson<T>(
   }
 }
 
-// A thin routing inbox preload used for the initial badge count. Drawer
-// refetches on open to get the freshest state, but the first paint has
-// an accurate number so the badge never lies about pending signals.
+// Inbox preload used for the initial badge count. Drawer refetches on
+// open to get the freshest state, but the first paint has an accurate
+// number so the badge never lies about pending work. Combines
+// 1-to-1 routed signals (Phase Q) with gated-proposal workload
+// (Phase S sign-offs + pending votes) — the drawer merges both.
 async function fetchInboxCount(cookieHeader: string): Promise<number> {
-  const data = await fetchJson<{ signals: RoutingSignal[] }>(
-    "/api/routing/inbox?status=pending&limit=200",
-    cookieHeader,
-    { signals: [] },
-  );
-  return data.signals.length;
+  const [routed, gated] = await Promise.all([
+    fetchJson<{ signals: RoutingSignal[] }>(
+      "/api/routing/inbox?status=pending&limit=200",
+      cookieHeader,
+      { signals: [] },
+    ),
+    fetchJson<{ items: unknown[] }>(
+      "/api/inbox/gated?limit=200",
+      cookieHeader,
+      { items: [] },
+    ),
+  ]);
+  return routed.signals.length + gated.items.length;
 }
 
 export async function AppShell({

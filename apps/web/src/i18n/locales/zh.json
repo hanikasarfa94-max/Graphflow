@@ -713,12 +713,25 @@
     "drawerTitle": "路由收件箱",
     "close": "关闭",
     "loading": "正在加载路由收件箱…",
-    "noPending": "暂无等待你回复的路由询问。",
+    "noPending": "暂无等待你处理的事项。",
     "openDrawer": "打开路由收件箱",
     "openDrawerN": "打开路由收件箱(还有 {n} 条待处理)",
     "newRoutedFrom": "来自 {name} 的新路由询问",
     "pendingLabel": "待处理",
     "repliedLabel": "已回复"
+  },
+  "vote": {
+    "pendingLabel": "投票待处理",
+    "thresholdLabel": "{threshold}/{pool} 可通过",
+    "rationalePlaceholder": "理由(可选)……",
+    "approve": "赞成",
+    "deny": "反对",
+    "abstain": "弃权",
+    "yourApprove": "✓ 你投了赞成",
+    "yourDeny": "✗ 你投了反对",
+    "yourAbstain": "~ 你投了弃权",
+    "openedGroupEyebrow": "已发起投票",
+    "resolvedGroupEyebrow": "投票已结束"
   },
   "tool": {
     "calling": "调用技能",

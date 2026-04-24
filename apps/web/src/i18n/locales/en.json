@@ -713,12 +713,25 @@
     "drawerTitle": "Routed inbox",
     "close": "Close",
     "loading": "Loading routed inbox…",
-    "noPending": "No routed questions waiting on you.",
+    "noPending": "Nothing waiting on you.",
     "openDrawer": "Open routed inbox",
     "openDrawerN": "Open routed inbox ({n} pending)",
     "newRoutedFrom": "New routed question from {name}",
     "pendingLabel": "Pending",
     "repliedLabel": "Replied"
+  },
+  "vote": {
+    "pendingLabel": "Vote pending",
+    "thresholdLabel": "{threshold}/{pool} to pass",
+    "rationalePlaceholder": "Rationale (optional)…",
+    "approve": "Approve",
+    "deny": "Deny",
+    "abstain": "Abstain",
+    "yourApprove": "✓ Your approve",
+    "yourDeny": "✗ Your deny",
+    "yourAbstain": "~ Your abstain",
+    "openedGroupEyebrow": "Vote opened",
+    "resolvedGroupEyebrow": "Vote resolved"
   },
   "tool": {
     "calling": "Calling skill",

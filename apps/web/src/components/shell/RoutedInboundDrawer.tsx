@@ -18,13 +18,16 @@ import { useTranslations } from "next-intl";
 import {
   ApiError,
   getRoutingSignal,
+  listGatedInbox,
   listRoutedInbox,
   replyRoutingSignal,
+  type GatedInboxItem as GatedInboxItemType,
   type RoutingSignal,
 } from "@/lib/api";
 
 import { relativeTime } from "@/components/stream/types";
 import { RoutedInboundBody } from "@/components/stream/RoutedInboundCard";
+import { GatedInboxItem } from "./GatedInboxItem";
 
 const DRAWER_WIDTH = 480;
 
@@ -40,6 +43,7 @@ export function RoutedInboundDrawer({
   const t = useTranslations("inbox");
 
   const [signals, setSignals] = useState<RoutingSignal[]>([]);
+  const [gatedItems, setGatedItems] = useState<GatedInboxItemType[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -48,15 +52,20 @@ export function RoutedInboundDrawer({
     setLoading(true);
     setError(null);
     try {
-      const { signals: rows } = await listRoutedInbox({
-        status: "pending",
-        limit: 100,
-      });
-      // For each, we only have the summary shape. The list endpoint
-      // already returns full RoutingSignal rows, so no N+1 fetch needed.
-      setSignals(rows);
-      // Sync the badge count to the authoritative list length.
-      onCountChange(rows.length);
+      // Fire both endpoints in parallel. Routed signals are 1-to-1
+      // routes; gated items are (a) sign-offs this user owes as
+      // gate-keeper and (b) open votes they're in the pool for.
+      // Merge into one drawer badge so the user sees their total
+      // workload at a glance.
+      const [routed, gated] = await Promise.all([
+        listRoutedInbox({ status: "pending", limit: 100 }),
+        listGatedInbox({ limit: 100 }).catch(
+          () => ({ ok: false, items: [] as GatedInboxItemType[] }),
+        ),
+      ]);
+      setSignals(routed.signals);
+      setGatedItems(gated.items);
+      onCountChange(routed.signals.length + gated.items.length);
     } catch (e) {
       if (e instanceof ApiError) {
         setError(`load failed (${e.status})`);
@@ -84,9 +93,17 @@ export function RoutedInboundDrawer({
   }, [open, onClose]);
 
   const pendingCount = useMemo(
-    () => signals.filter((s) => s.status === "pending").length,
-    [signals],
+    () =>
+      signals.filter((s) => s.status === "pending").length + gatedItems.length,
+    [signals, gatedItems],
   );
+
+  const handleGatedResolved = useCallback(() => {
+    // Drop the gated item from the local list + decrement the badge.
+    // Keeps UI snappy without a full refetch; the next drawer open
+    // pulls fresh state anyway.
+    void refresh();
+  }, [refresh]);
 
   const activeSignal = useMemo(
     () => signals.find((s) => s.id === activeId) ?? null,
@@ -251,18 +268,47 @@ export function RoutedInboundDrawer({
               {error}
             </div>
           )}
-          {!loading && !error && signals.length === 0 && (
-            <div
-              data-testid="routed-inbox-empty"
+          {!loading &&
+            !error &&
+            signals.length === 0 &&
+            gatedItems.length === 0 && (
+              <div
+                data-testid="routed-inbox-empty"
+                style={{
+                  padding: "32px 16px",
+                  textAlign: "center",
+                  color: "var(--wg-ink-soft)",
+                  fontSize: 13,
+                }}
+              >
+                {t("noPending")}
+              </div>
+            )}
+          {gatedItems.length > 0 && (
+            <ul
+              data-testid="gated-inbox-list"
               style={{
-                padding: "32px 16px",
-                textAlign: "center",
-                color: "var(--wg-ink-soft)",
-                fontSize: 13,
+                listStyle: "none",
+                margin: 0,
+                padding: "4px 12px 8px",
+                display: "flex",
+                flexDirection: "column",
+                gap: 10,
+                borderBottom:
+                  signals.length > 0 ? "1px solid var(--wg-line)" : "none",
+                marginBottom: signals.length > 0 ? 8 : 0,
+                paddingBottom: signals.length > 0 ? 12 : 8,
               }}
             >
-              {t("noPending")}
-            </div>
+              {gatedItems.map((item) => (
+                <li key={item.proposal.id}>
+                  <GatedInboxItem
+                    item={item}
+                    onResolved={handleGatedResolved}
+                  />
+                </li>
+              ))}
+            </ul>
           )}
           <ul
             style={{
