@@ -62,3 +62,8 @@ workgraph.tar.gz
 # SQLite dev DB variants
 data/*.db
 data/*.db-journal
+
+# Local working docs — not part of the shipped product
+docs/report.md
+docs/feishu_competation.md
+docs/product_flowcharts.md
