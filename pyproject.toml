@@ -43,6 +43,7 @@ target-version = "py311"
 
 [tool.pytest.ini_options]
 testpaths = ["apps", "packages", "tests"]
+pythonpath = ["apps/worker/src"]
 asyncio_mode = "auto"
 addopts = "--import-mode=importlib -m 'not eval'"
 python_files = ["test_*.py", "canonical_*.py"]
