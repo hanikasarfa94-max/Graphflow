@@ -300,3 +300,91 @@ async def test_counts_match_direct_db_queries(api_env):
     assert by_uid[other_id]["risks_owned"]["count"] == 0
     assert by_uid[other_id]["tasks_completed"]["count"] == len(task_rows) == 1
     assert task_id in by_uid[other_id]["tasks_completed"]["ids"]
+
+
+@pytest.mark.asyncio
+async def test_perf_aggregation_batched_with_large_team(api_env):
+    """Sanity check that team_perf() scales: seed 15 members with
+    decisions + tasks, then assert the response is correctly shaped.
+
+    The refactor batches all per-member queries (users / decisions /
+    routings / risks / tasks / messages / dissent / silent-consensus /
+    last-*) into a small constant number of GROUP-BY queries. This test
+    keeps the response shape locked in so future changes that reintroduce
+    an N+1 will still pass functional correctness; the downside-catch is
+    that the suite takes noticeably longer if we regress."""
+    client, maker, *_ = api_env
+    pid = await _mk_project(maker)
+    req_id = await _seed_requirement(maker, pid)
+
+    # Registered owner — full tier — satisfies the admin gate.
+    owner_id = await _register(client, "perf_batched_owner")
+    await _add_member(
+        maker, pid, owner_id, role="owner", license_tier="full"
+    )
+
+    # 14 seeded members, total team = 15. Each gets one decision and one
+    # completed task assigned to them — enough to exercise every batched
+    # query path.
+    member_ids: list[str] = []
+    for i in range(14):
+        uid = await _seed_user(maker, f"perf_batched_m{i:02d}")
+        await _add_member(maker, pid, uid, role="member")
+        member_ids.append(uid)
+        await _seed_decision(maker, pid, uid)
+        task_id = await _seed_task(maker, pid, req_id, status="done")
+        await _seed_assignment(maker, pid, task_id, uid)
+
+    # One open risk on the project — credited to the owner only.
+    risk_id = await _seed_risk(maker, pid, req_id, status="open")
+
+    await _login(client, "perf_batched_owner")
+    r = await client.get(f"/api/projects/{pid}/team/perf")
+    assert r.status_code == 200, r.text
+    body = r.json()
+
+    # 15 rows, one per member, output shape identical to the small-team
+    # path.
+    assert isinstance(body, list)
+    assert len(body) == 15
+    by_uid = {row["user_id"]: row for row in body}
+
+    # Owner metrics: no decision/task of their own, but credited for the
+    # shared project risk.
+    assert by_uid[owner_id]["decisions_made"]["count"] == 0
+    assert by_uid[owner_id]["tasks_completed"]["count"] == 0
+    assert by_uid[owner_id]["risks_owned"]["count"] == 1
+    assert risk_id in by_uid[owner_id]["risks_owned"]["ids"]
+
+    # Every seeded member has exactly one decision + one completed task
+    # and zero credited risks.
+    for uid in member_ids:
+        row = by_uid[uid]
+        assert row["role_in_project"] == "member"
+        assert row["decisions_made"]["count"] == 1
+        assert len(row["decisions_made"]["ids"]) == 1
+        assert row["tasks_completed"]["count"] == 1
+        assert len(row["tasks_completed"]["ids"]) == 1
+        assert row["risks_owned"]["count"] == 0
+        # Shape contract: every expected nested key is present.
+        assert set(row.keys()) >= {
+            "user_id",
+            "display_name",
+            "username",
+            "role_in_project",
+            "license_tier",
+            "decisions_made",
+            "routings_answered",
+            "risks_owned",
+            "tasks_completed",
+            "skills_validated",
+            "dissent_accuracy",
+            "silent_consensus_ratified",
+            "activity_last_30d",
+        }
+        assert set(row["dissent_accuracy"].keys()) == {
+            "total",
+            "supported",
+            "refuted",
+            "still_open",
+        }

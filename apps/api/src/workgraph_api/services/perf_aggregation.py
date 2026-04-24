@@ -20,9 +20,16 @@ Metric definitions (all scoped to `project_id`):
                         messages / decisions / assignments
   * skills_validated  — declared / observed / overlap counts lifted
                         from UserRow.profile and profile_tallies
+
+Query shape: a single call fans out to a small constant number of
+batched queries (roughly 15) regardless of team size. Each batched
+query is grouped by user_id and the result zipped back onto members
+in Python. This replaces an older per-member loop that ran O(15 × N)
+round-trips for an N-member team.
 """
 from __future__ import annotations
 
+from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -35,15 +42,14 @@ from workgraph_persistence import (
     DissentRow,
     MessageRow,
     ProjectMemberRepository,
+    ProjectMemberRow,
     RiskRow,
     RoutedSignalRow,
-    SilentConsensusRepository,
+    SilentConsensusRow,
     TaskRow,
-    UserRepository,
+    UserRow,
     session_scope,
 )
-
-from .profile_tallies import compute_profile
 
 
 # Number of most-recent ids to surface per metric. The UI shows one
@@ -85,199 +91,349 @@ class PerfAggregationService:
             if not members:
                 return []
 
-            user_repo = UserRepository(session)
             now = datetime.now(timezone.utc)
             window_30d = now - timedelta(days=30)
+            user_ids = [m.user_id for m in members]
 
-            records: list[dict[str, Any]] = []
-            for m in members:
-                user = await user_repo.get(m.user_id)
-                if user is None:
-                    continue
+            # ---- batch 1: users ---------------------------------------
+            user_rows = list(
+                (
+                    await session.execute(
+                        select(UserRow).where(UserRow.id.in_(user_ids))
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            users_by_id: dict[str, UserRow] = {u.id: u for u in user_rows}
 
-                decisions = await self._recent(
-                    session,
-                    select(DecisionRow.id)
-                    .where(DecisionRow.project_id == project_id)
-                    .where(DecisionRow.resolver_id == m.user_id)
-                    .order_by(DecisionRow.created_at.desc()),
-                )
-                decisions_total = await self._count(
-                    session,
-                    select(func.count(DecisionRow.id))
-                    .where(DecisionRow.project_id == project_id)
-                    .where(DecisionRow.resolver_id == m.user_id),
-                )
+            # ---- batch 2: decisions (count + recent ids) --------------
+            decisions_rows = list(
+                (
+                    await session.execute(
+                        select(
+                            DecisionRow.resolver_id,
+                            DecisionRow.id,
+                            DecisionRow.created_at,
+                        )
+                        .where(DecisionRow.project_id == project_id)
+                        .where(DecisionRow.resolver_id.in_(user_ids))
+                        .order_by(DecisionRow.created_at.desc())
+                    )
+                ).all()
+            )
+            decisions_total: dict[str, int] = defaultdict(int)
+            decisions_recent: dict[str, list[str]] = defaultdict(list)
+            decisions_last: dict[str, datetime] = {}
+            for resolver_id, did, created_at in decisions_rows:
+                decisions_total[resolver_id] += 1
+                if len(decisions_recent[resolver_id]) < _RECENT_ID_LIMIT:
+                    decisions_recent[resolver_id].append(did)
+                # rows are DESC-ordered, so the first is MAX per resolver
+                if resolver_id not in decisions_last:
+                    decisions_last[resolver_id] = created_at
 
-                routings = await self._recent(
-                    session,
-                    select(RoutedSignalRow.id)
-                    .where(RoutedSignalRow.project_id == project_id)
-                    .where(RoutedSignalRow.target_user_id == m.user_id)
-                    .where(RoutedSignalRow.reply_json.is_not(None))
-                    .order_by(RoutedSignalRow.created_at.desc()),
-                )
-                routings_total = await self._count(
-                    session,
-                    select(func.count(RoutedSignalRow.id))
-                    .where(RoutedSignalRow.project_id == project_id)
-                    .where(RoutedSignalRow.target_user_id == m.user_id)
-                    .where(RoutedSignalRow.reply_json.is_not(None)),
-                )
+            # ---- batch 3: routings (answered, i.e. reply_json set) ----
+            routings_rows = list(
+                (
+                    await session.execute(
+                        select(
+                            RoutedSignalRow.target_user_id,
+                            RoutedSignalRow.id,
+                        )
+                        .where(RoutedSignalRow.project_id == project_id)
+                        .where(RoutedSignalRow.target_user_id.in_(user_ids))
+                        .where(RoutedSignalRow.reply_json.is_not(None))
+                        .order_by(RoutedSignalRow.created_at.desc())
+                    )
+                ).all()
+            )
+            routings_total: dict[str, int] = defaultdict(int)
+            routings_recent: dict[str, list[str]] = defaultdict(list)
+            for target_uid, rid in routings_rows:
+                routings_total[target_uid] += 1
+                if len(routings_recent[target_uid]) < _RECENT_ID_LIMIT:
+                    routings_recent[target_uid].append(rid)
 
-                # Risks: RiskRow has no per-user owner column. Mirror
-                # profile_tallies semantics — open risks on this project
-                # are "owned" by whoever holds role='owner'. Non-owner
-                # members get 0.
-                if m.role == "owner":
-                    risks = await self._recent(
-                        session,
+            # ---- batch 4: open risks on this project ------------------
+            # RiskRow has no per-user owner column; mirror
+            # profile_tallies — the set of open risks on this project is
+            # credited wholesale to every member with role='owner'. One
+            # query fetches the shared list; non-owners get zeros.
+            risks_rows = list(
+                (
+                    await session.execute(
                         select(RiskRow.id)
                         .where(RiskRow.project_id == project_id)
                         .where(RiskRow.status == "open")
-                        .order_by(RiskRow.created_at.desc()),
+                        .order_by(RiskRow.created_at.desc())
                     )
-                    risks_total = await self._count(
-                        session,
-                        select(func.count(RiskRow.id))
-                        .where(RiskRow.project_id == project_id)
-                        .where(RiskRow.status == "open"),
+                )
+                .scalars()
+                .all()
+            )
+            risks_total_shared = len(risks_rows)
+            risks_recent_shared = risks_rows[:_RECENT_ID_LIMIT]
+
+            # ---- batch 5: completed tasks (task_id, user_id) ----------
+            # Task-id dedupe per user; a task may have been (re-)assigned
+            # more than once. DESC by assignment.created_at so "recent"
+            # picks the freshest binding per task.
+            tasks_rows = list(
+                (
+                    await session.execute(
+                        select(
+                            AssignmentRow.user_id,
+                            TaskRow.id,
+                        )
+                        .join(
+                            AssignmentRow,
+                            AssignmentRow.task_id == TaskRow.id,
+                        )
+                        .where(TaskRow.project_id == project_id)
+                        .where(TaskRow.status == "done")
+                        .where(AssignmentRow.user_id.in_(user_ids))
+                        .order_by(AssignmentRow.created_at.desc())
                     )
-                else:
-                    risks = []
-                    risks_total = 0
+                ).all()
+            )
+            tasks_seen: dict[str, set[str]] = defaultdict(set)
+            tasks_recent: dict[str, list[str]] = defaultdict(list)
+            for uid, tid in tasks_rows:
+                if tid in tasks_seen[uid]:
+                    continue
+                tasks_seen[uid].add(tid)
+                if len(tasks_recent[uid]) < _RECENT_ID_LIMIT:
+                    tasks_recent[uid].append(tid)
 
-                # Tasks completed: TaskRow.status == 'done' with an
-                # AssignmentRow binding it to this user. We include
-                # resolved assignments too — unassignment before the
-                # task flipped done means we'd undercount; a completed
-                # task the user touched at any point still credits
-                # them. Dedup task_ids because a task may have been
-                # (re-)assigned more than once.
-                tasks_rows = list(
-                    (
-                        await session.execute(
-                            select(TaskRow.id, AssignmentRow.created_at)
-                            .join(
-                                AssignmentRow,
-                                AssignmentRow.task_id == TaskRow.id,
-                            )
-                            .where(TaskRow.project_id == project_id)
-                            .where(TaskRow.status == "done")
-                            .where(AssignmentRow.user_id == m.user_id)
-                            .order_by(AssignmentRow.created_at.desc())
+            # ---- batch 6: dissent (bucketed per user) -----------------
+            dissent_rows = list(
+                (
+                    await session.execute(
+                        select(
+                            DissentRow.dissenter_user_id,
+                            DissentRow.validated_by_outcome,
                         )
-                    ).all()
-                )
-                seen_task_ids: set[str] = set()
-                tasks_recent: list[str] = []
-                for tid, _ in tasks_rows:
-                    if tid in seen_task_ids:
-                        continue
-                    seen_task_ids.add(tid)
-                    if len(tasks_recent) < _RECENT_ID_LIMIT:
-                        tasks_recent.append(tid)
-                tasks_total = len(seen_task_ids)
-
-                # Dissent accuracy — count the member's dissents on
-                # decisions within this project, bucketed by validation
-                # state. `still_open` is the explicit-null bucket so the
-                # UI can render (supported + refuted) / total as the
-                # judgment accuracy score.
-                dissent_rows = list(
-                    (
-                        await session.execute(
-                            select(DissentRow.validated_by_outcome)
-                            .join(
-                                DecisionRow,
-                                DecisionRow.id == DissentRow.decision_id,
-                            )
-                            .where(DecisionRow.project_id == project_id)
-                            .where(
-                                DissentRow.dissenter_user_id == m.user_id
-                            )
+                        .join(
+                            DecisionRow,
+                            DecisionRow.id == DissentRow.decision_id,
                         )
-                    ).all()
-                )
-                dissent_bucket = {
+                        .where(DecisionRow.project_id == project_id)
+                        .where(DissentRow.dissenter_user_id.in_(user_ids))
+                    )
+                ).all()
+            )
+            dissent_buckets: dict[str, dict[str, int]] = defaultdict(
+                lambda: {
                     "total": 0,
                     "supported": 0,
                     "refuted": 0,
                     "still_open": 0,
                 }
-                for (validated,) in dissent_rows:
-                    dissent_bucket["total"] += 1
-                    if validated == "supported":
-                        dissent_bucket["supported"] += 1
-                    elif validated == "refuted":
-                        dissent_bucket["refuted"] += 1
-                    else:
-                        # Treat both null (not yet observed) and the
-                        # explicit 'still_open' as still-open for the
-                        # panel view. Separate counting is a v2
-                        # concern; v1 has no code path that writes
-                        # 'still_open' anyway.
-                        dissent_bucket["still_open"] += 1
+            )
+            for diss_uid, validated in dissent_rows:
+                bucket = dissent_buckets[diss_uid]
+                bucket["total"] += 1
+                if validated == "supported":
+                    bucket["supported"] += 1
+                elif validated == "refuted":
+                    bucket["refuted"] += 1
+                else:
+                    bucket["still_open"] += 1
 
-                # Phase 1.A — silent-consensus ratified count.
-                # Ratification IS the action being measured here: the
-                # ratifier crystallized group agreement into a decision.
-                # Stored on DecisionRow.resolver_id, joined through
-                # SilentConsensusRow.ratified_decision_id.
-                sc_count, sc_recent = await SilentConsensusRepository(
-                    session
-                ).count_ratified_by_user_in_project(
-                    project_id=project_id, user_id=m.user_id
-                )
-
-                messages_30d = await self._count(
-                    session,
-                    select(func.count(MessageRow.id))
-                    .where(MessageRow.project_id == project_id)
-                    .where(MessageRow.author_id == m.user_id)
-                    .where(MessageRow.created_at >= window_30d),
-                )
-
-                # Last-active across project-scoped emissions.
-                last_message = (
+            # ---- batch 7: silent-consensus ratified per ratifier ------
+            # Ratifier = DecisionRow.resolver_id on the ratified decision.
+            sc_rows = list(
+                (
                     await session.execute(
-                        select(func.max(MessageRow.created_at))
+                        select(
+                            DecisionRow.resolver_id,
+                            SilentConsensusRow.id,
+                            SilentConsensusRow.ratified_at,
+                        )
+                        .join(
+                            DecisionRow,
+                            DecisionRow.id
+                            == SilentConsensusRow.ratified_decision_id,
+                        )
+                        .where(SilentConsensusRow.project_id == project_id)
+                        .where(SilentConsensusRow.status == "ratified")
+                        .where(DecisionRow.resolver_id.in_(user_ids))
+                        .order_by(SilentConsensusRow.ratified_at.desc())
+                    )
+                ).all()
+            )
+            sc_count: dict[str, int] = defaultdict(int)
+            sc_recent: dict[str, list[str]] = defaultdict(list)
+            for ratifier_id, sc_id, _ in sc_rows:
+                sc_count[ratifier_id] += 1
+                if len(sc_recent[ratifier_id]) < _RECENT_ID_LIMIT:
+                    sc_recent[ratifier_id].append(sc_id)
+
+            # ---- batch 8: messages in 30d (count + MAX) ---------------
+            messages_30d_rows = list(
+                (
+                    await session.execute(
+                        select(
+                            MessageRow.author_id,
+                            func.count(MessageRow.id),
+                        )
                         .where(MessageRow.project_id == project_id)
-                        .where(MessageRow.author_id == m.user_id)
+                        .where(MessageRow.author_id.in_(user_ids))
+                        .where(MessageRow.created_at >= window_30d)
+                        .group_by(MessageRow.author_id)
                     )
-                ).scalar_one_or_none()
-                last_decision = (
+                ).all()
+            )
+            messages_30d: dict[str, int] = {
+                uid: int(n or 0) for uid, n in messages_30d_rows
+            }
+
+            # ---- batch 9: last_message per user (all time) ------------
+            last_message_rows = list(
+                (
                     await session.execute(
-                        select(func.max(DecisionRow.created_at))
-                        .where(DecisionRow.project_id == project_id)
-                        .where(DecisionRow.resolver_id == m.user_id)
+                        select(
+                            MessageRow.author_id,
+                            func.max(MessageRow.created_at),
+                        )
+                        .where(MessageRow.project_id == project_id)
+                        .where(MessageRow.author_id.in_(user_ids))
+                        .group_by(MessageRow.author_id)
                     )
-                ).scalar_one_or_none()
-                last_assignment = (
+                ).all()
+            )
+            last_message: dict[str, datetime] = {
+                uid: t for uid, t in last_message_rows if t is not None
+            }
+
+            # last_decision piggybacked off the decisions batch above
+            last_decision = decisions_last
+
+            # ---- batch 10: last_assignment per user -------------------
+            last_assignment_rows = list(
+                (
                     await session.execute(
-                        select(func.max(AssignmentRow.created_at))
+                        select(
+                            AssignmentRow.user_id,
+                            func.max(AssignmentRow.created_at),
+                        )
                         .where(AssignmentRow.project_id == project_id)
-                        .where(AssignmentRow.user_id == m.user_id)
+                        .where(AssignmentRow.user_id.in_(user_ids))
+                        .group_by(AssignmentRow.user_id)
                     )
-                ).scalar_one_or_none()
+                ).all()
+            )
+            last_assignment: dict[str, datetime] = {
+                uid: t for uid, t in last_assignment_rows if t is not None
+            }
+
+            # ---- batch 11-14: observed-profile inputs (global, per user)
+            # We only need what `_observed_skill_tags` looks at, not the
+            # whole compute_profile payload:
+            #   * messages_posted_30d  (threshold 10)
+            #   * decisions_resolved_30d (threshold 1)
+            #   * risks_owned           (threshold 1)
+            #   * routings_answered_30d (threshold 3; proxied via
+            #     AssignmentRow.resolved_at, same rule as compute_profile)
+            # Each is a single GROUP-BY query over the full member set;
+            # project scope is intentionally dropped for symmetry with
+            # profile_tallies which computes cross-project tallies.
+            global_messages_30d = _dict_from_group_count(
+                await session.execute(
+                    select(
+                        MessageRow.author_id,
+                        func.count(MessageRow.id),
+                    )
+                    .where(MessageRow.author_id.in_(user_ids))
+                    .where(MessageRow.created_at >= window_30d)
+                    .group_by(MessageRow.author_id)
+                )
+            )
+            global_decisions_30d = _dict_from_group_count(
+                await session.execute(
+                    select(
+                        DecisionRow.resolver_id,
+                        func.count(DecisionRow.id),
+                    )
+                    .where(DecisionRow.resolver_id.in_(user_ids))
+                    .where(DecisionRow.created_at >= window_30d)
+                    .group_by(DecisionRow.resolver_id)
+                )
+            )
+            # risks_owned: open risks on any project where the user is
+            # role='owner'. Two-step join via ProjectMemberRow keeps this
+            # to one query.
+            global_risks_owned_rows = list(
+                (
+                    await session.execute(
+                        select(
+                            ProjectMemberRow.user_id,
+                            func.count(RiskRow.id),
+                        )
+                        .join(
+                            RiskRow,
+                            RiskRow.project_id == ProjectMemberRow.project_id,
+                        )
+                        .where(ProjectMemberRow.user_id.in_(user_ids))
+                        .where(ProjectMemberRow.role == "owner")
+                        .where(RiskRow.status == "open")
+                        .group_by(ProjectMemberRow.user_id)
+                    )
+                ).all()
+            )
+            global_risks_owned = {
+                uid: int(n or 0) for uid, n in global_risks_owned_rows
+            }
+            global_routings_30d = _dict_from_group_count(
+                await session.execute(
+                    select(
+                        AssignmentRow.user_id,
+                        func.count(AssignmentRow.id),
+                    )
+                    .where(AssignmentRow.user_id.in_(user_ids))
+                    .where(AssignmentRow.resolved_at.is_not(None))
+                    .where(AssignmentRow.resolved_at >= window_30d)
+                    .group_by(AssignmentRow.user_id)
+                )
+            )
+
+            # ---- assemble records -------------------------------------
+            records: list[dict[str, Any]] = []
+            for m in members:
+                user = users_by_id.get(m.user_id)
+                if user is None:
+                    continue
+
+                if m.role == "owner":
+                    risks_ids = list(risks_recent_shared)
+                    risks_count = risks_total_shared
+                else:
+                    risks_ids = []
+                    risks_count = 0
+
                 candidates = [
                     t
-                    for t in (last_message, last_decision, last_assignment)
+                    for t in (
+                        last_message.get(m.user_id),
+                        last_decision.get(m.user_id),
+                        last_assignment.get(m.user_id),
+                    )
                     if t is not None
                 ]
                 last_active = max(candidates) if candidates else None
 
-                # Skills: reuse compute_profile's observed set via the
-                # same rules the atlas uses. Declared count comes from
-                # the user's stored profile; overlap is the count of
-                # declared tokens that appear as observed signals
-                # (case-insensitive).
                 profile = dict(user.profile or {})
                 declared = [
-                    str(a) for a in (profile.get("declared_abilities") or [])
+                    str(a)
+                    for a in (profile.get("declared_abilities") or [])
                 ]
-                tallies = await compute_profile(session, m.user_id)
-                observed_set = _observed_skill_tags(tallies.observed)
+                observed_set = _observed_skill_tags_from_counts(
+                    messages_30d=global_messages_30d.get(m.user_id, 0),
+                    decisions_30d=global_decisions_30d.get(m.user_id, 0),
+                    risks_owned=global_risks_owned.get(m.user_id, 0),
+                    routings_30d=global_routings_30d.get(m.user_id, 0),
+                )
                 declared_lower = {d.lower() for d in declared}
                 overlap = len(observed_set & declared_lower)
 
@@ -289,33 +445,47 @@ class PerfAggregationService:
                         "role_in_project": m.role,
                         "license_tier": m.license_tier or "full",
                         "decisions_made": {
-                            "count": decisions_total,
-                            "ids": decisions,
+                            "count": decisions_total.get(m.user_id, 0),
+                            "ids": list(
+                                decisions_recent.get(m.user_id, [])
+                            ),
                         },
                         "routings_answered": {
-                            "count": routings_total,
-                            "ids": routings,
+                            "count": routings_total.get(m.user_id, 0),
+                            "ids": list(
+                                routings_recent.get(m.user_id, [])
+                            ),
                         },
                         "risks_owned": {
-                            "count": risks_total,
-                            "ids": risks,
+                            "count": risks_count,
+                            "ids": risks_ids,
                         },
                         "tasks_completed": {
-                            "count": tasks_total,
-                            "ids": tasks_recent,
+                            "count": len(tasks_seen.get(m.user_id, ())),
+                            "ids": list(tasks_recent.get(m.user_id, [])),
                         },
                         "skills_validated": {
                             "declared": len(declared),
                             "observed": len(observed_set),
                             "overlap": overlap,
                         },
-                        "dissent_accuracy": dissent_bucket,
+                        "dissent_accuracy": dict(
+                            dissent_buckets.get(
+                                m.user_id,
+                                {
+                                    "total": 0,
+                                    "supported": 0,
+                                    "refuted": 0,
+                                    "still_open": 0,
+                                },
+                            )
+                        ),
                         "silent_consensus_ratified": {
-                            "count": sc_count,
-                            "ids": sc_recent,
+                            "count": sc_count.get(m.user_id, 0),
+                            "ids": list(sc_recent.get(m.user_id, [])),
                         },
                         "activity_last_30d": {
-                            "messages": messages_30d,
+                            "messages": messages_30d.get(m.user_id, 0),
                             "last_active_at": (
                                 last_active.isoformat()
                                 if last_active is not None
@@ -337,19 +507,46 @@ class PerfAggregationService:
         return [r[0] for r in rows]
 
 
-def _observed_skill_tags(observed: Any) -> set[str]:
-    """Mirror SkillAtlasService._resolve_observed_skills without the
-    import cycle. Keeps perf independent of the atlas module."""
+def _dict_from_group_count(result) -> dict[str, int]:
+    """Collect a (id, count) GROUP BY result into a dict."""
+    return {row[0]: int(row[1] or 0) for row in result.all()}
+
+
+def _observed_skill_tags_from_counts(
+    *,
+    messages_30d: int,
+    decisions_30d: int,
+    risks_owned: int,
+    routings_30d: int,
+) -> set[str]:
+    """Batched-input form of the original `_observed_skill_tags`.
+
+    Mirrors SkillAtlasService._resolve_observed_skills and the previous
+    implementation that ran `compute_profile` per-member. Pulled out so
+    the loop doesn't need to materialize a full ProfileObserved dataclass
+    just to thresh four integers."""
     out: set[str] = set()
-    if observed.messages_posted_30d >= 10:
+    if messages_30d >= 10:
         out.add("communication")
-    if observed.decisions_resolved_30d >= 1:
+    if decisions_30d >= 1:
         out.add("decision-making")
-    if observed.risks_owned >= 1:
+    if risks_owned >= 1:
         out.add("risk-management")
-    if observed.routings_answered_30d >= 3:
+    if routings_30d >= 3:
         out.add("expertise-routing")
     return out
+
+
+def _observed_skill_tags(observed: Any) -> set[str]:
+    """Compatibility shim for any external caller still passing a
+    ProfileObserved dataclass. Internal callers use the batched form
+    above."""
+    return _observed_skill_tags_from_counts(
+        messages_30d=observed.messages_posted_30d,
+        decisions_30d=observed.decisions_resolved_30d,
+        risks_owned=observed.risks_owned,
+        routings_30d=observed.routings_answered_30d,
+    )
 
 
 __all__ = ["PerfAggregationService"]
