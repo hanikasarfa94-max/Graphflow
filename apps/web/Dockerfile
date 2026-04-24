@@ -15,6 +15,11 @@ ENV NEXT_TELEMETRY_DISABLED=1
 COPY --from=deps /app/node_modules ./node_modules
 COPY apps/web/package.json apps/web/bun.lock apps/web/.npmrc apps/web/tsconfig.json apps/web/next.config.mjs apps/web/next-env.d.ts ./
 COPY apps/web/src ./src
+# public/ holds static assets Next serves at root: /manifest.json,
+# /sw.js, /icons/*, /fonts/*, etc. Without this copy the PWA manifest
+# and service worker 404 in prod (the Next.js standalone build doesn't
+# bundle public/ implicitly).
+COPY apps/web/public ./public
 RUN bun run build
 
 FROM node:20-bookworm-slim AS runtime
@@ -34,6 +39,9 @@ RUN apt-get update \
 # bundle live separately.
 COPY --from=builder --chown=nextjs:nextjs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nextjs /app/.next/static ./.next/static
+# public/ must land at /app/public for Next standalone server to serve
+# static root assets (manifest.json, sw.js, icons/, fonts/).
+COPY --from=builder --chown=nextjs:nextjs /app/public ./public
 
 USER nextjs
 
