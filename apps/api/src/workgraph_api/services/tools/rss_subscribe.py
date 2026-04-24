@@ -26,6 +26,8 @@ from xml.etree import ElementTree as ET
 
 import httpx
 
+from workgraph_api.services.ssrf_guard import SSRFBlocked, safe_get
+
 _log = logging.getLogger("workgraph.api.tools.rss")
 
 _MAX_BYTES = 2_000_000  # 2 MB cap — generous for even pathological feeds.
@@ -153,10 +155,20 @@ async def rss_subscribe(
     try:
         async with httpx.AsyncClient(
             timeout=timeout_s,
-            follow_redirects=True,
             headers=headers,
         ) as client:
-            resp = await client.get(feed_url)
+            resp = await safe_get(client, feed_url)
+    except SSRFBlocked as exc:
+        # Same translation as fetch_url: return empty so the cron path
+        # moves on. The subscription endpoint caller treats `[]` as a
+        # "no items" signal — not ideal for feedback on a blocked URL,
+        # but the router-level validation (adding a subscription) can
+        # do its own pre-flight check if sharper feedback is needed.
+        _log.info(
+            "rss blocked by ssrf guard",
+            extra={"feed": feed_url, "reason": str(exc)},
+        )
+        return []
     except (httpx.HTTPError, httpx.InvalidURL) as exc:
         _log.info(
             "rss fetch error",

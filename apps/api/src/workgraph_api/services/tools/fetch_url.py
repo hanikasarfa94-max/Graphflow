@@ -29,6 +29,8 @@ from typing import Any
 
 import httpx
 
+from workgraph_api.services.ssrf_guard import SSRFBlocked, safe_get
+
 _log = logging.getLogger("workgraph.api.tools.fetch_url")
 
 # Hard cap on how much HTML we will pull down. Anything larger is almost
@@ -175,10 +177,20 @@ async def fetch_url(
     try:
         async with httpx.AsyncClient(
             timeout=timeout_s,
-            follow_redirects=True,
             headers=headers,
         ) as client:
-            resp = await client.get(url)
+            resp = await safe_get(client, url)
+    except SSRFBlocked as exc:
+        # Treat SSRF block identically to a transport error from the
+        # caller's perspective — return None so paste path surfaces a
+        # 400 and cron path silently skips. The concrete reason is
+        # logged but NOT put on `resp` — we don't want internal IPs
+        # bleeding into user-visible responses.
+        _log.info(
+            "fetch_url blocked by ssrf guard",
+            extra={"url": url, "reason": str(exc)},
+        )
+        return None
     except (httpx.HTTPError, httpx.InvalidURL) as exc:
         _log.info(
             "fetch_url network error",
