@@ -946,6 +946,75 @@ async def test_vote_opened_and_resolved_post_to_group_stream(api_env):
 
 
 @pytest.mark.asyncio
+async def test_inbox_gated_feed_mixes_sign_offs_and_vote_pending(api_env):
+    """GET /api/inbox/gated returns both (a) proposals where I'm the
+    single-approver gate-keeper (kind='gate-sign-off') and (b)
+    in-vote proposals where I'm in voter_pool (kind='vote-pending'),
+    in one most-recent-first feed. `my_vote` reflects whether I've
+    already cast on vote-pending items."""
+    client, maker, *_ = api_env
+    pid, u = await _seed_vote_ready_project(client, maker, "vi")
+
+    # 1. Proposer (b) creates single-approver proposal for budget class
+    #    with gate-keeper = different owner (c). Need a second mapping.
+    await _set_gate_keeper_map(
+        maker,
+        project_id=pid,
+        map_={"scope_cut": u["a"], "budget": u["c"]},
+    )
+    r1 = await client.post(
+        f"/api/projects/{pid}/gated-proposals",
+        json={"decision_class": "budget", "proposal_body": "buy rack"},
+    )
+    assert r1.status_code == 200, r1.text
+    sign_off_proposal_id = r1.json()["proposal"]["id"]
+
+    # 2. Proposer (b) creates scope_cut proposal, opens to vote.
+    r2 = await client.post(
+        f"/api/projects/{pid}/gated-proposals",
+        json={"decision_class": "scope_cut", "proposal_body": "trim auth"},
+    )
+    vote_proposal_id = r2.json()["proposal"]["id"]
+    await client.post(
+        f"/api/gated-proposals/{vote_proposal_id}/open-to-vote", json={}
+    )
+
+    # 3. As owner c: inbox should show BOTH items (gate-sign-off on
+    #    proposal 1, vote-pending on proposal 2; c is an owner so in
+    #    voter_pool).
+    await _login(client, "gp_owner_c_vi")
+    r = await client.get("/api/inbox/gated")
+    assert r.status_code == 200
+    items = r.json()["items"]
+    assert len(items) == 2
+    kinds = {i["kind"] for i in items}
+    assert kinds == {"gate-sign-off", "vote-pending"}
+    vote_item = next(i for i in items if i["kind"] == "vote-pending")
+    assert vote_item["proposal"]["id"] == vote_proposal_id
+    assert vote_item["my_vote"] is None  # c hasn't voted yet
+
+    # 4. c casts approve. Inbox reflects my_vote.
+    await client.post(
+        f"/api/gated-proposals/{vote_proposal_id}/votes",
+        json={"verdict": "approve", "rationale": "ok with it"},
+    )
+    r = await client.get("/api/inbox/gated")
+    assert r.status_code == 200
+    vote_item = next(
+        i for i in r.json()["items"] if i["kind"] == "vote-pending"
+    )
+    assert vote_item["my_vote"] is not None
+    assert vote_item["my_vote"]["verdict"] == "approve"
+    assert vote_item["my_vote"]["rationale"] == "ok with it"
+
+    # 5. Plain member (m) is NOT an owner, NOT a gate-keeper → empty inbox.
+    await _login(client, "gp_member_vi")
+    r = await client.get("/api/inbox/gated")
+    assert r.status_code == 200
+    assert r.json()["items"] == []
+
+
+@pytest.mark.asyncio
 async def test_cast_vote_bumps_votes_cast_tally(api_env):
     """Casting a vote bumps signal_tally.votes_cast on the voter,
     regardless of verdict. Verdict re-casts still bump (governance

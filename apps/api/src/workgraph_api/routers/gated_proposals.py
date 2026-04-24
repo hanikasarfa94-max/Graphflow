@@ -192,6 +192,31 @@ async def list_pending_for_me(
     return {"ok": True, "proposals": proposals}
 
 
+@router.get("/api/inbox/gated")
+async def list_inbox_gated(
+    request: Request,
+    user: AuthenticatedUser = Depends(require_user),
+    limit: int = 50,
+) -> dict[str, Any]:
+    """Unified sidebar-inbox feed for a user's gated-proposal workload.
+
+    Returns both kinds of items in one response so the sidebar doesn't
+    need to reconcile multiple fetches:
+      * `kind='gate-sign-off'` — I am the named gate-keeper on a
+        status=pending proposal.
+      * `kind='vote-pending'` — I am in `voter_pool` on a status=in_vote
+        proposal. `my_vote` is non-null if I've already cast (so the UI
+        can show "change your verdict" affordance vs "cast your vote").
+
+    Most-recent-first across both kinds. The sibling 1-to-1 routing
+    inbox at GET /api/routing/inbox is still the canonical feed for
+    routed-inbound signals — the sidebar merges the two client-side.
+    """
+    service = _get_service(request)
+    items = await service.list_inbox_for_user(user_id=user.id, limit=limit)
+    return {"ok": True, "items": items}
+
+
 @router.get("/api/gated-proposals/{proposal_id}")
 async def get_proposal(
     proposal_id: str,

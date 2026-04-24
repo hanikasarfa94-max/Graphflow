@@ -803,6 +803,103 @@ class GatedProposalService:
             row = await GatedProposalRepository(session).get(proposal_id)
         return self._payload(row) if row is not None else None
 
+    async def list_inbox_for_user(
+        self, *, user_id: str, limit: int = 50
+    ) -> list[dict[str, Any]]:
+        """Unified inbox feed for a user — a proposal appears here when:
+
+        * status='pending' AND they are the named gate-keeper (single-
+          approver: waiting on their sign-off). Item kind='gate-sign-off'.
+        * status='in_vote' AND they are in voter_pool (waiting on their
+          verdict OR they can still change it). Item kind='vote-pending';
+          `my_vote` carries their current verdict if they've already cast.
+
+        Ordered by `created_at DESC` across both kinds so the sidebar
+        shows most-recent-first regardless of type.
+
+        Note: this does NOT replace the per-voter fan-out pattern you
+        see in RoutedSignalRow — pending gated proposals are derived
+        from voter_pool membership on read, so there's no schema
+        explosion as voter counts grow. One GatedProposalRow → one
+        canonical source of truth across all its voters.
+        """
+        async with session_scope(self._sessionmaker) as session:
+            repo = GatedProposalRepository(session)
+            # Gate-sign-offs (single-approver): existing query already
+            # filters by gate_keeper_user_id + status='pending'.
+            sign_offs = await repo.list_for_gate_keeper(
+                user_id, status="pending", limit=limit
+            )
+            # Vote-pending: no direct repo method today. Query inline —
+            # scan in_vote proposals and filter by voter_pool membership
+            # in Python. At current scale (≤100 concurrent votes per
+            # project) this is fine; if we ever need an index, a
+            # materialized `gated_proposal_voters` join table is the
+            # next step (parked; not competition-blocking).
+            from sqlalchemy import select as _select
+
+            in_vote_rows = (
+                await session.execute(
+                    _select(GatedProposalRow).where(
+                        GatedProposalRow.status == "in_vote"
+                    )
+                )
+            ).scalars().all()
+            in_vote_for_me = [
+                r for r in in_vote_rows
+                if r.voter_pool and user_id in r.voter_pool
+            ]
+
+            # Build my_vote lookup for in_vote proposals in one pass.
+            proposal_ids = [r.id for r in in_vote_for_me]
+            my_votes: dict[str, dict[str, Any]] = {}
+            if proposal_ids:
+                from workgraph_persistence import VoteRow as _VoteRow
+                rows = (
+                    await session.execute(
+                        _select(_VoteRow).where(
+                            _VoteRow.subject_kind == self._VOTE_SUBJECT_KIND,
+                            _VoteRow.voter_user_id == user_id,
+                            _VoteRow.subject_id.in_(proposal_ids),
+                        )
+                    )
+                ).scalars().all()
+                for v in rows:
+                    my_votes[v.subject_id] = {
+                        "verdict": v.verdict,
+                        "rationale": v.rationale,
+                        "updated_at": (
+                            v.updated_at.isoformat() if v.updated_at else None
+                        ),
+                    }
+
+        items: list[dict[str, Any]] = []
+        for row in sign_offs:
+            items.append(
+                {
+                    "kind": "gate-sign-off",
+                    "created_at": (
+                        row.created_at.isoformat() if row.created_at else None
+                    ),
+                    "proposal": self._payload(row),
+                    "my_vote": None,
+                }
+            )
+        for row in in_vote_for_me:
+            items.append(
+                {
+                    "kind": "vote-pending",
+                    "created_at": (
+                        row.created_at.isoformat() if row.created_at else None
+                    ),
+                    "proposal": self._payload(row),
+                    "my_vote": my_votes.get(row.id),
+                }
+            )
+        # Most-recent first across both kinds.
+        items.sort(key=lambda i: i["created_at"] or "", reverse=True)
+        return items[:limit]
+
     # --------------------------------------------------------------- internals
 
     def _assert_gate_keeper(
