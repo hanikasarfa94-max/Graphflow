@@ -111,6 +111,7 @@ export default async function SkillsAtlasPage({
       ) : null}
 
       {isOwner ? <CollectiveBlock payload={payload} t={t} /> : null}
+      {isOwner ? <TeamShapeBlock payload={payload} t={t} /> : null}
 
       <div
         style={{
@@ -309,6 +310,222 @@ function CollectiveBlock({
         emptyLabel={t("collective.noGaps")}
       />
     </section>
+  );
+}
+
+// Phase S — "how does this team think" summary. Observed governance
+// + activity in the last 30d, rolled up across all members. Owner-
+// only block, sits below the skill collective. Read-only; the
+// actual org-composition tool (drag-rebalance, SPOF flags) lives on
+// the /composition route.
+function TeamShapeBlock({
+  payload,
+  t,
+}: {
+  payload: SkillAtlasPayload;
+  t: (key: string, values?: Record<string, string | number>) => string;
+}) {
+  const ts = payload.team_shape;
+  if (!ts || Object.keys(ts).length === 0) return null;
+
+  const memberCount = ts.member_count ?? 0;
+  const totalVotes = ts.total_votes_30d ?? 0;
+  const totalDecisions = ts.total_decisions_30d ?? 0;
+  const voteParticipation = Math.round((ts.vote_participation_ratio ?? 0) * 100);
+  const decisionParticipation = Math.round(
+    (ts.decision_participation_ratio ?? 0) * 100,
+  );
+  const dissentMix = Math.round((ts.dissent_mix ?? 0) * 100);
+  const concentration = Math.round((ts.decision_concentration ?? 0) * 100);
+
+  // Character signal: we translate the numeric rollup into one-word
+  // characterizations the owner can read at a glance. These aren't
+  // measurements — they're hints ("high dissent" vs "rubber-stamp").
+  // Rules:
+  //   dissent_mix >= 0.35 → "deliberative"; <0.10 → "consensus-heavy"; else "balanced"
+  //   decision_concentration >= 0.6 → "concentrated"; <=0.2 → "distributed"; else "moderate"
+  //   vote_participation_ratio >= 0.8 → "engaged"; <=0.3 → "quiet"; else "mixed"
+  const dissentShape =
+    (ts.dissent_mix ?? 0) >= 0.35
+      ? "deliberative"
+      : (ts.dissent_mix ?? 0) < 0.1 && totalVotes > 0
+        ? "consensusHeavy"
+        : "balanced";
+  const concentrationShape =
+    (ts.decision_concentration ?? 0) >= 0.6
+      ? "concentrated"
+      : (ts.decision_concentration ?? 0) <= 0.2
+        ? "distributed"
+        : "moderate";
+  const engagementShape =
+    (ts.vote_participation_ratio ?? 0) >= 0.8
+      ? "engaged"
+      : (ts.vote_participation_ratio ?? 0) <= 0.3
+        ? "quiet"
+        : "mixed";
+
+  return (
+    <section
+      data-testid="team-shape-block"
+      style={{
+        marginBottom: 22,
+        padding: "16px 20px",
+        background: "var(--wg-surface-sunk, var(--wg-surface))",
+        border: "1px solid var(--wg-line)",
+        borderLeft: "3px solid var(--wg-ok)",
+        borderRadius: "var(--wg-radius-md)",
+      }}
+    >
+      <h2
+        style={{
+          margin: "0 0 6px",
+          fontSize: 12,
+          fontFamily: "var(--wg-font-mono)",
+          textTransform: "uppercase",
+          letterSpacing: "0.08em",
+          color: "var(--wg-ok)",
+        }}
+      >
+        {t("teamShape.title")}
+      </h2>
+      <div
+        style={{
+          fontSize: 13,
+          color: "var(--wg-ink-soft)",
+          marginBottom: 14,
+        }}
+      >
+        {t("teamShape.subtitle", { member_count: memberCount })}
+      </div>
+
+      {/* Character chips — the one-glance read */}
+      <div
+        style={{
+          display: "flex",
+          gap: 8,
+          flexWrap: "wrap",
+          marginBottom: 16,
+        }}
+      >
+        <ShapeChip label={t(`teamShape.engagement.${engagementShape}`)} />
+        <ShapeChip label={t(`teamShape.concentration.${concentrationShape}`)} />
+        {totalVotes > 0 ? (
+          <ShapeChip label={t(`teamShape.dissent.${dissentShape}`)} />
+        ) : null}
+      </div>
+
+      {/* Numeric summary — 4 metrics in a tight grid */}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
+          gap: 12,
+        }}
+      >
+        <Metric
+          label={t("teamShape.votes30d")}
+          value={`${totalVotes}`}
+          caption={t("teamShape.activeVoters", {
+            n: ts.active_voters_30d ?? 0,
+            pct: voteParticipation,
+          })}
+        />
+        <Metric
+          label={t("teamShape.decisions30d")}
+          value={`${totalDecisions}`}
+          caption={t("teamShape.activeDeciders", {
+            n: ts.active_deciders_30d ?? 0,
+            pct: decisionParticipation,
+          })}
+        />
+        <Metric
+          label={t("teamShape.dissentMix")}
+          value={`${dissentMix}%`}
+          caption={t("teamShape.dissentHint")}
+        />
+        <Metric
+          label={t("teamShape.concentration30d")}
+          value={`${concentration}%`}
+          caption={t("teamShape.concentrationHint")}
+        />
+      </div>
+    </section>
+  );
+}
+
+function ShapeChip({ label }: { label: string }) {
+  return (
+    <span
+      style={{
+        padding: "3px 10px",
+        background: "var(--wg-ok-soft, var(--wg-surface-raised))",
+        border: "1px solid var(--wg-ok)",
+        color: "var(--wg-ok)",
+        borderRadius: 999,
+        fontSize: 11,
+        fontFamily: "var(--wg-font-mono)",
+        fontWeight: 600,
+        textTransform: "lowercase",
+        letterSpacing: "0.02em",
+      }}
+    >
+      {label}
+    </span>
+  );
+}
+
+function Metric({
+  label,
+  value,
+  caption,
+}: {
+  label: string;
+  value: string;
+  caption: string;
+}) {
+  return (
+    <div
+      style={{
+        padding: "10px 12px",
+        background: "var(--wg-surface-raised, var(--wg-surface))",
+        border: "1px solid var(--wg-line-soft, var(--wg-line))",
+        borderRadius: "var(--wg-radius-sm, 4px)",
+      }}
+    >
+      <div
+        style={{
+          fontSize: 10,
+          fontFamily: "var(--wg-font-mono)",
+          color: "var(--wg-ink-faint)",
+          textTransform: "uppercase",
+          letterSpacing: "0.04em",
+          marginBottom: 4,
+        }}
+      >
+        {label}
+      </div>
+      <div
+        style={{
+          fontSize: 22,
+          fontWeight: 600,
+          color: "var(--wg-ink)",
+          fontFamily: "var(--wg-font-sans)",
+          lineHeight: 1.1,
+          marginBottom: 4,
+        }}
+      >
+        {value}
+      </div>
+      <div
+        style={{
+          fontSize: 11,
+          color: "var(--wg-ink-soft)",
+          lineHeight: 1.3,
+        }}
+      >
+        {caption}
+      </div>
+    </div>
   );
 }
 

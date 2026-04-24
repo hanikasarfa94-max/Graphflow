@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, ConfigDict, Field
@@ -14,6 +16,8 @@ from workgraph_api.services import (
     UsernameInvalid,
     UsernameTaken,
 )
+
+_log = logging.getLogger("workgraph.api.auth")
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -82,6 +86,23 @@ async def post_register(
     _, token, _ = await service.login(username=body.username, password=body.password)
     secure = request.url.scheme == "https"
     _set_cookie(response, token, secure=secure)
+
+    # Game-style onboarding: drop the new user into a pre-populated
+    # "Welcome to graphflow" project with a pending vote. A failed seed
+    # must NEVER block registration — log and move on.
+    tutorial_service = getattr(
+        request.app.state, "tutorial_seed_service", None
+    )
+    if tutorial_service is not None:
+        try:
+            await tutorial_service.seed_for_new_user(user_id=user.id)
+        except Exception:  # noqa: BLE001
+            _log.warning(
+                "tutorial_seed failed; registration still succeeded",
+                extra={"user_id": user.id},
+                exc_info=True,
+            )
+
     return _user_dict(user)
 
 

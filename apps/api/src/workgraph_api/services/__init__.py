@@ -21,6 +21,7 @@ from .collab import (
 )
 from .collab_hub import CollabHub
 from .commitments import CommitmentService, CommitmentValidationError
+from .composition import CompositionError, CompositionService
 from .conflicts import ConflictService
 from .decisions import DecisionError, DecisionService
 from .delivery import DeliveryError, DeliveryService
@@ -79,6 +80,12 @@ from .skill_atlas import SkillAtlasService
 from .skills import SkillsService
 from .sla import SlaService
 from .streams import StreamService
+from .tutorial_seed import (
+    TUTORIAL_TITLE_EN,
+    TUTORIAL_TITLE_ZH,
+    TUTORIAL_TITLES,
+    TutorialSeedService,
+)
 
 __all__ = [
     "IntakeService",
@@ -105,6 +112,8 @@ __all__ = [
     "CollabHub",
     "CommitmentService",
     "CommitmentValidationError",
+    "CompositionError",
+    "CompositionService",
     "ConflictService",
     "DecisionService",
     "DecisionError",
@@ -165,4 +174,8 @@ __all__ = [
     "SkillsService",
     "SlaService",
     "StreamService",
+    "TutorialSeedService",
+    "TUTORIAL_TITLE_EN",
+    "TUTORIAL_TITLE_ZH",
+    "TUTORIAL_TITLES",
 ]

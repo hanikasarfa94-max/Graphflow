@@ -174,6 +174,13 @@ class SkillAtlasService:
             "decisions_resolved_30d": obs.decisions_resolved_30d,
             "risks_owned": obs.risks_owned,
             "routings_answered_30d": obs.routings_answered_30d,
+            # Phase S — governance participation surfaces in the skill
+            # atlas so consumers can see "this member votes often" or
+            # "this member is observed but silent on decisions."
+            "votes_cast_30d": obs.votes_cast_30d,
+            "votes_approve_30d": obs.votes_approve_30d,
+            "votes_deny_30d": obs.votes_deny_30d,
+            "votes_abstain_30d": obs.votes_abstain_30d,
         }
         role_skills = _resolve_role_skills(role_hints)
         observed_skills = _resolve_observed_skills(observed_dict)
@@ -251,6 +258,7 @@ class SkillAtlasService:
         # have, and where are the declared abilities without any
         # observed signal?
         collective: dict[str, Any] = {}
+        team_shape: dict[str, Any] = {}
         if viewer_is_owner:
             all_role_skills: set[str] = set()
             all_declared: set[str] = set()
@@ -273,10 +281,86 @@ class SkillAtlasService:
                 ),
             }
 
+            # Team shape — the "how does this team think" rollup.
+            # Read-only aggregates from each member's observed tallies
+            # (already fetched for the per-member cards; no extra DB
+            # round-trips). Consumers render this as a group-level
+            # summary: "high dissent team", "voters vs silent voices",
+            # "decisions concentrated on N members".
+            votes_cast = [c["observed_tallies"].get("votes_cast_30d", 0) for c in cards]
+            votes_approve = [
+                c["observed_tallies"].get("votes_approve_30d", 0) for c in cards
+            ]
+            votes_deny = [
+                c["observed_tallies"].get("votes_deny_30d", 0) for c in cards
+            ]
+            votes_abstain = [
+                c["observed_tallies"].get("votes_abstain_30d", 0) for c in cards
+            ]
+            decisions_resolved = [
+                c["observed_tallies"].get("decisions_resolved_30d", 0)
+                for c in cards
+            ]
+            messages_posted = [
+                c["observed_tallies"].get("messages_posted_30d", 0)
+                for c in cards
+            ]
+            routings_answered = [
+                c["observed_tallies"].get("routings_answered_30d", 0)
+                for c in cards
+            ]
+            total_votes = sum(votes_cast)
+            total_approve = sum(votes_approve)
+            total_deny = sum(votes_deny)
+            total_abstain = sum(votes_abstain)
+            total_decisions = sum(decisions_resolved)
+            active_voters = sum(1 for v in votes_cast if v > 0)
+            active_deciders = sum(1 for d in decisions_resolved if d > 0)
+            member_count = len(cards)
+            # Concentration: what fraction of total decisions came from
+            # the single most active decider? 1.0 = one-person-show,
+            # ~1/N = fully distributed. Complements `active_deciders`.
+            decision_concentration = (
+                max(decisions_resolved) / total_decisions
+                if total_decisions > 0
+                else 0.0
+            )
+            # Dissent mix: among casts, what fraction are deny + abstain?
+            # High value → the team votes critically; low → rubber-stamp.
+            dissent_mix = (
+                (total_deny + total_abstain) / total_votes
+                if total_votes > 0
+                else 0.0
+            )
+            team_shape = {
+                "member_count": member_count,
+                "total_votes_30d": total_votes,
+                "total_approve_30d": total_approve,
+                "total_deny_30d": total_deny,
+                "total_abstain_30d": total_abstain,
+                "total_decisions_30d": total_decisions,
+                "total_messages_30d": sum(messages_posted),
+                "total_routings_30d": sum(routings_answered),
+                "active_voters_30d": active_voters,
+                "active_deciders_30d": active_deciders,
+                # Ratios bounded to [0, 1] for easy UI rendering.
+                "vote_participation_ratio": (
+                    active_voters / member_count if member_count > 0 else 0.0
+                ),
+                "decision_participation_ratio": (
+                    active_deciders / member_count
+                    if member_count > 0
+                    else 0.0
+                ),
+                "decision_concentration": round(decision_concentration, 3),
+                "dissent_mix": round(dissent_mix, 3),
+            }
+
         return {
             "viewer_scope": "owner" if viewer_is_owner else "self",
             "members": cards,
             "collective": collective,
+            "team_shape": team_shape,
         }
 
 

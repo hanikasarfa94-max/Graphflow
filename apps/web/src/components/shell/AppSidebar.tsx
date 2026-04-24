@@ -106,6 +106,7 @@ function ProjectNode({
   const myThread = `/projects/${project.id}`;
   const teamRoom = `/projects/${project.id}/team`;
   const status = `/projects/${project.id}/status`;
+  const composition = `/projects/${project.id}/composition`;
   const kb = `/projects/${project.id}/kb`;
   const skills = `/projects/${project.id}/skills`;
   const meetings = `/projects/${project.id}/meetings`;
@@ -188,6 +189,17 @@ function ProjectNode({
               }}
             >
               <span aria-hidden>📊</span> {t("shell.project.status")}
+            </Link>
+          </li>
+          <li>
+            <Link
+              href={composition}
+              style={{
+                ...subItem,
+                ...(isActive(pathname, composition) ? subItemActive : null),
+              }}
+            >
+              <span aria-hidden>⚖</span> {t("shell.project.composition")}
             </Link>
           </li>
           <li>

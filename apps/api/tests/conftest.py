@@ -408,6 +408,7 @@ from workgraph_api.services import (
     CollabHub,
     CommentService,
     CommitmentService,
+    CompositionService,
     ConflictService,
     DecisionService,
     DeliveryService,
@@ -440,6 +441,7 @@ from workgraph_api.services import (
     SkillsService,
     SlaService,
     StreamService,
+    TutorialSeedService,
 )
 
 
@@ -537,6 +539,7 @@ async def api_env():
     gated_proposals_service = GatedProposalService(
         maker, stream_service, bus, signal_tally_service
     )
+    composition_service = CompositionService(maker)
     silent_consensus_service = SilentConsensusService(maker, bus)
     onboarding_service = OnboardingService(
         maker, license_context_service
@@ -566,6 +569,12 @@ async def api_env():
     from workgraph_api.services.perf_aggregation import PerfAggregationService
 
     perf_service = PerfAggregationService(maker)
+    # Tutorial seed is NOT wired by default in api_env — existing tests
+    # register users and assume an empty /projects list, and an auto-
+    # seeded welcome project would break those assertions. Tutorial
+    # tests opt in by setting `app.state.tutorial_seed_service` via the
+    # `tutorial_seed_enabled` fixture (see tests/test_tutorial_seed.py).
+    tutorial_seed_service = TutorialSeedService(maker, stream_service)
     edge_agent = _SilenceEdgeAgent()
     skills_service = SkillsService(maker)
     personal_service = PersonalStreamService(
@@ -645,12 +654,18 @@ async def api_env():
     app.state.handoff_service = handoff_service
     app.state.dissent_service = dissent_service
     app.state.gated_proposals_service = gated_proposals_service
+    app.state.composition_service = composition_service
     app.state.silent_consensus_service = silent_consensus_service
     app.state.onboarding_service = onboarding_service
     app.state.kb_hierarchy_service = kb_hierarchy_service
     app.state.meeting_ingest_service = meeting_ingest_service
     app.state.meeting_metabolizer = meeting_metabolizer
     app.state.perf_service = perf_service
+    # Expose the built service on a side attribute so opt-in fixtures
+    # can promote it to `tutorial_seed_service` for the tests that need
+    # registration → welcome-project behaviour.
+    app.state._tutorial_seed_service_available = tutorial_seed_service
+    app.state.tutorial_seed_service = None
 
     class _DrainingTransport(ASGITransport):
         """ASGI transport that drains EventBus subscriber tasks after

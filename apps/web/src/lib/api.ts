@@ -319,10 +319,36 @@ export interface SkillAtlasCollective {
   unvalidated_declarations?: string[];
 }
 
+// Phase S — team-level rollup of observed governance + activity. Only
+// populated in the owner view (empty object for non-owner). All ratios
+// are bounded to [0, 1] for easy UI rendering. The UI renders this as
+// a "how does this team think" summary stripe next to the skill
+// collective block.
+export interface SkillAtlasTeamShape {
+  member_count?: number;
+  total_votes_30d?: number;
+  total_approve_30d?: number;
+  total_deny_30d?: number;
+  total_abstain_30d?: number;
+  total_decisions_30d?: number;
+  total_messages_30d?: number;
+  total_routings_30d?: number;
+  active_voters_30d?: number;
+  active_deciders_30d?: number;
+  vote_participation_ratio?: number;
+  decision_participation_ratio?: number;
+  // 1.0 = one-person-show, ~1/N = fully distributed.
+  decision_concentration?: number;
+  // Fraction of casts that were deny + abstain. High = team votes
+  // critically; low = rubber-stamp.
+  dissent_mix?: number;
+}
+
 export interface SkillAtlasPayload {
   viewer_scope: "owner" | "self";
   members: SkillAtlasMemberCard[];
   collective: SkillAtlasCollective;
+  team_shape?: SkillAtlasTeamShape;
 }
 
 export function fetchSkillAtlas(

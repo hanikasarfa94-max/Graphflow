@@ -49,6 +49,7 @@ from workgraph_api.routers import auth as auth_router
 from workgraph_api.routers import clarification as clarification_router
 from workgraph_api.routers import collab as collab_router
 from workgraph_api.routers import commitments as commitments_router
+from workgraph_api.routers import composition as composition_router
 from workgraph_api.routers import conflicts as conflicts_router
 from workgraph_api.routers import delivery as delivery_router
 from workgraph_api.routers import demo as demo_router
@@ -85,6 +86,7 @@ from workgraph_api.services import (
     CollabHub,
     CommentService,
     CommitmentService,
+    CompositionService,
     ConflictService,
     DecisionService,
     DeliveryService,
@@ -118,6 +120,7 @@ from workgraph_api.services import (
     SkillsService,
     SlaService,
     StreamService,
+    TutorialSeedService,
 )
 from workgraph_api.settings import load_settings
 
@@ -495,6 +498,7 @@ async def lifespan(app: FastAPI):
         signal_tally_service,
         simulation_service=simulation_service,
     )
+    composition_service = CompositionService(sessionmaker)
     silent_consensus_service = SilentConsensusService(
         sessionmaker, event_bus
     )
@@ -527,6 +531,7 @@ async def lifespan(app: FastAPI):
     from workgraph_api.services.perf_aggregation import PerfAggregationService
 
     perf_service = PerfAggregationService(sessionmaker)
+    tutorial_seed_service = TutorialSeedService(sessionmaker, stream_service)
 
     app.state.engine = engine
     app.state.sessionmaker = sessionmaker
@@ -582,12 +587,14 @@ async def lifespan(app: FastAPI):
     app.state.handoff_service = handoff_service
     app.state.dissent_service = dissent_service
     app.state.gated_proposals_service = gated_proposals_service
+    app.state.composition_service = composition_service
     app.state.silent_consensus_service = silent_consensus_service
     app.state.onboarding_service = onboarding_service
     app.state.kb_hierarchy_service = kb_hierarchy_service
     app.state.meeting_ingest_service = meeting_ingest_service
     app.state.meeting_metabolizer = meeting_metabolizer
     app.state.perf_service = perf_service
+    app.state.tutorial_seed_service = tutorial_seed_service
 
     # Drift auto-trigger (Sprint 1c). Subscribe drift_service to the
     # event types that most reliably indicate "the project's surface
@@ -766,6 +773,7 @@ app.include_router(demo_router.router)
 app.include_router(dissent_router.router)
 app.include_router(drift_router.router)
 app.include_router(gated_proposals_router.router)
+app.include_router(composition_router.router)
 app.include_router(commitments_router.router)
 app.include_router(simulation_router.router)
 app.include_router(skill_atlas_router.router)

@@ -517,6 +517,7 @@
       "myThread": "My thread",
       "teamRoom": "Team room",
       "status": "Status",
+      "composition": "Composition",
       "kb": "KB",
       "skills": "Skill atlas",
       "meetings": "Meetings",
@@ -919,6 +920,33 @@
       "unvalidated": "Unvalidated declarations",
       "noGaps": "None — every declared ability has been observed"
     },
+    "teamShape": {
+      "title": "Team shape",
+      "subtitle": "How this {member_count}-person team has behaved over the last 30 days.",
+      "votes30d": "Votes cast (30d)",
+      "decisions30d": "Decisions resolved (30d)",
+      "dissentMix": "Dissent mix",
+      "concentration30d": "Decision concentration",
+      "activeVoters": "{n} people voted ({pct}% of team)",
+      "activeDeciders": "{n} people resolved ({pct}% of team)",
+      "dissentHint": "share of deny + abstain casts",
+      "concentrationHint": "share from the single most active decider",
+      "engagement": {
+        "engaged": "engaged",
+        "mixed": "mixed engagement",
+        "quiet": "quiet"
+      },
+      "concentration": {
+        "concentrated": "concentrated",
+        "moderate": "moderately distributed",
+        "distributed": "distributed"
+      },
+      "dissent": {
+        "deliberative": "deliberative",
+        "balanced": "balanced",
+        "consensusHeavy": "consensus-heavy"
+      }
+    },
     "card": {
       "roleSkills": "Role skills",
       "roleSkillsSubtitle": "Imposed by role · transfers to successor on handoff",
@@ -1103,5 +1131,41 @@
     "ownerHint": "Owner",
     "severity": "Severity",
     "errorHeading": "Error"
+  },
+  "composition": {
+    "title": "Org Composition",
+    "eyebrow": "Authority diagnostic",
+    "summary": "{members} members · {covered} classes covered · {spof} SPOF flags",
+    "loadError": "Could not load composition.",
+    "noMembers": "This project has no members yet.",
+    "sectionA_title": "Authority by class",
+    "sectionA_subtitle": "Who gates, who votes, and where the single points of failure are.",
+    "sectionB_title": "Member load",
+    "sectionB_subtitle": "Sorted by authority load. Higher = more gates + voter pools + in-flight work.",
+    "sectionC_title": "Shared authority",
+    "sectionC_subtitle": "Pairs of members who co-hold authority on one or more classes.",
+    "sectionC_empty": "No shared-authority pairs yet — add a gate-keeper or a second owner to start building the network.",
+    "class_label_budget": "Budget",
+    "class_label_legal": "Legal / IP",
+    "class_label_hire": "Hiring",
+    "class_label_scope_cut": "Scope cut",
+    "gateKeeper": "Gate-keeper",
+    "gateKeeperNone": "No gate-keeper set",
+    "voterPool": "Voter pool",
+    "poolSize": "{n} in pool",
+    "health_spof": "Single point of failure",
+    "health_thin": "Thin coverage",
+    "health_healthy": "Healthy coverage",
+    "roleOwner": "Owner",
+    "roleMember": "Member",
+    "gates_pill": "{n} gates",
+    "pools_pill": "{n} pools",
+    "inflight_pill": "{n} in-flight",
+    "votes30d": "{n} votes 30d",
+    "dissent30d": "{n} dissents 30d",
+    "decisions30d": "{n} resolved 30d",
+    "loadScore": "Load {n}",
+    "loadAria": "Load score {n}",
+    "sharedPair": "shares: {classes}"
   }
 }

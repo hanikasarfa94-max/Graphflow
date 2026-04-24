@@ -517,6 +517,7 @@
       "myThread": "我的会话",
       "teamRoom": "团队会议室",
       "status": "状态",
+      "composition": "组构",
       "kb": "知识库",
       "skills": "技能图谱",
       "meetings": "会议",
@@ -919,6 +920,33 @@
       "unvalidated": "未验证声明",
       "noGaps": "无 —— 每项已声明能力都已被观察到"
     },
+    "teamShape": {
+      "title": "团队画像",
+      "subtitle": "这支 {member_count} 人团队最近 30 天的表现速描。",
+      "votes30d": "投票(30 天)",
+      "decisions30d": "已生成决策(30 天)",
+      "dissentMix": "异议占比",
+      "concentration30d": "决策集中度",
+      "activeVoters": "{n} 人参与投票(占团队 {pct}%)",
+      "activeDeciders": "{n} 人参与决策(占团队 {pct}%)",
+      "dissentHint": "反对 + 弃权 占所有票的比例",
+      "concentrationHint": "最活跃决策者占全部决策的比例",
+      "engagement": {
+        "engaged": "积极参与",
+        "mixed": "参与不均",
+        "quiet": "较为沉默"
+      },
+      "concentration": {
+        "concentrated": "集中决策",
+        "moderate": "中度分散",
+        "distributed": "均衡分布"
+      },
+      "dissent": {
+        "deliberative": "审议型",
+        "balanced": "平衡型",
+        "consensusHeavy": "高度共识"
+      }
+    },
     "card": {
       "roleSkills": "角色技能",
       "roleSkillsSubtitle": "由角色赋予 · 交接时传递给继任者",
@@ -1103,5 +1131,41 @@
     "ownerHint": "建议负责人",
     "severity": "严重级别",
     "errorHeading": "错误"
+  },
+  "composition": {
+    "title": "组构诊断",
+    "eyebrow": "决策权分布",
+    "summary": "{members} 位成员 · {covered} 类已覆盖 · {spof} 项单点风险",
+    "loadError": "无法加载组构数据。",
+    "noMembers": "该项目暂无成员。",
+    "sectionA_title": "各类决策的权限分布",
+    "sectionA_subtitle": "看谁把关、谁投票,以及单点风险在哪里。",
+    "sectionB_title": "成员负荷",
+    "sectionB_subtitle": "按决策权负荷排序——负荷越高,说明把关与投票池中的角色越多。",
+    "sectionC_title": "共担权限",
+    "sectionC_subtitle": "在一个或多个类别上同时持有权限的成员对。",
+    "sectionC_empty": "暂无共担权限的成员对——添加一位把关人或新增所有者即可开始构建。",
+    "class_label_budget": "预算",
+    "class_label_legal": "法务 / 知识产权",
+    "class_label_hire": "招聘",
+    "class_label_scope_cut": "范围收缩",
+    "gateKeeper": "把关人",
+    "gateKeeperNone": "未设置把关人",
+    "voterPool": "投票池",
+    "poolSize": "池内 {n} 人",
+    "health_spof": "单点风险",
+    "health_thin": "覆盖较薄",
+    "health_healthy": "覆盖充足",
+    "roleOwner": "所有者",
+    "roleMember": "成员",
+    "gates_pill": "{n} 道关口",
+    "pools_pill": "{n} 个投票池",
+    "inflight_pill": "{n} 项进行中",
+    "votes30d": "近 30 天投票 {n} 次",
+    "dissent30d": "近 30 天异议 {n} 次",
+    "decisions30d": "近 30 天解决 {n} 项",
+    "loadScore": "负荷 {n}",
+    "loadAria": "负荷评分 {n}",
+    "sharedPair": "共担:{classes}"
   }
 }
