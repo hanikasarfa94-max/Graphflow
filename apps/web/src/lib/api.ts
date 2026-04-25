@@ -2263,3 +2263,83 @@ export function fetchTaskHistory(
 ): Promise<TaskHistoryPayload> {
   return api(`/api/tasks/${taskId}/history`, { baseUrl });
 }
+
+// ---------- KB items (Phase V — manual-write notes) -------------------
+
+export type KbNoteScope = "personal" | "group";
+export type KbNoteStatus = "draft" | "published" | "archived";
+export type KbNoteSource = "manual" | "upload" | "llm";
+
+export interface KbNote {
+  id: string;
+  project_id: string;
+  folder_id: string | null;
+  owner_user_id: string;
+  scope: KbNoteScope;
+  title: string;
+  content_md: string;
+  status: KbNoteStatus;
+  source: KbNoteSource;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export function listKbNotes(
+  projectId: string,
+  baseUrl?: string,
+): Promise<{ ok: boolean; items: KbNote[] }> {
+  return api(`/api/projects/${projectId}/kb-items`, { baseUrl });
+}
+
+export function getKbNote(
+  itemId: string,
+  baseUrl?: string,
+): Promise<KbNote> {
+  return api(`/api/kb-items/${itemId}`, { baseUrl });
+}
+
+export function createKbNote(
+  projectId: string,
+  input: {
+    title: string;
+    content_md?: string;
+    scope?: KbNoteScope;
+    folder_id?: string;
+    source?: KbNoteSource;
+    status?: KbNoteStatus;
+  },
+): Promise<KbNote> {
+  return api(`/api/projects/${projectId}/kb-items`, {
+    method: "POST",
+    body: input as unknown as JsonValue,
+  });
+}
+
+export function updateKbNote(
+  itemId: string,
+  input: {
+    title?: string;
+    content_md?: string;
+    status?: KbNoteStatus;
+    folder_id?: string | null;
+  },
+): Promise<KbNote> {
+  return api(`/api/kb-items/${itemId}`, {
+    method: "PATCH",
+    body: input as unknown as JsonValue,
+  });
+}
+
+export function deleteKbNote(
+  itemId: string,
+): Promise<{ ok: boolean; deleted_id: string }> {
+  return api(`/api/kb-items/${itemId}`, { method: "DELETE" });
+}
+
+export function promoteKbNote(itemId: string): Promise<KbNote> {
+  return api(`/api/kb-items/${itemId}/promote`, { method: "POST" });
+}
+
+export function demoteKbNote(itemId: string): Promise<KbNote> {
+  return api(`/api/kb-items/${itemId}/demote`, { method: "POST" });
+}

@@ -58,6 +58,7 @@ from workgraph_api.routers import drift as drift_router
 from workgraph_api.routers import gated_proposals as gated_proposals_router
 from workgraph_api.routers import organizations as organizations_router
 from workgraph_api.routers import task_progress as task_progress_router
+from workgraph_api.routers import kb_items as kb_items_router
 from workgraph_api.routers import events_stream as events_router
 from workgraph_api.routers import graph as graph_router
 from workgraph_api.routers import intake as intake_router
@@ -95,6 +96,7 @@ from workgraph_api.services import (
     DissentService,
     DriftService,
     GatedProposalService,
+    KbItemService,
     OrganizationService,
     TaskProgressService,
     HandoffService,
@@ -505,6 +507,7 @@ async def lifespan(app: FastAPI):
     composition_service = CompositionService(sessionmaker)
     organization_service = OrganizationService(sessionmaker)
     task_progress_service = TaskProgressService(sessionmaker, event_bus)
+    kb_item_service = KbItemService(sessionmaker)
     silent_consensus_service = SilentConsensusService(
         sessionmaker, event_bus
     )
@@ -596,6 +599,7 @@ async def lifespan(app: FastAPI):
     app.state.composition_service = composition_service
     app.state.organization_service = organization_service
     app.state.task_progress_service = task_progress_service
+    app.state.kb_item_service = kb_item_service
     app.state.silent_consensus_service = silent_consensus_service
     app.state.onboarding_service = onboarding_service
     app.state.kb_hierarchy_service = kb_hierarchy_service
@@ -784,6 +788,7 @@ app.include_router(gated_proposals_router.router)
 app.include_router(composition_router.router)
 app.include_router(organizations_router.router)
 app.include_router(task_progress_router.router)
+app.include_router(kb_items_router.router)
 app.include_router(commitments_router.router)
 app.include_router(simulation_router.router)
 app.include_router(skill_atlas_router.router)

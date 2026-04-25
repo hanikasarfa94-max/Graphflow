@@ -78,6 +78,7 @@ from .silent_consensus import (
     SilentConsensusService,
     WINDOW_DAYS as SILENT_CONSENSUS_WINDOW_DAYS,
 )
+from .kb_items import KbItemError, KbItemService
 from .render import RenderError, RenderService
 from .routing import RoutingService
 from .signal_tally import SIGNAL_KINDS, SignalTallyService
@@ -191,6 +192,8 @@ __all__ = [
     "SkillsService",
     "SlaService",
     "StreamService",
+    "KbItemService",
+    "KbItemError",
     "TaskProgressService",
     "TaskProgressError",
     "TASK_VALID_STATES",

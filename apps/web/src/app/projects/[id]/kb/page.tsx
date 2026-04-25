@@ -8,6 +8,7 @@
 
 import { Heading } from "@/components/ui";
 import { KbTreeBrowser } from "@/components/kb/KbTreeBrowser";
+import { NotesSection } from "@/components/kb/NotesSection";
 import {
   ApiError,
   getKbTree,
@@ -72,6 +73,15 @@ export default async function KbPage({
       <header style={{ marginBottom: 16 }}>
         <Heading level={1}>{t("kb.title")}</Heading>
       </header>
+      {/* Phase V — user-authored notes section. Project members can
+          write personal notes (only they see), promote to group when
+          ready. Lives above the membrane tree so the "I just wrote a
+          doc; where is it?" gap is gone. */}
+      <NotesSection
+        projectId={id}
+        currentUserId={user.id}
+        isProjectOwner={role === "owner"}
+      />
       {backendMissing || tree === null ? (
         <div
           style={{

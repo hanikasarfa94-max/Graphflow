@@ -416,6 +416,7 @@ from workgraph_api.services import (
     DriftService,
     GatedProposalService,
     HandoffService,
+    KbItemService,
     OrganizationService,
     TaskProgressService,
     IMService,
@@ -544,6 +545,7 @@ async def api_env():
     composition_service = CompositionService(maker)
     organization_service = OrganizationService(maker)
     task_progress_service = TaskProgressService(maker, bus)
+    kb_item_service = KbItemService(maker)
     silent_consensus_service = SilentConsensusService(maker, bus)
     onboarding_service = OnboardingService(
         maker, license_context_service
@@ -661,6 +663,7 @@ async def api_env():
     app.state.composition_service = composition_service
     app.state.organization_service = organization_service
     app.state.task_progress_service = task_progress_service
+    app.state.kb_item_service = kb_item_service
     app.state.silent_consensus_service = silent_consensus_service
     app.state.onboarding_service = onboarding_service
     app.state.kb_hierarchy_service = kb_hierarchy_service

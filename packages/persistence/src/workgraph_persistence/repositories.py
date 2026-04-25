@@ -27,6 +27,7 @@ from .orm import (
     IntakeEventRow,
     KbFolderRow,
     KbItemLicenseRow,
+    KbItemRow,
     LicenseAuditRow,
     MeetingTranscriptRow,
     MembraneSignalRow,
@@ -1760,6 +1761,116 @@ class TaskScoreRepository:
                 TaskRow.project_id == project_id
             )
         return list((await self._session.execute(stmt)).scalars().all())
+
+
+class KbItemRepository:
+    """Phase V — first-class KB notes (separate from membrane signals)."""
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def create(
+        self,
+        *,
+        project_id: str,
+        owner_user_id: str,
+        title: str,
+        content_md: str,
+        scope: str = "personal",
+        folder_id: str | None = None,
+        source: str = "manual",
+        status: str = "published",
+    ) -> KbItemRow:
+        row = KbItemRow(
+            id=_new_id(),
+            project_id=project_id,
+            owner_user_id=owner_user_id,
+            folder_id=folder_id,
+            scope=scope,
+            title=title,
+            content_md=content_md,
+            source=source,
+            status=status,
+        )
+        self._session.add(row)
+        await self._session.flush()
+        return row
+
+    async def get(self, item_id: str) -> KbItemRow | None:
+        return (
+            await self._session.execute(
+                select(KbItemRow).where(KbItemRow.id == item_id)
+            )
+        ).scalar_one_or_none()
+
+    async def list_visible_for_user(
+        self,
+        *,
+        project_id: str,
+        viewer_user_id: str,
+        limit: int = 200,
+    ) -> list[KbItemRow]:
+        """Personal items the viewer owns + every group item in the
+        project. Order: most-recent updated first."""
+        stmt = (
+            select(KbItemRow)
+            .where(KbItemRow.project_id == project_id)
+            .where(
+                # OR clause: scope=group OR (scope=personal AND owner=me).
+                # SQLAlchemy via sa.or_ would be cleaner but we already
+                # avoid the import in this module.
+                (KbItemRow.scope == "group")
+                | (
+                    (KbItemRow.scope == "personal")
+                    & (KbItemRow.owner_user_id == viewer_user_id)
+                )
+            )
+            .order_by(KbItemRow.updated_at.desc())
+            .limit(limit)
+        )
+        return list((await self._session.execute(stmt)).scalars().all())
+
+    async def update(
+        self,
+        *,
+        item_id: str,
+        title: str | None = None,
+        content_md: str | None = None,
+        status: str | None = None,
+        folder_id: str | None = None,
+    ) -> KbItemRow | None:
+        row = await self.get(item_id)
+        if row is None:
+            return None
+        if title is not None:
+            row.title = title
+        if content_md is not None:
+            row.content_md = content_md
+        if status is not None:
+            row.status = status
+        if folder_id is not None:
+            row.folder_id = folder_id or None
+        row.updated_at = datetime.now(timezone.utc)
+        await self._session.flush()
+        return row
+
+    async def set_scope(self, *, item_id: str, scope: str) -> KbItemRow | None:
+        """Promotion / demotion. Service-layer enforces who can call."""
+        row = await self.get(item_id)
+        if row is None:
+            return None
+        row.scope = scope
+        row.updated_at = datetime.now(timezone.utc)
+        await self._session.flush()
+        return row
+
+    async def delete(self, item_id: str) -> bool:
+        row = await self.get(item_id)
+        if row is None:
+            return False
+        await self._session.delete(row)
+        await self._session.flush()
+        return True
 
 
 # ---- Phase B (v2) — stream repositories ---------------------------------

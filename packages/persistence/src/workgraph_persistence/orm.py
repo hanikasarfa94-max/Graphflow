@@ -1857,6 +1857,65 @@ class KbFolderRow(Base):
     )
 
 
+class KbItemRow(Base):
+    """Migration 0019 — Phase V: first-class user-authored KB note.
+
+    Distinct from MembraneSignalRow (which is for URL/RSS/web-search
+    ingests through the membrane pipeline). KbItemRow is what the user
+    wrote (or uploaded) directly. The two coexist; the wiki UI lists
+    both.
+
+    Scope semantics:
+      * 'personal' — visible only to owner_user_id. The edge LLM uses
+        these as private pretext for that user's sub-agent ONLY. Never
+        bleeds into other members' contexts. Default scope on create.
+      * 'group'    — shared with all project members. LLM uses for
+        everyone. Promoted from personal via an explicit owner action
+        (Phase V.1) or LLM-mediated route (Phase V.2). Group items
+        affect everyone's pretext, so the promotion flow gates carefully.
+
+    The folder_id link is optional: items without a folder live at root.
+    Folder = the existing KbFolderRow; we don't add a second hierarchy.
+
+    `content_md` stores markdown. v1 caps at 64KB (DB column limit) —
+    larger uploads get a placeholder body + an external blob ref later.
+
+    `status` lifecycle: draft (just created) → published (owner ready
+    for others to read) → archived (kept but hidden from default lists).
+    Personal items skip the gate; group items can use draft/published
+    as a "WIP, don't trust this yet" signal.
+    """
+
+    __tablename__ = "kb_items"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    project_id: Mapped[str] = mapped_column(
+        ForeignKey("projects.id", ondelete="CASCADE"), index=True
+    )
+    folder_id: Mapped[str | None] = mapped_column(
+        ForeignKey("kb_folders.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    owner_user_id: Mapped[str] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    scope: Mapped[str] = mapped_column(String(16), default="personal", index=True)
+    title: Mapped[str] = mapped_column(String(500))
+    content_md: Mapped[str] = mapped_column(String, default="")
+    status: Mapped[str] = mapped_column(String(16), default="published")
+    # Source tag — 'manual' (typed in the UI), 'upload' (file ingest),
+    # 'llm' (created by the user's edge sub-agent on their request).
+    # Lets the wiki UI surface a small "Source: …" chip.
+    source: Mapped[str] = mapped_column(String(16), default="manual")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, onupdate=_utcnow
+    )
+
+
 class KbItemLicenseRow(Base):
     """Per-KB-item license tier override.
 
