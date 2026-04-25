@@ -567,6 +567,7 @@ export function StreamView({ projectId, currentUserId, members, streamId }: Prop
                 author={author}
                 crystallized={crystallized}
                 counterNote={counterNote}
+                projectId={projectId}
               />
               {showSubAgent && sug && (
                 <SubAgentTurnCard

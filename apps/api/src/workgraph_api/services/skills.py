@@ -89,16 +89,36 @@ _ROUTING_W_PROFILE = 0.20
 
 
 class SkillsService:
-    """Dispatcher for read-only skills the EdgeAgent may invoke."""
+    """Dispatcher for skills the EdgeAgent may invoke.
+
+    Almost every skill is read-only — the system can run them without
+    asking the user because the worst case is wasted tokens. The one
+    exception is `propose_wiki_entry`, which writes a `KbItemRow` with
+    `status='draft'` so the entry is staged for owner approval before
+    it joins the canonical group context. Treat it as a staged
+    proposal, not a graph mutation.
+    """
 
     # Re-export so callers can introspect without importing from agents.
     allowed_skills = frozenset(ALLOWED_SKILLS)
 
-    def __init__(self, sessionmaker: async_sessionmaker) -> None:
+    def __init__(
+        self,
+        sessionmaker: async_sessionmaker,
+        kb_item_service: Any | None = None,
+    ) -> None:
         self._sessionmaker = sessionmaker
+        # Optional — propose_wiki_entry needs it; other skills do not.
+        # Lazy-resolved if not injected so legacy constructors still work.
+        self._kb_item_service = kb_item_service
 
     async def execute(
-        self, *, project_id: str, skill_name: str, args: dict[str, Any] | None = None
+        self,
+        *,
+        project_id: str,
+        skill_name: str,
+        args: dict[str, Any] | None = None,
+        caller_user_id: str | None = None,
     ) -> dict[str, Any]:
         """Dispatch by skill_name. Returns `{ok, result}` on success,
         `{ok: False, error}` on failure.
@@ -129,6 +149,12 @@ class SkillsService:
             elif skill_name == "routing_suggest":
                 result = await self._routing_suggest(
                     project_id=project_id, **args
+                )
+            elif skill_name == "propose_wiki_entry":
+                result = await self._propose_wiki_entry(
+                    project_id=project_id,
+                    caller_user_id=caller_user_id,
+                    **args,
                 )
             else:  # defensive — already guarded above
                 return {"ok": False, "error": "unknown_skill"}
@@ -696,6 +722,43 @@ class SkillsService:
 
         scored.sort(key=lambda r: r["score"], reverse=True)
         return scored[:limit_val]
+
+    async def _propose_wiki_entry(
+        self,
+        *,
+        project_id: str,
+        title: str = "",
+        content_md: str = "",
+        caller_user_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Stage a group-scope KbItemRow as `status='draft'` so the
+        owner can promote it to canonical. The only write skill;
+        intentionally non-destructive (draft, not published).
+        """
+        if self._kb_item_service is None:
+            return {"ok": False, "error": "kb_service_unavailable"}
+        if not caller_user_id:
+            return {"ok": False, "error": "caller_user_id_required"}
+        title_clean = (title or "").strip()
+        content_clean = (content_md or "").strip()
+        if not title_clean and not content_clean:
+            return {"ok": False, "error": "empty_proposal"}
+        if not title_clean:
+            title_clean = (content_clean.splitlines()[0] or "Untitled")[:160]
+        try:
+            item = await self._kb_item_service.create(
+                project_id=project_id,
+                owner_user_id=caller_user_id,
+                title=title_clean,
+                content_md=content_clean,
+                scope="group",
+                source="llm",
+                status="draft",
+            )
+        except Exception as e:  # noqa: BLE001
+            code = getattr(e, "code", None) or "create_failed"
+            return {"ok": False, "error": code}
+        return {"item_id": item.get("id"), "title": item.get("title")}
 
 
 __all__ = ["SkillsService"]

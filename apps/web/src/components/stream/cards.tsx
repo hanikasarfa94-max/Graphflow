@@ -32,6 +32,7 @@ import { useTranslations } from "next-intl";
 import { useState } from "react";
 
 import { Button } from "@/components/ui";
+import { ApiError, saveMessageAsKb } from "@/lib/api";
 import type { Decision, IMMessage, IMSuggestion } from "@/lib/api";
 
 import {
@@ -197,6 +198,78 @@ function renderBodyWithAttachments(body: string): React.ReactNode {
   return parts.length > 0 ? parts : renderBody(body);
 }
 
+// ---------- SaveToWikiButton ----------
+// One-click "save this message as a wiki entry" affordance. The
+// backend creates a `scope='group', source='llm', status='draft'`
+// KbItemRow so the item lands in the wiki view pending owner
+// promotion. Future: the edge agent will auto-trigger the same
+// endpoint for messages it classifies as load-bearing.
+
+function SaveToWikiButton({
+  projectId,
+  messageId,
+  label,
+  savedLabel,
+  failedLabel,
+}: {
+  projectId: string;
+  messageId: string;
+  label: string;
+  savedLabel: string;
+  failedLabel: string;
+}) {
+  const [state, setState] = useState<"idle" | "saving" | "saved" | "failed">(
+    "idle",
+  );
+  async function save() {
+    if (state === "saving" || state === "saved") return;
+    setState("saving");
+    try {
+      await saveMessageAsKb(projectId, messageId);
+      setState("saved");
+    } catch (e) {
+      setState("failed");
+      if (!(e instanceof ApiError)) throw e;
+    }
+  }
+  const display =
+    state === "saving"
+      ? "…"
+      : state === "saved"
+        ? `✓ ${savedLabel}`
+        : state === "failed"
+          ? failedLabel
+          : `📚 ${label}`;
+  return (
+    <button
+      type="button"
+      onClick={save}
+      disabled={state === "saving" || state === "saved"}
+      data-testid="save-to-wiki-btn"
+      data-state={state}
+      style={{
+        padding: "2px 8px",
+        fontSize: 12,
+        background:
+          state === "saved"
+            ? "var(--wg-ok-soft)"
+            : "transparent",
+        border: "1px solid var(--wg-line)",
+        borderRadius: "var(--wg-radius-sm)",
+        color:
+          state === "saved"
+            ? "var(--wg-ok, #2f8f4f)"
+            : state === "failed"
+              ? "var(--wg-accent)"
+              : "var(--wg-ink-soft)",
+        cursor: state === "idle" ? "pointer" : "default",
+      }}
+    >
+      {display}
+    </button>
+  );
+}
+
 // ---------- HumanTurnCard ----------
 
 export function HumanTurnCard({
@@ -205,12 +278,16 @@ export function HumanTurnCard({
   author,
   crystallized,
   counterNote,
+  projectId,
 }: {
   message: IMMessage;
   mine: boolean;
   author: StreamMember | undefined;
   crystallized: boolean;
   counterNote: boolean;
+  // Optional — when provided, shows a "Save to wiki" action that
+  // promotes the message into a group-scope KbItemRow draft.
+  projectId?: string;
 }) {
   const t = useTranslations("stream");
   const name =
@@ -284,6 +361,15 @@ export function HumanTurnCard({
         >
           +
         </button>
+        {projectId ? (
+          <SaveToWikiButton
+            projectId={projectId}
+            messageId={message.id}
+            label={t("actions.saveToWiki")}
+            savedLabel={t("actions.savedToWiki")}
+            failedLabel={t("actions.saveToWikiFailed")}
+          />
+        ) : null}
         {crystallized && (
           <span
             data-testid="decision-recorded"

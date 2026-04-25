@@ -890,6 +890,13 @@ class MessageRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
 
+    async def get(self, message_id: str) -> MessageRow | None:
+        return (
+            await self._session.execute(
+                select(MessageRow).where(MessageRow.id == message_id)
+            )
+        ).scalar_one_or_none()
+
     async def append(
         self,
         *,

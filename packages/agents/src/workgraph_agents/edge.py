@@ -66,6 +66,11 @@ ALLOWED_SKILLS = frozenset(
         "member_profile",
         "why_chain",
         "routing_suggest",
+        # `propose_wiki_entry` lets the edge agent nominate a chunk of
+        # the current conversation as a group-scope KB (wiki) draft.
+        # The dispatcher creates the row as status='draft' so the
+        # owner approves before it joins the canonical group context.
+        "propose_wiki_entry",
     }
 )
 

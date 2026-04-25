@@ -1335,6 +1335,20 @@ export function acceptRoutingSignal(
   );
 }
 
+// Promote a stream message into a group-scope KB (wiki) draft. Manual
+// trigger today; the backend reuses the same code path the future
+// edge-agent auto-classifier will call so the system has one entry
+// point regardless of who initiated the save.
+export function saveMessageAsKb(
+  projectId: string,
+  messageId: string,
+): Promise<{ ok: boolean; item: KbNote; source_message_id: string }> {
+  return api<{ ok: boolean; item: KbNote; source_message_id: string }>(
+    `/api/projects/${projectId}/messages/${messageId}/save-as-kb`,
+    { method: "POST" },
+  );
+}
+
 // ---------- Routing inbox / outbox (Phase Q — sidebar drawer) ----------
 //
 // Phase Q corrects the routed-inbound pattern: inbound signals no longer

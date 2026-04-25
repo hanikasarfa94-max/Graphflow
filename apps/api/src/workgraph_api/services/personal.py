@@ -405,6 +405,7 @@ class PersonalStreamService:
                 project_id=project_id,
                 skill_name="why_chain",
                 args=call_args,
+                caller_user_id=user_id,
             )
             result_msg = await self._stream_service.post_system_message(
                 stream_id=stream_id,
@@ -533,11 +534,15 @@ class PersonalStreamService:
                 }
             )
 
-            # Execute the skill — read-only, scoped to this project.
+            # Execute the skill — scoped to this project. Most skills
+            # are read-only; propose_wiki_entry is the lone write
+            # (status='draft', not graph mutation). caller_user_id
+            # flows in so write skills know whose row to attribute.
             skill_result = await self._skills_service.execute(
                 project_id=project_id,
                 skill_name=tc.name,
                 args=dict(tc.args or {}),
+                caller_user_id=user_id,
             )
             result_msg = await self._stream_service.post_system_message(
                 stream_id=stream_id,

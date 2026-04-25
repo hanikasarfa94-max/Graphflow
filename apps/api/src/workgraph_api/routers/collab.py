@@ -12,6 +12,7 @@ from sqlalchemy import select
 
 from workgraph_persistence import (
     DeliverableRow,
+    MessageRepository,
     ProjectRow,
     RiskRow,
     TaskRow,
@@ -256,6 +257,53 @@ async def post_message(
             raise HTTPException(status_code=403, detail="observer_cannot_post")
         raise HTTPException(status_code=400, detail=err)
     return result
+
+
+@router.post("/projects/{project_id}/messages/{message_id}/save-as-kb")
+async def post_save_message_as_kb(
+    project_id: str,
+    message_id: str,
+    request: Request,
+    user: AuthenticatedUser = Depends(require_user),
+):
+    """Promote a stream message into a group-scope KB (wiki) draft.
+
+    Manual trigger today; the same path will be reused by the future
+    edge-agent auto-classifier so the path through the system is
+    identical regardless of trigger origin. The created KbItemRow is
+    `scope='group', source='llm', status='draft'` so the wiki view
+    surfaces it pending owner approval / promotion. Title is derived
+    from the first line of the message body (capped); content is the
+    full body.
+    """
+    project_service: ProjectService = request.app.state.project_service
+    if not await project_service.is_member(project_id=project_id, user_id=user.id):
+        raise HTTPException(status_code=403, detail="not a project member")
+    async with session_scope(request.app.state.sessionmaker) as session:
+        msg = await MessageRepository(session).get(message_id)
+        if msg is None or msg.project_id != project_id:
+            raise HTTPException(status_code=404, detail="message_not_found")
+        body = (msg.body or "").strip()
+    if not body:
+        raise HTTPException(status_code=400, detail="empty_message")
+    first_line = body.splitlines()[0] if body else ""
+    title = (first_line or body)[:160].strip() or "Untitled"
+    kb_service = request.app.state.kb_item_service
+    try:
+        item = await kb_service.create(
+            project_id=project_id,
+            owner_user_id=user.id,
+            title=title,
+            content_md=body,
+            scope="group",
+            source="llm",
+            status="draft",
+        )
+    except Exception as e:  # noqa: BLE001 — surface the validation code
+        code = getattr(e, "code", None) or "create_failed"
+        status = getattr(e, "status", None) or 400
+        raise HTTPException(status_code=status, detail=code) from e
+    return {"ok": True, "item": item, "source_message_id": message_id}
 
 
 @router.get("/projects/{project_id}/messages")

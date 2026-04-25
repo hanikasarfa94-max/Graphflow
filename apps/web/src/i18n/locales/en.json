@@ -248,7 +248,10 @@
       "send": "Send",
       "sendCounter": "Send counter",
       "cancel": "Cancel",
-      "react": "React"
+      "react": "React",
+      "saveToWiki": "Save to wiki",
+      "savedToWiki": "Saved as draft",
+      "saveToWikiFailed": "Save failed"
     },
     "status": {
       "accepted": "suggestion accepted",

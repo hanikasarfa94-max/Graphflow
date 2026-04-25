@@ -248,7 +248,10 @@
       "send": "发送",
       "sendCounter": "发送反提",
       "cancel": "取消",
-      "react": "表情"
+      "react": "表情",
+      "saveToWiki": "存为 Wiki",
+      "savedToWiki": "已存为草稿",
+      "saveToWikiFailed": "保存失败"
     },
     "status": {
       "accepted": "建议已接受",

@@ -467,7 +467,12 @@ async def lifespan(app: FastAPI):
     else:
         edge_agent = EdgeAgent()
 
-    skills_service = SkillsService(sessionmaker)
+    # KbItemService must be constructed BEFORE SkillsService so the
+    # propose_wiki_entry skill has somewhere to write its draft. The
+    # rest of kb_item_service consumers are wired further down — this
+    # one is special because it's the only write skill in the catalog.
+    kb_item_service = KbItemService(sessionmaker)
+    skills_service = SkillsService(sessionmaker, kb_item_service=kb_item_service)
     personal_service = PersonalStreamService(
         sessionmaker,
         stream_service,
@@ -507,7 +512,6 @@ async def lifespan(app: FastAPI):
     composition_service = CompositionService(sessionmaker)
     organization_service = OrganizationService(sessionmaker)
     task_progress_service = TaskProgressService(sessionmaker, event_bus)
-    kb_item_service = KbItemService(sessionmaker)
     silent_consensus_service = SilentConsensusService(
         sessionmaker, event_bus
     )
