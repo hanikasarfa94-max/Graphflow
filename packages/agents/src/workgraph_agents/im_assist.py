@@ -12,7 +12,7 @@ from .llm import LLMClient, LLMResult, ParseFailure
 
 _log = logging.getLogger("workgraph.agents.im_assist")
 
-PROMPT_VERSION = "2026-04-17.phase7p.v1"
+PROMPT_VERSION = "2026-04-25.wiki_entry.v2"
 
 _PROMPT_DIR = Path(__file__).parent / "prompts" / "im_assist"
 
@@ -23,13 +23,18 @@ def _load_prompt(version: str = "v1") -> str:
 
 
 Outcome = Literal["ok", "retry", "manual_review"]
-SuggestionKind = Literal["none", "tag", "decision", "blocker"]
+SuggestionKind = Literal["none", "tag", "decision", "blocker", "wiki_entry"]
 ProposalAction = Literal[
     "drop_deliverable",
     "update_constraint",
     "reassign_task",
     "mark_task_done",
     "open_risk",
+    # `save_to_wiki` is the v0 of the membrane "promote into the cell"
+    # path — the agent nominates a load-bearing message as a group-scope
+    # KB entry; an owner approves through the existing IM suggestion
+    # accept/dismiss flow before it joins canonical group context.
+    "save_to_wiki",
     "other",
 ]
 

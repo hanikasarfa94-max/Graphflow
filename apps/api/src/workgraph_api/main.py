@@ -401,6 +401,11 @@ async def lifespan(app: FastAPI):
         membrane_agent = MembraneAgent()
         render_agent = RenderAgent()
 
+    # KbItemService has no dependencies beyond sessionmaker; construct
+    # early so IMService + SkillsService (further down) can both inject
+    # it. Both layers handle the wiki_entry "promote to KB" path.
+    kb_item_service_early = KbItemService(sessionmaker)
+
     im_service = IMService(
         sessionmaker,
         event_bus,
@@ -408,6 +413,7 @@ async def lifespan(app: FastAPI):
         notification_service,
         message_service,
         im_agent,
+        kb_item_service=kb_item_service_early,
     )
     conflict_service = ConflictService(
         sessionmaker,
@@ -467,11 +473,10 @@ async def lifespan(app: FastAPI):
     else:
         edge_agent = EdgeAgent()
 
-    # KbItemService must be constructed BEFORE SkillsService so the
-    # propose_wiki_entry skill has somewhere to write its draft. The
-    # rest of kb_item_service consumers are wired further down — this
-    # one is special because it's the only write skill in the catalog.
-    kb_item_service = KbItemService(sessionmaker)
+    # Reuse the early-bound instance from above so SkillsService and
+    # IMService share one KbItemService (state-free anyway, but one
+    # instance keeps the dependency graph readable).
+    kb_item_service = kb_item_service_early
     skills_service = SkillsService(sessionmaker, kb_item_service=kb_item_service)
     personal_service = PersonalStreamService(
         sessionmaker,

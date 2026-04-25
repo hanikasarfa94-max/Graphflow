@@ -65,6 +65,7 @@ class IMService:
         notifications: NotificationService,
         messages: MessageService,
         agent: IMAssistAgent,
+        kb_item_service: Any | None = None,
     ) -> None:
         self._sessionmaker = sessionmaker
         self._event_bus = event_bus
@@ -72,6 +73,9 @@ class IMService:
         self._notifications = notifications
         self._messages = messages
         self._agent = agent
+        # Optional — only the wiki_entry apply branch needs it. Other
+        # apply branches don't touch KB. Tests construct without it.
+        self._kb_item_service = kb_item_service
         # Keep in-flight classification tasks so tests + shutdown can await.
         self._pending: set[asyncio.Task] = set()
 
@@ -788,6 +792,46 @@ class IMService:
                 "graph_touched": True,
                 "constraint_id": constraint.id,
                 "action": "update_constraint",
+            }
+
+        if row.kind == "wiki_entry" or action == "save_to_wiki":
+            # Promote nominated content into a group-scope KB entry. The
+            # IM-assist prompt puts the title in proposal.summary and the
+            # body in proposal.detail.content_md. Fall back to the source
+            # message body when detail is missing.
+            title_raw = (
+                proposal.get("summary") if isinstance(proposal, dict) else ""
+            ) or ""
+            content_md = ""
+            if isinstance(detail, dict):
+                content_md = (detail.get("content_md") or "").strip()
+            if not content_md and row.message_id:
+                src = await MessageRepository(session).get(row.message_id)
+                if src is not None:
+                    content_md = (src.body or "").strip()
+            title = (title_raw or content_md.splitlines()[0] if content_md else "Untitled")[:160].strip() or "Untitled"
+            if not content_md:
+                return {"ok": False, "error": "empty_wiki_proposal"}
+            if self._kb_item_service is None:
+                return {"ok": False, "error": "kb_service_unavailable"}
+            try:
+                item = await self._kb_item_service.create(
+                    project_id=row.project_id,
+                    owner_user_id=actor_id or row.project_id,
+                    title=title,
+                    content_md=content_md,
+                    scope="group",
+                    source="llm",
+                    status="published",
+                )
+            except Exception as e:  # noqa: BLE001 — surface code
+                code = getattr(e, "code", None) or "create_failed"
+                return {"ok": False, "error": code}
+            return {
+                "ok": True,
+                "graph_touched": True,
+                "kb_item_id": item.get("id"),
+                "action": "save_to_wiki",
             }
 
         # tag or `none` kinds have nothing to apply.
