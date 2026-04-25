@@ -172,6 +172,13 @@ export function RouteProposalCard({
     Record<string, string>
   >({});
   const [acceptedTargetId, setAcceptedTargetId] = useState<string | null>(null);
+  // B-facing draft per target — initially seeded from tg.b_facing_draft
+  // returned by the edge agent. User can refine before clicking Ask;
+  // refined text becomes the routed signal's framing so B sees a
+  // direct A→B-voice ask, not A's sub-agent's prose.
+  const [bFacingDrafts, setBFacingDrafts] = useState<Record<string, string>>(
+    {},
+  );
 
   if (dismissed) {
     return (
@@ -277,7 +284,15 @@ export function RouteProposalCard({
     setPendingTargetId(target.user_id);
     setError(null);
     try {
-      const result = await confirmRouteProposal(message.id, target.user_id);
+      // Refined B-facing draft (user-edited or LLM-supplied default).
+      // Falls through to "" → backend uses original proposal.framing.
+      const refined =
+        bFacingDrafts[target.user_id] ?? target.b_facing_draft ?? "";
+      const result = await confirmRouteProposal(
+        message.id,
+        target.user_id,
+        refined,
+      );
       setConfirmedName(target.display_name);
       onConfirmed?.(result.signal_id);
     } catch (e) {
@@ -423,6 +438,60 @@ export function RouteProposalCard({
                   flex: "1 1 220px",
                 }}
               >
+                {tg.b_facing_draft || bFacingDrafts[tg.user_id] !== undefined ? (
+                  <div
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: 4,
+                    }}
+                    data-testid="b-facing-draft-block"
+                    data-target-user-id={tg.user_id}
+                  >
+                    <span
+                      style={{
+                        fontSize: 10,
+                        fontFamily: "var(--wg-font-mono)",
+                        textTransform: "uppercase",
+                        letterSpacing: "0.06em",
+                        color: "var(--wg-ink-faint)",
+                      }}
+                    >
+                      {t("routeProposal.bFacingLabel", {
+                        name: tg.display_name,
+                      })}
+                    </span>
+                    <textarea
+                      value={
+                        bFacingDrafts[tg.user_id] ?? tg.b_facing_draft ?? ""
+                      }
+                      onChange={(e) =>
+                        setBFacingDrafts((prev) => ({
+                          ...prev,
+                          [tg.user_id]: e.target.value,
+                        }))
+                      }
+                      placeholder={t("routeProposal.bFacingPlaceholder", {
+                        name: tg.display_name,
+                      })}
+                      rows={2}
+                      maxLength={400}
+                      data-testid="b-facing-draft-input"
+                      data-target-user-id={tg.user_id}
+                      style={{
+                        padding: "6px 8px",
+                        fontSize: 13,
+                        fontFamily: "var(--wg-font-sans, inherit)",
+                        border: "1px solid var(--wg-line)",
+                        borderRadius: "var(--wg-radius-sm, 4px)",
+                        background: "var(--wg-surface)",
+                        color: "var(--wg-ink)",
+                        resize: "vertical",
+                        minHeight: 38,
+                      }}
+                    />
+                  </div>
+                ) : null}
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                   <button
                     type="button"

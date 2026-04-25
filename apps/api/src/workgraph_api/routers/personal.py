@@ -43,6 +43,12 @@ class ConfirmRouteRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     target_user_id: str = Field(min_length=1, max_length=64)
+    # Optional refined B-facing framing the user edited in the route-
+    # proposal card. When present, this overrides the original
+    # proposal.framing so the routed signal carries an A→B-voice ask
+    # (e.g. "do you have bandwidth for the auth rewrite?") instead of
+    # A's sub-agent's prose written for A. Empty / null = use original.
+    refined_framing: str | None = Field(default=None, max_length=4000)
 
 
 def _get_service(request: Request) -> PersonalStreamService:
@@ -118,6 +124,7 @@ async def post_confirm_route(
         proposal_id=proposal_id,
         source_user_id=user.id,
         target_user_id=body.target_user_id,
+        refined_framing=body.refined_framing,
     )
     if not result.get("ok"):
         err = result.get("error", "confirm_failed")

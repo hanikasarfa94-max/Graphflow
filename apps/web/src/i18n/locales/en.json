@@ -428,6 +428,8 @@
       "header": "🧠 Edge — routing proposal",
       "ask": "Ask {name}",
       "asking": "Asking {name}…",
+      "bFacingLabel": "What {name} will see",
+      "bFacingPlaceholder": "Write the question as if you're asking {name} directly…",
       "confirmed": "✓ Asked {name}",
       "dismiss": "Don't ask, dismiss",
       "dismissed": "· Dismissed",

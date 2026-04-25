@@ -428,6 +428,8 @@
       "header": "🧠 Edge —— 路由建议",
       "ask": "询问 {name}",
       "asking": "正在询问 {name}…",
+      "bFacingLabel": "{name} 看到的内容",
+      "bFacingPlaceholder": "用你直接问 {name} 的口吻写出这个问题……",
       "confirmed": "✓ 已询问 {name}",
       "dismiss": "不询问,忽略",
       "dismissed": "· 已忽略",

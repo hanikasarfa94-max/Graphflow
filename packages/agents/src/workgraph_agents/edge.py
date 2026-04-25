@@ -51,7 +51,7 @@ from .llm import LLMClient, LLMResult, ParseFailure
 
 _log = logging.getLogger("workgraph.agents.edge")
 
-PROMPT_VERSION = "2026-04-23.phaseR.v1"
+PROMPT_VERSION = "2026-04-25.b_facing.v2"
 OPTIONS_PROMPT_VERSION = "2026-04-18.phaseQ.v1"
 REPLY_FRAME_PROMPT_VERSION = "2026-04-21.phaseM.v2"
 
@@ -117,6 +117,14 @@ class RouteTarget(BaseModel):
     username: str = Field(min_length=1, max_length=120)
     display_name: str = Field(default="", max_length=200)
     rationale: str = Field(default="", max_length=240)
+    # B-facing draft of the question, rewritten as if the SOURCE is
+    # asking the TARGET directly in first person. The user reviews +
+    # optionally refines this in the route-proposal card before
+    # sending. The refined text becomes the routed signal's framing,
+    # so B sees a clean A→B ask instead of A's sub-agent's prose
+    # written for A. Empty string when the LLM didn't supply one;
+    # the frontend falls back to the source body in that case.
+    b_facing_draft: str = Field(default="", max_length=400)
 
 
 class ToolCall(BaseModel):

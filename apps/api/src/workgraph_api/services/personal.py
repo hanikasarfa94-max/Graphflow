@@ -298,6 +298,7 @@ class PersonalStreamService:
                 "username": t.username,
                 "display_name": t.display_name,
                 "rationale": t.rationale,
+                "b_facing_draft": t.b_facing_draft,
             }
             for t in response.route_targets
         ]
@@ -739,11 +740,18 @@ class PersonalStreamService:
         proposal_id: str,
         source_user_id: str,
         target_user_id: str,
+        refined_framing: str | None = None,
     ) -> dict[str, Any]:
         """Source clicks "Ask X" on a route-proposal card. Generate options
         from the target's sub-agent, dispatch, and post a follow-up
         "✓ asked X" ambient turn so the source stream shows the routed
         state (since we don't mutate the original proposal row).
+
+        `refined_framing` (optional) replaces the proposal's stored framing
+        with a B-facing draft the user edited in the route card. Reframing
+        the question in A→B voice fixes the dogfood complaint that B saw
+        prose written for A's perspective ("your question…") with
+        self-pointing pronouns. Empty / None falls back to proposal.framing.
 
         Error codes:
           * 'proposal_not_found'
@@ -783,10 +791,16 @@ class PersonalStreamService:
             )
             project_id = proposal["project_id"]
 
+        # User's refined draft (B-facing) overrides the proposal's
+        # original A-facing framing when present + non-empty.
+        effective_framing = (refined_framing or "").strip() or proposal.get(
+            "framing", ""
+        )
+
         # Build routing_context for option generation. Keys follow the
         # EdgeAgent.options prompt contract.
         routing_context = {
-            "framing": proposal.get("framing", ""),
+            "framing": effective_framing,
             "background": proposal.get("background", []),
             "source_user": {
                 "id": source_user_id,
@@ -817,7 +831,7 @@ class PersonalStreamService:
         dispatch_result = await self._routing_service.dispatch(
             source_user_id=source_user_id,
             target_user_id=target_user_id,
-            framing=proposal.get("framing", ""),
+            framing=effective_framing,
             background=proposal.get("background", []),
             options=options_payload,
             project_id=project_id,

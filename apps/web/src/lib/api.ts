@@ -1057,6 +1057,11 @@ export interface PersonalRouteTarget {
   username?: string;
   display_name: string;
   rationale?: string;
+  // B-facing draft of the question, rewritten as if the source is
+  // asking the target directly. The user can refine this in the
+  // route-proposal card before sending; the refined text becomes the
+  // routed signal's framing so B sees a clean A→B ask.
+  b_facing_draft?: string;
 }
 
 // Phase R v1 — Scene 2 routing taxonomy. See
@@ -1205,12 +1210,18 @@ export interface ConfirmRouteResponse {
 export function confirmRouteProposal(
   proposalId: string,
   targetUserId: string,
+  refinedFraming?: string | null,
 ): Promise<ConfirmRouteResponse> {
   return api<ConfirmRouteResponse>(
     `/api/personal/route/${proposalId}/confirm`,
     {
       method: "POST",
-      body: { target_user_id: targetUserId },
+      body: {
+        target_user_id: targetUserId,
+        ...(refinedFraming && refinedFraming.trim()
+          ? { refined_framing: refinedFraming.trim() }
+          : {}),
+      },
     },
   );
 }
