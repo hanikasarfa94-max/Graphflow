@@ -226,6 +226,63 @@ async def test_promote_personal_to_group(api_env):
     assert "my note" in titles
 
 
+# ---- membrane review (stage 3) -----------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_membrane_downgrades_duplicate_group_title_to_draft(api_env):
+    """Stage 3 of docs/membrane-reorg.md: when an owner creates a
+    group-scope KB entry whose title matches an existing group entry
+    (case-insensitive, punctuation-insensitive), the membrane returns
+    `request_review` and the new row is downgraded to status='draft'
+    so it doesn't surface as canonical group context until the owner
+    explicitly resolves the duplicate.
+    """
+    client, maker, *_ = api_env
+    owner_id = await _register_and_login(client, "kb_dup_owner")
+    member_id = await _register_and_login(client, "kb_dup_member")
+    pid = await _mk_project_with_members(maker, owner_id=owner_id, member_id=member_id)
+
+    await _login(client, "kb_dup_owner")
+    # First write: clean, lands as published (membrane auto_merge).
+    r = await client.post(
+        f"/api/projects/{pid}/kb-items",
+        json={
+            "title": "API Conventions",
+            "content_md": "we use snake_case for endpoint paths.",
+            "scope": "group",
+        },
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["status"] == "published"
+
+    # Second write with near-identical title (extra punctuation +
+    # casing). Membrane catches duplicate → downgrade to draft.
+    r = await client.post(
+        f"/api/projects/{pid}/kb-items",
+        json={
+            "title": "api conventions!!",
+            "content_md": "actually we use kebab-case now.",
+            "scope": "group",
+        },
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["status"] == "draft", r.json()
+
+    # Personal-scope writes are forks — membrane doesn't review them.
+    # Same title goes through unchanged.
+    r = await client.post(
+        f"/api/projects/{pid}/kb-items",
+        json={
+            "title": "API Conventions",
+            "content_md": "personal note about conventions",
+            "scope": "personal",
+        },
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["status"] == "published"
+
+
 # ---- file upload --------------------------------------------------------
 
 

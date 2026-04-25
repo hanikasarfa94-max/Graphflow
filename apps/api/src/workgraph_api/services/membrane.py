@@ -57,6 +57,7 @@ from workgraph_observability import get_trace_id
 from workgraph_persistence import (
     AgentRunLogRepository,
     EDGE_AGENT_SYSTEM_USER_ID,
+    KbItemRepository,
     MembraneSignalRepository,
     MembraneSignalRow,
     MessageRepository,
@@ -359,20 +360,16 @@ class MembraneService:
     ) -> MembraneReview:
         """Decide what to do with a candidate trying to enter the cell.
 
-        Stage 2 shell — always returns auto_merge with a stub reason.
-        Stage 3+ will fill in conflict detection (cell snapshot diff,
-        owner-review queueing, the clarify Q&A back-channel) without
-        the call sites needing to change.
+        Branches on candidate.kind. Stage 3 wires real review for
+        `kb_item_group` (title near-duplicate detection); other kinds
+        fall through to auto_merge until their respective stages.
 
         Callers should treat this as authoritative — if the action is
         not auto_merge, do NOT proceed with the write. The non-auto
         action handlers are the membrane's job, not the caller's.
         """
-        # Stage 3 will branch on candidate.kind here. For now, log the
-        # candidate so we have observability for what's flowing through
-        # the boundary even before any rules fire.
         _log.info(
-            "membrane.review (stage 2 passthrough)",
+            "membrane.review",
             extra={
                 "kind": candidate.kind,
                 "project_id": candidate.project_id,
@@ -381,9 +378,68 @@ class MembraneService:
                 "content_chars": len(candidate.content or ""),
             },
         )
+        if candidate.kind == "kb_item_group":
+            return await self._review_kb_item_group(candidate)
+        # Stages 4+ will fill in decision_crystallize / graph_edge.
         return MembraneReview(
             action="auto_merge",
-            reason="stage2_passthrough",
+            reason="no_check_for_kind",
+        )
+
+    async def _review_kb_item_group(
+        self, candidate: MembraneCandidate
+    ) -> MembraneReview:
+        """Pre-write checks for a group-scope KB candidate.
+
+        Stage 3 v0 — title near-duplicate detection. The most common
+        failure mode for crowd-sourced wikis is "everyone writes
+        their own slightly different page on the same topic." We catch
+        the obvious case (same normalized title) and downgrade to
+        request_review so the owner can decide: merge into the
+        existing entry, supersede it, or accept as a related sibling.
+
+        Not yet covered (stage 4+):
+        - Semantic contradiction with existing entries (needs LLM)
+        - Conflict with crystallized DecisionRow rationales
+        - Conflict with active CommitmentRow content
+        - Stale-on-arrival (older than the most recent edit on the
+          related node by N days)
+        """
+        normalized_new = _normalize_title(candidate.title)
+        if not normalized_new:
+            return MembraneReview(
+                action="auto_merge",
+                reason="empty_title_lets_caller_validate",
+            )
+
+        async with session_scope(self._sessionmaker) as session:
+            existing = await KbItemRepository(session).list_group_for_project(
+                project_id=candidate.project_id, limit=500
+            )
+
+        # First non-trivial title-match wins. Excluding archived rows
+        # since they're explicitly retired by the owner — overwriting
+        # the title on a new entry is fine and shouldn't trigger
+        # review.
+        for row in existing:
+            if row.status == "archived":
+                continue
+            if _normalize_title(row.title) == normalized_new:
+                return MembraneReview(
+                    action="request_review",
+                    reason="duplicate_title",
+                    diff_summary=(
+                        f"An existing group KB entry has the same title: "
+                        f"'{row.title}' (id={row.id}, status={row.status}). "
+                        "Owner should decide whether to merge, supersede, "
+                        "or accept as a sibling."
+                    ),
+                    conflict_with=(row.id,),
+                )
+
+        return MembraneReview(
+            action="auto_merge",
+            reason="no_conflicts",
         )
 
     async def _route_to_members(
@@ -590,6 +646,25 @@ class MembraneService:
             "trace_id": row.trace_id,
             "created_at": row.created_at.isoformat() if row.created_at else None,
         }
+
+
+def _normalize_title(title: str | None) -> str:
+    """Normalize a KB title for duplicate detection.
+
+    Lowercase, strip punctuation, collapse whitespace, drop common
+    leading-article words. Two titles that pass this filter to the
+    same value are treated as duplicates by the membrane.
+    """
+    if not title:
+        return ""
+    import re
+    s = title.strip().lower()
+    # Drop punctuation; keep word chars + Unicode letters (so "API 设计" stays
+    # comparable to "API设计"). \W matches non-word; combined with the unicode
+    # flag this preserves CJK + accented chars.
+    s = re.sub(r"[^\w\s]", "", s, flags=re.UNICODE)
+    s = re.sub(r"\s+", " ", s).strip()
+    return s
 
 
 __all__ = [

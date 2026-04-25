@@ -598,6 +598,12 @@ async def api_env():
     membrane_ingest_service = MembraneIngestService(
         maker, membrane_service, license_context_service
     )
+    # Stage 2 of docs/membrane-reorg.md: every group-scope KB write
+    # passes through MembraneService.review() before persistence.
+    # Late-bound here for the same reason main.py late-binds: the
+    # membrane needs stream_service which is constructed after
+    # KbItemService.
+    kb_item_service.attach_membrane(membrane_service)
     render_agent = _StubRenderAgent()
     render_service = RenderService(maker, render_agent)
 

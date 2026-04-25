@@ -1810,6 +1810,24 @@ class KbItemRepository:
             )
         ).scalar_one_or_none()
 
+    async def list_group_for_project(
+        self,
+        *,
+        project_id: str,
+        limit: int = 500,
+    ) -> list[KbItemRow]:
+        """All group-scope items in the project. Used by the membrane
+        review pre-write check to scan for near-duplicate titles
+        without leaking personal-scope items into the comparison."""
+        stmt = (
+            select(KbItemRow)
+            .where(KbItemRow.project_id == project_id)
+            .where(KbItemRow.scope == "group")
+            .order_by(KbItemRow.updated_at.desc())
+            .limit(limit)
+        )
+        return list((await self._session.execute(stmt)).scalars().all())
+
     async def list_visible_for_user(
         self,
         *,

@@ -172,9 +172,26 @@ slides in alongside `ingest()` as the inward-facing twin.
    stage 3+ adds real review logic without touching every caller.
    Personal-scope writes are forks and skip review. ✅ shipped
    2026-04-25.
-3. **Stage 3 — wire conflict detection**. Pull `ConflictService.recheck`
-   logic into `review()` for the relevant candidate kinds. Old
-   post-write recheck stays as a backstop until parity is verified.
+3. **Stage 3 — wire conflict detection**. ✅ shipped 2026-04-25 (v0).
+   Audit revealed the existing `ConflictService` rules
+   (deadline_vs_scope, dependency_blocking, missing_owner,
+   blocked_downstream) are all about INTERNAL graph integrity —
+   none apply to the candidate kind that's actually flowing today
+   (`kb_item_group`). Stage 3 v0 introduces the FIRST review check
+   tailored to KB candidates: `_review_kb_item_group` does title
+   near-duplicate detection (case-insensitive, punctuation-stripped,
+   Unicode-safe) against existing group entries in the same project.
+   When a duplicate is found, returns `request_review` with
+   diff_summary; KbItemService downgrades the new row to
+   `status='draft'` so it doesn't surface in canonical group context
+   until the owner resolves the duplicate (merge / supersede /
+   sibling). Personal-scope writes still skip review (forks).
+   Existing ConflictService rules will port in stage 4+ when
+   `decision_crystallize` and `graph_edge` candidates start flowing
+   through `review()` — they're the kinds those rules naturally fit.
+   Not yet covered: semantic contradiction (needs LLM), conflict
+   with crystallized DecisionRow, conflict with active CommitmentRow,
+   stale-on-arrival.
 4. **Stage 4 — `request_review` action**. When review returns
    `request_review`, create an `IMSuggestionRow(kind='membrane_review')`
    instead of writing. Owner accept = approval = real write. Today's
