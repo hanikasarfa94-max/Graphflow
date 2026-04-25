@@ -153,7 +153,15 @@
     "approvals": {
       "title": "待你审批",
       "empty": "暂无等待你审批的事项",
-      "placeholderNote": "管理员审批路由将在 v2 上线 —— 目前尚无路由到你的事项。"
+      "countSubtitle": "{count} 项等待你处理",
+      "review": "去处理 →",
+      "unknownProject": "未知项目",
+      "class": {
+        "budget": "预算",
+        "legal": "法务",
+        "hire": "招聘",
+        "scope_cut": "范围"
+      }
     },
     "active": {
       "title": "你正在处理",

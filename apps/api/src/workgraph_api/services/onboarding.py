@@ -78,6 +78,134 @@ VALID_CHECKPOINTS: frozenset[str] = frozenset(
 _CACHE_TTL_SECONDS = 24 * 60 * 60
 
 
+# Templated copy in two languages. We read viewer.display_language to
+# pick. Unknown languages fall back to "en". Keep keys flat — no nested
+# namespaces — so .format(**kwargs) stays predictable.
+_TR: dict[str, dict[str, str]] = {
+    "en": {
+        "title.vision": "Project thesis",
+        "title.decisions": "Recent decisions",
+        "title.teammates": "Adjacent teammates",
+        "title.your_tasks": "Your active tasks",
+        "title.open_risks": "Open risks",
+        "viewer_default_name": "teammate",
+        "vision.welcome_role": "Welcome, {name} — you're joining {project} as the {role}.",
+        "vision.welcome_no_role": "Welcome, {name} — here's what {project} is aiming for.",
+        "vision.no_commitments": (
+            "No thesis commitments are on record yet. "
+            "Ask the owner what outcome the project is promising."
+        ),
+        "vision.intro": "These are the top thesis commitments on record:",
+        "vision.bullet": "- {headline} ({status})",
+        "vision.unnamed": "(unnamed commitment)",
+        "decisions.empty": (
+            "No crystallized decisions are visible in your slice yet. "
+            "If the project feels undirected, that's normal for a new "
+            "surface — flag anything you'd expect to see recorded."
+        ),
+        "decisions.intro": "The last few crystallized decisions on your side of the graph:",
+        "decisions.no_rationale": "(no rationale recorded)",
+        "teammates.empty": (
+            "No adjacent teammates detected yet — you haven't shared a "
+            "task, deliverable, or role with anyone. Once you're assigned "
+            "work, this section fills in."
+        ),
+        "teammates.intro": "The teammates you're most graph-adjacent to:",
+        "teammates.uid_fallback": "teammate {short_id}",
+        "teammates.role_fallback": "member",
+        "teammates.reason_shared_tasks": "{n} shared task(s)",
+        "teammates.reason_shared_deliverables": "{n} shared deliverable(s)",
+        "teammates.reason_same_role": "same role",
+        "teammates.reason_default": "project member",
+        "teammates.bullet": (
+            "- {name} ({role}) — {why}. Expect them to emit decisions and "
+            "task updates around the shared work."
+        ),
+        "tasks.empty": (
+            "You have no active task assignments yet. The owner will route "
+            "work to you as the plan fills in — keep an eye on your "
+            "personal stream."
+        ),
+        "tasks.summary": "You have {n} active task(s) — {breakdown}.",
+        "tasks.bullet": "- {title} [{status}]",
+        "tasks.untitled": "(untitled task)",
+        "risks.empty": (
+            "No open risks visible in your slice. If something worries "
+            "you that isn't on this list, file it — silence is not absence."
+        ),
+        "risks.summary": "{n} open risk(s) on your side of the graph:",
+        "risks.bullet": "- {title} ({sev})",
+        "risks.untitled": "(untitled risk)",
+    },
+    "zh": {
+        "title.vision": "项目主张",
+        "title.decisions": "近期决策",
+        "title.teammates": "关系最近的同事",
+        "title.your_tasks": "你的进行中任务",
+        "title.open_risks": "未结风险",
+        "viewer_default_name": "同事",
+        "vision.welcome_role": "欢迎，{name} —— 你以「{role}」身份加入 {project}。",
+        "vision.welcome_no_role": "欢迎，{name} —— 这是 {project} 想要达成的方向。",
+        "vision.no_commitments": (
+            "项目暂未登记任何主张性承诺。"
+            "建议向负责人询问该项目正在承诺交付的成果。"
+        ),
+        "vision.intro": "记录在案的关键主张性承诺：",
+        "vision.bullet": "- {headline}（{status}）",
+        "vision.unnamed": "（未命名承诺）",
+        "decisions.empty": (
+            "你的视图内暂无已落定的决策。"
+            "如果项目方向不明确，对新视图来说属于正常 —— "
+            "记得标记你预期应当被记录但未出现的内容。"
+        ),
+        "decisions.intro": "你这一侧图上最近落定的几条决策：",
+        "decisions.no_rationale": "（未记录理由）",
+        "teammates.empty": (
+            "暂未识别到关系紧密的同事 —— "
+            "你还没有与任何人共享任务、交付物或角色。"
+            "一旦有任务分配给你，这里就会自动填充。"
+        ),
+        "teammates.intro": "图上与你关系最紧密的同事：",
+        "teammates.uid_fallback": "同事 {short_id}",
+        "teammates.role_fallback": "成员",
+        "teammates.reason_shared_tasks": "共担任务 {n} 个",
+        "teammates.reason_shared_deliverables": "共担交付物 {n} 个",
+        "teammates.reason_same_role": "相同角色",
+        "teammates.reason_default": "项目成员",
+        "teammates.bullet": (
+            "- {name}（{role}）—— {why}。"
+            "可预期他们围绕共担工作产出决策与任务更新。"
+        ),
+        "tasks.empty": (
+            "你目前没有进行中的任务分配。"
+            "负责人会随计划展开把工作分派给你 —— "
+            "留意你的个人流即可。"
+        ),
+        "tasks.summary": "你共有 {n} 个进行中任务 —— {breakdown}。",
+        "tasks.bullet": "- {title} [{status}]",
+        "tasks.untitled": "（未命名任务）",
+        "risks.empty": (
+            "你的视图内暂无未结风险。"
+            "如果你担心的事项未列在这里，请记录下来 —— 沉默不等于不存在。"
+        ),
+        "risks.summary": "你这一侧图上有 {n} 个未结风险：",
+        "risks.bullet": "- {title}（{sev}）",
+        "risks.untitled": "（未命名风险）",
+    },
+}
+
+
+def _tr(lang: str, key: str, **kwargs: Any) -> str:
+    table = _TR.get(lang) or _TR["en"]
+    template = table.get(key) or _TR["en"].get(key, key)
+    if kwargs:
+        try:
+            return template.format(**kwargs)
+        except (KeyError, IndexError):
+            return template
+    return template
+
+
 @dataclass
 class _Section:
     kind: str
@@ -161,10 +289,13 @@ class OnboardingService:
             audience_user_id=None,
         )
 
+        lang = await self._viewer_language(user_id)
+
         sections = await self._assemble_sections(
             user_id=user_id,
             project_id=project_id,
             slice_=slice_,
+            lang=lang,
         )
 
         payload = {
@@ -265,6 +396,7 @@ class OnboardingService:
         user_id: str,
         project_id: str,
         slice_: dict[str, Any],
+        lang: str = "en",
     ) -> list[_Section]:
         project_title = (
             (slice_.get("project") or {}).get("title") or "this project"
@@ -287,10 +419,11 @@ class OnboardingService:
                 project_title=project_title,
                 viewer_display=viewer_display,
                 viewer_role=viewer_role,
+                lang=lang,
             )
         )
         sections.append(
-            self._section_recent_decisions(decisions=decisions)
+            self._section_recent_decisions(decisions=decisions, lang=lang)
         )
         sections.append(
             self._section_adjacent_teammates(
@@ -298,6 +431,7 @@ class OnboardingService:
                 members=members,
                 assignments=assignments,
                 tasks=tasks,
+                lang=lang,
             )
         )
         sections.append(
@@ -305,10 +439,11 @@ class OnboardingService:
                 user_id=user_id,
                 assignments=assignments,
                 tasks=tasks,
+                lang=lang,
             )
         )
         sections.append(
-            self._section_open_risks(risks=risks)
+            self._section_open_risks(risks=risks, lang=lang)
         )
         return sections
 
@@ -327,6 +462,14 @@ class OnboardingService:
                 return ""
             return user.display_name or user.username
 
+    async def _viewer_language(self, user_id: str) -> str:
+        """Returns 'en' or 'zh'. Anything else falls through to 'en'.
+        Read from UserRow.display_language; default 'en' when missing."""
+        async with session_scope(self._sessionmaker) as session:
+            user = await UserRepository(session).get(user_id)
+        lang = (user.display_language if user else None) or "en"
+        return lang if lang in _TR else "en"
+
     # ---- sections --------------------------------------------------------
 
     async def _section_vision(
@@ -336,6 +479,7 @@ class OnboardingService:
         project_title: str,
         viewer_display: str,
         viewer_role: str | None,
+        lang: str = "en",
     ) -> _Section:
         """Vision section reads CommitmentRow headlines (thesis-commits).
 
@@ -348,35 +492,40 @@ class OnboardingService:
             commitments = await CommitmentRepository(
                 session
             ).list_for_project(project_id, limit=20)
-        # Keep the 3 oldest open / resolved — those tend to be the
-        # thesis-level commitments, not tactical ones.
         thesis = [c for c in commitments if c.status != "withdrawn"][:3]
 
         claims: list[CitedClaim] = []
         lines: list[str] = []
+        viewer_name = viewer_display or _tr(lang, "viewer_default_name")
         if viewer_role:
             lines.append(
-                f"Welcome, {viewer_display or 'teammate'} — "
-                f"you're joining {project_title} as the {viewer_role}."
+                _tr(
+                    lang,
+                    "vision.welcome_role",
+                    name=viewer_name,
+                    project=project_title,
+                    role=viewer_role,
+                )
             )
         else:
             lines.append(
-                f"Welcome, {viewer_display or 'teammate'} — "
-                f"here's what {project_title} is aiming for."
+                _tr(
+                    lang,
+                    "vision.welcome_no_role",
+                    name=viewer_name,
+                    project=project_title,
+                )
             )
         if not thesis:
-            lines.append(
-                "No thesis commitments are on record yet. "
-                "Ask the owner what outcome the project is promising."
-            )
+            lines.append(_tr(lang, "vision.no_commitments"))
         else:
-            lines.append(
-                "These are the top thesis commitments on record:"
-            )
+            lines.append(_tr(lang, "vision.intro"))
             for c in thesis:
-                headline = (c.headline or "").strip() or "(unnamed commitment)"
+                headline = (c.headline or "").strip() or _tr(lang, "vision.unnamed")
                 status = c.status or "open"
-                lines.append(f"- {headline} ({status})")
+                lines.append(
+                    _tr(lang, "vision.bullet", headline=headline, status=status)
+                )
                 claims.append(
                     CitedClaim(
                         text=headline,
@@ -388,41 +537,34 @@ class OnboardingService:
 
         return _Section(
             kind="vision",
-            title="Project thesis",
+            title=_tr(lang, "title.vision"),
             body_md="\n".join(lines),
             claims=claims,
         )
 
     def _section_recent_decisions(
-        self, *, decisions: list[dict[str, Any]]
+        self, *, decisions: list[dict[str, Any]], lang: str = "en"
     ) -> _Section:
         """License-scoped recent decisions. Observer tier already
         drops decisions they didn't resolve; we take the top 5
         whatever the slice produced.
         """
         recent = decisions[:5]
+        title = _tr(lang, "title.decisions")
         if not recent:
-            body = (
-                "No crystallized decisions are visible in your slice "
-                "yet. If the project feels undirected, that's normal "
-                "for a new surface — flag anything you'd expect to "
-                "see recorded."
-            )
             return _Section(
                 kind="decisions",
-                title="Recent decisions",
-                body_md=body,
+                title=title,
+                body_md=_tr(lang, "decisions.empty"),
                 claims=[],
             )
 
         claims: list[CitedClaim] = []
-        lines: list[str] = [
-            "The last few crystallized decisions on your side of the graph:",
-        ]
+        lines: list[str] = [_tr(lang, "decisions.intro")]
         for d in recent:
             summary = (
                 d.get("rationale") or d.get("custom_text") or ""
-            ).strip() or "(no rationale recorded)"
+            ).strip() or _tr(lang, "decisions.no_rationale")
             summary = summary[:200]
             lines.append(f"- {summary}")
             did = d.get("id")
@@ -437,7 +579,7 @@ class OnboardingService:
                 )
         return _Section(
             kind="decisions",
-            title="Recent decisions",
+            title=title,
             body_md="\n".join(lines),
             claims=claims,
         )
@@ -449,6 +591,7 @@ class OnboardingService:
         members: list[dict[str, Any]],
         assignments: list[dict[str, Any]],
         tasks: list[dict[str, Any]],
+        lang: str = "en",
     ) -> _Section:
         """Who's adjacent? For each member, count the edges that
         connect them to the viewer:
@@ -534,48 +677,59 @@ class OnboardingService:
         claims: list[CitedClaim] = []
         lines: list[str] = []
         if not ranked:
-            lines.append(
-                "No adjacent teammates detected yet — you haven't "
-                "shared a task, deliverable, or role with anyone. "
-                "Once you're assigned work, this section fills in."
-            )
+            lines.append(_tr(lang, "teammates.empty"))
         else:
-            lines.append("The teammates you're most graph-adjacent to:")
+            lines.append(_tr(lang, "teammates.intro"))
             for uid, rec in ranked:
                 m = members_by_id.get(uid) or {}
                 name = (
                     m.get("display_name")
                     or m.get("username")
-                    or f"teammate {uid[:8]}"
+                    or _tr(lang, "teammates.uid_fallback", short_id=uid[:8])
                 )
-                role = m.get("role") or "member"
+                role = m.get("role") or _tr(lang, "teammates.role_fallback")
                 reasons: list[str] = []
                 if rec["shared_tasks"]:
                     reasons.append(
-                        f"{rec['shared_tasks']} shared task(s)"
+                        _tr(
+                            lang,
+                            "teammates.reason_shared_tasks",
+                            n=rec["shared_tasks"],
+                        )
                     )
                 if rec["shared_deliverables"]:
                     reasons.append(
-                        f"{rec['shared_deliverables']} shared deliverable(s)"
+                        _tr(
+                            lang,
+                            "teammates.reason_shared_deliverables",
+                            n=rec["shared_deliverables"],
+                        )
                     )
                 if rec["same_role"]:
-                    reasons.append("same role")
-                why = ", ".join(reasons) if reasons else "project member"
-                sentence = (
-                    f"{name} ({role}) — {why}. "
-                    f"Expect them to emit decisions and task updates "
-                    f"around the shared work."
+                    reasons.append(_tr(lang, "teammates.reason_same_role"))
+                separator = "、" if lang == "zh" else ", "
+                why = (
+                    separator.join(reasons)
+                    if reasons
+                    else _tr(lang, "teammates.reason_default")
                 )
-                lines.append(f"- {sentence}")
-                # No canonical kind for 'user' in CitedClaim — use
-                # the members list as plain text; citations stay empty
-                # for this section. (Members are not graph nodes in
-                # the CitationKind taxonomy.)
-                claims.append(CitedClaim(text=sentence, citations=[]))
+                lines.append(
+                    _tr(
+                        lang,
+                        "teammates.bullet",
+                        name=name,
+                        role=role,
+                        why=why,
+                    )
+                )
+                # CitationKind has no `user` member, so we cannot link
+                # teammate names to graph nodes. Don't emit empty-
+                # citation claims — the OnboardingOverlay would render
+                # them as a second copy of the body lines.
 
         return _Section(
             kind="teammates",
-            title="Adjacent teammates",
+            title=_tr(lang, "title.teammates"),
             body_md="\n".join(lines),
             claims=claims,
         )
@@ -586,6 +740,7 @@ class OnboardingService:
         user_id: str,
         assignments: list[dict[str, Any]],
         tasks: list[dict[str, Any]],
+        lang: str = "en",
     ) -> _Section:
         viewer_task_ids = {
             a["task_id"]
@@ -594,34 +749,34 @@ class OnboardingService:
             and bool(a.get("active", True))
         }
         mine = [t for t in tasks if t.get("id") in viewer_task_ids]
+        title = _tr(lang, "title.your_tasks")
 
         claims: list[CitedClaim] = []
         if not mine:
-            body = (
-                "You have no active task assignments yet. The owner "
-                "will route work to you as the plan fills in — keep "
-                "an eye on your personal stream."
-            )
             return _Section(
                 kind="your_tasks",
-                title="Your active tasks",
-                body_md=body,
+                title=title,
+                body_md=_tr(lang, "tasks.empty"),
                 claims=claims,
             )
 
-        # Status histogram helps the user see at-a-glance shape.
         counts = Counter((t.get("status") or "unknown") for t in mine)
-        breakdown = ", ".join(f"{n} {s}" for s, n in counts.most_common())
-        lines = [f"You have {len(mine)} active task(s) — {breakdown}."]
+        separator = "、" if lang == "zh" else ", "
+        breakdown = separator.join(f"{n} {s}" for s, n in counts.most_common())
+        lines = [
+            _tr(lang, "tasks.summary", n=len(mine), breakdown=breakdown)
+        ]
         for t in mine:
-            title = (t.get("title") or "").strip() or "(untitled task)"
+            title_text = (t.get("title") or "").strip() or _tr(lang, "tasks.untitled")
             status = t.get("status") or "unknown"
-            lines.append(f"- {title} [{status}]")
+            lines.append(
+                _tr(lang, "tasks.bullet", title=title_text, status=status)
+            )
             tid = t.get("id")
             if tid:
                 claims.append(
                     CitedClaim(
-                        text=title,
+                        text=title_text,
                         citations=[
                             Citation(node_id=str(tid), kind="task")
                         ],
@@ -629,44 +784,40 @@ class OnboardingService:
                 )
         return _Section(
             kind="your_tasks",
-            title="Your active tasks",
+            title=title,
             body_md="\n".join(lines),
             claims=claims,
         )
 
     def _section_open_risks(
-        self, *, risks: list[dict[str, Any]]
+        self, *, risks: list[dict[str, Any]], lang: str = "en"
     ) -> _Section:
         open_risks = [
             r
             for r in risks
             if (r.get("status") or "open") not in ("resolved", "closed")
         ]
+        title = _tr(lang, "title.open_risks")
         claims: list[CitedClaim] = []
         if not open_risks:
-            body = (
-                "No open risks visible in your slice. If something "
-                "worries you that isn't on this list, file it — "
-                "silence is not absence."
-            )
             return _Section(
                 kind="open_risks",
-                title="Open risks",
-                body_md=body,
+                title=title,
+                body_md=_tr(lang, "risks.empty"),
                 claims=claims,
             )
-        lines = [
-            f"{len(open_risks)} open risk(s) on your side of the graph:",
-        ]
+        lines = [_tr(lang, "risks.summary", n=len(open_risks))]
         for r in open_risks[:8]:
-            title = (r.get("title") or "").strip() or "(untitled risk)"
+            title_text = (r.get("title") or "").strip() or _tr(lang, "risks.untitled")
             sev = r.get("severity") or "medium"
-            lines.append(f"- {title} ({sev})")
+            lines.append(
+                _tr(lang, "risks.bullet", title=title_text, sev=sev)
+            )
             rid = r.get("id")
             if rid:
                 claims.append(
                     CitedClaim(
-                        text=title,
+                        text=title_text,
                         citations=[
                             Citation(node_id=str(rid), kind="risk")
                         ],
@@ -674,7 +825,7 @@ class OnboardingService:
                 )
         return _Section(
             kind="open_risks",
-            title="Open risks",
+            title=title,
             body_md="\n".join(lines),
             claims=claims,
         )

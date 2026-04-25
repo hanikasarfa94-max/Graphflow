@@ -61,7 +61,9 @@ export default async function Home() {
 
       <PendingSection pending={data.pending} />
 
-      {data.is_admin_anywhere ? <ApprovalsSection /> : null}
+      {data.is_admin_anywhere ? (
+        <ApprovalsSection projects={data.projects} />
+      ) : null}
 
       <ActiveSection active={data.active} />
 

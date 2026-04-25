@@ -153,7 +153,15 @@
     "approvals": {
       "title": "Gated approvals",
       "empty": "No gated approvals waiting on you",
-      "placeholderNote": "Admin approver routing ships in v2 — nothing routed to you yet."
+      "countSubtitle": "{count} waiting on you",
+      "review": "Review →",
+      "unknownProject": "Unknown project",
+      "class": {
+        "budget": "Budget",
+        "legal": "Legal",
+        "hire": "Hire",
+        "scope_cut": "Scope"
+      }
     },
     "active": {
       "title": "You're working on",
