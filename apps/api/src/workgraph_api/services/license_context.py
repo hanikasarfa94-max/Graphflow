@@ -323,14 +323,33 @@ class LicenseContextService:
             member_rows = await ProjectMemberRepository(
                 session
             ).list_for_project(project_id)
-            members = [
-                {
-                    "user_id": m.user_id,
-                    "role": m.role,
-                    "license_tier": m.license_tier,
-                }
-                for m in member_rows
-            ]
+            # Resolve display_name + username so downstream renderers
+            # (onboarding tour, render templates) don't have to fall
+            # back to raw UUIDs ("teammate 4f9b3353"). Single bulk
+            # SELECT keyed by id; missing rows are tolerated.
+            from workgraph_persistence.orm import UserRow
+
+            member_user_ids = [m.user_id for m in member_rows if m.user_id]
+            user_lookup: dict[str, UserRow] = {}
+            if member_user_ids:
+                rows = (
+                    await session.execute(
+                        select(UserRow).where(UserRow.id.in_(member_user_ids))
+                    )
+                ).scalars().all()
+                user_lookup = {u.id: u for u in rows}
+            members = []
+            for m in member_rows:
+                u = user_lookup.get(m.user_id)
+                members.append(
+                    {
+                        "user_id": m.user_id,
+                        "role": m.role,
+                        "license_tier": m.license_tier,
+                        "display_name": (u.display_name or u.username) if u else None,
+                        "username": u.username if u else None,
+                    }
+                )
 
         return {
             "project": {"id": project.id, "title": project.title},
