@@ -20,6 +20,7 @@ never calls an LLM. Prod wires a DeepSeek-backed instance.
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import re
@@ -637,12 +638,44 @@ class PersonalStreamService:
         #   route_kind='discovery'  → POST /api/routing/confirm
         #   route_kind='gated'      → POST /api/projects/{id}/gated-proposals
         if kind == "route_proposal":
+            # Backfill empty b_facing_draft via a small second LLM
+            # call. The respond prompt asks for the field but DeepSeek
+            # is inconsistent about emitting it, so we paper over the
+            # gap server-side. Parallel via asyncio.gather so a 3-way
+            # discovery route doesn't pay 3× latency.
+            framing_for_rewrite = (response.body or body or "").strip()
+            empty_targets = [
+                t for t in response.route_targets if not (t.b_facing_draft or "").strip()
+            ]
+            # Tests / stub agents may not implement rewrite_for_target;
+            # in that case we just skip the backfill and let the frontend
+            # fall through to its A-voice seed. Production EdgeAgent
+            # always has it.
+            rewrite_fn = getattr(self._edge_agent, "rewrite_for_target", None)
+            if empty_targets and framing_for_rewrite and rewrite_fn is not None:
+                rewrites = await asyncio.gather(
+                    *(
+                        rewrite_fn(
+                            framing=framing_for_rewrite,
+                            target_display_name=t.display_name,
+                        )
+                        for t in empty_targets
+                    ),
+                    return_exceptions=True,
+                )
+                for t, rewrite in zip(empty_targets, rewrites):
+                    if isinstance(rewrite, str) and rewrite.strip():
+                        # Mutate in place — RouteTarget is a pydantic model
+                        # so attribute assignment is allowed and the
+                        # subsequent serialization picks it up.
+                        object.__setattr__(t, "b_facing_draft", rewrite.strip())
             targets_payload = [
                 {
                     "user_id": t.user_id,
                     "username": t.username,
                     "display_name": t.display_name,
                     "rationale": t.rationale,
+                    "b_facing_draft": t.b_facing_draft,
                 }
                 for t in response.route_targets
             ]

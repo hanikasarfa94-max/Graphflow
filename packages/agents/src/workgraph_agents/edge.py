@@ -489,6 +489,61 @@ class EdgeAgent:
             attempts=attempts,
         )
 
+    # -- rewrite_for_target ------------------------------------------------
+
+    async def rewrite_for_target(
+        self,
+        *,
+        framing: str,
+        target_display_name: str,
+    ) -> str:
+        """One-shot LLM call to rewrite an A-voice framing as a direct
+        first-person ask addressed to the target.
+
+        Used as a server-side fallback when respond() returns a
+        route_target with empty `b_facing_draft` (the LLM ignored the
+        new field). Cheap by design — ~100 tokens in, ~50 tokens out.
+        Returns "" on any failure so the caller can fall through to
+        whatever default behavior they had (the textarea seed will use
+        proposal.framing).
+        """
+        target_display_name = (target_display_name or "").strip() or "the target"
+        framing = (framing or "").strip()
+        if not framing:
+            return ""
+        system = (
+            "You rewrite a question so the source can ask the target "
+            "directly. Return the question only, no quotes, no preamble, "
+            "no explanation. Address the target by name, first person, "
+            "≤200 characters. Drop self-references like 'your question' or "
+            "'the team wants to know'. Just the question."
+        )
+        user = (
+            f"Target name: {target_display_name}\n"
+            f"Original framing (written by the source's sub-agent): {framing}\n\n"
+            f"Rewrite so the source asks {target_display_name} directly:"
+        )
+        try:
+            result = await self._llm.complete(
+                messages=[
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": user},
+                ],
+                temperature=0.3,
+            )
+        except Exception:
+            _log.warning(
+                "edge.rewrite_for_target failed",
+                extra={"target": target_display_name},
+                exc_info=True,
+            )
+            return ""
+        text = (result.content or "").strip().strip('"').strip()
+        # Cap at the model's expected length; tolerate a little overrun.
+        if len(text) > 400:
+            text = text[:400]
+        return text
+
     # -- generate_options --------------------------------------------------
 
     async def generate_options(
