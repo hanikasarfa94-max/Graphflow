@@ -50,6 +50,7 @@ from workgraph_persistence import (
     AssignmentRepository,
     ConflictRepository,
     DecisionRepository,
+    KbItemRepository,
     MembraneSignalRepository,
     MessageRepository,
     PlanRepository,
@@ -185,11 +186,19 @@ class SkillsService:
         query: str = "",
         limit: int = 3,
     ) -> list[dict[str, Any]]:
-        """Simple text-match over MembraneSignalRow content + classification.
+        """Text-match over MembraneSignalRow + KbItemRow.
 
-        v1: case-insensitive substring match on raw_content, summary, and
-        tags. Full-text / vector search is a v2 concern. Rejected rows
-        never surface.
+        Two tables, one search surface — same fix as the wiki tree
+        (kb_hierarchy.get_tree). Until 2026-04-25 this skill only
+        scanned MembraneSignalRow, so the LLM reported 'nothing in
+        KB' even when manual notes / file uploads / membrane-staged
+        drafts existed. Now both tables flow through the same
+        case-insensitive substring match. Personal-scope KbItemRow
+        rows are excluded — the LLM's project context is for the
+        whole team, not a specific viewer, so personal forks would
+        leak across users. Rejected / archived rows excluded.
+
+        v1: substring match. Full-text / vector search is v2.
         """
         q = (query or "").strip().lower()
         try:
@@ -198,16 +207,27 @@ class SkillsService:
             limit_val = 3
 
         async with session_scope(self._sessionmaker) as session:
-            repo = MembraneSignalRepository(session)
-            # Pull more than `limit` so we can post-filter by substring
-            # without losing recall; cap hard at 200 rows for the scan.
-            rows = await repo.list_for_project(project_id, limit=200)
-            # Exclude rejected — stale content the graph explicitly said
-            # should never surface. Everything else is fair game.
-            rows = [r for r in rows if r.status != "rejected"]
+            membrane_rows = [
+                r
+                for r in await MembraneSignalRepository(session).list_for_project(
+                    project_id, limit=200
+                )
+                if r.status != "rejected"
+            ]
+            kb_item_rows = [
+                r
+                for r in await KbItemRepository(session).list_group_for_project(
+                    project_id=project_id, limit=200
+                )
+                if r.status not in ("archived", "draft")
+                # Drafts are membrane-staged; not yet canonical group
+                # context. Including them would have the LLM cite
+                # un-approved content. Once stage-4 review accept
+                # promotes them to 'published' they show up.
+            ]
 
         matched: list[dict[str, Any]] = []
-        for row in rows:
+        for row in membrane_rows:
             classification = dict(row.classification_json or {})
             summary = (classification.get("summary") or "")
             tags = list(classification.get("tags") or [])
@@ -233,6 +253,34 @@ class SkillsService:
             )
             if len(matched) >= limit_val:
                 break
+
+        if len(matched) < limit_val:
+            for row in kb_item_rows:
+                title = (row.title or "").lower()
+                content = (row.content_md or "").lower()
+                if q and q not in title and q not in content:
+                    continue
+                matched.append(
+                    {
+                        "id": row.id,
+                        "source_kind": (
+                            "kb-personal" if row.scope == "personal" else "kb-note"
+                        ),
+                        "source_identifier": None,
+                        "summary": (row.title or "") + (
+                            ": " + (row.content_md or "")[:160]
+                            if row.content_md
+                            else ""
+                        ),
+                        "tags": [],
+                        "status": row.status,
+                        "created_at": (
+                            row.created_at.isoformat() if row.created_at else None
+                        ),
+                    }
+                )
+                if len(matched) >= limit_val:
+                    break
         return matched
 
     async def _recent_decisions(
