@@ -335,20 +335,25 @@ class OnboardingService:
         return serialized, created
 
     async def build_walkthrough(
-        self, *, user_id: str, project_id: str
+        self,
+        *,
+        user_id: str,
+        project_id: str,
+        chrome_locale: str | None = None,
     ) -> dict[str, Any]:
         """Build (or reuse) the structured walkthrough script.
 
-        Shape:
-            {
-              sections: [{kind, title, body_md, claims[]}, ...],
-              user_id, project_id, generated_at,
-              license_tier, scope_user_id,
-            }
-
-        The cached copy on OnboardingStateRow.walkthrough_json is
-        reused if it's still fresh (<24h). Regenerates otherwise.
+        `chrome_locale` is the value of NEXT_LOCALE (the UI language the
+        viewer is reading the page in). When present and valid, it
+        overrides the stale users.display_language value so chrome and
+        tour body agree even before the LanguageSwitcher PATCH lands.
+        Cache is keyed by language so flipping locales doesn't serve the
+        old-language render.
         """
+        lang = await self._viewer_language(user_id)
+        if chrome_locale and chrome_locale in _TR:
+            lang = chrome_locale
+
         async with session_scope(self._sessionmaker) as session:
             row = await OnboardingStateRepository(session).get(
                 user_id=user_id, project_id=project_id
@@ -356,7 +361,13 @@ class OnboardingService:
             cached_json = row.walkthrough_json if row else None
             cached_at = _aware(row.walkthrough_generated_at) if row else None
 
-        if cached_json and cached_at and self._is_fresh(cached_at):
+        cached_lang = (cached_json or {}).get("lang")
+        if (
+            cached_json
+            and cached_at
+            and self._is_fresh(cached_at)
+            and cached_lang == lang
+        ):
             return dict(cached_json)
 
         slice_ = await self._license_ctx.build_slice(
@@ -364,8 +375,6 @@ class OnboardingService:
             viewer_user_id=user_id,
             audience_user_id=None,
         )
-
-        lang = await self._viewer_language(user_id)
 
         sections = await self._assemble_sections(
             user_id=user_id,
@@ -381,6 +390,7 @@ class OnboardingService:
             "generated_at": datetime.now(timezone.utc).isoformat(),
             "license_tier": slice_.get("license_tier", "full"),
             "scope_user_id": slice_.get("scope_user_id", user_id),
+            "lang": lang,
         }
 
         # Cache. If the row doesn't exist yet (caller invoked us

@@ -30,6 +30,21 @@ from workgraph_api.services import (
 
 router = APIRouter(tags=["onboarding"])
 
+# Frontend chrome reads NEXT_LOCALE from this cookie. The body of the
+# tour is templated server-side and historically read users.display_language,
+# which only updates when the LanguageSwitcher is clicked. If a user
+# registered in en, then read in zh chrome, the body lagged. Prefer the
+# cookie when present + valid so chrome and body always agree.
+_LOCALE_COOKIE = "NEXT_LOCALE"
+_ALLOWED_LOCALES = frozenset({"en", "zh"})
+
+
+def _locale_from_request(request: Request) -> str | None:
+    raw = request.cookies.get(_LOCALE_COOKIE)
+    if raw and raw in _ALLOWED_LOCALES:
+        return raw
+    return None
+
 
 class CheckpointRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -74,7 +89,9 @@ async def get_walkthrough(
         user_id=user.id, project_id=project_id
     )
     walkthrough = await service.build_walkthrough(
-        user_id=user.id, project_id=project_id
+        user_id=user.id,
+        project_id=project_id,
+        chrome_locale=_locale_from_request(request),
     )
     return {
         "state": state,
