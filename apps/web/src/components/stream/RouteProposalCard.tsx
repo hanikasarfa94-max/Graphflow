@@ -438,60 +438,69 @@ export function RouteProposalCard({
                   flex: "1 1 220px",
                 }}
               >
-                {tg.b_facing_draft || bFacingDrafts[tg.user_id] !== undefined ? (
-                  <div
+                <div
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 4,
+                  }}
+                  data-testid="b-facing-draft-block"
+                  data-target-user-id={tg.user_id}
+                >
+                  <span
                     style={{
-                      display: "flex",
-                      flexDirection: "column",
-                      gap: 4,
+                      fontSize: 10,
+                      fontFamily: "var(--wg-font-mono)",
+                      textTransform: "uppercase",
+                      letterSpacing: "0.06em",
+                      color: "var(--wg-ink-faint)",
                     }}
-                    data-testid="b-facing-draft-block"
-                    data-target-user-id={tg.user_id}
                   >
-                    <span
-                      style={{
-                        fontSize: 10,
-                        fontFamily: "var(--wg-font-mono)",
-                        textTransform: "uppercase",
-                        letterSpacing: "0.06em",
-                        color: "var(--wg-ink-faint)",
-                      }}
-                    >
-                      {t("routeProposal.bFacingLabel", {
-                        name: tg.display_name,
-                      })}
-                    </span>
-                    <textarea
-                      value={
-                        bFacingDrafts[tg.user_id] ?? tg.b_facing_draft ?? ""
-                      }
-                      onChange={(e) =>
-                        setBFacingDrafts((prev) => ({
-                          ...prev,
-                          [tg.user_id]: e.target.value,
-                        }))
-                      }
-                      placeholder={t("routeProposal.bFacingPlaceholder", {
-                        name: tg.display_name,
-                      })}
-                      rows={2}
-                      maxLength={400}
-                      data-testid="b-facing-draft-input"
-                      data-target-user-id={tg.user_id}
-                      style={{
-                        padding: "6px 8px",
-                        fontSize: 13,
-                        fontFamily: "var(--wg-font-sans, inherit)",
-                        border: "1px solid var(--wg-line)",
-                        borderRadius: "var(--wg-radius-sm, 4px)",
-                        background: "var(--wg-surface)",
-                        color: "var(--wg-ink)",
-                        resize: "vertical",
-                        minHeight: 38,
-                      }}
-                    />
-                  </div>
-                ) : null}
+                    {t("routeProposal.bFacingLabel", {
+                      name: tg.display_name,
+                    })}
+                  </span>
+                  <textarea
+                    // Always render — earlier version was conditional
+                    // on the LLM emitting b_facing_draft, which silently
+                    // hid the textarea when the model didn't fill the
+                    // new field (prompt cache, schema drift). Falling
+                    // back to proposal.framing as the seed gives the
+                    // user something to refine even when the LLM was
+                    // silent; it's still better than auto-sending
+                    // A-voice prose with self-pointing pronouns.
+                    value={
+                      bFacingDrafts[tg.user_id] ??
+                      tg.b_facing_draft ??
+                      proposal?.framing ??
+                      ""
+                    }
+                    onChange={(e) =>
+                      setBFacingDrafts((prev) => ({
+                        ...prev,
+                        [tg.user_id]: e.target.value,
+                      }))
+                    }
+                    placeholder={t("routeProposal.bFacingPlaceholder", {
+                      name: tg.display_name,
+                    })}
+                    rows={2}
+                    maxLength={400}
+                    data-testid="b-facing-draft-input"
+                    data-target-user-id={tg.user_id}
+                    style={{
+                      padding: "6px 8px",
+                      fontSize: 13,
+                      fontFamily: "var(--wg-font-sans, inherit)",
+                      border: "1px solid var(--wg-line)",
+                      borderRadius: "var(--wg-radius-sm, 4px)",
+                      background: "var(--wg-surface)",
+                      color: "var(--wg-ink)",
+                      resize: "vertical",
+                      minHeight: 38,
+                    }}
+                  />
+                </div>
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                   <button
                     type="button"
