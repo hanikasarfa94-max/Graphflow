@@ -3,6 +3,7 @@ import { getTranslations } from "next-intl/server";
 import type { ProjectState } from "@/lib/api";
 
 import { ageSecondsFrom, formatAge } from "./age";
+import { NewTaskComposer } from "./NewTaskComposer";
 import { EmptyState, Panel } from "./Panel";
 import { TaskScoreCell, TaskStatusCell } from "./TaskRowControls";
 
@@ -45,6 +46,7 @@ export async function TasksPanel({
   members,
   currentUserId,
   isProjectOwner,
+  projectId,
 }: {
   tasks: Task[];
   assignments: Record<string, unknown>[];
@@ -54,6 +56,9 @@ export async function TasksPanel({
   // (panels without auth context) still render the static pill.
   currentUserId?: string;
   isProjectOwner?: boolean;
+  // Phase T — projectId enables the "+ New task" composer at the
+  // panel head. When omitted, the panel stays read-only (legacy).
+  projectId?: string;
 }) {
   const t = await getTranslations();
   const now = new Date();
@@ -101,6 +106,9 @@ export async function TasksPanel({
       title={t("status.tasks.title")}
       subtitle={active.length > 0 ? String(active.length) : undefined}
     >
+      {projectId && currentUserId ? (
+        <NewTaskComposer projectId={projectId} />
+      ) : null}
       {active.length === 0 ? (
         <EmptyState>{t("status.tasks.empty")}</EmptyState>
       ) : (

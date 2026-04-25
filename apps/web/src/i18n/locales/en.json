@@ -287,7 +287,15 @@
       "columnOwner": "Owner",
       "columnStatus": "Status",
       "columnAge": "Age",
-      "unassigned": "Unassigned"
+      "unassigned": "Unassigned",
+      "newTask": "New task",
+      "newTaskHint": "Personal task — only you see it until promoted",
+      "newTaskTitlePlaceholder": "What needs doing?",
+      "newTaskDescriptionPlaceholder": "Optional context…",
+      "newTaskSave": "Add task",
+      "newTaskSaving": "Adding…",
+      "newTaskCancel": "Cancel",
+      "createFailed": "Could not create task"
     },
     "risks": {
       "title": "Open risks",

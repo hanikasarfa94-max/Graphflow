@@ -271,8 +271,12 @@ class TaskRow(_GraphEntityBase, Base):
     project_id: Mapped[str] = mapped_column(
         ForeignKey("projects.id", ondelete="CASCADE"), index=True
     )
-    requirement_id: Mapped[str] = mapped_column(
-        ForeignKey("requirements.id", ondelete="CASCADE"), index=True
+    # Migration 0021 — nullable for personal-scope tasks (self-set
+    # to-dos that don't hang off a Requirement until promoted).
+    requirement_id: Mapped[str | None] = mapped_column(
+        ForeignKey("requirements.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
     )
     deliverable_id: Mapped[str | None] = mapped_column(
         ForeignKey("graph_deliverables.id", ondelete="SET NULL"),
@@ -287,6 +291,24 @@ class TaskRow(_GraphEntityBase, Base):
     assignee_role: Mapped[str] = mapped_column(String(32), default="unknown")
     estimate_hours: Mapped[int | None] = mapped_column(Integer, nullable=True)
     acceptance_criteria: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    # Migration 0021 — personal vs plan. Mirrors the kb_items split.
+    # 'personal' = self-set to-do, owner_user_id-only visibility,
+    # not in the canonical group plan. 'plan' = LLM-produced or
+    # promoted, visible to all members. Default 'plan' preserves
+    # backward compatibility for existing rows.
+    scope: Mapped[str] = mapped_column(
+        String(16), default="plan", server_default="plan"
+    )
+    owner_user_id: Mapped[str | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    source_message_id: Mapped[str | None] = mapped_column(
+        ForeignKey("messages.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
 
 
 class TaskDependencyRow(Base):

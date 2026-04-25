@@ -287,7 +287,15 @@
       "columnOwner": "负责人",
       "columnStatus": "状态",
       "columnAge": "时长",
-      "unassigned": "未分配"
+      "unassigned": "未分配",
+      "newTask": "新建任务",
+      "newTaskHint": "个人任务 —— 在你提交前只有你能看到",
+      "newTaskTitlePlaceholder": "需要做什么?",
+      "newTaskDescriptionPlaceholder": "可选的补充说明……",
+      "newTaskSave": "添加",
+      "newTaskSaving": "保存中……",
+      "newTaskCancel": "取消",
+      "createFailed": "新建任务失败"
     },
     "risks": {
       "title": "未解决的风险",

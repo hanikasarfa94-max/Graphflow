@@ -422,6 +422,89 @@ class PlanRepository:
         )
         return (await self._session.execute(stmt)).scalar_one_or_none() is not None
 
+    async def get_task(self, task_id: str) -> TaskRow | None:
+        return (
+            await self._session.execute(
+                select(TaskRow).where(TaskRow.id == task_id)
+            )
+        ).scalar_one_or_none()
+
+    async def list_personal_for_owner(
+        self, *, project_id: str, owner_user_id: str, limit: int = 200
+    ) -> list[TaskRow]:
+        """Personal-scope tasks belonging to one user in one project.
+
+        Used by the TasksPanel "My drafts" section so the owner can
+        see and promote their own self-set tasks. Other members
+        cannot see these.
+        """
+        stmt = (
+            select(TaskRow)
+            .where(TaskRow.project_id == project_id)
+            .where(TaskRow.scope == "personal")
+            .where(TaskRow.owner_user_id == owner_user_id)
+            .order_by(TaskRow.created_at.desc())
+            .limit(limit)
+        )
+        return list((await self._session.execute(stmt)).scalars().all())
+
+    async def create_personal_task(
+        self,
+        *,
+        project_id: str,
+        owner_user_id: str,
+        title: str,
+        description: str = "",
+        source_message_id: str | None = None,
+    ) -> TaskRow:
+        """Self-set personal task. requirement_id stays NULL until
+        promoted; sort_order is timestamp-based (ms since epoch
+        modulo a day's worth) so it stays roughly chronological
+        without coordinating with the plan's sort_order space.
+        """
+        sort_seed = int(datetime.now(timezone.utc).timestamp() * 1000) % (
+            24 * 60 * 60 * 1000
+        )
+        row = TaskRow(
+            id=_new_id(),
+            project_id=project_id,
+            requirement_id=None,
+            sort_order=sort_seed,
+            deliverable_id=None,
+            title=title,
+            description=description or "",
+            assignee_role="unknown",
+            estimate_hours=None,
+            acceptance_criteria=None,
+            scope="personal",
+            owner_user_id=owner_user_id,
+            source_message_id=source_message_id,
+            status="open",
+        )
+        self._session.add(row)
+        await self._session.flush()
+        return row
+
+    async def promote_personal_to_plan(
+        self,
+        *,
+        task_id: str,
+        requirement_id: str,
+        sort_order: int,
+    ) -> TaskRow | None:
+        """Personal → plan. Caller (PlanningService / TaskService)
+        decides the sort_order to avoid collisions with the existing
+        plan layout. Returns None if task wasn't personal.
+        """
+        row = await self.get_task(task_id)
+        if row is None or row.scope != "personal":
+            return None
+        row.scope = "plan"
+        row.requirement_id = requirement_id
+        row.sort_order = sort_order
+        await self._session.flush()
+        return row
+
     async def append_plan(
         self,
         *,
