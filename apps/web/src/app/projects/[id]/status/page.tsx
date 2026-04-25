@@ -80,7 +80,11 @@ export default async function ProjectStatusPage({
         }}
       >
         <div style={{ gridColumn: "1 / -1" }}>
-          <MembersPanel members={state?.members ?? []} />
+          <MembersPanel
+            members={state?.members ?? []}
+            projectId={id}
+            currentUserId={user.id}
+          />
         </div>
         <TasksPanel
           tasks={state?.plan.tasks ?? []}

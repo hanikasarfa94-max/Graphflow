@@ -2,19 +2,44 @@ import { getTranslations } from "next-intl/server";
 
 import type { ProjectState } from "@/lib/api";
 
+import { InlineMemberInvite } from "./InlineMemberInvite";
 import { EmptyState, Panel } from "./Panel";
 
 type Member = ProjectState["members"][number];
 
 // Grid of member cards. For v1, everyone is rendered as "online" — presence
 // is a v2 polish per Phase E's decision. License-tier observers get a badge.
-export async function MembersPanel({ members }: { members: Member[] }) {
+// Owners get an inline invite affordance below the grid so adding teammates
+// happens where the team list lives, not in /settings.
+export async function MembersPanel({
+  members,
+  projectId,
+  currentUserId,
+}: {
+  members: Member[];
+  projectId?: string;
+  currentUserId?: string;
+}) {
   const t = await getTranslations();
+
+  const isOwner = Boolean(
+    currentUserId &&
+      members.some(
+        (m) => m.user_id === currentUserId && m.role === "owner",
+      ),
+  );
+  const existingUsernames = members.map((m) => m.username).filter(Boolean);
 
   if (!members || members.length === 0) {
     return (
       <Panel title={t("status.members.title")}>
         <EmptyState>{t("status.members.empty")}</EmptyState>
+        {isOwner && projectId ? (
+          <InlineMemberInvite
+            projectId={projectId}
+            existingUsernames={existingUsernames}
+          />
+        ) : null}
       </Panel>
     );
   }
@@ -46,6 +71,12 @@ export async function MembersPanel({ members }: { members: Member[] }) {
           />
         ))}
       </div>
+      {isOwner && projectId ? (
+        <InlineMemberInvite
+          projectId={projectId}
+          existingUsernames={existingUsernames}
+        />
+      ) : null}
     </Panel>
   );
 }
