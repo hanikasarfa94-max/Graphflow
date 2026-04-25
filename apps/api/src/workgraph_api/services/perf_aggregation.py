@@ -47,6 +47,7 @@ from workgraph_persistence import (
     RoutedSignalRow,
     SilentConsensusRow,
     TaskRow,
+    TaskScoreRow,
     UserRow,
     session_scope,
 )
@@ -205,6 +206,33 @@ class PerfAggregationService:
                 tasks_seen[uid].add(tid)
                 if len(tasks_recent[uid]) < _RECENT_ID_LIMIT:
                     tasks_recent[uid].append(tid)
+
+            # ---- batch 5b: task scores (Phase U) ----------------------
+            # Joins task_scores → plan_tasks to scope by project, then
+            # buckets by assignee for the perf rollup. quality_index =
+            # weighted mean of {good=1.0, ok=0.5, needs_work=0.0};
+            # treat as "0..1 quality score" surfaceable as a percent.
+            task_score_rows = list(
+                (
+                    await session.execute(
+                        select(
+                            TaskScoreRow.assignee_user_id,
+                            TaskScoreRow.quality,
+                        )
+                        .join(TaskRow, TaskRow.id == TaskScoreRow.task_id)
+                        .where(TaskRow.project_id == project_id)
+                        .where(TaskScoreRow.assignee_user_id.in_(user_ids))
+                    )
+                ).all()
+            )
+            task_score_buckets: dict[str, dict[str, int]] = defaultdict(
+                lambda: {"good": 0, "ok": 0, "needs_work": 0, "total": 0}
+            )
+            for assignee_uid, quality in task_score_rows:
+                bucket = task_score_buckets[assignee_uid]
+                if quality in ("good", "ok", "needs_work"):
+                    bucket[quality] += 1
+                bucket["total"] += 1
 
             # ---- batch 6: dissent (bucketed per user) -----------------
             dissent_rows = list(
@@ -464,6 +492,14 @@ class PerfAggregationService:
                             "count": len(tasks_seen.get(m.user_id, ())),
                             "ids": list(tasks_recent.get(m.user_id, [])),
                         },
+                        # Phase U — quality of completed off-platform
+                        # work, scored by project owners after the
+                        # owner marks done. quality_index rolls
+                        # good/ok/needs_work into a 0..1 mean. total=0
+                        # → no scores; UI shows "—" for the index.
+                        "task_quality": _task_quality_payload(
+                            task_score_buckets.get(m.user_id)
+                        ),
                         "skills_validated": {
                             "declared": len(declared),
                             "observed": len(observed_set),
@@ -547,6 +583,34 @@ def _observed_skill_tags(observed: Any) -> set[str]:
         risks_owned=observed.risks_owned,
         routings_30d=observed.routings_answered_30d,
     )
+
+
+def _task_quality_payload(
+    bucket: dict[str, int] | None,
+) -> dict[str, Any]:
+    """Roll a per-user score bucket into a payload the perf surface
+    renders. quality_index = (good + 0.5*ok) / total, in [0, 1]; null
+    when no scores."""
+    if not bucket or bucket.get("total", 0) == 0:
+        return {
+            "good": 0,
+            "ok": 0,
+            "needs_work": 0,
+            "total": 0,
+            "quality_index": None,
+        }
+    good = int(bucket.get("good", 0))
+    ok = int(bucket.get("ok", 0))
+    nw = int(bucket.get("needs_work", 0))
+    total = good + ok + nw
+    idx = (good + 0.5 * ok) / total if total else None
+    return {
+        "good": good,
+        "ok": ok,
+        "needs_work": nw,
+        "total": total,
+        "quality_index": round(idx, 3) if idx is not None else None,
+    }
 
 
 __all__ = ["PerfAggregationService"]

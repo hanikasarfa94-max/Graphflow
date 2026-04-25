@@ -49,6 +49,8 @@ from .orm import (
     StreamRow,
     TaskDependencyRow,
     TaskRow,
+    TaskScoreRow,
+    TaskStatusUpdateRow,
     UserRow,
     VoteRow,
 )
@@ -1643,6 +1645,120 @@ class DeliverySummaryRepository:
             .order_by(DeliverySummaryRow.created_at.desc())
             .limit(limit)
         )
+        return list((await self._session.execute(stmt)).scalars().all())
+
+
+# ---- Task progress (Phase U) — status updates + leader scoring ----------
+
+
+class TaskStatusUpdateRepository:
+    """Append-only audit log. No update / delete — every status flip
+    writes a fresh row. The TaskRow itself carries the current status;
+    this gives the timeline."""
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def append(
+        self,
+        *,
+        task_id: str,
+        actor_user_id: str,
+        old_status: str | None,
+        new_status: str,
+        note: str | None = None,
+    ) -> TaskStatusUpdateRow:
+        row = TaskStatusUpdateRow(
+            id=_new_id(),
+            task_id=task_id,
+            actor_user_id=actor_user_id,
+            old_status=old_status,
+            new_status=new_status,
+            note=note,
+        )
+        self._session.add(row)
+        await self._session.flush()
+        return row
+
+    async def list_for_task(
+        self, task_id: str, *, limit: int = 50
+    ) -> list[TaskStatusUpdateRow]:
+        stmt = (
+            select(TaskStatusUpdateRow)
+            .where(TaskStatusUpdateRow.task_id == task_id)
+            .order_by(TaskStatusUpdateRow.created_at.asc())
+            .limit(limit)
+        )
+        return list((await self._session.execute(stmt)).scalars().all())
+
+
+class TaskScoreRepository:
+    """One score per (task, assignee). Re-scoring updates in place."""
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def upsert(
+        self,
+        *,
+        task_id: str,
+        reviewer_user_id: str,
+        assignee_user_id: str,
+        quality: str,
+        feedback: str | None = None,
+    ) -> tuple[TaskScoreRow, bool]:
+        """Returns (row, created). created=True if this is a new score."""
+        existing = (
+            await self._session.execute(
+                select(TaskScoreRow)
+                .where(TaskScoreRow.task_id == task_id)
+                .where(TaskScoreRow.assignee_user_id == assignee_user_id)
+            )
+        ).scalar_one_or_none()
+        if existing is not None:
+            existing.reviewer_user_id = reviewer_user_id
+            existing.quality = quality
+            existing.feedback = feedback
+            existing.updated_at = datetime.now(timezone.utc)
+            await self._session.flush()
+            return existing, False
+        row = TaskScoreRow(
+            id=_new_id(),
+            task_id=task_id,
+            reviewer_user_id=reviewer_user_id,
+            assignee_user_id=assignee_user_id,
+            quality=quality,
+            feedback=feedback,
+        )
+        self._session.add(row)
+        await self._session.flush()
+        return row, True
+
+    async def get_for_task(self, task_id: str) -> TaskScoreRow | None:
+        return (
+            await self._session.execute(
+                select(TaskScoreRow).where(TaskScoreRow.task_id == task_id)
+            )
+        ).scalar_one_or_none()
+
+    async def list_for_assignee_in_window(
+        self,
+        *,
+        assignee_user_id: str,
+        project_id: str | None = None,
+        since: datetime | None = None,
+    ) -> list[TaskScoreRow]:
+        """Used by perf_aggregation. If project_id is set, joins through
+        TaskRow to filter."""
+        stmt = select(TaskScoreRow).where(
+            TaskScoreRow.assignee_user_id == assignee_user_id
+        )
+        if since is not None:
+            stmt = stmt.where(TaskScoreRow.updated_at >= since)
+        if project_id is not None:
+            stmt = stmt.join(TaskRow, TaskScoreRow.task_id == TaskRow.id).where(
+                TaskRow.project_id == project_id
+            )
         return list((await self._session.execute(stmt)).scalars().all())
 
 

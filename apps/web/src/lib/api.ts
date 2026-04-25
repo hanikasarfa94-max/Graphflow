@@ -2192,3 +2192,74 @@ export function attachProjectToWorkspace(
     { method: "POST" },
   );
 }
+
+// ---------- Task progress (Phase U — status self-report + scoring) ----
+
+export type TaskStatusValue =
+  | "open"
+  | "in_progress"
+  | "blocked"
+  | "done"
+  | "canceled";
+
+export type TaskQuality = "good" | "ok" | "needs_work";
+
+export interface TaskStatusUpdateRecord {
+  id: string;
+  actor_user_id: string;
+  actor_display_name: string | null;
+  old_status: string | null;
+  new_status: string;
+  note: string | null;
+  created_at: string | null;
+}
+
+export interface TaskScoreRecord {
+  quality: TaskQuality;
+  feedback: string | null;
+  reviewer_user_id: string;
+  assignee_user_id: string;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export interface TaskHistoryPayload {
+  task_id: string;
+  current_status: string;
+  updates: TaskStatusUpdateRecord[];
+  score: TaskScoreRecord | null;
+}
+
+export function updateTaskStatus(
+  taskId: string,
+  input: { new_status: TaskStatusValue; note?: string },
+): Promise<{ ok: boolean; status: string; old_status?: string; no_op?: boolean }> {
+  return api(`/api/tasks/${taskId}/status`, {
+    method: "POST",
+    body: input as unknown as JsonValue,
+  });
+}
+
+export function scoreTask(
+  taskId: string,
+  input: { quality: TaskQuality; feedback?: string },
+): Promise<{
+  ok: boolean;
+  quality: TaskQuality;
+  feedback: string | null;
+  assignee_user_id: string;
+  reviewer_user_id: string;
+  created: boolean;
+}> {
+  return api(`/api/tasks/${taskId}/score`, {
+    method: "POST",
+    body: input as unknown as JsonValue,
+  });
+}
+
+export function fetchTaskHistory(
+  taskId: string,
+  baseUrl?: string,
+): Promise<TaskHistoryPayload> {
+  return api(`/api/tasks/${taskId}/history`, { baseUrl });
+}

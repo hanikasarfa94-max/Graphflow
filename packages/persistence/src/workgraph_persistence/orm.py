@@ -459,6 +459,78 @@ class AssignmentRow(Base):
     )
 
 
+class TaskStatusUpdateRow(Base):
+    """Migration 0018 — append-only audit log for task status changes.
+
+    The TaskRow itself carries the *current* status; this table is the
+    history. Every owner-initiated `update_status` call writes one row.
+    Used by the perf surface to compute "tasks completed in 30d" and
+    by the task detail UI to show progress narrative ("set to
+    in_progress 3d ago, marked done 1h ago").
+
+    `actor_user_id` is the assignee or project-owner who made the
+    transition. `note` is the optional progress text the user typed
+    when transitioning (especially useful on done — "shipped to staging,
+    waiting on QA").
+    """
+
+    __tablename__ = "task_status_updates"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    task_id: Mapped[str] = mapped_column(
+        ForeignKey("plan_tasks.id", ondelete="CASCADE"), index=True
+    )
+    actor_user_id: Mapped[str] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    old_status: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    new_status: Mapped[str] = mapped_column(String(32))
+    note: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow
+    )
+
+
+class TaskScoreRow(Base):
+    """Migration 0018 — leader's quality score on a completed task.
+
+    For off-platform work (Unity edits, design reviews, code commits)
+    the platform can't auto-detect quality. Owner marks task done →
+    project owner scores it → the score feeds perf_aggregation.
+
+    Unique on (task_id, assignee_user_id): one score per
+    (task, person-who-did-it). The reviewer can edit their verdict
+    until the project moves on (no re-score after task is canceled).
+    """
+
+    __tablename__ = "task_scores"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    task_id: Mapped[str] = mapped_column(
+        ForeignKey("plan_tasks.id", ondelete="CASCADE"), index=True
+    )
+    reviewer_user_id: Mapped[str] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    assignee_user_id: Mapped[str] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    quality: Mapped[str] = mapped_column(String(16))
+    feedback: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "task_id", "assignee_user_id", name="uq_task_score_assignee"
+        ),
+    )
+
+
 class CommentRow(Base):
     """Threaded comment on a Task / Deliverable / Risk.
 

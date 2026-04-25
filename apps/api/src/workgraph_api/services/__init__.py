@@ -86,6 +86,13 @@ from .skill_atlas import SkillAtlasService
 from .skills import SkillsService
 from .sla import SlaService
 from .streams import StreamService
+from .task_progress import (
+    QUALITY_INDEX as TASK_QUALITY_INDEX,
+    VALID_QUALITIES as TASK_VALID_QUALITIES,
+    VALID_TARGET_STATES as TASK_VALID_STATES,
+    TaskProgressError,
+    TaskProgressService,
+)
 from .tutorial_seed import (
     TUTORIAL_TITLE_EN,
     TUTORIAL_TITLE_ZH,
@@ -184,6 +191,11 @@ __all__ = [
     "SkillsService",
     "SlaService",
     "StreamService",
+    "TaskProgressService",
+    "TaskProgressError",
+    "TASK_VALID_STATES",
+    "TASK_VALID_QUALITIES",
+    "TASK_QUALITY_INDEX",
     "TutorialSeedService",
     "TUTORIAL_TITLE_EN",
     "TUTORIAL_TITLE_ZH",
