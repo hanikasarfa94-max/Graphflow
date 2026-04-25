@@ -188,14 +188,14 @@ class RoutingService:
 
         # DM mirror — the dual-purpose DM is the shared log of routed
         # flows between the pair. Create if needed.
-        # Two messages land here: (a) the framing as a `routed-prompt`
-        # message authored by the SOURCE human (so the DM reads like a
-        # real conversation A initiated), and (b) the existing
-        # `routed-dm-log` summary so the audit trail still shows that
-        # the trip went through the edge agent. Without (a) the DM was
-        # a one-sided record — only B's eventual answer surfaced
-        # (post-reply path below also writes routed-dm-log) and the
-        # original prompt that opened the loop was invisible.
+        # We post the framing as a `routed-prompt` message authored by
+        # the SOURCE human so the DM reads like a real conversation A
+        # initiated. Previously we ALSO posted a `routed-dm-log` audit
+        # line ("🧠 X → Y via edge: {framing}") — but that contained
+        # the same framing text and showed as a visual duplicate next
+        # to routed-prompt. The routing fact (it went through edge) is
+        # already on the RoutedSignalRow itself, so the audit is not
+        # lost; we just stop double-printing it to the user.
         dm_result = await self._stream_service.create_or_get_dm(
             user_id=source_user_id, other_user_id=target_user_id
         )
@@ -206,14 +206,6 @@ class RoutingService:
                 author_id=source_user_id,
                 body=framing,
                 kind="routed-prompt",
-                linked_id=signal.id,
-            )
-            dm_body = f"🧠 {source_display} → {target_display} via edge: {framing}"
-            await self._stream_service.post_system_message(
-                stream_id=dm_stream_id,
-                author_id=EDGE_AGENT_SYSTEM_USER_ID,
-                body=dm_body,
-                kind="routed-dm-log",
                 linked_id=signal.id,
             )
 
@@ -239,6 +231,7 @@ class RoutingService:
         option_id: str | None = None,
         custom_text: str | None = None,
         lint_decision: str | None = None,
+        skip_source_post: bool = False,
     ) -> dict[str, Any]:
         """Record target's reply, post into source's personal stream, mirror DM.
 
@@ -349,20 +342,27 @@ class RoutingService:
                         break
 
         # Post routed-reply into source's personal stream.
+        # Callers wrapping a follow-up frame (PersonalStreamService.handle_reply
+        # writes a richer `edge-reply-frame` immediately after) pass
+        # skip_source_post=True so the source stream gets one card per
+        # reply, not two. The frontend has a dedupe band-aid, but the
+        # right fix is to not double-write. Direct callers (tests,
+        # programmatic dispatch without a frame layer) keep the summary.
         if option_label:
             reply_summary = f"picked '{option_label}'"
         elif option_id:
             reply_summary = f"picked option {option_id}"
         else:
             reply_summary = f'replied: "{(custom_text or "").strip()[:160]}"'
-        reply_body = f"🧠 {target_display} {reply_summary}"
-        await self._stream_service.post_system_message(
-            stream_id=signal.source_stream_id,
-            author_id=EDGE_AGENT_SYSTEM_USER_ID,
-            body=reply_body,
-            kind="routed-reply",
-            linked_id=signal.id,
-        )
+        if not skip_source_post:
+            reply_body = f"🧠 {target_display} {reply_summary}"
+            await self._stream_service.post_system_message(
+                stream_id=signal.source_stream_id,
+                author_id=EDGE_AGENT_SYSTEM_USER_ID,
+                body=reply_body,
+                kind="routed-reply",
+                linked_id=signal.id,
+            )
 
         # Mirror into the DM log.
         dm_result = await self._stream_service.create_or_get_dm(

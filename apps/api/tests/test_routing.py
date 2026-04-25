@@ -261,13 +261,17 @@ async def test_dispatch_creates_signal_with_inbound_and_dm_mirror(api_env):
         assert inbound_msgs[0].author_id == EDGE_AGENT_SYSTEM_USER_ID
         assert inbound_msgs[0].linked_id == signal["id"]
 
-        # DM mirror: a dm stream between maya + raj should now exist with
-        # a 'routed-dm-log' message referencing the signal.
+        # DM mirror: a dm stream between maya + raj should now exist
+        # with a `routed-prompt` message authored by the source human.
+        # Previously we also wrote a `routed-dm-log` audit line that
+        # repeated the framing — dropped because it was a visual dup
+        # next to routed-prompt. Routing fact stays in the
+        # RoutedSignalRow itself.
         dm_msgs = list(
             (
                 await session.execute(
                     select(MessageRow).where(
-                        MessageRow.kind == "routed-dm-log",
+                        MessageRow.kind == "routed-prompt",
                         MessageRow.linked_id == signal["id"],
                     )
                 )
@@ -384,8 +388,13 @@ async def test_reply_posts_reply_card_and_flips_status(api_env):
     assert signal["reply"]["option_id"] == "halve"
     assert signal["responded_at"] is not None
 
-    # A 'routed-reply' message exists in Maya's personal stream authored
-    # by the edge-agent, linked to the signal.
+    # The /reply endpoint goes through PersonalStreamService.handle_reply,
+    # which suppresses the routed-reply summary in source's stream
+    # (skip_source_post=True) and lets the LLM-framed edge-reply-frame
+    # be the only card. So routed-reply should be ABSENT here. Direct
+    # callers of RoutingService.reply (without the frame layer) still
+    # get routed-reply via the default skip_source_post=False — covered
+    # in the dedicated test below.
     async with session_scope(maker) as session:
         maya_personal = (
             await session.execute(
@@ -408,11 +417,11 @@ async def test_reply_posts_reply_card_and_flips_status(api_env):
             .scalars()
             .all()
         )
-        assert len(reply_msgs) == 1
-        assert reply_msgs[0].linked_id == signal_id
-        assert reply_msgs[0].author_id == EDGE_AGENT_SYSTEM_USER_ID
+        assert len(reply_msgs) == 0
 
-        # DM log grew by a second 'routed-dm-log' row (dispatch + reply).
+        # DM log on reply still posts a routed-dm-log (the dispatch path
+        # dropped its log, but the reply path keeps one summary line so
+        # the DM has the "B answered" beat). Exactly one for this signal.
         dm_logs = list(
             (
                 await session.execute(
@@ -425,7 +434,7 @@ async def test_reply_posts_reply_card_and_flips_status(api_env):
             .scalars()
             .all()
         )
-        assert len(dm_logs) == 2
+        assert len(dm_logs) == 1
 
         # Signal row persisted the reply_json.
         row = (
@@ -774,8 +783,11 @@ async def test_reply_posts_edge_reply_frame_in_source_stream(api_env):
     assert body["framed"]["action_hint"] == "accept"
 
     # frame_reply was called with the shaped signal payload (contains
-    # source context). The routed-reply + edge-reply-frame rows both
-    # land in Maya's personal stream.
+    # source context). Source's personal stream gets ONLY the framed
+    # card now — the routed-reply summary is suppressed via
+    # skip_source_post=True so the user doesn't see the same reply
+    # rendered twice. (Pre-2026-04-25 both kinds landed and the
+    # frontend deduped; the dual-write was the real bug.)
     assert len(stub.frame_calls) == 1
     call = stub.frame_calls[0]
     assert call["signal"]["id"] == signal_id
@@ -806,21 +818,12 @@ async def test_reply_posts_edge_reply_frame_in_source_stream(api_env):
         for r in rows:
             rows_by_kind.setdefault(r.kind, []).append(r)
 
-        # The raw routed-reply mirror still lands (we didn't move it).
+        # No routed-reply mirror — suppressed via skip_source_post.
         routed_reply_msgs = rows_by_kind.get("routed-reply", [])
-        assert len(routed_reply_msgs) == 1
-        # AND the source-side framed card landed.
+        assert len(routed_reply_msgs) == 0
+        # The source-side framed card landed.
         frame_msgs = rows_by_kind.get("edge-reply-frame", [])
         assert len(frame_msgs) == 1
         assert frame_msgs[0].linked_id == signal_id
         assert frame_msgs[0].author_id == EDGE_AGENT_SYSTEM_USER_ID
         assert "halve" in frame_msgs[0].body.lower() or "boss" in frame_msgs[0].body.lower()
-
-        # Routed-reply dedupe contract (v4 dogfood bug fix): both rows
-        # carry the SAME linked_id = signal_id. Both kinds render as
-        # RoutedReplyCard on the frontend; the frontend uses this shared
-        # linked_id to dedupe (keeps edge-reply-frame, drops routed-
-        # reply). If the backend ever stops tagging both with signal.id,
-        # the frontend dedupe breaks — fail early here.
-        assert routed_reply_msgs[0].linked_id == signal_id
-        assert routed_reply_msgs[0].linked_id == frame_msgs[0].linked_id

@@ -869,6 +869,11 @@ class PersonalStreamService:
             replier_user_id=replier_user_id,
             option_id=option_id,
             custom_text=custom_text,
+            # Suppress the routed-reply summary in source's stream; we
+            # post the richer `edge-reply-frame` below. Without this,
+            # source saw the same reply rendered twice as RoutedReplyCard
+            # (frontend deduped, but the dual-write was the real bug).
+            skip_source_post=True,
         )
         if not reply_result.get("ok"):
             return reply_result
