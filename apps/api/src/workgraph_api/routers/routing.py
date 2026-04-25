@@ -145,6 +145,35 @@ async def post_reply(
     return result
 
 
+@router.post("/{signal_id}/accept")
+async def post_accept(
+    signal_id: str,
+    request: Request,
+    user: AuthenticatedUser = Depends(require_user),
+):
+    """Source-side acknowledgment that closes a replied signal.
+
+    Persists `status='accepted'` so a refresh after the click does NOT
+    reopen the Accept button. Only the source can accept; the signal
+    must already be in `replied`. Re-accept is a no-op (idempotent).
+    """
+    service = _get_service(request)
+    result = await service.accept(
+        signal_id=signal_id, accepter_user_id=user.id
+    )
+    if not result.get("ok"):
+        err = result.get("error", "accept_failed")
+        status_map = {
+            "signal_not_found": 404,
+            "not_the_source": 403,
+            "not_accepted_state": 409,
+        }
+        raise HTTPException(
+            status_code=status_map.get(err, 400), detail=err
+        )
+    return result
+
+
 @router.get("/inbox")
 async def get_inbox(
     request: Request,

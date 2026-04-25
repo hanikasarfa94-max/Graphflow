@@ -330,11 +330,17 @@ export function RoutedInboundBody({
   onPick,
   onCustom,
   error,
+  sourceDisplay,
 }: {
   signal: RoutingSignal;
   onPick: (optionId: string) => void | Promise<void>;
   onCustom: (text: string) => void | Promise<void>;
   error?: string | null;
+  // Used to retitle the framing block as B-facing context. Without it
+  // the card just labels the framing "framing" — accurate but the body
+  // text was authored by A's sub-agent for A to read, so B sees prose
+  // in the wrong voice. The retitle makes the audience switch explicit.
+  sourceDisplay?: string;
 }) {
   const t = useTranslations("personal");
   const [bgExpanded, setBgExpanded] = useState(false);
@@ -409,8 +415,22 @@ export function RoutedInboundBody({
             marginBottom: 2,
           }}
         >
-          {t("inbound.framing")}
+          {sourceDisplay
+            ? t("inbound.framingFrom", { name: sourceDisplay })
+            : t("inbound.framing")}
         </div>
+        {sourceDisplay ? (
+          <div
+            style={{
+              fontSize: 11,
+              fontStyle: "italic",
+              color: "var(--wg-ink-faint)",
+              marginBottom: 6,
+            }}
+          >
+            {t("inbound.framingNote")}
+          </div>
+        ) : null}
         <div
           style={{
             color: "var(--wg-ink)",
@@ -749,6 +769,7 @@ export function RoutedInboundFullCard({
         onPick={handlePick}
         onCustom={handleCustom}
         error={error}
+        sourceDisplay={sourceName}
       />
     </div>
   );

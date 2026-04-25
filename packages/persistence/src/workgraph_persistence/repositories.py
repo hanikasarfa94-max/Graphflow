@@ -2219,6 +2219,20 @@ class RoutedSignalRepository:
         await self._session.flush()
         return row
 
+    async def mark_accepted(self, signal_id: str) -> RoutedSignalRow | None:
+        """Source closes the loop on a signal that's already been replied
+        to. Status transitions: replied → accepted. Idempotent: re-accept
+        is a no-op so a refresh after the click never reopens the buttons.
+        """
+        row = await self.get(signal_id)
+        if row is None:
+            return None
+        if row.status not in ("replied", "accepted"):
+            return row
+        row.status = "accepted"
+        await self._session.flush()
+        return row
+
 
 # ---- Phase D — membrane signal repository -------------------------------
 

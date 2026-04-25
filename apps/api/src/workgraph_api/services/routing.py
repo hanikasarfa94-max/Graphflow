@@ -188,11 +188,26 @@ class RoutingService:
 
         # DM mirror — the dual-purpose DM is the shared log of routed
         # flows between the pair. Create if needed.
+        # Two messages land here: (a) the framing as a `routed-prompt`
+        # message authored by the SOURCE human (so the DM reads like a
+        # real conversation A initiated), and (b) the existing
+        # `routed-dm-log` summary so the audit trail still shows that
+        # the trip went through the edge agent. Without (a) the DM was
+        # a one-sided record — only B's eventual answer surfaced
+        # (post-reply path below also writes routed-dm-log) and the
+        # original prompt that opened the loop was invisible.
         dm_result = await self._stream_service.create_or_get_dm(
             user_id=source_user_id, other_user_id=target_user_id
         )
         if dm_result.get("ok"):
             dm_stream_id = dm_result["stream"]["id"]
+            await self._stream_service.post_system_message(
+                stream_id=dm_stream_id,
+                author_id=source_user_id,
+                body=framing,
+                kind="routed-prompt",
+                linked_id=signal.id,
+            )
             dm_body = f"🧠 {source_display} → {target_display} via edge: {framing}"
             await self._stream_service.post_system_message(
                 stream_id=dm_stream_id,
@@ -566,6 +581,26 @@ class RoutingService:
             if viewer_id not in (row.source_user_id, row.target_user_id):
                 return {"ok": False, "error": "not_a_participant"}
             return {"ok": True, "signal": _shape(row)}
+
+    async def accept(
+        self, *, signal_id: str, accepter_user_id: str
+    ) -> dict[str, Any]:
+        """Source closes the loop on a replied signal. Persists the
+        transition so a refresh after the click never reopens the
+        accept button. Idempotent: re-accepting a signal already in
+        'accepted' returns ok without writing.
+        """
+        async with session_scope(self._sessionmaker) as session:
+            repo = RoutedSignalRepository(session)
+            row = await repo.get(signal_id)
+            if row is None:
+                return {"ok": False, "error": "signal_not_found"}
+            if row.source_user_id != accepter_user_id:
+                return {"ok": False, "error": "not_the_source"}
+            if row.status not in ("replied", "accepted"):
+                return {"ok": False, "error": "not_accepted_state"}
+            updated = await repo.mark_accepted(signal_id)
+            return {"ok": True, "signal": _shape(updated)}
 
 
 __all__ = ["RoutingService"]

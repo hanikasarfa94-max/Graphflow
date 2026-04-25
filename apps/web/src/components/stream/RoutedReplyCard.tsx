@@ -26,6 +26,7 @@ import { useTranslations } from "next-intl";
 
 import {
   ApiError,
+  acceptRoutingSignal,
   createDMStream,
   dispatchCounterBack,
   getRoutingSignal,
@@ -86,11 +87,14 @@ export function RoutedReplyCard({ message, memberById, onFollowUp }: Props) {
   const [mode, setMode] = useState<ActionMode>(null);
   const [draft, setDraft] = useState("");
   const [posting, setPosting] = useState(false);
-  const [locallyAccepted, setLocallyAccepted] = useState(false);
+  const [optimisticAccept, setLocallyAccepted] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const loadedRef = useRef(false);
 
   const signalId = message.linked_id;
+  // Server-confirmed acceptance OR an in-flight optimistic click. The
+  // server side wins when both exist (e.g. a refresh after the click).
+  const isAccepted = signal?.status === "accepted" || optimisticAccept;
 
   const load = useCallback(async () => {
     if (!signalId) return;
@@ -143,9 +147,12 @@ export function RoutedReplyCard({ message, memberById, onFollowUp }: Props) {
     }
   }
 
-  // Accept — v1 local-only. Mark visually closed; optionally hand off to
-  // the composer so the user can type an acknowledgment turn.
-  function handleAccept() {
+  // Accept — persists status='accepted' on the signal so a refresh
+  // doesn't reopen the button. Optimistic UI flips first; on backend
+  // failure we revert + surface the error so the click isn't lost.
+  async function handleAccept() {
+    if (!signalId || posting) return;
+    if (signal?.status === "accepted") return;
     setLocallyAccepted(true);
     setError(null);
     if (onFollowUp) {
@@ -153,6 +160,18 @@ export function RoutedReplyCard({ message, memberById, onFollowUp }: Props) {
       onFollowUp(
         t("reply.acceptPrefill", { name: targetName || "", snippet }),
       );
+    }
+    setPosting(true);
+    try {
+      const res = await acceptRoutingSignal(signalId);
+      if (res.signal) setSignal(res.signal);
+    } catch (e) {
+      setLocallyAccepted(false);
+      setError(
+        e instanceof ApiError ? `accept ${e.status}` : "accept failed",
+      );
+    } finally {
+      setPosting(false);
     }
   }
 
@@ -292,7 +311,7 @@ export function RoutedReplyCard({ message, memberById, onFollowUp }: Props) {
         />
       )}
 
-      {locallyAccepted ? (
+      {isAccepted ? (
         <div
           data-testid="personal-reply-accepted"
           style={{
@@ -371,7 +390,7 @@ export function RoutedReplyCard({ message, memberById, onFollowUp }: Props) {
         </div>
       )}
 
-      {mode !== null && !locallyAccepted && (
+      {mode !== null && !isAccepted && (
         <div style={{ marginTop: 6, display: "flex", flexDirection: "column", gap: 6 }}>
           <textarea
             value={draft}

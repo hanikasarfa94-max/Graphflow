@@ -371,6 +371,10 @@ export interface PreAnswerDraft {
   matched_skills: string[];
   uncovered_topics: string[];
   recommend_route: boolean;
+  // Set true when the question demands a real-time human judgment the
+  // sub-agent cannot pre-know (allocation, scheduling, capacity calls).
+  // RouteProposalCard floats "Manual answer" to position 1 when set.
+  human_answer_demand?: boolean;
   rationale: string;
   // Phase 1.B — provenance chips for factual claims inside `body`.
   claims?: CitedClaim[];
@@ -1317,6 +1321,18 @@ export function replyRoutingSignal(
     method: "POST",
     body: params,
   });
+}
+
+// Source-side accept persists the close-the-loop click. Without this
+// the Accept button reappeared on every refresh because the local
+// useState in RoutedReplyCard didn't survive the next /state pull.
+export function acceptRoutingSignal(
+  signalId: string,
+): Promise<{ ok: boolean; signal: RoutingSignal }> {
+  return api<{ ok: boolean; signal: RoutingSignal }>(
+    `/api/routing/${signalId}/accept`,
+    { method: "POST" },
+  );
 }
 
 // ---------- Routing inbox / outbox (Phase Q — sidebar drawer) ----------

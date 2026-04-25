@@ -31,7 +31,7 @@ from .llm import LLMClient, LLMResult, ParseFailure
 
 _log = logging.getLogger("workgraph.agents.pre_answer")
 
-PRE_ANSWER_PROMPT_VERSION = "2026-04-21.stage2.v2"
+PRE_ANSWER_PROMPT_VERSION = "2026-04-25.human_demand.v3"
 
 _PROMPT_DIR = Path(__file__).parent / "prompts" / "edge"
 
@@ -62,6 +62,12 @@ class PreAnswerDraft(BaseModel):
     recommend_route: bool = True
     rationale: str = Field(default="", max_length=400)
     claims: list[CitedClaim] = Field(default_factory=list, max_length=8)
+    # True when the question demands a real-time human judgment the target
+    # sub-agent cannot pre-know — task allocation, scheduling preferences,
+    # capacity calls. Frontend uses this to float a "Manual answer" option
+    # to position 1 so the user isn't shown a confident-sounding-but-empty
+    # pre-reply ("Yes, ask me and I'll distribute") as the default.
+    human_answer_demand: bool = False
 
 
 _MANUAL_REVIEW_DRAFT = PreAnswerDraft(

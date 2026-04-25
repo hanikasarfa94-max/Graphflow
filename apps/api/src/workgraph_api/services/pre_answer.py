@@ -245,6 +245,7 @@ class PreAnswerService:
                 "matched_skills": outcome.draft.matched_skills,
                 "uncovered_topics": outcome.draft.uncovered_topics,
                 "recommend_route": outcome.draft.recommend_route,
+                "human_answer_demand": outcome.draft.human_answer_demand,
                 "rationale": outcome.draft.rationale,
                 "claims": claims_payload(draft_claims),
                 "uncited": is_uncited(draft_claims),

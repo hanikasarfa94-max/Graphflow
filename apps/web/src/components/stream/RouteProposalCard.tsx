@@ -740,12 +740,35 @@ function PreAnswerPanel({
           {draft.rationale}
         </div>
       ) : null}
+      {draft.human_answer_demand ? (
+        <div
+          data-testid="personal-pre-answer-human-demand-hint"
+          style={{
+            fontSize: 11,
+            padding: "6px 8px",
+            background: "var(--wg-amber-soft)",
+            border: "1px solid var(--wg-amber, #c58b00)",
+            borderRadius: "var(--wg-radius-sm, 4px)",
+            color: "var(--wg-amber, #c58b00)",
+            fontFamily: "var(--wg-font-mono)",
+          }}
+        >
+          {t("routeProposal.preAnswer.humanDemandHint", {
+            name: target.display_name,
+          })}
+        </div>
+      ) : null}
       <div
         style={{
           display: "flex",
           gap: 8,
           paddingTop: 4,
           flexWrap: "wrap",
+          // When the question genuinely needs the human, route-anyway
+          // (manual answer) becomes the primary action. Reverse the row
+          // so it sits first; promote its visual weight below.
+          flexDirection: draft.human_answer_demand ? "row-reverse" : "row",
+          justifyContent: draft.human_answer_demand ? "flex-end" : "flex-start",
         }}
       >
         <button
@@ -754,9 +777,15 @@ function PreAnswerPanel({
           data-testid="personal-pre-answer-accept-btn"
           style={{
             padding: "5px 10px",
-            background: "var(--wg-ok, #2f8f4f)",
-            color: "#fff",
-            border: "none",
+            background: draft.human_answer_demand
+              ? "var(--wg-surface)"
+              : "var(--wg-ok, #2f8f4f)",
+            color: draft.human_answer_demand
+              ? "var(--wg-ink-soft)"
+              : "#fff",
+            border: draft.human_answer_demand
+              ? "1px solid var(--wg-line)"
+              : "none",
             borderRadius: "var(--wg-radius)",
             fontSize: 12,
             fontWeight: 600,
@@ -772,9 +801,15 @@ function PreAnswerPanel({
           data-testid="personal-pre-answer-route-btn"
           style={{
             padding: "5px 10px",
-            background: "var(--wg-surface)",
-            color: "var(--wg-accent)",
-            border: "1px solid var(--wg-accent)",
+            background: draft.human_answer_demand
+              ? "var(--wg-accent)"
+              : "var(--wg-surface)",
+            color: draft.human_answer_demand
+              ? "#fff"
+              : "var(--wg-accent)",
+            border: draft.human_answer_demand
+              ? "none"
+              : "1px solid var(--wg-accent)",
             borderRadius: "var(--wg-radius)",
             fontSize: 12,
             fontWeight: 600,
@@ -782,9 +817,13 @@ function PreAnswerPanel({
             opacity: busy ? 0.6 : 1,
           }}
         >
-          {t("routeProposal.preAnswer.routeAnyway", {
-            name: target.display_name,
-          })}
+          {draft.human_answer_demand
+            ? t("routeProposal.preAnswer.routeAnywayManual", {
+                name: target.display_name,
+              })
+            : t("routeProposal.preAnswer.routeAnyway", {
+                name: target.display_name,
+              })}
         </button>
       </div>
     </div>

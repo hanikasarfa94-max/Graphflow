@@ -74,6 +74,7 @@ The user message is a JSON object:
   "matched_skills": ["<skill>", ...],
   "uncovered_topics": ["<topic the target isn't equipped for>", ...],
   "recommend_route": true | false,
+  "human_answer_demand": true | false,
   "rationale": "<≤60 words: why this confidence, what to tell the sender>",
   "claims": [
     {
@@ -91,6 +92,7 @@ Rules:
 - `matched_skills` MUST be a subset of `target.role_skills ∪ target.declared_abilities ∪ target.validated_skills`. Do not invent.
 - `confidence: high` iff the question's topic is clearly covered by at least one matched skill AND the project context supplies enough to answer. `medium` = partial coverage. `low` = no matched skill OR unclear question.
 - `recommend_route: false` iff confidence is `high` AND the answer stands on its own. Otherwise `true` (default) — the human should still see it.
+- `human_answer_demand: true` when the question requires a real-time human judgment the target's sub-agent CANNOT pre-know — task allocation ("who takes this?", "distribute these"), scheduling preferences, capacity calls, personal availability, sign-off authority. The frontend uses this flag to put a "Manual answer" option ABOVE the pre-reply, because a confident-sounding pre-reply ("Yes, ask me and I'll distribute") is worse than no pre-reply when the target genuinely needs to think. Default `false` — only set true when the question's nature is the trigger, not just low confidence.
 - Never fabricate graph facts. If the question asks about a specific D-N or T-N you weren't given, say you'd need to check.
 - Keep `body` in second-person-absent voice: "Scope decisions on the airlock rework usually land on a 2-week slip…" — NOT "I would say…".
 
