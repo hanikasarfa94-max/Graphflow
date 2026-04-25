@@ -34,6 +34,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker
 from workgraph_persistence import (
     KbFolderRepository,
     KbItemLicenseRepository,
+    KbItemRepository,
     MembraneSignalRepository,
     ProjectMemberRepository,
     UserRepository,
@@ -430,6 +431,25 @@ class KbHierarchyService:
             license_map = await license_repo.get_map_for_items(
                 [i.id for i in items]
             )
+            # Phase V — KbItemRow rows (manual notes, file uploads,
+            # LLM-proposed wiki entries, membrane-staged drafts) live
+            # in a separate table from MembraneSignalRow. Until now
+            # the tree only read membrane signals, so KbItemRow writes
+            # were invisible in the wiki view (the QA "agent saved to
+            # KB but UI shows nothing" report). Merge both kinds into
+            # the same tree. Visibility:
+            #   * scope='group'  — visible to every project member
+            #   * scope='personal' — visible only to its owner_user_id
+            # Status: include all but 'archived' (drafts surface with
+            # a chip so the membrane-stage queue is visible too).
+            kb_item_repo = KbItemRepository(session)
+            kb_item_rows = [
+                r
+                for r in await kb_item_repo.list_visible_for_user(
+                    project_id=project_id, viewer_user_id=user_id, limit=500
+                )
+                if r.status != "archived"
+            ]
             username_cache: dict[str, str | None] = {}
 
             async def _username(uid: str | None) -> str | None:
@@ -449,6 +469,12 @@ class KbHierarchyService:
                 payload["license_tier_override"] = license_map.get(r.id)
                 payload["ingested_by_username"] = await _username(
                     r.ingested_by_user_id
+                )
+                item_payloads.append(payload)
+            for r in kb_item_rows:
+                payload = _kb_item_payload(r)
+                payload["ingested_by_username"] = await _username(
+                    r.owner_user_id
                 )
                 item_payloads.append(payload)
 
@@ -492,6 +518,36 @@ def _item_payload(row: Any) -> dict[str, Any]:
         # updated_at isn't on MembraneSignalRow; proxy via created_at
         # so the tree can sort by recency without a second table.
         "updated_at": row.created_at.isoformat() if row.created_at else None,
+    }
+
+
+def _kb_item_payload(row: Any) -> dict[str, Any]:
+    """Render a KbItemRow into the same shape the kb tree uses for
+    MembraneSignalRow items. `source_kind` distinguishes the table:
+
+      * `kb-note`     — manual or LLM-created KbItemRow, scope=group
+      * `kb-personal` — same shape, scope=personal (only the owner sees it)
+
+    The frontend can still render both alongside the existing
+    `wiki` / `url` / `meeting` membrane source kinds — the tree
+    is polymorphic by source_kind already.
+    """
+    src_kind = "kb-personal" if row.scope == "personal" else "kb-note"
+    return {
+        "id": row.id,
+        "folder_id": row.folder_id,
+        "title": row.title or "(untitled)",
+        "summary": (row.content_md or "")[:300],
+        "source_kind": src_kind,
+        "source_identifier": None,
+        "status": row.status,
+        "tags": [],
+        "created_at": row.created_at.isoformat() if row.created_at else None,
+        "updated_at": row.updated_at.isoformat() if row.updated_at else None,
+        "license_tier_override": None,
+        # Owner is the proposer; the tree caller fills
+        # ingested_by_username via the same _username cache used for
+        # MembraneSignalRow.ingested_by_user_id.
     }
 
 
