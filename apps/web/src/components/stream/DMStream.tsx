@@ -136,14 +136,31 @@ export function DMStream({ streamId, currentUserId, members }: Props) {
           const m = frame.payload as unknown as IMMessage;
           setMessages((prev) => {
             if (prev.some((x) => x.id === m.id)) return prev;
-            return [
-              ...prev,
-              {
-                ...m,
-                project_id: m.project_id ?? "",
-                suggestion: null,
-              },
-            ];
+            const next: IMMessage = {
+              ...m,
+              project_id: m.project_id ?? "",
+              suggestion: null,
+            };
+            // Race fix: when the WS frame for our own send arrives
+            // BEFORE the POST response, the optimistic local-* row
+            // is still in state. Naive append would land the same
+            // message twice (once as local-*, once as the real id),
+            // and the POST response's map would then no-op because
+            // the local-* id is already gone after a later refresh —
+            // but in the meantime the user sees their message twice.
+            // If the incoming message is ours, swap it into the
+            // first matching optimistic placeholder by body.
+            if (m.author_id === currentUserId) {
+              const idx = prev.findIndex(
+                (x) => x.id.startsWith("local-") && x.body === m.body,
+              );
+              if (idx !== -1) {
+                const updated = [...prev];
+                updated[idx] = next;
+                return updated;
+              }
+            }
+            return [...prev, next];
           });
         } catch {
           // ignore malformed frames

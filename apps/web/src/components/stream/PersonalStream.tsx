@@ -178,9 +178,35 @@ function dedupeReplyCards(merged: PersonalMessage[]): PersonalMessage[] {
 function mergeMessages(
   existing: PersonalMessage[],
   incoming: PersonalMessage[],
+  currentUserId?: string,
 ): PersonalMessage[] {
+  // Race fix: an incoming WS message authored by the current user
+  // might arrive while a `pending-*` optimistic placeholder is still
+  // in state (post send → WS broadcast wins the network race against
+  // the POST response). Naive merge would land BOTH the pending and
+  // the real id, then the POST response's swap leaves a duplicate.
+  // Drop pendings whose body matches an incoming row from the same
+  // author before merging.
+  let cleaned = existing;
+  if (currentUserId) {
+    const incomingMineByBody = new Set(
+      incoming
+        .filter((m) => m.author_id === currentUserId)
+        .map((m) => m.body),
+    );
+    if (incomingMineByBody.size > 0) {
+      cleaned = existing.filter(
+        (m) =>
+          !(
+            m.id.startsWith("pending-") &&
+            m.author_id === currentUserId &&
+            incomingMineByBody.has(m.body)
+          ),
+      );
+    }
+  }
   const byId = new Map<string, PersonalMessage>();
-  for (const m of existing) byId.set(m.id, m);
+  for (const m of cleaned) byId.set(m.id, m);
   for (const m of incoming) byId.set(m.id, m); // server wins
   const merged = Array.from(byId.values());
   merged.sort((a, b) => {
@@ -239,7 +265,7 @@ export function PersonalStream({
         projectId,
       );
       if (!mountedRef.current) return;
-      setMessages((prev) => mergeMessages(prev, rows ?? []));
+      setMessages((prev) => mergeMessages(prev, rows ?? [], currentUserId));
       if (stream_id) setStreamId(stream_id);
       setError(null);
     } catch (e) {
@@ -296,7 +322,7 @@ export function PersonalStream({
           // Cast through PersonalMessage — backend post_system_message
           // shape is a superset of the list_messages shape we render.
           const m = frame.payload as unknown as PersonalMessage;
-          setMessages((prev) => mergeMessages(prev, [m]));
+          setMessages((prev) => mergeMessages(prev, [m], currentUserId));
         } catch {
           // ignore malformed frames
         }
@@ -515,7 +541,7 @@ export function PersonalStream({
           // stream frame during post_system_message before the POST
           // response unwinds). Plain [...prev, edge] was producing
           // duplicate React keys when that race hit.
-          setMessages((prev) => mergeMessages(prev, [edge]));
+          setMessages((prev) => mergeMessages(prev, [edge], currentUserId));
         }
       }
       // Trigger a refresh so poll-lag doesn't delay the server-truth.
