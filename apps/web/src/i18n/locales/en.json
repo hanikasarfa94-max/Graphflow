@@ -1204,5 +1204,43 @@
     "errorEmpty": "Add at least one skill.",
     "errorSave": "Save failed ({status}). Please try again.",
     "errorNetwork": "Network error. Please try again."
+  },
+  "workspace": {
+    "eyebrow": "Workspace",
+    "sidebarSection": "Workspaces",
+    "roles": {
+      "owner": "Owner",
+      "admin": "Admin",
+      "member": "Member",
+      "viewer": "Viewer"
+    },
+    "members": {
+      "title": "Members ({count})"
+    },
+    "projects": {
+      "title": "Projects in this workspace",
+      "empty": "No projects attached yet."
+    },
+    "forbidden": {
+      "title": "You don't have access to this workspace",
+      "body": "Ask the workspace owner to invite you."
+    },
+    "invite": {
+      "title": "Invite a member",
+      "usernamePlaceholder": "username",
+      "submit": "Invite",
+      "submitting": "Inviting…",
+      "success": "{name} added as {role}.",
+      "userNotFound": "No account found with username @{name} — ask them to register first.",
+      "forbidden": "Only workspace owners and admins can invite.",
+      "invalidUsername": "Username must be 3–32 characters, letters/digits/dashes only.",
+      "genericError": "Couldn't invite ({code}).",
+      "networkError": "Network error. Please try again.",
+      "roleOption": {
+        "member": "Member",
+        "admin": "Admin",
+        "viewer": "Viewer"
+      }
+    }
   }
 }

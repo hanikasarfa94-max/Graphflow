@@ -35,6 +35,8 @@ from .orm import (
     MilestoneRow,
     NotificationRow,
     OnboardingStateRow,
+    OrganizationMemberRow,
+    OrganizationRow,
     ProjectMemberRow,
     ProjectRow,
     RequirementRow,
@@ -3308,6 +3310,165 @@ class KbItemLicenseRepository:
 
     async def clear(self, item_id: str) -> bool:
         row = await self.get(item_id)
+        if row is None:
+            return False
+        await self._session.delete(row)
+        await self._session.flush()
+        return True
+
+
+# ---- Migration 0017 — Organization (Workspace) tier -----------------------
+
+
+class OrganizationRepository:
+    """CRUD over OrganizationRow + slug lookups.
+
+    v1 keeps the surface small — create, fetch by id/slug, list by
+    owner. Deletion isn't wired because the service layer doesn't
+    expose it yet (out of scope: workspace delete).
+    """
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def create(
+        self,
+        *,
+        name: str,
+        slug: str,
+        owner_user_id: str,
+        description: str | None = None,
+    ) -> OrganizationRow:
+        row = OrganizationRow(
+            id=_new_id(),
+            name=name,
+            slug=slug,
+            owner_user_id=owner_user_id,
+            description=description,
+        )
+        self._session.add(row)
+        await self._session.flush()
+        return row
+
+    async def get(self, org_id: str) -> OrganizationRow | None:
+        return (
+            await self._session.execute(
+                select(OrganizationRow).where(OrganizationRow.id == org_id)
+            )
+        ).scalar_one_or_none()
+
+    async def get_by_slug(self, slug: str) -> OrganizationRow | None:
+        return (
+            await self._session.execute(
+                select(OrganizationRow).where(OrganizationRow.slug == slug)
+            )
+        ).scalar_one_or_none()
+
+    async def list_by_ids(self, ids: list[str]) -> list[OrganizationRow]:
+        if not ids:
+            return []
+        stmt = select(OrganizationRow).where(OrganizationRow.id.in_(ids))
+        return list((await self._session.execute(stmt)).scalars().all())
+
+
+class OrganizationMemberRepository:
+    """Membership + role management for workspaces.
+
+    `add` is idempotent on (org_id, user_id) — repeated calls return the
+    existing row (matching ProjectMemberRepository's semantics). Role
+    mutation is `set_role`; removal is `remove`. `is_member` is a fast
+    existence check for the router guard.
+    """
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def add(
+        self,
+        *,
+        organization_id: str,
+        user_id: str,
+        role: str,
+        invited_by_user_id: str | None = None,
+    ) -> OrganizationMemberRow:
+        existing = await self.get_member(organization_id, user_id)
+        if existing is not None:
+            return existing
+        row = OrganizationMemberRow(
+            id=_new_id(),
+            organization_id=organization_id,
+            user_id=user_id,
+            role=role,
+            invited_by_user_id=invited_by_user_id,
+        )
+        self._session.add(row)
+        try:
+            await self._session.flush()
+        except IntegrityError:
+            await self._session.rollback()
+            fresh = await self.get_member(organization_id, user_id)
+            assert fresh is not None
+            return fresh
+        return row
+
+    async def get_member(
+        self, organization_id: str, user_id: str
+    ) -> OrganizationMemberRow | None:
+        return (
+            await self._session.execute(
+                select(OrganizationMemberRow).where(
+                    OrganizationMemberRow.organization_id == organization_id,
+                    OrganizationMemberRow.user_id == user_id,
+                )
+            )
+        ).scalar_one_or_none()
+
+    async def is_member(self, organization_id: str, user_id: str) -> bool:
+        return (await self.get_member(organization_id, user_id)) is not None
+
+    async def list_for_organization(
+        self, organization_id: str
+    ) -> list[OrganizationMemberRow]:
+        stmt = (
+            select(OrganizationMemberRow)
+            .where(OrganizationMemberRow.organization_id == organization_id)
+            .order_by(OrganizationMemberRow.created_at)
+        )
+        return list((await self._session.execute(stmt)).scalars().all())
+
+    async def list_for_user(
+        self, user_id: str
+    ) -> list[OrganizationMemberRow]:
+        stmt = (
+            select(OrganizationMemberRow)
+            .where(OrganizationMemberRow.user_id == user_id)
+            .order_by(OrganizationMemberRow.created_at.desc())
+        )
+        return list((await self._session.execute(stmt)).scalars().all())
+
+    async def count_by_role(
+        self, organization_id: str, role: str
+    ) -> int:
+        stmt = select(OrganizationMemberRow.id).where(
+            OrganizationMemberRow.organization_id == organization_id,
+            OrganizationMemberRow.role == role,
+        )
+        return len(list((await self._session.execute(stmt)).scalars().all()))
+
+    async def set_role(
+        self, *, organization_id: str, user_id: str, new_role: str
+    ) -> OrganizationMemberRow | None:
+        row = await self.get_member(organization_id, user_id)
+        if row is None:
+            return None
+        row.role = new_role
+        await self._session.flush()
+        return row
+
+    async def remove(
+        self, *, organization_id: str, user_id: str
+    ) -> bool:
+        row = await self.get_member(organization_id, user_id)
         if row is None:
             return False
         await self._session.delete(row)

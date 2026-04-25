@@ -30,7 +30,7 @@ import type { User } from "@/lib/api";
 
 import { NewDMPicker } from "./NewDMPicker";
 import { RoutedInboxBadge } from "./RoutedInboxBadge";
-import type { ShellDM, ShellProject } from "./AppShellClient";
+import type { ShellDM, ShellProject, ShellWorkspace } from "./AppShellClient";
 
 const SIDEBAR_WIDTH = 256;
 
@@ -359,12 +359,14 @@ export function AppSidebar({
   dms,
   inboxCount,
   onOpenInbox,
+  workspaces = [],
 }: {
   user: User;
   projects: ShellProject[];
   dms: ShellDM[];
   inboxCount: number;
   onOpenInbox: () => void;
+  workspaces?: ShellWorkspace[];
 }) {
   const pathname = usePathname();
   const t = useTranslations();
@@ -476,6 +478,53 @@ export function AppSidebar({
             />
           </li>
         </ul>
+
+        {/* Workspaces — Phase T tier above Projects. Hidden when the
+            user belongs to none, so registered users without a
+            workspace see the existing layout unchanged. */}
+        {workspaces.length > 0 ? (
+          <>
+            <div style={sectionLabel}>{t("workspace.sidebarSection")}</div>
+            <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
+              {workspaces.map((w) => {
+                const wsHref = `/workspaces/${w.slug}`;
+                const wsActive = isActive(pathname, wsHref);
+                return (
+                  <li key={w.id} style={{ marginBottom: 2 }}>
+                    <Link
+                      href={wsHref}
+                      data-testid="sidebar-workspace-link"
+                      data-slug={w.slug}
+                      style={{
+                        ...linkBase,
+                        background: wsActive
+                          ? "var(--wg-accent-soft, #fdf4ec)"
+                          : "transparent",
+                        color: wsActive
+                          ? "var(--wg-accent)"
+                          : "var(--wg-ink)",
+                        fontWeight: wsActive ? 600 : 400,
+                      }}
+                      title={w.name}
+                    >
+                      <span aria-hidden>🏢</span>
+                      <span
+                        style={{
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                          flex: 1,
+                        }}
+                      >
+                        {w.name}
+                      </span>
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+          </>
+        ) : null}
 
         {/* Projects */}
         <div style={sectionLabel}>{t("shell.projects")}</div>

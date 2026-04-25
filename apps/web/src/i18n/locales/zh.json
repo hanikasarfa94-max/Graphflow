@@ -1204,5 +1204,43 @@
     "errorEmpty": "请至少填写一项。",
     "errorSave": "保存失败({status})。请重试。",
     "errorNetwork": "网络错误,请重试。"
+  },
+  "workspace": {
+    "eyebrow": "工作空间",
+    "sidebarSection": "工作空间",
+    "roles": {
+      "owner": "所有者",
+      "admin": "管理员",
+      "member": "成员",
+      "viewer": "查看者"
+    },
+    "members": {
+      "title": "成员({count})"
+    },
+    "projects": {
+      "title": "工作空间下的项目",
+      "empty": "还没有挂载任何项目。"
+    },
+    "forbidden": {
+      "title": "你无权访问此工作空间",
+      "body": "请联系工作空间所有者邀请你加入。"
+    },
+    "invite": {
+      "title": "邀请成员",
+      "usernamePlaceholder": "用户名",
+      "submit": "邀请",
+      "submitting": "正在邀请…",
+      "success": "已将 {name} 添加为{role}。",
+      "userNotFound": "未找到用户名为 @{name} 的账号 —— 请先让对方注册。",
+      "forbidden": "只有工作空间所有者或管理员能邀请成员。",
+      "invalidUsername": "用户名为 3–32 字符,仅限字母、数字、下划线、短横线。",
+      "genericError": "邀请失败({code})。",
+      "networkError": "网络错误,请重试。",
+      "roleOption": {
+        "member": "成员",
+        "admin": "管理员",
+        "viewer": "查看者"
+      }
+    }
   }
 }

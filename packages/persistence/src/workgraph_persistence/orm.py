@@ -39,6 +39,17 @@ class ProjectRow(Base):
     # existing projects stamp clean on migration.
     gate_keeper_map: Mapped[dict] = mapped_column(JSON, default=dict)
 
+    # Migration 0017 — Organization (Workspace) tier. Nullable because
+    # existing projects predate the tier and stay unassigned until the
+    # owner explicitly nests them. SET NULL on org delete so a deleted
+    # workspace doesn't cascade-destroy its projects — they fall back to
+    # standalone until reassigned.
+    organization_id: Mapped[str | None] = mapped_column(
+        ForeignKey("organizations.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+
 
 class RequirementRow(Base):
     """Versioned requirement. v1 from intake; each clarify-reply yields v2+.
@@ -1811,4 +1822,88 @@ class KbItemLicenseRow(Base):
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_utcnow, onupdate=_utcnow
+    )
+
+
+# ---- Migration 0017 — Organization (Workspace) tier -----------------------
+
+
+class OrganizationRow(Base):
+    """A Workspace (Studio / Enterprise) — the tier above ProjectRow.
+
+    User-facing label is "Workspace" (EN) / "工作空间" (ZH); internally we
+    keep the neutral "Organization" name so code stays readable for both
+    studio and enterprise deployments.
+
+    v1 is intentionally minimal:
+      * One owner (the creator) captured directly on the row for fast
+        lookup. Full role info lives in OrganizationMemberRow — the owner
+        also has a member row with role='owner'.
+      * `slug` is globally unique and URL-safe — this is the only lookup
+        key beyond id. Surfaced in `/workspaces/{slug}` URLs.
+      * `description` is optional freeform. Not rendered in index yet;
+        only shown on the detail page.
+
+    Out of scope for v1 (flag at service layer):
+      * Authority delegation to members (viewer tier scoping).
+      * Workspace-scoped KB or routing.
+      * SSO, billing, email verification.
+      * Cross-org project moves.
+    """
+
+    __tablename__ = "organizations"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    name: Mapped[str] = mapped_column(String(120))
+    slug: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    owner_user_id: Mapped[str | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    description: Mapped[str | None] = mapped_column(String(4000), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow
+    )
+
+
+class OrganizationMemberRow(Base):
+    """Explicit workspace ↔ user join.
+
+    Role taxonomy (v1):
+      * `owner`  — created the workspace, or promoted later. Can manage
+                   members, update roles, and attach projects. At least
+                   one owner must always remain.
+      * `admin`  — can invite members and attach projects. Cannot alter
+                   ownership or remove owners.
+      * `member` — default tier for invitees. Can see the workspace and
+                   attached projects; cannot invite.
+      * `viewer` — read-only observer. v1 stores the role but
+                   workspace-scoped read-only enforcement lands in v2
+                   (flagged as out of scope).
+
+    Uniqueness: one role row per (org_id, user_id) so promotions mutate
+    the existing row rather than stacking.
+    """
+
+    __tablename__ = "organization_members"
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id", "user_id", name="uq_organization_member"
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    organization_id: Mapped[str] = mapped_column(
+        ForeignKey("organizations.id", ondelete="CASCADE"), index=True
+    )
+    user_id: Mapped[str] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    role: Mapped[str] = mapped_column(String(16))
+    invited_by_user_id: Mapped[str | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow
     )

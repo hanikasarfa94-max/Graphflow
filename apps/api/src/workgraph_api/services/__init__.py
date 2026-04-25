@@ -61,6 +61,12 @@ from .meeting_ingest import (
 from .membrane import MembraneService
 from .membrane_ingest import MembraneIngestService, extract_first_url
 from .onboarding import VALID_CHECKPOINTS, OnboardingService
+from .organizations import (
+    MANAGEMENT_ROLES as ORG_MANAGEMENT_ROLES,
+    OrganizationError,
+    OrganizationService,
+    VALID_ROLES as ORG_VALID_ROLES,
+)
 from .personal import PersonalStreamService
 from .planning import NotReadyForPlanning, PlanningService, PlanValidationError
 from .pre_answer import PreAnswerService
@@ -154,6 +160,10 @@ __all__ = [
     "extract_first_url",
     "OnboardingService",
     "VALID_CHECKPOINTS",
+    "OrganizationService",
+    "OrganizationError",
+    "ORG_VALID_ROLES",
+    "ORG_MANAGEMENT_ROLES",
     "PersonalStreamService",
     "PreAnswerService",
     "ProjectService",

@@ -44,6 +44,15 @@ export interface ShellDM {
   unread_count: number;
 }
 
+// Phase T — workspace tier above project. Empty array = user belongs
+// to no workspaces; sidebar hides the section entirely.
+export interface ShellWorkspace {
+  id: string;
+  name: string;
+  slug: string;
+  role: string;
+}
+
 type ShellCtx = {
   inboxCount: number;
   setInboxCount: (n: number | ((prev: number) => number)) => void;
@@ -73,12 +82,14 @@ export function AppShellClient({
   projects,
   dms,
   initialInboxCount,
+  workspaces,
   children,
 }: {
   user: User;
   projects: ShellProject[];
   dms: ShellDM[];
   initialInboxCount: number;
+  workspaces?: ShellWorkspace[];
   children: ReactNode;
 }) {
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -107,6 +118,7 @@ export function AppShellClient({
           dms={dms}
           inboxCount={inboxCount}
           onOpenInbox={openInbox}
+          workspaces={workspaces ?? []}
         />
         <main
           style={{

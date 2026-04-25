@@ -99,7 +99,7 @@ export async function AppShell({
   }
 
   // Shell data — all tolerant of failures.
-  const [projects, streamsResp, inboxCount] = await Promise.all([
+  const [projects, streamsResp, inboxCount, workspaces] = await Promise.all([
     fetchJson<ProjectSummary[]>("/api/projects", cookieHeader, []),
     fetchJson<{ streams: StreamSummary[] }>(
       "/api/streams",
@@ -107,6 +107,14 @@ export async function AppShell({
       { streams: [] },
     ),
     fetchInboxCount(cookieHeader),
+    // Phase T — workspaces this user belongs to. Tolerant: an empty
+    // array (or a 401/network blip) just hides the sidebar section.
+    fetchJson<Array<{
+      id: string;
+      name: string;
+      slug: string;
+      role: string;
+    }>>("/api/organizations", cookieHeader, []),
   ]);
 
   const streams = streamsResp.streams ?? [];
@@ -158,6 +166,12 @@ export async function AppShell({
       projects={shellProjects}
       dms={dmSummaries}
       initialInboxCount={inboxCount}
+      workspaces={workspaces.map((w) => ({
+        id: w.id,
+        name: w.name,
+        slug: w.slug,
+        role: w.role,
+      }))}
     >
       {children}
     </AppShellClient>

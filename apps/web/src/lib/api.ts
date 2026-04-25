@@ -2080,3 +2080,115 @@ export function putGateKeeperMap(
     },
   );
 }
+
+// ---------- Organizations / Workspaces (Phase T) ----------
+//
+// The tier above project. Backend: routers/organizations.py. Slug is
+// the URL key everywhere except create.
+
+export type WorkspaceRole = "owner" | "admin" | "member" | "viewer";
+
+export interface WorkspaceSummary {
+  id: string;
+  name: string;
+  slug: string;
+  owner_user_id: string;
+  description: string | null;
+  created_at: string | null;
+}
+
+export interface WorkspaceWithRole extends WorkspaceSummary {
+  role: WorkspaceRole;
+}
+
+export interface WorkspaceProject {
+  id: string;
+  title: string;
+  updated_at: string | null;
+}
+
+export interface WorkspaceDetail extends WorkspaceWithRole {
+  projects: WorkspaceProject[];
+}
+
+export interface WorkspaceMember {
+  user_id: string;
+  username: string;
+  display_name: string;
+  role: WorkspaceRole;
+  invited_by_user_id: string | null;
+  created_at: string | null;
+}
+
+export function createWorkspace(input: {
+  name: string;
+  slug: string;
+  description?: string;
+}): Promise<WorkspaceSummary> {
+  return api<WorkspaceSummary>(`/api/organizations`, {
+    method: "POST",
+    body: input as unknown as JsonValue,
+  });
+}
+
+export function listMyWorkspaces(
+  baseUrl?: string,
+): Promise<WorkspaceWithRole[]> {
+  return api<WorkspaceWithRole[]>(`/api/organizations`, { baseUrl });
+}
+
+export function getWorkspace(
+  slug: string,
+  baseUrl?: string,
+): Promise<WorkspaceDetail> {
+  return api<WorkspaceDetail>(`/api/organizations/${slug}`, { baseUrl });
+}
+
+export function listWorkspaceMembers(
+  slug: string,
+  baseUrl?: string,
+): Promise<WorkspaceMember[]> {
+  return api<WorkspaceMember[]>(`/api/organizations/${slug}/members`, {
+    baseUrl,
+  });
+}
+
+export function inviteToWorkspace(
+  slug: string,
+  input: { username: string; role?: WorkspaceRole },
+): Promise<{ ok: boolean; user_id: string; username: string; display_name: string; role: WorkspaceRole }> {
+  return api(`/api/organizations/${slug}/invite`, {
+    method: "POST",
+    body: input as unknown as JsonValue,
+  });
+}
+
+export function updateWorkspaceMemberRole(
+  slug: string,
+  userId: string,
+  role: WorkspaceRole,
+): Promise<{ ok: boolean; user_id: string; role: WorkspaceRole }> {
+  return api(`/api/organizations/${slug}/members/${userId}`, {
+    method: "PATCH",
+    body: { role },
+  });
+}
+
+export function removeWorkspaceMember(
+  slug: string,
+  userId: string,
+): Promise<{ ok: boolean; user_id: string }> {
+  return api(`/api/organizations/${slug}/members/${userId}`, {
+    method: "DELETE",
+  });
+}
+
+export function attachProjectToWorkspace(
+  slug: string,
+  projectId: string,
+): Promise<{ ok: boolean; project_id: string; organization_id: string; slug: string }> {
+  return api(
+    `/api/organizations/${slug}/projects/${projectId}/attach`,
+    { method: "POST" },
+  );
+}
