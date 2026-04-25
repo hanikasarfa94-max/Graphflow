@@ -306,7 +306,18 @@
     "decisions": {
       "title": "Recent decisions",
       "empty": "No decisions yet",
-      "fromIm": "from IM",
+      "fromIm": "from IM suggestion",
+      "fromConflict": "from conflict",
+      "fromGated": "gated · {cls}",
+      "fromGatedShort": "from gated proposal",
+      "resolvedBy": "by {name}",
+      "applyOutcomeHint": "Did the decision's mechanical follow-through complete?",
+      "applyOutcome": {
+        "pending": "applying…",
+        "partial": "partial",
+        "failed": "apply failed",
+        "advisory": "advisory"
+      },
       "viewLineage": "View lineage"
     },
     "artifacts": {

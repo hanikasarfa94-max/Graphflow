@@ -294,13 +294,56 @@ class LicenseContextService:
             decision_rows = await DecisionRepository(session).list_for_project(
                 project_id, limit=50
             )
+            # Resolve resolver display names so DecisionsPanel doesn't
+            # have to render UUIDs. Single bulk SELECT keyed by id;
+            # missing rows tolerated (resolver_id is SET NULL on user
+            # delete, so a deleted user just shows as their UUID).
+            from workgraph_persistence.orm import UserRow
+
+            resolver_ids = list(
+                {d.resolver_id for d in decision_rows if d.resolver_id}
+            )
+            resolver_lookup: dict[str, UserRow] = {}
+            if resolver_ids:
+                rows = (
+                    await session.execute(
+                        select(UserRow).where(UserRow.id.in_(resolver_ids))
+                    )
+                ).scalars().all()
+                resolver_lookup = {u.id: u for u in rows}
+
+            def _resolver_display(rid: str | None) -> str | None:
+                if not rid:
+                    return None
+                u = resolver_lookup.get(rid)
+                if u is None:
+                    return None
+                return u.display_name or u.username
+
             decisions = [
                 {
                     "id": d.id,
                     "project_id": d.project_id,
                     "resolver_id": d.resolver_id,
+                    "resolver_display_name": _resolver_display(d.resolver_id),
                     "rationale": d.rationale,
                     "custom_text": d.custom_text,
+                    # Provenance fields the DecisionsPanel needs to
+                    # render "how this decision was made". Stripped
+                    # historically; restored 2026-04-25 after a QA
+                    # report that the dashboard hides these.
+                    "conflict_id": d.conflict_id,
+                    "source_suggestion_id": d.source_suggestion_id,
+                    "gated_via_proposal_id": d.gated_via_proposal_id,
+                    "decision_class": d.decision_class,
+                    "apply_outcome": d.apply_outcome,
+                    "option_index": d.option_index,
+                    "created_at": (
+                        d.created_at.isoformat() if d.created_at else None
+                    ),
+                    "applied_at": (
+                        d.applied_at.isoformat() if d.applied_at else None
+                    ),
                 }
                 for d in decision_rows
             ]

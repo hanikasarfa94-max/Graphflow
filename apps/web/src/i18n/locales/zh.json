@@ -306,7 +306,18 @@
     "decisions": {
       "title": "最近的决策",
       "empty": "暂无决策",
-      "fromIm": "来自会话",
+      "fromIm": "来自会话建议",
+      "fromConflict": "来自冲突解决",
+      "fromGated": "审批通过 · {cls}",
+      "fromGatedShort": "来自审批",
+      "resolvedBy": "由 {name} 决定",
+      "applyOutcomeHint": "决策对应的实际改动是否生效?",
+      "applyOutcome": {
+        "pending": "执行中…",
+        "partial": "部分生效",
+        "failed": "执行失败",
+        "advisory": "仅作记录"
+      },
       "viewLineage": "查看来龙去脉"
     },
     "artifacts": {

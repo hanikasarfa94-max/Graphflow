@@ -88,12 +88,51 @@ export async function DecisionsPanel({
                     color: "var(--wg-ink-soft)",
                   }}
                 >
+                  {d.resolver_display_name ? (
+                    <span>
+                      {t("status.decisions.resolvedBy", {
+                        name: d.resolver_display_name,
+                      })}
+                    </span>
+                  ) : null}
                   <span>
                     {d.created_at
                       ? new Date(d.created_at).toLocaleString()
                       : ""}
                   </span>
-                  {d.source_suggestion_id ? (
+                  {/* Provenance — show one badge for whichever source
+                      origin produced this decision. Order: gated >
+                      conflict > IM, since gated proposals subsume the
+                      others when present. */}
+                  {d.gated_via_proposal_id ? (
+                    <span
+                      style={{
+                        padding: "1px 6px",
+                        borderRadius: 10,
+                        background: "var(--wg-accent-soft)",
+                        border: "1px solid var(--wg-accent)",
+                        color: "var(--wg-accent)",
+                      }}
+                    >
+                      {d.decision_class
+                        ? t("status.decisions.fromGated", {
+                            cls: d.decision_class,
+                          })
+                        : t("status.decisions.fromGatedShort")}
+                    </span>
+                  ) : d.conflict_id ? (
+                    <span
+                      style={{
+                        padding: "1px 6px",
+                        borderRadius: 10,
+                        background: "var(--wg-amber-soft)",
+                        border: "1px solid var(--wg-amber, #c58b00)",
+                        color: "var(--wg-amber, #c58b00)",
+                      }}
+                    >
+                      {t("status.decisions.fromConflict")}
+                    </span>
+                  ) : d.source_suggestion_id ? (
                     <span
                       style={{
                         padding: "1px 6px",
@@ -104,6 +143,29 @@ export async function DecisionsPanel({
                       }}
                     >
                       {t("status.decisions.fromIm")}
+                    </span>
+                  ) : null}
+                  {d.apply_outcome && d.apply_outcome !== "ok" ? (
+                    <span
+                      title={t("status.decisions.applyOutcomeHint")}
+                      style={{
+                        padding: "1px 6px",
+                        borderRadius: 10,
+                        background:
+                          d.apply_outcome === "failed"
+                            ? "var(--wg-accent-soft)"
+                            : "var(--wg-surface-raised)",
+                        border: "1px solid var(--wg-line)",
+                        color:
+                          d.apply_outcome === "failed"
+                            ? "var(--wg-accent)"
+                            : "var(--wg-ink-soft)",
+                      }}
+                    >
+                      {t(
+                        `status.decisions.applyOutcome.${d.apply_outcome}` as never,
+                        { fallback: d.apply_outcome } as never,
+                      )}
                     </span>
                   ) : null}
                   <Link

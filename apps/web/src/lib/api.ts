@@ -689,13 +689,22 @@ export interface Decision {
   conflict_id: string | null;
   project_id: string;
   resolver_id: string | null;
+  // Resolved name for the resolver_id (display_name || username), so
+  // the dashboard doesn't have to render UUIDs. Null when the user
+  // was deleted (resolver_id set to null on user delete).
+  resolver_display_name?: string | null;
   option_index: number | null;
   custom_text: string | null;
   rationale: string;
-  apply_actions: Record<string, unknown>[];
-  apply_outcome: "pending" | "ok" | "partial" | "failed" | "advisory";
-  apply_detail: Record<string, unknown>;
+  apply_actions?: Record<string, unknown>[];
+  apply_outcome?: "pending" | "ok" | "partial" | "failed" | "advisory";
+  apply_detail?: Record<string, unknown>;
   source_suggestion_id: string | null;
+  // Scene 2 routing provenance — set when the decision came from a
+  // gated proposal (gate-keeper sign-off → crystallize). Null for
+  // IM-suggestion-originated or conflict-originated decisions.
+  gated_via_proposal_id?: string | null;
+  decision_class?: string | null;
   created_at: string | null;
   applied_at: string | null;
 }

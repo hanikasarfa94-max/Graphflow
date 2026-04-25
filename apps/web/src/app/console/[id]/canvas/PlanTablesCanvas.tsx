@@ -245,7 +245,7 @@ function DecisionsTable({ state }: { state: ProjectState }) {
       {d.created_at ? new Date(d.created_at).toLocaleString() : "—"}
     </Mono>,
     <span key="r">{d.rationale || d.custom_text || "—"}</span>,
-    <OutcomeChip key="o" outcome={d.apply_outcome} />,
+    <OutcomeChip key="o" outcome={d.apply_outcome ?? "pending"} />,
   ]);
   return (
     <DataTable headers={headers} rows={rows} empty="No decisions recorded." />
