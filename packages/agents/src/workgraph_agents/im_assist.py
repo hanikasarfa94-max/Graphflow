@@ -23,7 +23,20 @@ def _load_prompt(version: str = "v1") -> str:
 
 
 Outcome = Literal["ok", "retry", "manual_review"]
-SuggestionKind = Literal["none", "tag", "decision", "blocker", "wiki_entry"]
+SuggestionKind = Literal[
+    "none",
+    "tag",
+    "decision",
+    "blocker",
+    "wiki_entry",
+    # Stage 4 of docs/membrane-reorg.md. The membrane review pipeline
+    # creates these directly (NOT the IM-assist agent — the LLM never
+    # emits this kind). When MembraneService.review() returns
+    # request_review for a candidate, an IMSuggestionRow with this
+    # kind is inserted; accept = approve the staged write
+    # (KbItemRow status='draft' → 'published'); dismiss = archive.
+    "membrane_review",
+]
 ProposalAction = Literal[
     "drop_deliverable",
     "update_constraint",
@@ -35,6 +48,12 @@ ProposalAction = Literal[
     # KB entry; an owner approves through the existing IM suggestion
     # accept/dismiss flow before it joins canonical group context.
     "save_to_wiki",
+    # Stage 4 — the membrane reviews a candidate and wants an owner to
+    # approve before it joins the cell. The proposal.detail carries
+    # `{"candidate_kind": ..., "kb_item_id": ..., "diff_summary": ...,
+    #   "conflict_with": [...]}` so the accept handler can flip the
+    # staged draft to published.
+    "approve_membrane_candidate",
     "other",
 ]
 

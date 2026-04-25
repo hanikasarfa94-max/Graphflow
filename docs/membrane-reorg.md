@@ -192,18 +192,31 @@ slides in alongside `ingest()` as the inward-facing twin.
    Not yet covered: semantic contradiction (needs LLM), conflict
    with crystallized DecisionRow, conflict with active CommitmentRow,
    stale-on-arrival.
-4. **Stage 4 — `request_review` action**. When review returns
-   `request_review`, create an `IMSuggestionRow(kind='membrane_review')`
-   instead of writing. Owner accept = approval = real write. Today's
-   `wiki_entry` flow becomes a degenerate case of this. KbItemService
-   already downgrades to `status='draft'` when review returns
-   `request_review` — stage 4 makes that downgrade route through the
-   suggestion inbox.
-5. **Stage 5 — `request_clarification`**. New `kind='membrane-clarify'`
-   stream message. Proposer sees a Q from the membrane, replies, the
-   reply re-enters the same `review()` with the clarification
-   appended to the candidate. The Q&A back-channel lives in the
+4. **Stage 4 — `request_review` action**. ✅ shipped 2026-04-25.
+   When `review()` returns `request_review`, KbItemService:
+   (a) creates the row at `status='draft'`, then
+   (b) posts a `kind='membrane-review'` system message to the team
+   stream describing the candidate + diff_summary, then
+   (c) inserts an `IMSuggestionRow(kind='membrane_review')` linked
+   to that message with a proposal of `action='approve_membrane_candidate',
+   detail={kb_item_id, candidate_kind, diff_summary, conflict_with}`.
+   IMService.\_apply\_proposal handles the new action by flipping the
+   linked KbItemRow `status='draft' → 'published'`. Owner accepts the
+   suggestion via the existing IM accept/dismiss UI — same surface
+   that handles wiki_entry / decision / blocker. Test:
+   `test_membrane_review_creates_inbox_suggestion_and_accept_publishes`.
+5. **Stage 5 — `request_clarification`**. Spec only for now (no
+   candidate kind triggers it yet — kb_item_group goes to
+   request_review, not clarify). Shape: new
+   `kind='membrane-clarify'` system message in the proposer's
+   personal stream containing the membrane's question. Proposer
+   replies in the same stream; reply is intercepted, the
+   clarification appended to the candidate, the candidate is
+   re-submitted to `review()`. The Q&A back-channel lives in the
    proposer's personal stream — never in DM, never in the cell.
+   Will be implemented when a candidate kind in stage 6 actually
+   needs clarification (e.g. semantic-contradiction LLM review of
+   wiki entries that needs the proposer to confirm intent).
 6. **Stage 6 — collapse the conflict agent**. Once stage 3 + 4 are
    stable, `ConflictService.kick_recheck` becomes a no-op (post-write
    recheck only runs as paranoia mode). `ConflictExplanationAgent`

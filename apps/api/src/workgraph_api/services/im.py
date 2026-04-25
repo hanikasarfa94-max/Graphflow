@@ -834,6 +834,33 @@ class IMService:
                 "action": "save_to_wiki",
             }
 
+        if (
+            row.kind == "membrane_review"
+            or action == "approve_membrane_candidate"
+        ):
+            # Stage 4 of docs/membrane-reorg.md. The membrane staged a
+            # group-scope KB write as draft + queued this suggestion;
+            # the owner just clicked accept. Flip the linked draft to
+            # published so it joins canonical group context.
+            kb_item_id = (
+                detail.get("kb_item_id") if isinstance(detail, dict) else None
+            )
+            if not kb_item_id:
+                return {"ok": False, "error": "missing_kb_item_id"}
+            from workgraph_persistence import KbItemRepository
+
+            updated = await KbItemRepository(session).update(
+                item_id=kb_item_id, status="published"
+            )
+            if updated is None:
+                return {"ok": False, "error": "kb_item_not_found"}
+            return {
+                "ok": True,
+                "graph_touched": True,
+                "kb_item_id": kb_item_id,
+                "action": "approve_membrane_candidate",
+            }
+
         # tag or `none` kinds have nothing to apply.
         return {"ok": True, "graph_touched": False, "action": action or "noop"}
 

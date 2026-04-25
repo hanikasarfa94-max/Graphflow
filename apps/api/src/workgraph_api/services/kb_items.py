@@ -42,9 +42,13 @@ from typing import Any
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from workgraph_persistence import (
+    EDGE_AGENT_SYSTEM_USER_ID,
+    IMSuggestionRepository,
     KbItemRepository,
     KbItemRow,
+    MessageRepository,
     ProjectMemberRepository,
+    StreamRepository,
     session_scope,
 )
 
@@ -148,6 +152,7 @@ class KbItemService:
         # for now, but the call site is in place for stage 3+ to add
         # conflict detection / review queueing without touching every
         # caller).
+        review = None
         if scope == "group" and self._membrane_service is not None:
             from .membrane import MembraneCandidate
 
@@ -168,10 +173,8 @@ class KbItemService:
                     status_=409,
                 )
             if review.action in ("request_review", "request_clarification"):
-                # Stage 3+: these will route to a suggestion / Q&A
-                # back-channel. For now downgrade to draft so nothing
-                # surfaces in canonical group context until a future
-                # version of this code wires the review queue.
+                # Downgrade to draft. The full inbox enqueue happens
+                # below after the row is persisted (we need its id).
                 status = "draft"
 
         async with session_scope(self._sessionmaker) as session:
@@ -189,7 +192,63 @@ class KbItemService:
                 source=source,
                 status=status,
             )
-            return _serialize(row)
+            item_payload = _serialize(row)
+            kb_item_id = row.id
+
+            # Stage 4: when membrane staged this as a draft, also
+            # create an IMSuggestion(kind='membrane_review') in the
+            # team-room inbox so an owner can one-click approve. The
+            # suggestion needs a message to anchor; post a system
+            # message authored by the edge agent that names the
+            # candidate + the reason for review.
+            if (
+                review is not None
+                and review.action == "request_review"
+                and scope == "group"
+            ):
+                team_stream = await StreamRepository(session).get_for_project(
+                    project_id
+                )
+                if team_stream is not None:
+                    body = (
+                        f"📥 Membrane staged a group KB entry for review: "
+                        f"'{title}'. Reason: {review.reason}."
+                    )
+                    if review.diff_summary:
+                        body = f"{body}\n{review.diff_summary}"
+                    msg = await MessageRepository(session).append(
+                        project_id=project_id,
+                        author_id=EDGE_AGENT_SYSTEM_USER_ID,
+                        body=body,
+                        stream_id=team_stream.id,
+                        kind="membrane-review",
+                        linked_id=kb_item_id,
+                    )
+                    await IMSuggestionRepository(session).append(
+                        project_id=project_id,
+                        message_id=msg.id,
+                        kind="membrane_review",
+                        confidence=1.0,
+                        targets=list(review.conflict_with),
+                        proposal={
+                            "action": "approve_membrane_candidate",
+                            "summary": (
+                                review.diff_summary
+                                or f"Approve '{title}' for the group wiki"
+                            ),
+                            "detail": {
+                                "candidate_kind": "kb_item_group",
+                                "kb_item_id": kb_item_id,
+                                "diff_summary": review.diff_summary,
+                                "conflict_with": list(review.conflict_with),
+                            },
+                        },
+                        reasoning=review.reason or "membrane request_review",
+                        prompt_version=None,
+                        outcome="ok",
+                        attempts=1,
+                    )
+            return item_payload
 
     async def list_visible(
         self, *, project_id: str, viewer_user_id: str, limit: int = 200

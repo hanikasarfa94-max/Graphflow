@@ -283,6 +283,103 @@ async def test_membrane_downgrades_duplicate_group_title_to_draft(api_env):
     assert r.json()["status"] == "published"
 
 
+@pytest.mark.asyncio
+async def test_membrane_review_creates_inbox_suggestion_and_accept_publishes(
+    api_env,
+):
+    """Stage 4 of docs/membrane-reorg.md: when membrane stages a draft,
+    also create an IMSuggestion(kind='membrane_review') in the team
+    inbox. Owner accept = the linked draft flips to status='published'.
+    """
+    from sqlalchemy import select
+
+    from workgraph_persistence import (
+        IMSuggestionRow,
+        KbItemRow,
+        MessageRow,
+        StreamRow,
+        session_scope,
+    )
+
+    client, maker, *_ = api_env
+    owner_id = await _register_and_login(client, "kb_inbox_owner")
+    member_id = await _register_and_login(client, "kb_inbox_member")
+    pid = await _mk_project_with_members(maker, owner_id=owner_id, member_id=member_id)
+
+    # Membrane stage-4 enqueue posts a system message to the team-room
+    # stream; the production lifespan backfills these on boot, but the
+    # bare-bones test fixture above doesn't, so create one explicitly.
+    from workgraph_persistence import StreamRepository
+
+    async with session_scope(maker) as session:
+        await StreamRepository(session).create(type="project", project_id=pid)
+
+    await _login(client, "kb_inbox_owner")
+    # First write: clean.
+    r = await client.post(
+        f"/api/projects/{pid}/kb-items",
+        json={
+            "title": "Coding Conventions",
+            "content_md": "tabs not spaces.",
+            "scope": "group",
+        },
+    )
+    assert r.status_code == 200, r.text
+
+    # Second write: triggers membrane request_review → draft + inbox.
+    r = await client.post(
+        f"/api/projects/{pid}/kb-items",
+        json={
+            "title": "coding conventions",
+            "content_md": "actually spaces.",
+            "scope": "group",
+        },
+    )
+    assert r.status_code == 200, r.text
+    draft_id = r.json()["id"]
+    assert r.json()["status"] == "draft"
+
+    # IMSuggestion(kind='membrane_review') exists, linked to a
+    # team-room message with kind='membrane-review' on the kb_item id.
+    async with session_scope(maker) as session:
+        team_stream = (
+            await session.execute(
+                select(StreamRow).where(
+                    StreamRow.project_id == pid, StreamRow.type == "project"
+                )
+            )
+        ).scalar_one()
+        sugg = (
+            await session.execute(
+                select(IMSuggestionRow).where(
+                    IMSuggestionRow.project_id == pid,
+                    IMSuggestionRow.kind == "membrane_review",
+                )
+            )
+        ).scalar_one()
+        msg = (
+            await session.execute(
+                select(MessageRow).where(MessageRow.id == sugg.message_id)
+            )
+        ).scalar_one()
+        assert msg.stream_id == team_stream.id
+        assert msg.kind == "membrane-review"
+        assert msg.linked_id == draft_id
+        assert sugg.proposal["action"] == "approve_membrane_candidate"
+        assert sugg.proposal["detail"]["kb_item_id"] == draft_id
+
+    # Owner accepts → linked draft flips to published.
+    r = await client.post(f"/api/im_suggestions/{sugg.id}/accept")
+    assert r.status_code == 200, r.text
+    async with session_scope(maker) as session:
+        row = (
+            await session.execute(
+                select(KbItemRow).where(KbItemRow.id == draft_id)
+            )
+        ).scalar_one()
+        assert row.status == "published"
+
+
 # ---- file upload --------------------------------------------------------
 
 
