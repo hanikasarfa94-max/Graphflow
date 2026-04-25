@@ -1227,7 +1227,12 @@
     "promoteConfirm": "Make this note visible to the whole team? It will affect everyone's pretext.",
     "demote": "Demote → personal",
     "delete": "Delete",
-    "deleteConfirm": "Delete this note? This cannot be undone."
+    "deleteConfirm": "Delete this note? This cannot be undone.",
+    "uploadFile": "Upload file",
+    "uploading": "Uploading…",
+    "uploadTooLarge": "File is too large (5 MB max).",
+    "uploadEmpty": "File is empty.",
+    "uploadFailed": "Upload failed ({code})."
   },
   "workspace": {
     "eyebrow": "Workspace",

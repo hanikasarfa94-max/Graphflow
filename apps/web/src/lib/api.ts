@@ -2270,6 +2270,13 @@ export type KbNoteScope = "personal" | "group";
 export type KbNoteStatus = "draft" | "published" | "archived";
 export type KbNoteSource = "manual" | "upload" | "llm";
 
+export interface KbNoteAttachment {
+  filename: string;
+  mime: string;
+  bytes: number;
+  download_url: string;
+}
+
 export interface KbNote {
   id: string;
   project_id: string;
@@ -2280,6 +2287,7 @@ export interface KbNote {
   content_md: string;
   status: KbNoteStatus;
   source: KbNoteSource;
+  attachment: KbNoteAttachment | null;
   created_at: string | null;
   updated_at: string | null;
 }
@@ -2342,4 +2350,37 @@ export function promoteKbNote(itemId: string): Promise<KbNote> {
 
 export function demoteKbNote(itemId: string): Promise<KbNote> {
   return api(`/api/kb-items/${itemId}/demote`, { method: "POST" });
+}
+
+// Phase B — file upload. Multipart, so we don't go through the
+// JSON `api` helper. Browser sets Content-Type with boundary.
+export async function uploadKbNote(
+  projectId: string,
+  input: { file: File; title?: string; scope?: KbNoteScope; folderId?: string },
+): Promise<KbNote> {
+  const fd = new FormData();
+  fd.append("file", input.file);
+  if (input.title) fd.append("title", input.title);
+  if (input.scope) fd.append("scope", input.scope);
+  if (input.folderId) fd.append("folder_id", input.folderId);
+  const res = await fetch(
+    `/api/projects/${projectId}/kb-items/upload`,
+    { method: "POST", credentials: "include", body: fd, cache: "no-store" },
+  );
+  const text = await res.text();
+  let body: unknown = null;
+  try {
+    body = text ? JSON.parse(text) : null;
+  } catch {
+    body = text;
+  }
+  if (!res.ok) {
+    throw new ApiError(res.status, body, `upload ${res.status}`);
+  }
+  return body as KbNote;
+}
+
+// Download URL for an attached file. Component can use as <a href>.
+export function kbAttachmentUrl(itemId: string): string {
+  return `/api/kb-items/${itemId}/attachment`;
 }

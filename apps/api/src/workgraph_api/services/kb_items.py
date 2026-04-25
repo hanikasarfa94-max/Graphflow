@@ -1,4 +1,4 @@
-"""KbItemService — Phase V manual-write KB primitive.
+"""KbItemService — Phase V manual-write KB primitive (+ file upload).
 
 Solves the QA finding "no way to write a doc, only paste URLs."
 KbItemRow is a first-class user-authored note, distinct from the
@@ -19,10 +19,24 @@ Permission model (v0):
     "this will affect everyone's pretext" before the call. Phase V.2
     inserts the membrane review step.
   * Demote (group → personal): project owner only.
+
+Phase B file upload:
+  * Multipart upload → KbItemRow with source='upload'. Bytes saved to
+    `<KB_UPLOADS_ROOT>/<item_id>/<filename>`. Text-ish files (≤32KB
+    plain text) get inlined into content_md too so the LLM can read
+    them directly; binary files leave content_md as a stub pointing
+    to the download endpoint.
+  * Cap at 5MB per upload (enforced server-side).
+  * Download endpoint streams the file with the same scope/auth gate
+    as item read.
 """
 from __future__ import annotations
 
 import logging
+import mimetypes
+import os
+import shutil
+from pathlib import Path
 from typing import Any
 
 from sqlalchemy.ext.asyncio import async_sessionmaker
@@ -33,6 +47,29 @@ from workgraph_persistence import (
     ProjectMemberRepository,
     session_scope,
 )
+
+
+# Disk layout for attachments. Default lands inside the same /data
+# volume the SQLite DB lives on, so the nightly backup script picks
+# them up automatically. Override via env for non-Docker dev runs.
+KB_UPLOADS_ROOT = Path(
+    os.environ.get("WORKGRAPH_KB_UPLOADS_ROOT", "/data/kb-uploads")
+)
+
+# 5 MB hard cap on a single upload. Larger files should land in a
+# real blob store (v3 — S3 / OSS) — this is a v1 sanity bound.
+MAX_UPLOAD_BYTES = 5 * 1024 * 1024
+
+# Mime types we treat as "inline-able" — read into content_md so the
+# LLM can use them directly. Anything else stays a binary attachment
+# with a stub content_md.
+_INLINE_MIME_PREFIXES = (
+    "text/",
+    "application/json",
+    "application/yaml",
+    "application/x-yaml",
+)
+_INLINE_MAX_BYTES = 32 * 1024  # don't inline beyond 32KB even if text
 
 _log = logging.getLogger("workgraph.api.kb_items")
 
@@ -169,8 +206,23 @@ class KbItemService:
             if row is None:
                 raise KbItemError("not_found", status_=404)
             await self._assert_can_edit(session, row, actor_user_id)
+            had_attachment = bool(row.attachment_filename)
             await KbItemRepository(session).delete(item_id)
-            return {"ok": True, "deleted_id": item_id}
+        # Clean up the attachment dir on disk after the row is gone.
+        # Best-effort — if we crash here the orphaned file is harmless
+        # (the FK cascade prevents the row from being recreated with
+        # the same id), and a future cleanup sweep can reap it.
+        if had_attachment:
+            attachment_dir = KB_UPLOADS_ROOT / item_id
+            if attachment_dir.exists():
+                try:
+                    shutil.rmtree(attachment_dir)
+                except OSError:
+                    _log.warning(
+                        "kb delete: orphan attachment dir",
+                        extra={"item_id": item_id},
+                    )
+        return {"ok": True, "deleted_id": item_id}
 
     async def promote_to_group(
         self, *, item_id: str, actor_user_id: str
@@ -193,6 +245,146 @@ class KbItemService:
                 item_id=item_id, scope="group"
             )
             return _serialize(updated)
+
+    async def upload(
+        self,
+        *,
+        project_id: str,
+        owner_user_id: str,
+        filename: str,
+        data: bytes,
+        title: str | None = None,
+        scope: str = "personal",
+        folder_id: str | None = None,
+        client_mime: str | None = None,
+    ) -> dict[str, Any]:
+        """Multipart upload entry. Creates a KbItemRow with
+        source='upload', persists bytes to disk, optionally inlines
+        text content into content_md.
+
+        Caller is responsible for already enforcing MAX_UPLOAD_BYTES
+        on the multipart parser side; we double-check here anyway.
+
+        `client_mime` is what the browser claimed in the multipart
+        Content-Type header. We trust it if non-empty + non-default
+        (the spec's `application/octet-stream` fallback) — it's better
+        than `mimetypes.guess_type` for cases stdlib doesn't know
+        (.md, .yaml, etc.).
+        """
+        if not filename:
+            raise KbItemError("invalid_filename", "filename required")
+        size = len(data)
+        if size == 0:
+            raise KbItemError("empty_file")
+        if size > MAX_UPLOAD_BYTES:
+            raise KbItemError("file_too_large")
+        if scope not in VALID_SCOPES:
+            raise KbItemError("invalid_scope")
+
+        safe_name = _sanitize_filename(filename)
+        # Prefer client-supplied MIME (browser usually has it right);
+        # fall back to extension sniffing; final fallback to octet-stream.
+        if client_mime and client_mime != "application/octet-stream":
+            mime = client_mime
+        else:
+            mime, _ = mimetypes.guess_type(safe_name)
+            mime = mime or "application/octet-stream"
+        # Best-effort .md → text/markdown for the stdlib gap that bit
+        # us in tests on certain Python builds.
+        if mime == "application/octet-stream" and safe_name.lower().endswith(".md"):
+            mime = "text/markdown"
+
+        # Inline text-ish content into content_md so the LLM can read
+        # it. Binary files get a stub pointing at the download endpoint.
+        is_text = mime.startswith(_INLINE_MIME_PREFIXES)
+        if is_text and size <= _INLINE_MAX_BYTES:
+            try:
+                inlined = data.decode("utf-8")
+            except UnicodeDecodeError:
+                # Mime claimed text but the bytes aren't UTF-8. Fall
+                # back to attachment-only.
+                inlined = None
+        else:
+            inlined = None
+
+        if inlined is not None:
+            content_md = inlined
+        else:
+            human_size = _format_bytes(size)
+            content_md = (
+                f"📎 **{safe_name}** ({human_size}, {mime})\n\n"
+                f"_Binary attachment — fetch via the download link._"
+            )
+
+        display_title = (title or safe_name).strip()[:500] or safe_name
+
+        async with session_scope(self._sessionmaker) as session:
+            if not await ProjectMemberRepository(session).is_member(
+                project_id, owner_user_id
+            ):
+                raise KbItemError("not_a_member", status_=403)
+            row = await KbItemRepository(session).create(
+                project_id=project_id,
+                owner_user_id=owner_user_id,
+                title=display_title,
+                content_md=content_md,
+                scope=scope,
+                folder_id=folder_id,
+                source="upload",
+                status="published",
+            )
+            # Persist attachment metadata + bytes only after the row
+            # exists, so a write failure leaves no orphan KbItemRow with
+            # missing bytes.
+            row.attachment_filename = safe_name
+            row.attachment_mime = mime
+            row.attachment_bytes = size
+            await session.flush()
+            item_id = row.id
+            payload = _serialize(row)
+
+        # Bytes-to-disk happens AFTER the DB commit so a transient FS
+        # failure doesn't leave a dangling row claiming to have an
+        # attachment. If the disk write fails post-commit we delete
+        # the row so future reads don't 404 on the file.
+        try:
+            target = _attachment_path(item_id, safe_name)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(data)
+        except OSError:
+            _log.exception(
+                "kb upload disk write failed; rolling back row",
+                extra={"item_id": item_id, "filename": safe_name},
+            )
+            async with session_scope(self._sessionmaker) as session:
+                await KbItemRepository(session).delete(item_id)
+            raise KbItemError("storage_failed")
+
+        return payload
+
+    async def get_attachment(
+        self, *, item_id: str, viewer_user_id: str
+    ) -> tuple[Path, str, str, int]:
+        """Returns (path-on-disk, filename, mime, bytes). Caller streams
+        the file. Same scope/auth gate as item read."""
+        async with session_scope(self._sessionmaker) as session:
+            row = await KbItemRepository(session).get(item_id)
+            if row is None:
+                raise KbItemError("not_found", status_=404)
+            await self._assert_can_read(session, row, viewer_user_id)
+            if not row.attachment_filename:
+                raise KbItemError("no_attachment", status_=404)
+            path = _attachment_path(row.id, row.attachment_filename)
+        if not path.exists():
+            # DB says yes, disk says no — return a clear error rather
+            # than a generic 404 so we can spot and fix.
+            raise KbItemError("attachment_missing", status_=410)
+        return (
+            path,
+            row.attachment_filename,
+            row.attachment_mime or "application/octet-stream",
+            row.attachment_bytes or path.stat().st_size,
+        )
 
     async def demote_to_personal(
         self, *, item_id: str, actor_user_id: str
@@ -254,9 +446,56 @@ def _serialize(row: KbItemRow) -> dict[str, Any]:
         "content_md": row.content_md,
         "status": row.status,
         "source": row.source,
+        "attachment": (
+            {
+                "filename": row.attachment_filename,
+                "mime": row.attachment_mime,
+                "bytes": row.attachment_bytes,
+                "download_url": f"/api/kb-items/{row.id}/attachment",
+            }
+            if row.attachment_filename
+            else None
+        ),
         "created_at": row.created_at.isoformat() if row.created_at else None,
         "updated_at": row.updated_at.isoformat() if row.updated_at else None,
     }
+
+
+def _attachment_path(item_id: str, filename: str) -> Path:
+    """Resolved path on the volume. Filename is already sanitized at
+    upload time; we re-sanitize here as belt-and-braces against a
+    poisoned DB row."""
+    return KB_UPLOADS_ROOT / item_id / _sanitize_filename(filename)
+
+
+def _sanitize_filename(name: str) -> str:
+    """Strip path separators + null bytes; collapse double-dot to
+    single. Keeps unicode, dashes, dots, underscores. Caps at 200
+    chars (DB column is 500 but the file system has a per-component
+    limit much lower on some setups)."""
+    name = name.replace("\x00", "").strip()
+    # Drop directory prefixes — only the last component is the filename.
+    name = name.replace("\\", "/").rsplit("/", 1)[-1]
+    # Collapse `..` so an attacker can't escape the item-id dir.
+    while ".." in name:
+        name = name.replace("..", ".")
+    if len(name) > 200:
+        # Preserve the suffix so MIME stays sniffable.
+        stem, dot, ext = name.rpartition(".")
+        if dot and len(ext) <= 16:
+            name = stem[: 200 - len(ext) - 1] + "." + ext
+        else:
+            name = name[:200]
+    return name or "attachment"
+
+
+def _format_bytes(n: int) -> str:
+    """Tiny human-readable formatter used in the inline-stub copy."""
+    if n < 1024:
+        return f"{n} B"
+    if n < 1024 * 1024:
+        return f"{n / 1024:.1f} KB"
+    return f"{n / (1024 * 1024):.1f} MB"
 
 
 __all__ = [

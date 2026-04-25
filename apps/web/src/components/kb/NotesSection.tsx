@@ -19,6 +19,7 @@ import {
   listKbNotes,
   promoteKbNote,
   updateKbNote,
+  uploadKbNote,
   type KbNote,
 } from "@/lib/api";
 
@@ -36,6 +37,41 @@ export function NotesSection({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [composerOpen, setComposerOpen] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+
+  // Hidden <input type=file> wired through a ref so the visible
+  // "Upload file" button looks consistent with the rest of the chrome.
+  const fileInputRef = useState<HTMLInputElement | null>(null);
+  const setFileInput = (el: HTMLInputElement | null) => {
+    fileInputRef[1](el);
+  };
+
+  async function handleFile(file: File) {
+    setUploading(true);
+    setUploadError(null);
+    try {
+      await uploadKbNote(projectId, { file });
+      void refresh();
+    } catch (e) {
+      if (e instanceof ApiError) {
+        const body = e.body as { message?: unknown } | undefined;
+        const code =
+          body && typeof body.message === "string" ? body.message : "";
+        if (code === "file_too_large" || e.status === 413) {
+          setUploadError(t("uploadTooLarge"));
+        } else if (code === "empty_file") {
+          setUploadError(t("uploadEmpty"));
+        } else {
+          setUploadError(t("uploadFailed", { code: code || `${e.status}` }));
+        }
+      } else {
+        setUploadError(t("uploadFailed", { code: "network" }));
+      }
+    } finally {
+      setUploading(false);
+    }
+  }
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -94,26 +130,76 @@ export function NotesSection({
         >
           {t("title")}
         </h3>
-        <button
-          type="button"
-          onClick={() => setComposerOpen((v) => !v)}
-          data-testid="kb-notes-new-btn"
+        <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+          <input
+            ref={setFileInput}
+            type="file"
+            style={{ display: "none" }}
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) {
+                void handleFile(f);
+                e.target.value = "";
+              }
+            }}
+          />
+          <button
+            type="button"
+            onClick={() => fileInputRef[0]?.click()}
+            disabled={uploading}
+            data-testid="kb-notes-upload-btn"
+            style={{
+              padding: "4px 12px",
+              background: "transparent",
+              color: "var(--wg-ink)",
+              border: "1px solid var(--wg-line)",
+              borderRadius: "var(--wg-radius-sm, 4px)",
+              fontSize: 12,
+              fontWeight: 600,
+              cursor: uploading ? "progress" : "pointer",
+              opacity: uploading ? 0.6 : 1,
+            }}
+          >
+            {uploading ? t("uploading") : t("uploadFile")}
+          </button>
+          <button
+            type="button"
+            onClick={() => setComposerOpen((v) => !v)}
+            data-testid="kb-notes-new-btn"
+            style={{
+              padding: "4px 12px",
+              background: composerOpen
+                ? "var(--wg-line)"
+                : "var(--wg-accent)",
+              color: composerOpen ? "var(--wg-ink)" : "#fff",
+              border: "none",
+              borderRadius: "var(--wg-radius-sm, 4px)",
+              fontSize: 12,
+              fontWeight: 600,
+              cursor: "pointer",
+            }}
+          >
+            {composerOpen ? t("cancelNew") : t("newNote")}
+          </button>
+        </div>
+      </header>
+
+      {uploadError ? (
+        <div
+          role="alert"
           style={{
-            padding: "4px 12px",
-            background: composerOpen
-              ? "var(--wg-line)"
-              : "var(--wg-accent)",
-            color: composerOpen ? "var(--wg-ink)" : "#fff",
-            border: "none",
+            padding: "6px 10px",
+            marginBottom: 8,
+            background: "var(--wg-accent-soft)",
+            border: "1px solid var(--wg-accent)",
             borderRadius: "var(--wg-radius-sm, 4px)",
             fontSize: 12,
-            fontWeight: 600,
-            cursor: "pointer",
+            color: "var(--wg-accent)",
           }}
         >
-          {composerOpen ? t("cancelNew") : t("newNote")}
-        </button>
-      </header>
+          {uploadError}
+        </div>
+      ) : null}
 
       {composerOpen ? (
         <NoteComposer
@@ -524,6 +610,40 @@ function NoteRow({
           </button>
         ) : null}
       </div>
+      {item.attachment ? (
+        <div
+          style={{
+            marginTop: 6,
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
+            fontSize: 11,
+            fontFamily: "var(--wg-font-mono)",
+          }}
+        >
+          <a
+            href={item.attachment.download_url}
+            download={item.attachment.filename}
+            target="_blank"
+            rel="noopener noreferrer"
+            data-testid="kb-note-download"
+            style={{
+              padding: "3px 8px",
+              background: "var(--wg-surface-sunk)",
+              color: "var(--wg-accent)",
+              border: "1px solid var(--wg-accent-ring, var(--wg-accent))",
+              borderRadius: 999,
+              textDecoration: "none",
+              fontWeight: 600,
+            }}
+          >
+            ⬇ {item.attachment.filename}
+          </a>
+          <span style={{ color: "var(--wg-ink-faint)" }}>
+            {formatBytes(item.attachment.bytes)} · {item.attachment.mime}
+          </span>
+        </div>
+      ) : null}
       {expanded && item.content_md ? (
         <pre
           style={{
@@ -545,6 +665,12 @@ function NoteRow({
       ) : null}
     </li>
   );
+}
+
+function formatBytes(n: number): string {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 const inputStyle: React.CSSProperties = {

@@ -1908,6 +1908,21 @@ class KbItemRow(Base):
     # 'llm' (created by the user's edge sub-agent on their request).
     # Lets the wiki UI surface a small "Source: …" chip.
     source: Mapped[str] = mapped_column(String(16), default="manual")
+    # Phase B (migration 0020) — file attachment metadata. All four
+    # are populated together when source='upload'; null for manual /
+    # llm-authored items. The actual bytes live on disk at
+    # `<KB_UPLOADS_ROOT>/<item_id>/<attachment_filename>` — we don't
+    # store the absolute path so the root can move (volume mount,
+    # different host) without rewriting rows.
+    attachment_filename: Mapped[str | None] = mapped_column(
+        String(500), nullable=True
+    )
+    attachment_mime: Mapped[str | None] = mapped_column(
+        String(120), nullable=True
+    )
+    attachment_bytes: Mapped[int | None] = mapped_column(
+        Integer, nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_utcnow
     )

@@ -27,7 +27,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 from workgraph_api.deps import require_user
@@ -36,6 +37,7 @@ from workgraph_api.services import (
     KbItemError,
     KbItemService,
 )
+from workgraph_api.services.kb_items import MAX_UPLOAD_BYTES
 
 
 router = APIRouter(tags=["kb-items"])
@@ -46,8 +48,14 @@ _CODE_TO_STATUS: dict[str, int] = {
     "invalid_scope": 400,
     "invalid_status": 400,
     "invalid_source": 400,
+    "invalid_filename": 400,
     "content_too_large": 400,
+    "empty_file": 400,
+    "file_too_large": 413,
+    "storage_failed": 500,
     "not_found": 404,
+    "no_attachment": 404,
+    "attachment_missing": 410,
     "not_a_member": 403,
     "forbidden": 403,
 }
@@ -195,3 +203,66 @@ async def demote_item(
         )
     except KbItemError as err:
         _raise(err)
+
+
+# ---- Phase B: file upload + download -----------------------------------
+
+
+@router.post("/api/projects/{project_id}/kb-items/upload")
+async def upload_item(
+    project_id: str,
+    request: Request,
+    file: UploadFile = File(...),
+    title: str | None = Form(default=None),
+    scope: str = Form(default="personal"),
+    folder_id: str | None = Form(default=None),
+    user: AuthenticatedUser = Depends(require_user),
+) -> dict[str, Any]:
+    """Multipart upload. Body: file=<bytes>, title?, scope?, folder_id?.
+
+    Reads the entire body into memory then hands to the service —
+    capped at MAX_UPLOAD_BYTES so this is fine. For the v3 blob-store
+    move we'll switch to streaming chunked writes.
+    """
+    # Read with the cap applied here so a 5GB upload doesn't waste a
+    # bunch of process memory before we reject it.
+    data = await file.read(MAX_UPLOAD_BYTES + 1)
+    if len(data) > MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=413, detail="file_too_large")
+    service = _service(request)
+    try:
+        return await service.upload(
+            project_id=project_id,
+            owner_user_id=user.id,
+            filename=file.filename or "attachment",
+            data=data,
+            title=title,
+            scope=scope,
+            folder_id=folder_id,
+            client_mime=file.content_type,
+        )
+    except KbItemError as err:
+        _raise(err)
+
+
+@router.get("/api/kb-items/{item_id}/attachment")
+async def download_attachment(
+    item_id: str,
+    request: Request,
+    user: AuthenticatedUser = Depends(require_user),
+):
+    """Streams the file with the same scope/auth gate as item read.
+    Personal-scope attachments 403 to non-owner."""
+    service = _service(request)
+    try:
+        path, filename, mime, _bytes = await service.get_attachment(
+            item_id=item_id, viewer_user_id=user.id
+        )
+    except KbItemError as err:
+        _raise(err)
+        return  # type: ignore[unreachable]
+    return FileResponse(
+        path=str(path),
+        media_type=mime,
+        filename=filename,
+    )
