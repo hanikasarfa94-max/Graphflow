@@ -198,7 +198,11 @@
       "submitting": "Creating…",
       "cancel": "Cancel",
       "errorCreate": "Couldn't create project",
-      "errorInvite": "Created, but some invites failed:"
+      "errorInvite": "Created, but some invites failed:",
+      "uploadLabel": "Seed files (optional)",
+      "uploadHint": "Pick documents to upload as personal KB notes — only you'll see them until you promote.",
+      "uploadProgress": "Uploading {n}/{total}: {name}…",
+      "errorUpload": "Created, but some uploads failed:"
     }
   },
   "stream": {
@@ -1204,6 +1208,26 @@
     "errorEmpty": "Add at least one skill.",
     "errorSave": "Save failed ({status}). Please try again.",
     "errorNetwork": "Network error. Please try again."
+  },
+  "taskProgress": {
+    "states": {
+      "open": "Open",
+      "in_progress": "In progress",
+      "blocked": "Blocked",
+      "done": "Done",
+      "canceled": "Canceled"
+    },
+    "quality": {
+      "good": "Good",
+      "ok": "OK",
+      "needs_work": "Needs work"
+    },
+    "scoreThis": "Score…",
+    "feedbackPlaceholder": "Optional feedback…",
+    "save": "Save score",
+    "update": "Update score",
+    "saving": "Saving…",
+    "cancel": "Cancel"
   },
   "kbNotes": {
     "title": "Notes",

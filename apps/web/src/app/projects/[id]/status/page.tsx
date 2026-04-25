@@ -86,6 +86,11 @@ export default async function ProjectStatusPage({
           tasks={state?.plan.tasks ?? []}
           assignments={state?.assignments ?? []}
           members={state?.members ?? []}
+          currentUserId={user.id}
+          isProjectOwner={
+            (state?.members ?? []).find((m) => m.user_id === user.id)?.role ===
+            "owner"
+          }
         />
         <RisksPanel risks={state?.graph.risks ?? []} />
         <DecisionsPanel decisions={state?.decisions ?? []} projectId={id} />

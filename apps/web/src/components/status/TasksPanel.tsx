@@ -4,6 +4,7 @@ import type { ProjectState } from "@/lib/api";
 
 import { ageSecondsFrom, formatAge } from "./age";
 import { EmptyState, Panel } from "./Panel";
+import { TaskScoreCell, TaskStatusCell } from "./TaskRowControls";
 
 type Task = ProjectState["plan"]["tasks"][number];
 type Member = ProjectState["members"][number];
@@ -15,9 +16,11 @@ type Assignment = {
 };
 
 // Terminal statuses — anything not in this set counts as "active".
-// Matches what PlanRepository / UI use elsewhere (done = complete,
-// cancelled = explicitly killed).
-const TERMINAL_STATUSES = new Set(["done", "cancelled", "archived"]);
+// Matches what PlanRepository / UI use elsewhere. Phase U expanded
+// the human-driven taxonomy: backend writes "canceled" (US spelling)
+// from TaskProgressService; we tolerate both spellings here so old
+// rows + new rows both filter out of the active list.
+const TERMINAL_STATUSES = new Set(["done", "cancelled", "canceled", "archived"]);
 
 // House signal-color rule (2026-04-21 unification pass): task status
 // pills ride the same sage / amber / terracotta triad as risks and
@@ -40,10 +43,17 @@ export async function TasksPanel({
   tasks,
   assignments,
   members,
+  currentUserId,
+  isProjectOwner,
 }: {
   tasks: Task[];
   assignments: Record<string, unknown>[];
   members: Member[];
+  // Phase U row controls — assignee sees a status dropdown, project
+  // owner sees both dropdown + score button. Optional so older callers
+  // (panels without auth context) still render the static pill.
+  currentUserId?: string;
+  isProjectOwner?: boolean;
 }) {
   const t = await getTranslations();
   const now = new Date();
@@ -57,8 +67,12 @@ export async function TasksPanel({
     }
   }
 
+  // Phase U — include `done` tasks too so project owners can score
+  // them inline. We still hide explicitly canceled / archived tasks.
+  // Active-only filter would have made the score button unreachable.
+  const HIDDEN_STATUSES = new Set(["cancelled", "canceled", "archived"]);
   const active = tasks
-    .filter((task) => !TERMINAL_STATUSES.has(task.status))
+    .filter((task) => !HIDDEN_STATUSES.has(task.status))
     .map((task) => {
       const assignment = assignmentByTask.get(task.id);
       const owner = assignment?.user_id
@@ -114,40 +128,59 @@ export async function TasksPanel({
               </tr>
             </thead>
             <tbody>
-              {active.map(({ task, ownerLabel, ageSeconds }) => (
-                <tr
-                  key={task.id}
-                  style={{ borderBottom: "1px solid var(--wg-line)" }}
-                >
-                  <Td>
-                    <div style={{ fontWeight: 600 }}>{task.title}</div>
-                  </Td>
-                  <Td style={{ color: "var(--wg-ink-soft)" }}>{ownerLabel}</Td>
-                  <Td>
-                    <span
+              {active.map(({ task, ownerLabel, ageSeconds }) => {
+                const assignment = assignmentByTask.get(task.id);
+                const isAssignee = Boolean(
+                  currentUserId && assignment?.user_id === currentUserId,
+                );
+                const canEditStatus = Boolean(
+                  isAssignee || isProjectOwner,
+                );
+                return (
+                  <tr
+                    key={task.id}
+                    style={{ borderBottom: "1px solid var(--wg-line)" }}
+                  >
+                    <Td>
+                      <div style={{ fontWeight: 600 }}>{task.title}</div>
+                    </Td>
+                    <Td style={{ color: "var(--wg-ink-soft)" }}>
+                      {ownerLabel}
+                    </Td>
+                    <Td>
+                      <div
+                        style={{
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: 4,
+                          alignItems: "flex-start",
+                        }}
+                      >
+                        <TaskStatusCell
+                          taskId={task.id}
+                          status={task.status}
+                          canEdit={canEditStatus}
+                        />
+                        <TaskScoreCell
+                          taskId={task.id}
+                          status={task.status}
+                          isProjectOwner={Boolean(isProjectOwner)}
+                        />
+                      </div>
+                    </Td>
+                    <Td
                       style={{
-                        padding: "2px 8px",
-                        borderRadius: 999,
-                        background: statusColor(task.status),
-                        fontSize: 11,
+                        textAlign: "right",
                         fontFamily: "var(--wg-font-mono)",
+                        color: "var(--wg-ink-soft)",
+                        fontSize: 12,
                       }}
                     >
-                      {task.status}
-                    </span>
-                  </Td>
-                  <Td
-                    style={{
-                      textAlign: "right",
-                      fontFamily: "var(--wg-font-mono)",
-                      color: "var(--wg-ink-soft)",
-                      fontSize: 12,
-                    }}
-                  >
-                    {formatAge(ageSeconds, t)}
-                  </Td>
-                </tr>
-              ))}
+                      {formatAge(ageSeconds, t)}
+                    </Td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

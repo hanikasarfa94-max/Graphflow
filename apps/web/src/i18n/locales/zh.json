@@ -198,7 +198,11 @@
       "submitting": "正在创建…",
       "cancel": "取消",
       "errorCreate": "创建项目失败",
-      "errorInvite": "项目已创建,但部分邀请失败:"
+      "errorInvite": "项目已创建,但部分邀请失败:",
+      "uploadLabel": "种子文件(可选)",
+      "uploadHint": "上传一些文档作为你的私人笔记 —— 在你「晋级为共享」前,仅你可见。",
+      "uploadProgress": "上传 {n}/{total}:{name}……",
+      "errorUpload": "项目已创建,但部分文件上传失败:"
     }
   },
   "stream": {
@@ -1204,6 +1208,26 @@
     "errorEmpty": "请至少填写一项。",
     "errorSave": "保存失败({status})。请重试。",
     "errorNetwork": "网络错误,请重试。"
+  },
+  "taskProgress": {
+    "states": {
+      "open": "未开始",
+      "in_progress": "进行中",
+      "blocked": "受阻",
+      "done": "已完成",
+      "canceled": "已取消"
+    },
+    "quality": {
+      "good": "优秀",
+      "ok": "合格",
+      "needs_work": "需改进"
+    },
+    "scoreThis": "评分……",
+    "feedbackPlaceholder": "可选反馈……",
+    "save": "保存评分",
+    "update": "更新评分",
+    "saving": "保存中……",
+    "cancel": "取消"
   },
   "kbNotes": {
     "title": "笔记",

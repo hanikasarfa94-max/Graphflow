@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/ui";
+import { uploadKbNote, ApiError } from "@/lib/api";
 
 // New-project modal per Phase F §7. Projects are created from the intake
 // endpoint (POST /api/intake/message), which returns a project row. We
@@ -31,6 +32,11 @@ export function NewProjectModal({
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [invites, setInvites] = useState("");
+  // Phase V.B QA#6 — optional file attachments seeded as personal KB
+  // notes on the new project. Owner can promote-to-group from /kb after
+  // create. Bounded by the same 5MB-per-file cap as the regular upload.
+  const [seedFiles, setSeedFiles] = useState<File[]>([]);
+  const [uploadProgress, setUploadProgress] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [warning, setWarning] = useState<string | null>(null);
@@ -53,6 +59,8 @@ export function NewProjectModal({
       setTitle("");
       setDescription("");
       setInvites("");
+      setSeedFiles([]);
+      setUploadProgress(null);
       setError(null);
       setWarning(null);
       setPending(false);
@@ -113,12 +121,48 @@ export function NewProjectModal({
         }
       }
 
+      // Phase V.B QA#6 — upload seed files as personal KB notes on
+      // the new project. Owner can promote-to-group from /kb after
+      // they review them. Failures are non-blocking; we surface them
+      // as a warning that joins the existing invite-failure warning.
+      const uploadFailures: string[] = [];
+      if (seedFiles.length > 0) {
+        for (let i = 0; i < seedFiles.length; i++) {
+          const f = seedFiles[i];
+          setUploadProgress(
+            t("home.newProject.uploadProgress", {
+              n: i + 1,
+              total: seedFiles.length,
+              name: f.name,
+            }),
+          );
+          try {
+            await uploadKbNote(projectId, { file: f });
+          } catch (e) {
+            const code =
+              e instanceof ApiError && e.body && typeof (e.body as { message?: unknown }).message === "string"
+                ? ((e.body as { message: string }).message)
+                : (e instanceof ApiError ? `${e.status}` : "network");
+            uploadFailures.push(`${f.name} (${code})`);
+          }
+        }
+        setUploadProgress(null);
+      }
+
+      const warnings: string[] = [];
       if (failures.length > 0) {
-        setWarning(
+        warnings.push(
           `${t("home.newProject.errorInvite")} ${failures.join(", ")}`,
         );
-        // Give the user a moment to see the warning before navigating.
-        setTimeout(() => router.push(`/projects/${projectId}`), 1500);
+      }
+      if (uploadFailures.length > 0) {
+        warnings.push(
+          `${t("home.newProject.errorUpload")} ${uploadFailures.join(", ")}`,
+        );
+      }
+      if (warnings.length > 0) {
+        setWarning(warnings.join("\n"));
+        setTimeout(() => router.push(`/projects/${projectId}`), 1800);
         return;
       }
 
@@ -209,6 +253,61 @@ export function NewProjectModal({
             style={inputStyle}
           />
         </Field>
+
+        <Field label={t("home.newProject.uploadLabel")}>
+          <input
+            type="file"
+            multiple
+            data-testid="new-project-files"
+            onChange={(e) => setSeedFiles(Array.from(e.target.files ?? []))}
+            style={{ ...inputStyle, padding: "8px 4px" }}
+          />
+          {seedFiles.length > 0 ? (
+            <ul
+              style={{
+                listStyle: "none",
+                margin: "6px 0 0",
+                padding: 0,
+                display: "flex",
+                flexDirection: "column",
+                gap: 2,
+                fontSize: 11,
+                fontFamily: "var(--wg-font-mono)",
+                color: "var(--wg-ink-soft)",
+              }}
+            >
+              {seedFiles.map((f, i) => (
+                <li key={`${f.name}-${i}`}>
+                  📎 {f.name} ({Math.round(f.size / 1024)} KB)
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <div
+              style={{
+                fontSize: 11,
+                color: "var(--wg-ink-faint)",
+                marginTop: 4,
+                fontFamily: "var(--wg-font-mono)",
+              }}
+            >
+              {t("home.newProject.uploadHint")}
+            </div>
+          )}
+        </Field>
+
+        {uploadProgress ? (
+          <div
+            role="status"
+            style={{
+              fontSize: 12,
+              color: "var(--wg-accent)",
+              fontFamily: "var(--wg-font-mono)",
+            }}
+          >
+            {uploadProgress}
+          </div>
+        ) : null}
 
         {error ? (
           <div
