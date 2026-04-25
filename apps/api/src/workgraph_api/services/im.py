@@ -347,6 +347,21 @@ class IMService:
             project_id = row.project_id
             kind = row.kind
             confidence = row.confidence
+
+            # Owner-gate on membrane_review accept. The whole point of
+            # the membrane review queue is "the proposer can't ship
+            # their own staged write without an owner review." Members
+            # accepting their own membrane drafts would defeat the
+            # purpose. Other suggestion kinds (decision/blocker/tag/
+            # wiki_entry) keep the looser "any member can accept"
+            # rule — those don't carry the same authority concern.
+            if kind == "membrane_review":
+                role = await ProjectMemberRepository(session).get_role(
+                    project_id, actor_id
+                )
+                if role != "owner":
+                    return {"ok": False, "error": "owner_only"}
+
             applied = await self._apply_proposal(session, row, actor_id=actor_id)
 
             # Signal-chain crystallization (vision §6): when a high-confidence

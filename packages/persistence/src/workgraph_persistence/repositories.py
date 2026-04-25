@@ -786,6 +786,17 @@ class ProjectMemberRepository:
         ).scalar_one_or_none()
         return row is not None
 
+    async def get_role(self, project_id: str, user_id: str) -> str | None:
+        row = (
+            await self._session.execute(
+                select(ProjectMemberRow).where(
+                    ProjectMemberRow.project_id == project_id,
+                    ProjectMemberRow.user_id == user_id,
+                )
+            )
+        ).scalar_one_or_none()
+        return row.role if row is not None else None
+
 
 class AssignmentRepository:
     def __init__(self, session: AsyncSession) -> None:

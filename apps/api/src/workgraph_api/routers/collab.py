@@ -343,9 +343,12 @@ async def accept_suggestion(
         raise HTTPException(status_code=403, detail="not a project member")
     result = await service.accept(suggestion_id=suggestion_id, actor_id=user.id)
     if not result.get("ok"):
-        raise HTTPException(
-            status_code=409, detail=result.get("error", "accept_failed")
-        )
+        err = result.get("error", "accept_failed")
+        # owner_only: caller is a member but not the project owner;
+        # only owners can accept membrane_review suggestions (the
+        # staged-write authority gate).
+        status = 403 if err == "owner_only" else 409
+        raise HTTPException(status_code=status, detail=err)
     return result
 
 

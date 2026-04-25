@@ -368,7 +368,15 @@ async def test_membrane_review_creates_inbox_suggestion_and_accept_publishes(
         assert sugg.proposal["action"] == "approve_membrane_candidate"
         assert sugg.proposal["detail"]["kb_item_id"] == draft_id
 
+    # Member-not-owner accept is rejected (owner-only gate). The
+    # member is in the project but doesn't have the 'owner' role —
+    # they shouldn't be able to ship membrane-staged drafts.
+    await _login(client, "kb_inbox_member")
+    r = await client.post(f"/api/im_suggestions/{sugg.id}/accept")
+    assert r.status_code == 403, r.text
+
     # Owner accepts → linked draft flips to published.
+    await _login(client, "kb_inbox_owner")
     r = await client.post(f"/api/im_suggestions/{sugg.id}/accept")
     assert r.status_code == 200, r.text
     async with session_scope(maker) as session:

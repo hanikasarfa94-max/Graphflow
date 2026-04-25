@@ -332,8 +332,11 @@ class KbItemService:
     async def promote_to_group(
         self, *, item_id: str, actor_user_id: str
     ) -> dict[str, Any]:
-        """Personal → group. v0: owner-self-promote allowed; project owner
-        also allowed. Frontend should confirm intent before calling."""
+        """Personal → group. Owner-self-promote and project-owner
+        promote both go through MembraneService.review() so a personal
+        note moving into the cell gets the same duplicate-detection /
+        request-review treatment as a direct group write.
+        """
         async with session_scope(self._sessionmaker) as session:
             row = await KbItemRepository(session).get(item_id)
             if row is None:
@@ -346,9 +349,49 @@ class KbItemService:
             )
             if not (is_owner_of_item or is_project_owner):
                 raise KbItemError("forbidden", status_=403)
+            project_id = row.project_id
+            title = row.title
+            content_md = row.content_md or ""
+
+        # Membrane review — personal → group is a "join the cell"
+        # gesture; same gate as direct group writes (stage 2/3 of
+        # docs/membrane-reorg.md). Skip when no membrane attached
+        # (legacy boot path / tests without late-binding).
+        target_status = "published"
+        if self._membrane_service is not None:
+            from .membrane import MembraneCandidate
+
+            review = await self._membrane_service.review(
+                MembraneCandidate(
+                    kind="kb_item_group",
+                    project_id=project_id,
+                    proposer_user_id=actor_user_id,
+                    title=title,
+                    content=content_md,
+                    metadata={"source": "promote", "from_item_id": item_id},
+                )
+            )
+            if review.action == "reject":
+                raise KbItemError(
+                    "membrane_rejected",
+                    review.reason or "rejected by membrane",
+                    status_=409,
+                )
+            if review.action in ("request_review", "request_clarification"):
+                # Promote completes (scope flips) but lands as draft so
+                # canonical group context isn't polluted until owner
+                # approves the staged review. Symmetric with direct
+                # group writes.
+                target_status = "draft"
+
+        async with session_scope(self._sessionmaker) as session:
             updated = await KbItemRepository(session).set_scope(
                 item_id=item_id, scope="group"
             )
+            if target_status == "draft":
+                updated = await KbItemRepository(session).update(
+                    item_id=item_id, status="draft"
+                )
             return _serialize(updated)
 
     async def upload(
