@@ -206,6 +206,82 @@ def _tr(lang: str, key: str, **kwargs: Any) -> str:
     return template
 
 
+# Low-cardinality enum labels we render inside templated bullets. Falls
+# through to the raw DB value for unknown values so backend additions
+# don't crash the tour — just show un-translated.
+_ENUMS: dict[str, dict[str, dict[str, str]]] = {
+    "role": {
+        "en": {
+            "owner": "owner",
+            "admin": "admin",
+            "member": "member",
+            "viewer": "viewer",
+        },
+        "zh": {
+            "owner": "负责人",
+            "admin": "管理员",
+            "member": "成员",
+            "viewer": "观察员",
+        },
+    },
+    "task_status": {
+        "en": {
+            "open": "open",
+            "in_progress": "in progress",
+            "blocked": "blocked",
+            "done": "done",
+            "canceled": "canceled",
+            "cancelled": "canceled",
+            "unknown": "unknown",
+        },
+        "zh": {
+            "open": "未开始",
+            "in_progress": "进行中",
+            "blocked": "受阻",
+            "done": "已完成",
+            "canceled": "已取消",
+            "cancelled": "已取消",
+            "unknown": "未知",
+        },
+    },
+    "commitment_status": {
+        "en": {
+            "open": "open",
+            "kept": "kept",
+            "broken": "broken",
+            "withdrawn": "withdrawn",
+            "resolved": "resolved",
+        },
+        "zh": {
+            "open": "进行中",
+            "kept": "已兑现",
+            "broken": "已违约",
+            "withdrawn": "已撤回",
+            "resolved": "已结",
+        },
+    },
+    "risk_severity": {
+        "en": {
+            "low": "low",
+            "medium": "medium",
+            "high": "high",
+            "critical": "critical",
+        },
+        "zh": {
+            "low": "低",
+            "medium": "中",
+            "high": "高",
+            "critical": "严重",
+        },
+    },
+}
+
+
+def _enum(lang: str, kind: str, value: str) -> str:
+    table = _ENUMS.get(kind, {}).get(lang) or _ENUMS.get(kind, {}).get("en", {})
+    return table.get(value, value)
+
+
 @dataclass
 class _Section:
     kind: str
@@ -504,7 +580,7 @@ class OnboardingService:
                     "vision.welcome_role",
                     name=viewer_name,
                     project=project_title,
-                    role=viewer_role,
+                    role=_enum(lang, "role", viewer_role),
                 )
             )
         else:
@@ -524,7 +600,12 @@ class OnboardingService:
                 headline = (c.headline or "").strip() or _tr(lang, "vision.unnamed")
                 status = c.status or "open"
                 lines.append(
-                    _tr(lang, "vision.bullet", headline=headline, status=status)
+                    _tr(
+                        lang,
+                        "vision.bullet",
+                        headline=headline,
+                        status=_enum(lang, "commitment_status", status),
+                    )
                 )
                 claims.append(
                     CitedClaim(
@@ -687,7 +768,8 @@ class OnboardingService:
                     or m.get("username")
                     or _tr(lang, "teammates.uid_fallback", short_id=uid[:8])
                 )
-                role = m.get("role") or _tr(lang, "teammates.role_fallback")
+                raw_role = m.get("role") or "member"
+                role = _enum(lang, "role", raw_role)
                 reasons: list[str] = []
                 if rec["shared_tasks"]:
                     reasons.append(
@@ -762,7 +844,10 @@ class OnboardingService:
 
         counts = Counter((t.get("status") or "unknown") for t in mine)
         separator = "、" if lang == "zh" else ", "
-        breakdown = separator.join(f"{n} {s}" for s, n in counts.most_common())
+        breakdown = separator.join(
+            f"{n} {_enum(lang, 'task_status', s)}"
+            for s, n in counts.most_common()
+        )
         lines = [
             _tr(lang, "tasks.summary", n=len(mine), breakdown=breakdown)
         ]
@@ -770,7 +855,12 @@ class OnboardingService:
             title_text = (t.get("title") or "").strip() or _tr(lang, "tasks.untitled")
             status = t.get("status") or "unknown"
             lines.append(
-                _tr(lang, "tasks.bullet", title=title_text, status=status)
+                _tr(
+                    lang,
+                    "tasks.bullet",
+                    title=title_text,
+                    status=_enum(lang, "task_status", status),
+                )
             )
             tid = t.get("id")
             if tid:
@@ -811,7 +901,12 @@ class OnboardingService:
             title_text = (r.get("title") or "").strip() or _tr(lang, "risks.untitled")
             sev = r.get("severity") or "medium"
             lines.append(
-                _tr(lang, "risks.bullet", title=title_text, sev=sev)
+                _tr(
+                    lang,
+                    "risks.bullet",
+                    title=title_text,
+                    sev=_enum(lang, "risk_severity", sev),
+                )
             )
             rid = r.get("id")
             if rid:
