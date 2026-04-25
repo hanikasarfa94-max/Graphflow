@@ -100,6 +100,22 @@ class KbItemError(Exception):
 class KbItemService:
     def __init__(self, sessionmaker: async_sessionmaker) -> None:
         self._sessionmaker = sessionmaker
+        # Optional — late-bound from main.py once MembraneService is
+        # constructed (needs stream_service which is built later).
+        # When set, group-scope writes pass through MembraneService.review()
+        # before persisting. None falls through to direct write (legacy
+        # path for tests + the period before late-binding completes).
+        self._membrane_service = None
+
+    def attach_membrane(self, membrane_service: Any) -> None:
+        """Late-bind the MembraneService dependency.
+
+        See docs/membrane-reorg.md stage 2: every group-scope KB write
+        is a candidate trying to enter the cell. The membrane gets the
+        last word before persistence. Personal-scope writes are forks
+        and skip review entirely.
+        """
+        self._membrane_service = membrane_service
 
     async def create(
         self,
@@ -127,6 +143,36 @@ class KbItemService:
             raise KbItemError("invalid_status")
         if source not in VALID_SOURCES:
             raise KbItemError("invalid_source")
+
+        # Membrane review for group-scope writes (stage 2 — passthrough
+        # for now, but the call site is in place for stage 3+ to add
+        # conflict detection / review queueing without touching every
+        # caller).
+        if scope == "group" and self._membrane_service is not None:
+            from .membrane import MembraneCandidate
+
+            review = await self._membrane_service.review(
+                MembraneCandidate(
+                    kind="kb_item_group",
+                    project_id=project_id,
+                    proposer_user_id=owner_user_id,
+                    title=title,
+                    content=content_md,
+                    metadata={"source": source, "status": status},
+                )
+            )
+            if review.action == "reject":
+                raise KbItemError(
+                    "membrane_rejected",
+                    review.reason or "rejected by membrane",
+                    status_=409,
+                )
+            if review.action in ("request_review", "request_clarification"):
+                # Stage 3+: these will route to a suggestion / Q&A
+                # back-channel. For now downgrade to draft so nothing
+                # surfaces in canonical group context until a future
+                # version of this code wires the review queue.
+                status = "draft"
 
         async with session_scope(self._sessionmaker) as session:
             if not await ProjectMemberRepository(session).is_member(

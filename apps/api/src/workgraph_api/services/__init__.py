@@ -58,7 +58,13 @@ from .meeting_ingest import (
     MetabolizeOutcome,
     MetabolizedSignals,
 )
-from .membrane import MembraneService
+from .membrane import (
+    CandidateKind,
+    MembraneCandidate,
+    MembraneReview,
+    MembraneService,
+    ReviewAction,
+)
 from .membrane_ingest import MembraneIngestService, extract_first_url
 from .onboarding import VALID_CHECKPOINTS, OnboardingService
 from .organizations import (
@@ -164,6 +170,10 @@ __all__ = [
     "MetabolizeOutcome",
     "MetabolizedSignals",
     "MembraneService",
+    "MembraneCandidate",
+    "MembraneReview",
+    "ReviewAction",
+    "CandidateKind",
     "MembraneIngestService",
     "extract_first_url",
     "OnboardingService",

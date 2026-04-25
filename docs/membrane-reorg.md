@@ -153,22 +153,35 @@ The conflict detection already exists in `ConflictService`. Stage 2
 moves its invocation from "post-write recheck" to "pre-write membrane
 review" — same rules, different timing.
 
-### Migration order (tentative)
+### Migration order (revised after audit, 2026-04-25)
 
-1. **Stage 1 — rename + docstring**. `MembraneIngestService` →
-   `MembraneService`. Broaden the docstring to describe the cell /
-   boundary model. No behavior change.
-2. **Stage 2 — extract review() shell**. Add the empty
-   `MembraneService.review()` method that today just does
-   `return MembraneReview(action='auto_merge', reason='no checks yet')`.
-   Wire `KbItemService.create` to call it. Same path for promote.
+Audit found `MembraneService` already exists in `services/membrane.py`
+with the auto-approve gate logic for external signals (the `ingest()`
+path). No rename needed. The migration becomes additive — `review()`
+slides in alongside `ingest()` as the inward-facing twin.
+
+1. **Stage 1 — docstring**. `services/membrane.py` MembraneService
+   docstring updated to describe both directions: `ingest()` for
+   external signals, `review()` for internal candidates. ✅ shipped
+   2026-04-25.
+2. **Stage 2 — review() shell**. Add `MembraneCandidate`,
+   `MembraneReview`, `ReviewAction`, `CandidateKind` types and the
+   `MembraneService.review()` method. Wire `KbItemService.create`
+   (group-scope only) to call it before persisting. Stage 2 review
+   is a passthrough (always auto_merge); the wiring matters because
+   stage 3+ adds real review logic without touching every caller.
+   Personal-scope writes are forks and skip review. ✅ shipped
+   2026-04-25.
 3. **Stage 3 — wire conflict detection**. Pull `ConflictService.recheck`
    logic into `review()` for the relevant candidate kinds. Old
    post-write recheck stays as a backstop until parity is verified.
 4. **Stage 4 — `request_review` action**. When review returns
    `request_review`, create an `IMSuggestionRow(kind='membrane_review')`
    instead of writing. Owner accept = approval = real write. Today's
-   `wiki_entry` flow becomes a degenerate case of this.
+   `wiki_entry` flow becomes a degenerate case of this. KbItemService
+   already downgrades to `status='draft'` when review returns
+   `request_review` — stage 4 makes that downgrade route through the
+   suggestion inbox.
 5. **Stage 5 — `request_clarification`**. New `kind='membrane-clarify'`
    stream message. Proposer sees a Q from the membrane, replies, the
    reply re-enters the same `review()` with the clarification

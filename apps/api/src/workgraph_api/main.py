@@ -467,6 +467,12 @@ async def lifespan(app: FastAPI):
         membrane_service,
         license_context_service,
     )
+    # Late-bind the membrane into KbItemService so group-scope writes
+    # pass through MembraneService.review() before persistence
+    # (docs/membrane-reorg.md stage 2). Stage 2 is a passthrough; the
+    # wiring matters because stage 3+ adds real review logic without
+    # touching every caller.
+    kb_item_service_early.attach_membrane(membrane_service)
 
     if settings.use_stubs:
         edge_agent = _SilentStubEdgeAgent()

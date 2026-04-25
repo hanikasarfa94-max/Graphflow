@@ -1,6 +1,10 @@
-"""MembraneService — Phase D external signal ingestion.
+"""MembraneService — boundary between the cell (project knowledge) and
+candidates trying to enter it.
 
-Vision §5.12 (Membranes). The service owns the full pipeline:
+The service owns two parallel entry points (vision §5.12 + the
+2026-04-25 user reframe in docs/membrane-reorg.md):
+
+## ingest()  — external signals (Phase D, original surface)
 
   1. Caller hands in `(source_kind, source_identifier, raw_content, project_id)`.
   2. Dedup: if we've already seen this (project_id, source_identifier) pair,
@@ -22,11 +26,28 @@ Vision §5.12 (Membranes). The service owns the full pipeline:
 The service NEVER trusts the LLM's `proposed_target_user_ids` blindly —
 ids are filtered against the project's member list. External content
 cannot name-drop arbitrary user ids into routing targets.
+
+## review()  — internal candidates (added 2026-04-25, stage 2 of
+                                     docs/membrane-reorg.md)
+
+The same boundary, called from the OPPOSITE direction: when a user
+or sub-agent proposes promoting something INTO the cell (group-scope
+KB item, decision crystallization, edge join), the write path calls
+`review(candidate, cell_snapshot)` first. The review returns one of
+four actions (auto_merge / request_review / request_clarification /
+reject) — the GitHub-PR analogy spelled out in the reorg doc.
+
+For Stage 2 the review is a passthrough (always auto_merge). The
+shell exists so Stage 3+ can fill in conflict detection, owner
+review queueing, and the clarify Q&A back-channel without callers
+having to change shape. Same pattern as the auto-approve gate in
+ingest() — same cell, same agent, same boundary, just inward-facing.
 """
 from __future__ import annotations
 
 import logging
-from typing import Any
+from dataclasses import dataclass, field
+from typing import Any, Literal
 
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
@@ -60,6 +81,61 @@ RAW_CONTENT_MAX_CHARS = 4000
 # confidence OR any of the soft-block conditions → status stays
 # 'pending-review' until a human approves.
 AUTO_APPROVE_CONFIDENCE_THRESHOLD = 0.7
+
+
+# Stage 2 of the membrane reorg (docs/membrane-reorg.md). Candidates
+# trying to enter the cell go through review() — same boundary as
+# ingest() for external signals, opposite direction.
+ReviewAction = Literal[
+    "auto_merge",            # write to cell, no review needed
+    "request_review",        # queue for owner approval
+    "request_clarification", # back-channel Q&A with proposer first
+    "reject",                # log + notify proposer with reason
+]
+
+# Candidate kinds the membrane review() understands. Each promote
+# path picks one; the review function uses it to choose which checks
+# to run. Stage 2 only wires `kb_item_group` (group-scope KB write);
+# other kinds reserved for Stage 3+.
+CandidateKind = Literal[
+    "kb_item_group",         # group-scope KbItemRow about to be created
+    "decision_crystallize",  # DecisionRow about to crystallize
+    "graph_edge",             # graph node/edge promotion
+]
+
+
+@dataclass(frozen=True)
+class MembraneCandidate:
+    """A candidate trying to enter the cell.
+
+    Shape is intentionally permissive — the review function pulls
+    only the fields it needs per kind. Frozen so callers can't
+    accidentally mutate state mid-review.
+    """
+
+    kind: CandidateKind
+    project_id: str
+    proposer_user_id: str
+    title: str = ""
+    content: str = ""
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class MembraneReview:
+    """Outcome of a review() call.
+
+    `action` drives what the caller does next; `reason` is for logs +
+    user-facing copy. `clarify_question` is populated only when
+    action='request_clarification' (Stage 5). `conflict_with` lists
+    cell node ids the candidate contradicts (Stage 3).
+    """
+
+    action: ReviewAction
+    reason: str
+    diff_summary: str | None = None
+    clarify_question: str | None = None
+    conflict_with: tuple[str, ...] = ()
 
 
 class MembraneService:
@@ -278,6 +354,38 @@ class MembraneService:
             "classified": True,
         }
 
+    async def review(
+        self, candidate: MembraneCandidate
+    ) -> MembraneReview:
+        """Decide what to do with a candidate trying to enter the cell.
+
+        Stage 2 shell — always returns auto_merge with a stub reason.
+        Stage 3+ will fill in conflict detection (cell snapshot diff,
+        owner-review queueing, the clarify Q&A back-channel) without
+        the call sites needing to change.
+
+        Callers should treat this as authoritative — if the action is
+        not auto_merge, do NOT proceed with the write. The non-auto
+        action handlers are the membrane's job, not the caller's.
+        """
+        # Stage 3 will branch on candidate.kind here. For now, log the
+        # candidate so we have observability for what's flowing through
+        # the boundary even before any rules fire.
+        _log.info(
+            "membrane.review (stage 2 passthrough)",
+            extra={
+                "kind": candidate.kind,
+                "project_id": candidate.project_id,
+                "proposer_user_id": candidate.proposer_user_id,
+                "title_chars": len(candidate.title or ""),
+                "content_chars": len(candidate.content or ""),
+            },
+        )
+        return MembraneReview(
+            action="auto_merge",
+            reason="stage2_passthrough",
+        )
+
     async def _route_to_members(
         self,
         *,
@@ -486,6 +594,10 @@ class MembraneService:
 
 __all__ = [
     "MembraneService",
+    "MembraneCandidate",
+    "MembraneReview",
+    "ReviewAction",
+    "CandidateKind",
     "RAW_CONTENT_MAX_CHARS",
     "AUTO_APPROVE_CONFIDENCE_THRESHOLD",
 ]
