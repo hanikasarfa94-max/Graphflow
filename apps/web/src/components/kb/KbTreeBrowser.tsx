@@ -353,13 +353,16 @@ export function KbTreeBrowser({
               {t("kb.folder.new")}
             </Button>
             {/* "New item" previously linked to /projects/[id]/membrane,
-                but that route doesn't exist — the click 404'd silently.
-                Ingest is managed from the project settings page (where
-                external signal subscriptions + paste live), so redirect
-                there. */}
+                but that route doesn't exist. Ingest is managed from the
+                project settings page, specifically the "External signal
+                subscriptions" section. We anchor-link straight to that
+                section so the user doesn't land on the page-top gate-
+                keeper map and wonder what "sign-off gate-keepers" has
+                to do with creating a KB entry (it doesn't). */}
             <Link
-              href={`/projects/${projectId}/settings`}
+              href={`/projects/${projectId}/settings#membrane-subscriptions`}
               style={{ textDecoration: "none" }}
+              title={t("kb.folder.newItemHelp")}
             >
               <Button variant="ghost" size="sm">
                 {t("kb.folder.newItem")}

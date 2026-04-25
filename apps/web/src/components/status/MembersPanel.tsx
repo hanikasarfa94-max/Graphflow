@@ -38,6 +38,11 @@ export async function MembersPanel({ members }: { members: Member[] }) {
             observerLabel={t("status.members.observer")}
             roleLabel={t("status.members.roleLabel")}
             presenceLabel={t("stream.presence.online")}
+            roleTranslations={{
+              owner: t("status.members.role.owner"),
+              member: t("status.members.role.member"),
+              observer: t("status.members.role.observer"),
+            }}
           />
         ))}
       </div>
@@ -50,12 +55,16 @@ function MemberCard({
   observerLabel,
   roleLabel,
   presenceLabel,
+  roleTranslations,
 }: {
   member: Member;
   observerLabel: string;
   roleLabel: string;
   presenceLabel: string;
+  roleTranslations: Record<"owner" | "member" | "observer", string>;
 }) {
+  const roleKey = (member.role as "owner" | "member" | "observer") ?? "member";
+  const localizedRole = roleTranslations[roleKey] ?? member.role;
   const initial =
     (member.display_name?.trim()?.[0] ??
       member.username?.trim()?.[0] ??
@@ -133,7 +142,7 @@ function MemberCard({
             marginTop: 2,
           }}
         >
-          <span>{roleLabel}: {member.role}</span>
+          <span>{roleLabel}: {localizedRole}</span>
           {isObserver ? (
             <span
               style={{

@@ -6,6 +6,8 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, ConfigDict, Field
 
+from workgraph_persistence import UserRepository, session_scope
+
 from workgraph_api.deps import get_auth_service, require_user
 from workgraph_api.services import (
     SESSION_COOKIE,
@@ -18,6 +20,26 @@ from workgraph_api.services import (
 )
 
 _log = logging.getLogger("workgraph.api.auth")
+
+# NEXT_LOCALE cookie — written by the web frontend's LanguageSwitcher +
+# middleware. Kept in sync with apps/web/src/i18n/config.ts so the
+# locale the user picked on the login/register page flows all the way
+# into the tutorial seed's welcome copy.
+_LOCALE_COOKIE = "NEXT_LOCALE"
+_ALLOWED_LOCALES = frozenset({"en", "zh"})
+
+
+def _locale_from_request(request: Request) -> str | None:
+    """Pick the user's preferred locale from the NEXT_LOCALE cookie.
+
+    Register is unauthenticated, so we don't have a user-profile row
+    yet — the cookie is the only signal available. Returned value is
+    whatever the frontend wrote (narrow allow-list enforced) or None.
+    """
+    raw = request.cookies.get(_LOCALE_COOKIE)
+    if raw and raw in _ALLOWED_LOCALES:
+        return raw
+    return None
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -87,6 +109,25 @@ async def post_register(
     secure = request.url.scheme == "https"
     _set_cookie(response, token, secure=secure)
 
+    # Persist the display_language the user picked on the login page so
+    # every subsequent backend render (tutorial seed, gated-proposal
+    # cards, edge-agent prompts) knows their preference. Silently no-op
+    # if the cookie is missing or invalid — the DB default is "en".
+    locale = _locale_from_request(request)
+    if locale is not None:
+        try:
+            maker = request.app.state.sessionmaker
+            async with session_scope(maker) as session:
+                await UserRepository(session).update_profile(
+                    user.id, display_language=locale
+                )
+        except Exception:  # noqa: BLE001 — non-fatal; locale falls back
+            _log.warning(
+                "register: could not persist display_language",
+                extra={"user_id": user.id, "locale": locale},
+                exc_info=True,
+            )
+
     # Game-style onboarding: drop the new user into a pre-populated
     # "Welcome to graphflow" project with a pending vote. A failed seed
     # must NEVER block registration — log and move on.
@@ -95,7 +136,9 @@ async def post_register(
     )
     if tutorial_service is not None:
         try:
-            await tutorial_service.seed_for_new_user(user_id=user.id)
+            await tutorial_service.seed_for_new_user(
+                user_id=user.id, display_language=locale
+            )
         except Exception:  # noqa: BLE001
             _log.warning(
                 "tutorial_seed failed; registration still succeeded",

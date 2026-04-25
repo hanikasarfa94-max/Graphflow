@@ -13,6 +13,7 @@ import { useTranslations } from "next-intl";
 
 import { ApiError, api } from "@/lib/api";
 import { GateKeeperMapSection } from "@/components/settings/GateKeeperMapSection";
+import { InviteMemberSection } from "@/components/settings/InviteMemberSection";
 
 type Subscription = {
   id: string;
@@ -132,15 +133,22 @@ export default function ProjectSettingsPage({
     <main style={{ padding: 32, maxWidth: 800 }}>
       <h1 style={{ marginBottom: 24 }}>Settings</h1>
 
+      <InviteMemberSection projectId={id} />
+
       <GateKeeperMapSection projectId={id} />
 
       <section
+        id="membrane-subscriptions"
         data-testid="membrane-subscriptions"
         style={{
           marginTop: 24,
           padding: 20,
           border: "1px solid var(--wg-line)",
           borderRadius: "var(--wg-radius)",
+          // Give the anchor-link jump target some breathing room from
+          // the top so the browser scrolls the heading into view rather
+          // than pinning it behind the sticky chrome.
+          scrollMarginTop: 24,
         }}
       >
         <h2 style={{ marginTop: 0 }}>{tMembrane("subscriptionsHeading")}</h2>

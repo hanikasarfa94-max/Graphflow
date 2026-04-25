@@ -258,7 +258,12 @@
       "title": "团队",
       "empty": "暂无成员",
       "observer": "观察者",
-      "roleLabel": "角色"
+      "roleLabel": "角色",
+      "role": {
+        "owner": "所有者",
+        "member": "成员",
+        "observer": "观察者"
+      }
     },
     "tasks": {
       "title": "进行中的任务",
@@ -343,7 +348,8 @@
       "root": "/",
       "empty": "还没有文件夹。",
       "new": "+ 新建文件夹",
-      "newItem": "+ 新建条目",
+      "newItem": "管理信号来源…",
+      "newItemHelp": "打开「项目设置 → 外部信号订阅」。知识库条目由采集管线生成,不需要手动创建。",
       "newPlaceholder": "文件夹名称",
       "selectPrompt": "请选择一个文件夹",
       "delete": "删除文件夹",
@@ -1167,5 +1173,36 @@
     "loadScore": "负荷 {n}",
     "loadAria": "负荷评分 {n}",
     "sharedPair": "共担:{classes}"
+  },
+  "teamPage": {
+    "invite": {
+      "heading": "成员",
+      "subtitle": "项目现有成员。所有者可按用户名邀请。",
+      "membersLabel": "共 {count} 位成员",
+      "membersEmpty": "暂无成员。",
+      "formLabel": "邀请新成员",
+      "placeholder": "用户名(如 alice-wong)",
+      "submit": "+ 邀请",
+      "submitting": "邀请中…",
+      "success": "已邀请 @{username}。",
+      "errorBounds": "用户名需为 3–32 个字符。",
+      "errorChars": "用户名只能包含字母、数字、下划线和短横线。",
+      "errorAlreadyMember": "该用户已在项目中。",
+      "errorNotFound": "未找到用户名为 @{username} 的账号 —— 请先让对方注册。",
+      "errorForbidden": "只有项目成员可以发起邀请。",
+      "errorGeneric": "邀请失败({status})。请重试。",
+      "errorNetwork": "网络错误,请重试。"
+    }
+  },
+  "skillDeclarationBanner": {
+    "label": "欢迎",
+    "heading": "欢迎加入 {project} —— 先填 2–3 项你擅长的领域,让团队知道你能在哪里帮忙。",
+    "placeholder": "例如:产品设计、文案、Python",
+    "save": "保存",
+    "saving": "保存中…",
+    "skip": "暂不填写",
+    "errorEmpty": "请至少填写一项。",
+    "errorSave": "保存失败({status})。请重试。",
+    "errorNetwork": "网络错误,请重试。"
   }
 }

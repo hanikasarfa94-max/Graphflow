@@ -59,6 +59,8 @@ import {
   type RehearsalPreview as RehearsalPreviewType,
 } from "@/lib/api";
 
+import { SkillDeclarationBanner } from "@/components/onboarding/SkillDeclarationBanner";
+
 import { DriftCard } from "./DriftCard";
 import { SlaCard } from "./SlaCard";
 import { EdgeReplyCard } from "./EdgeReplyCard";
@@ -78,6 +80,9 @@ type Props = {
   projectId: string;
   currentUserId: string;
   members: StreamMember[];
+  // QA finding #9b — optional so non-breaking; falls back to the project
+  // id prefix when the caller can't supply the human title.
+  projectTitle?: string;
 };
 
 // WS reconnect backoff — 1s, 2s, 4s, 8s, capped at 10s. Matches
@@ -190,7 +195,12 @@ function mergeMessages(
   return needsReplyDedupe ? dedupeReplyCards(merged) : merged;
 }
 
-export function PersonalStream({ projectId, currentUserId, members }: Props) {
+export function PersonalStream({
+  projectId,
+  currentUserId,
+  members,
+  projectTitle,
+}: Props) {
   const t = useTranslations("personal");
   const tStream = useTranslations("stream");
 
@@ -829,6 +839,14 @@ export function PersonalStream({ projectId, currentUserId, members }: Props) {
           padding: "14px 14px 4px",
         }}
       >
+        {/* QA finding #9b — first-time skill declaration banner.
+            Inline soft banner at the top of the stream; self-hides when
+            declared_abilities is non-empty or the user dismisses it. */}
+        <SkillDeclarationBanner
+          projectId={projectId}
+          projectTitle={projectTitle ?? projectId.slice(0, 8)}
+          userId={currentUserId}
+        />
         {!loaded && (
           <div
             style={{

@@ -67,6 +67,7 @@ export default async function ProjectPersonalPage({
         projectId={id}
         currentUserId={user.id}
         members={members}
+        projectTitle={state?.project?.title}
       />
     </>
   );

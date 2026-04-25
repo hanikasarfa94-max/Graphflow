@@ -258,7 +258,12 @@
       "title": "Team",
       "empty": "No members yet",
       "observer": "Observer",
-      "roleLabel": "role"
+      "roleLabel": "role",
+      "role": {
+        "owner": "owner",
+        "member": "member",
+        "observer": "observer"
+      }
     },
     "tasks": {
       "title": "Active tasks",
@@ -343,7 +348,8 @@
       "root": "/",
       "empty": "No folders yet.",
       "new": "+ New folder",
-      "newItem": "+ New item",
+      "newItem": "Ingest sources…",
+      "newItemHelp": "Opens project settings → External signal subscriptions. KB entries are created by the ingest pipeline, not by hand.",
       "newPlaceholder": "Folder name",
       "selectPrompt": "Select a folder",
       "delete": "Delete folder",
@@ -1167,5 +1173,36 @@
     "loadScore": "Load {n}",
     "loadAria": "Load score {n}",
     "sharedPair": "shares: {classes}"
+  },
+  "teamPage": {
+    "invite": {
+      "heading": "Members",
+      "subtitle": "Who's on this project. Owners can invite by username.",
+      "membersLabel": "{count} members",
+      "membersEmpty": "No members yet.",
+      "formLabel": "Invite a new member",
+      "placeholder": "Username (e.g. alice-wong)",
+      "submit": "+ Invite",
+      "submitting": "Inviting…",
+      "success": "Invited @{username}.",
+      "errorBounds": "Username must be 3–32 characters.",
+      "errorChars": "Username can only contain letters, numbers, underscores, and dashes.",
+      "errorAlreadyMember": "That user is already on this project.",
+      "errorNotFound": "No account found with username @{username} — ask them to register first.",
+      "errorForbidden": "Only project members can invite.",
+      "errorGeneric": "Invite failed ({status}). Please try again.",
+      "errorNetwork": "Network error. Please try again."
+    }
+  },
+  "skillDeclarationBanner": {
+    "label": "Welcome",
+    "heading": "Welcome to {project} — before you start, add 2–3 skills so the group knows where you fit.",
+    "placeholder": "e.g. product design, copywriting, Python",
+    "save": "Save",
+    "saving": "Saving…",
+    "skip": "Skip for now",
+    "errorEmpty": "Add at least one skill.",
+    "errorSave": "Save failed ({status}). Please try again.",
+    "errorNetwork": "Network error. Please try again."
   }
 }
