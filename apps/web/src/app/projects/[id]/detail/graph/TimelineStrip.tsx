@@ -38,8 +38,8 @@ import type {
 // Color tokens — match the existing severity palette on the canvas so
 // markers and node tints speak the same visual language.
 const SEVERITY_TINT: Record<string, string> = {
-  critical: "#c0471e",
-  high: "#c0471e",
+  critical: "#2563eb",
+  high: "#2563eb",
   medium: "#c68a00",
   low: "#9a9a95",
 };

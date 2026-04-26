@@ -25,11 +25,17 @@
 import type { CSSProperties, ReactNode } from "react";
 
 type Variant = "default" | "raised" | "sunk";
-type Accent = "terracotta" | "amber" | "sage" | null;
+// Renamed 2026-04-26 with the v1→v2 palette shift (terracotta → blue,
+// sage → green). Keeping the prop name `accent` but switching the
+// variant names from colour-words to semantic words so future palette
+// shifts don't strand misleading prop values. Old names accepted as
+// aliases so callers can migrate gradually.
+type Accent = "accent" | "amber" | "ok" | null;
+type AccentInput = Accent | "terracotta" | "sage";
 
 type Props = {
   variant?: Variant;
-  accent?: Accent;
+  accent?: AccentInput;
   title?: ReactNode;
   subtitle?: ReactNode;
   children?: ReactNode;
@@ -58,10 +64,13 @@ function background(variant: Variant): string {
   }
 }
 
-function accentColor(accent: Accent): string | null {
-  if (accent === "terracotta") return "var(--wg-accent)";
+function accentColor(accent: AccentInput): string | null {
+  // Both old (terracotta/sage) and new (accent/ok) names are accepted
+  // so the rename can land without touching every caller in the same
+  // commit. Resolve to the same CSS var either way.
+  if (accent === "accent" || accent === "terracotta") return "var(--wg-accent)";
   if (accent === "amber") return "var(--wg-amber)";
-  if (accent === "sage") return "var(--wg-ok)";
+  if (accent === "ok" || accent === "sage") return "var(--wg-ok)";
   return null;
 }
 

@@ -143,7 +143,7 @@ function StatusDot({ status }: { status: Connection }) {
     status === "open"
       ? "#7ab87a"
       : status === "connecting"
-        ? "#c7a44a"
+        ? "#d97706"
         : "var(--wg-accent)";
   return (
     <span

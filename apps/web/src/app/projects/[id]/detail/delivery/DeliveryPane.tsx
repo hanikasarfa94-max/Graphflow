@@ -16,13 +16,13 @@ const OUTCOME_LABEL: Record<Delivery["parse_outcome"], string> = {
 
 const OUTCOME_COLOR: Record<Delivery["parse_outcome"], string> = {
   ok: "#4a7ac7",
-  retry: "#c7a44a",
+  retry: "#d97706",
   manual_review: "var(--wg-accent)",
 };
 
 const SEVERITY_COLOR: Record<"low" | "medium" | "high", string> = {
   high: "var(--wg-accent)",
-  medium: "#c7a44a",
+  medium: "#d97706",
   low: "var(--wg-ink-soft)",
 };
 
@@ -149,7 +149,7 @@ export function DeliveryPane({
                 wsState === "open"
                   ? "#4ac78a"
                   : wsState === "connecting"
-                    ? "#c7a44a"
+                    ? "#d97706"
                     : "var(--wg-ink-soft)",
             }}
           />

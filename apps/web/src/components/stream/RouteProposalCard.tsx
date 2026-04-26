@@ -1258,7 +1258,7 @@ function SkillChip({
   const s =
     tone === "matched"
       ? {
-          bg: "rgba(77,122,74,0.12)",
+          bg: "rgba(22, 163, 74,0.12)",
           fg: "var(--wg-ok, #2f8f4f)",
           border: "var(--wg-ok, #2f8f4f)",
         }

@@ -15,7 +15,7 @@ type Member = ProjectState["members"][number];
 
 const SEVERITY_COLOR: Record<Conflict["severity"], string> = {
   critical: "var(--wg-accent)",
-  high: "#c7a44a",
+  high: "#d97706",
   medium: "#4a7ac7",
   low: "var(--wg-ink-soft)",
 };
@@ -692,7 +692,7 @@ function StatusDot({ state }: { state: "connecting" | "open" | "closed" }) {
     state === "open"
       ? "#7ab87a"
       : state === "connecting"
-        ? "#c7a44a"
+        ? "#d97706"
         : "var(--wg-accent)";
   return (
     <span
@@ -714,7 +714,7 @@ function outcomeColor(outcome: Decision["apply_outcome"]): string {
     case "ok":
       return "#4a8a4a";
     case "partial":
-      return "#c7a44a";
+      return "#d97706";
     case "failed":
       return "var(--wg-accent)";
     case "advisory":

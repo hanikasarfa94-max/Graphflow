@@ -448,7 +448,7 @@ function StatusChip({
       style={{
         padding: "2px 8px",
         background: isFinal
-          ? "rgba(77,122,74,0.15)"
+          ? "rgba(22, 163, 74,0.15)"
           : "var(--wg-amber-soft)",
         color: isFinal ? "var(--wg-ok, #2f8f4f)" : "var(--wg-amber)",
         border: `1px solid ${

@@ -15,10 +15,10 @@ Opinionated visual + motion system for the final-round competition pass. Every c
 
 ## Aesthetic Direction
 
-- **Direction:** *Warm-industrial with biological undertones.* Blueprint paper meets lab notebook meets the sage-green of old CRT displays. The graph is a living instrument.
-- **Decoration level:** **Intentional.** Subtle paper-grain texture (~3% opacity) on surfaces. Hand-weighted line icons. Ambient motion on organism-level events. Never decorative blobs, never purple gradients, never centered-everything-in-a-grid-of-three.
-- **Mood:** Alive and observant. The product should feel like it's paying attention even when idle. The graph breathes.
-- **Category break:** Everyone else is cold enterprise chrome (Slack) or literary minimal (Notion). We're warm-industrial. Remembered within 2 seconds.
+- **Direction:** *Cool-clinical / blueprint paper.* Clean blue-on-white, structured grid undertones, generous whitespace. The graph is a precise instrument; the chrome around it should read as the same family — engineered, scannable, deliberately calm. (v2, 2026-04-26 — see Decisions Log for the shift from v1 warm-industrial.)
+- **Decoration level:** **Intentional.** Subtle blueprint-grid texture on surfaces (~5% opacity, 36px grid + 72px anchor dots). Soft blue radial accents on hero surfaces. Hand-weighted line icons. Ambient motion on organism-level events. Never decorative blobs, never purple gradients, never centered-everything-in-a-grid-of-three.
+- **Mood:** Crisp and observant. The product should feel like a clean instrument panel — readable at a glance, structured by intent, paying attention even when idle. The graph breathes; the chrome doesn't fight it.
+- **Category break:** Everyone else is cold enterprise chrome with no opinion (Slack), literary minimal (Notion), or AI-purple-soup (every 2025 launch). We're a blueprint instrument: blue, but not generic-SaaS blue — paired with serif display headlines, mono data, and graph-paper backgrounds that signal "this is a structured workspace, not a feed." Remembered within 2 seconds.
 
 ---
 
@@ -55,69 +55,71 @@ Loaded via Bunny Fonts CDN (no Google telemetry) or self-hosted from `apps/web/p
 
 ## Color
 
-Evolve the existing token system. All surfaces, text, accents reference variables. No inline hex.
+All surfaces, text, accents reference variables. No inline hex outside `globals.css` (and this doc).
 
-### Light mode (default)
+### Light mode (default — v2 blue/white)
 
 ```
---wg-paper:         #f7f2e8   /* was #fafaf7 — warmer, lab-notebook */
---wg-surface:       #fbf7ed
+--wg-paper:         #f5f8ff   /* page background — pale blueprint */
+--wg-surface:       #ffffff   /* card surface */
 --wg-surface-raised:#ffffff
---wg-surface-sunk:  #ede7d6
+--wg-surface-sunk:  #f3f7ff   /* subtle sunk surface — nav rails */
 
---wg-ink:           #0f0e0d   /* was #1a1a1a — warmer black */
---wg-ink-soft:      #5a5652
---wg-ink-faint:     #9a958c
---wg-line:          #e6ded0   /* dividers + borders */
+--wg-ink:           #172033   /* deep navy — readable, not pure black */
+--wg-ink-soft:      #667085
+--wg-ink-faint:     #9aa8bd
+--wg-line:          #d9e3f4   /* cool blue-gray hairlines */
+--wg-line-soft:     #eef3fb
 
---wg-accent:        #c0471e   /* terracotta — crystallization / primary */
---wg-accent-soft:   #f2d9cc
---wg-accent-ring:   rgba(192,71,30,0.18)
+--wg-accent:        #2563eb   /* blue — crystallization / primary */
+--wg-accent-soft:   rgba(37,99,235,0.08)
+--wg-accent-ring:   rgba(37,99,235,0.24)
 
---wg-amber:         #b5802b   /* escalation / medium severity / clarifier */
---wg-amber-soft:    #f4e4bf
+--wg-amber:         #d97706   /* escalation / medium severity / clarifier */
+--wg-amber-soft:    rgba(217,119,6,0.10)
 
---wg-ok:            #4d7a4a   /* sage — supported / healthy */
---wg-ok-soft:       #d8e4d5
+--wg-ok:            #16a34a   /* clean green — supported / healthy */
+--wg-ok-soft:       rgba(22,163,74,0.10)
 
---wg-danger:        #a33131   /* reserved; use sparingly */
+--wg-danger:        #dc2626   /* reserved; use sparingly */
 ```
 
-**Paper grain** (optional overlay, ~3% opacity, tiled 256px SVG noise): `url(data:image/svg+xml;…)` applied as `background-image` on `body` + `[data-surface="raised"]`. Additive, a11y-neutral, mobile-OK.
+**Surface texture** (token `--wg-paper-grain`): blueprint grid + anchor dots, ~5% opacity blue lines, 72px tile. Applied via `background-image` on `body`. The grid is the structural metaphor — the chrome reads as the same surface as the graph, not as a separate "container" wrapping it.
 
-### Dark mode (full redesign — not inversion)
+### Dark mode (full redesign — not inversion — v2)
 
 ```
---wg-paper:         #0f0e0d
---wg-surface:       #171513
---wg-surface-raised:#1f1c19
---wg-surface-sunk:  #0a0907
+--wg-paper:         #0b1224   /* night blueprint */
+--wg-surface:       #111a2e
+--wg-surface-raised:#16213a
+--wg-surface-sunk:  #0a1020
 
---wg-ink:           #f7f2e8
---wg-ink-soft:      #b8b0a3
---wg-ink-faint:     #6f6860
---wg-line:          #2a2622
+--wg-ink:           #e6ecf7
+--wg-ink-soft:      #a3afc4
+--wg-ink-faint:     #6d7a8f
+--wg-line:          #1e2a44
+--wg-line-soft:     #182039
 
---wg-accent:        #d85c33   /* +8% saturation for dark surfaces */
---wg-accent-soft:   rgba(216,92,51,0.18)
---wg-accent-ring:   rgba(216,92,51,0.35)
+--wg-accent:        #3b82f6   /* brighter blue for dark surfaces */
+--wg-accent-soft:   rgba(59,130,246,0.18)
+--wg-accent-ring:   rgba(59,130,246,0.35)
 
---wg-amber:         #d09a3c
---wg-amber-soft:    rgba(208,154,60,0.18)
+--wg-amber:         #f59e0b
+--wg-amber-soft:    rgba(245,158,11,0.18)
 
---wg-ok:            #6d9c69
---wg-ok-soft:       rgba(109,156,105,0.18)
+--wg-ok:            #22c55e
+--wg-ok-soft:       rgba(34,197,94,0.18)
 
---wg-danger:        #c75151
+--wg-danger:        #ef4444
 ```
 
-Dark mode paper grain stays but at 4% opacity. Every component must be authored with both modes in mind, not inversion-tested.
+Dark-mode grid stays but at lower opacity. Every component must be authored with both modes in mind, not inversion-tested.
 
 ### Semantic usage (never break these)
 
-- **Terracotta** = a decision moment, a crystallized fact, a primary affordance. Used *sparingly* — scarcity is the product's accent.
+- **Blue (`--wg-accent`)** = a decision moment, a crystallized fact, a primary affordance, a routing target. Used *sparingly* — scarcity is the product's accent. (v1 used terracotta for this slot — same semantic role, different colour.)
 - **Amber** = something needs attention / clarification. Escalation, drift alerts, clarifier turns, medium-severity risks.
-- **Sage** = confirmed / supported / healthy / "ok" state. Dissent `supported`, member online, commitment on-track.
+- **Green (`--wg-ok`)** = confirmed / supported / healthy / "ok" state. Dissent `supported`, member online, commitment on-track.
 - **Ink-faint** = ambient / uncited / passive. Uncited claims, read messages, observer-tier restricted placeholders.
 
 ---
@@ -158,7 +160,7 @@ Motion is how the organism thesis goes from metaphor to visceral. Five moments a
 
 ### The 5 load-bearing moments
 
-1. **⚡ Decision crystallization.** When a `DecisionRow` lands in-stream: terracotta ring pulse (320ms), card scale from 0.97 → 1.0, accompanying graph-view node drop-in if graph is visible. Once per decision, never on replays.
+1. **⚡ Decision crystallization.** When a `DecisionRow` lands in-stream: blue (`--wg-accent`) ring pulse (320ms), card scale from 0.97 → 1.0, accompanying graph-view node drop-in if graph is visible. Once per decision, never on replays.
 2. **Drift alert emergence.** Don't pop from corner. Float up from the affected node with a subtle shadow expansion. Feels like the organism noticing.
 3. **Citation chip activation.** When the edge LLM emits a cited claim, each chip does a brief amber glow (180ms) as the text types in, then settles to neutral. Evidence lighting up in sequence.
 4. **Scrimmage running card.** Two small glyphs (filled circle + empty circle) rotating around a central axis while agents debate. Stops on convergence with a soft click-in of the proposal card.
@@ -199,7 +201,7 @@ Never use emoji outside these five signal roles.
 Every primary-route component must use the `apps/web/src/components/ui/` primitives. Inline `style=` is a code-smell — flag in review.
 
 - `<Button>` — variant: `primary | ghost | amber | danger | link`. Size: `sm | md`. No other buttons.
-- `<Card>` — variant: `default | raised | sunk`. Accent: `terracotta | amber | sage | null`. Never hand-rolled borders.
+- `<Card>` — variant: `default | raised | sunk`. Accent: `accent | amber | ok | null` (the `accent` slot is now blue per v2; the prop name `accent` survived the v1→v2 rename). Never hand-rolled borders.
 - `<Heading>` — level `1 | 2 | 3`. Uses `--wg-fs-h1/2/3`. Serif variant for level 1 on landing + node detail.
 - `<Text>` — variant: `body | label | caption | mono`. Muted boolean.
 - `<EmptyState>` — dashed border, centered muted text + optional CTA. Consistent across every empty list.
@@ -227,6 +229,9 @@ Every primary-route component must use the `apps/web/src/components/ui/` primiti
 | 2026-04-22 | 5 load-bearing motion moments, rest restrained        | Motion is how "organism" stops being metaphor. Scarcity keeps them magic.   |
 | 2026-04-22 | Dark mode = full redesign, not inversion              | Prod demo URL will be visited on both modes. Inversion always looks cheap. |
 | 2026-04-22 | Icon stroke 1.5 on lucide                             | Thinner strokes feel hand-drawn, match biological undertones.               |
+| 2026-04-26 | **v2 — switch palette to blue/white (cool-clinical)** | Per user direction. v1 warm-industrial was a deliberate category-break, but the user wants the product to read as a clean collaboration instrument rather than a literary lab notebook. Token NAMES unchanged in `globals.css` (so component code is untouched) — only HEX values shifted. Surface texture moves from noise grain to blueprint grid: same "structured surface" intent, on-theme for the graph instrument. v1 palette preserved in git history if we ever need to compare. Type stack (Instrument Serif / General Sans / JetBrains Mono) unchanged — the serif headline is still the highest-leverage taste lever and pairs well with cool blues. |
+| 2026-04-26 | **v2 — keep Instrument Serif over Georgia**            | The reference HTML uses Georgia, but Instrument Serif is the genuine differentiator vs. category defaults. Switching to Georgia would weaken the "thoughtful instrument" signal for no gain. |
+| 2026-04-26 | **v2 — surface texture = blueprint grid, not noise**   | Noise grain was for the lab-notebook mood. Blueprint grid signals "this surface is structured, this is where the graph lives." Same a11y profile (static SVG, mask-faded). |
 
 ---
 

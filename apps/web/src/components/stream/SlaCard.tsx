@@ -79,7 +79,7 @@ export function SlaCard({ message, onOpen }: Props) {
   const isOverdue = payload.band === "overdue";
   const accent = isOverdue ? "var(--wg-accent)" : "var(--wg-amber)";
   const bg = isOverdue
-    ? "rgba(192,71,30,0.05)"
+    ? "rgba(37, 99, 235,0.05)"
     : "var(--wg-amber-soft)";
   const bandLabel = isOverdue
     ? t("sla.overdue", { when: humanize(payload.seconds_remaining) })
