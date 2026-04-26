@@ -30,7 +30,6 @@ from .orm import (
     KbItemRow,
     LicenseAuditRow,
     MeetingTranscriptRow,
-    MembraneSignalRow,
     MembraneSubscriptionRow,
     MessageRow,
     MilestoneRow,
@@ -2356,8 +2355,20 @@ class RoutedSignalRepository:
 # ---- Phase D — membrane signal repository -------------------------------
 
 
-class MembraneSignalRepository:
-    """Phase D — persistence for membrane-ingested external signals.
+class KbIngestRepository:
+    """Externally-ingested KB items (membrane source).
+
+    Operates on `kb_items` rows with `source='ingest'`. The class
+    encapsulates the dedup-by-source-identifier and review-lifecycle
+    semantics that external ingests need (URLs, RSS, webhooks,
+    git commits) — separate from the manual / upload / llm write paths
+    that go through `KbItemRepository.create` directly.
+
+    Renamed from `MembraneSignalRepository` after the fold completed
+    (docs/membrane-reorg.md F1-F5, 2026-04-26). Pre-fold the class
+    operated on a separate `membrane_signals` table; post-fold it
+    operates on a discriminated subset of `kb_items`. The old name
+    survives as a deprecated alias in `__init__.py`.
 
     Vision §5.12 (Membranes). Dedup key is (project_id, source_identifier).
     Re-ingesting the same URL / commit hash / forum post returns the
@@ -2372,16 +2383,18 @@ class MembraneSignalRepository:
 
     async def find_by_source(
         self, *, project_id: str | None, source_identifier: str
-    ) -> MembraneSignalRow | None:
-        stmt = select(MembraneSignalRow).where(
-            MembraneSignalRow.source_identifier == source_identifier,
+    ) -> KbItemRow | None:
+        stmt = (
+            select(KbItemRow)
+            .where(KbItemRow.source == "ingest")
+            .where(KbItemRow.source_identifier == source_identifier)
         )
         # NULL-safe project scope match — project-scoped dedup only collides
         # with rows from the same project_id value (including null↔null).
         if project_id is None:
-            stmt = stmt.where(MembraneSignalRow.project_id.is_(None))
+            stmt = stmt.where(KbItemRow.project_id.is_(None))
         else:
-            stmt = stmt.where(MembraneSignalRow.project_id == project_id)
+            stmt = stmt.where(KbItemRow.project_id == project_id)
         return (await self._session.execute(stmt)).scalar_one_or_none()
 
     async def create(
@@ -2393,16 +2406,30 @@ class MembraneSignalRepository:
         raw_content: str,
         ingested_by_user_id: str | None = None,
         trace_id: str | None = None,
-    ) -> MembraneSignalRow:
-        row = MembraneSignalRow(
+    ) -> KbItemRow:
+        # Title fallback chain mirrors the F2 backfill exactly so old
+        # backfilled rows and new ingest writes pick the same title.
+        # Caps at 500 (KbItemRow.title column limit).
+        title = (
+            (raw_content or "")[:80]
+            or (source_identifier or "")[:500]
+            or "Untitled signal"
+        )
+        row = KbItemRow(
             id=_new_id(),
             project_id=project_id,
+            owner_user_id=ingested_by_user_id,
+            folder_id=None,
+            scope="group",
+            title=title,
+            content_md="",
+            source="ingest",
             source_kind=source_kind,
             source_identifier=source_identifier,
             raw_content=raw_content,
-            ingested_by_user_id=ingested_by_user_id,
             classification_json={},
             status="pending-review",
+            ingested_by_user_id=ingested_by_user_id,
             trace_id=trace_id,
         )
         self._session.add(row)
@@ -2411,6 +2438,12 @@ class MembraneSignalRepository:
         except IntegrityError:
             # Race: another request wrote the same (project_id, source_identifier)
             # between find + flush. Return the existing row instead of exploding.
+            # NOTE: F1 didn't add a UNIQUE constraint on (project_id,
+            # source_identifier) at the DB level (SQLite portability); the
+            # find+create pattern + this rollback path is the dedup mechanism.
+            # Concurrent writes can still produce duplicates briefly until the
+            # next find_by_source coalesces them; acceptable for the ingest
+            # cadence (cron polls + occasional user pastes).
             await self._session.rollback()
             fresh = await self.find_by_source(
                 project_id=project_id, source_identifier=source_identifier
@@ -2420,10 +2453,15 @@ class MembraneSignalRepository:
             raise
         return row
 
-    async def get(self, signal_id: str) -> MembraneSignalRow | None:
+    async def get(self, signal_id: str) -> KbItemRow | None:
+        # No source='ingest' filter: callers may pass an id that was
+        # written before the fold (back when membrane_signals was the
+        # only store). Post-F2 backfill, every such id has a kb_items
+        # mirror, so plain id lookup is correct. After F5 the legacy
+        # table is gone and this is the only path.
         return (
             await self._session.execute(
-                select(MembraneSignalRow).where(MembraneSignalRow.id == signal_id)
+                select(KbItemRow).where(KbItemRow.id == signal_id)
             )
         ).scalar_one_or_none()
 
@@ -2433,12 +2471,13 @@ class MembraneSignalRepository:
         *,
         classification: dict,
         status: str,
-    ) -> MembraneSignalRow | None:
+    ) -> KbItemRow | None:
         row = await self.get(signal_id)
         if row is None:
             return None
         row.classification_json = dict(classification)
         row.status = status
+        row.updated_at = datetime.now(timezone.utc)
         await self._session.flush()
         return row
 
@@ -2448,7 +2487,7 @@ class MembraneSignalRepository:
         *,
         status: str,
         approved_by_user_id: str | None = None,
-    ) -> MembraneSignalRow | None:
+    ) -> KbItemRow | None:
         row = await self.get(signal_id)
         if row is None:
             return None
@@ -2456,6 +2495,7 @@ class MembraneSignalRepository:
         if approved_by_user_id is not None:
             row.approved_by_user_id = approved_by_user_id
             row.approved_at = datetime.now(timezone.utc)
+        row.updated_at = datetime.now(timezone.utc)
         await self._session.flush()
         return row
 
@@ -2465,13 +2505,15 @@ class MembraneSignalRepository:
         *,
         status: str | None = None,
         limit: int = 100,
-    ) -> list[MembraneSignalRow]:
-        stmt = select(MembraneSignalRow).where(
-            MembraneSignalRow.project_id == project_id
+    ) -> list[KbItemRow]:
+        stmt = (
+            select(KbItemRow)
+            .where(KbItemRow.source == "ingest")
+            .where(KbItemRow.project_id == project_id)
         )
         if status is not None:
-            stmt = stmt.where(MembraneSignalRow.status == status)
-        stmt = stmt.order_by(MembraneSignalRow.created_at.desc()).limit(limit)
+            stmt = stmt.where(KbItemRow.status == status)
+        stmt = stmt.order_by(KbItemRow.created_at.desc()).limit(limit)
         return list((await self._session.execute(stmt)).scalars().all())
 
 
@@ -3567,26 +3609,30 @@ class KbFolderRepository:
         return len(list(rows))
 
     async def count_items(self, folder_id: str) -> int:
-        stmt = select(MembraneSignalRow).where(
-            MembraneSignalRow.folder_id == folder_id
-        )
+        # Post-fold (F3): all KB items — user-authored AND ingested —
+        # live in kb_items. Counting both kinds ensures the "is this
+        # folder empty?" gate stays correct regardless of source.
+        stmt = select(KbItemRow).where(KbItemRow.folder_id == folder_id)
         rows = (await self._session.execute(stmt)).scalars().all()
         return len(list(rows))
 
     async def set_item_folder(
         self, item_id: str, *, folder_id: str | None
-    ) -> MembraneSignalRow | None:
-        """Move an existing KB item (MembraneSignalRow) to a new folder.
+    ) -> KbItemRow | None:
+        """Move an existing KB item to a new folder.
 
-        Lives on the folder repo rather than MembraneSignalRepository
-        because moving items is tree-management; keeping the call
-        co-located with the rest of the hierarchy API is less confusing.
+        Operates on `kb_items` rows (any source). Pre-fold this mutated
+        MembraneSignalRow; post-fold all KB items — user-authored AND
+        ingested — live in kb_items, so the move is uniform regardless
+        of the row's source.
+
+        Lives on the folder repo rather than KbItemRepository because
+        moving items is tree-management; keeping the call co-located
+        with the rest of the hierarchy API is less confusing.
         """
         row = (
             await self._session.execute(
-                select(MembraneSignalRow).where(
-                    MembraneSignalRow.id == item_id
-                )
+                select(KbItemRow).where(KbItemRow.id == item_id)
             )
         ).scalar_one_or_none()
         if row is None:
@@ -3834,3 +3880,9 @@ class OrganizationMemberRepository:
         await self._session.delete(row)
         await self._session.flush()
         return True
+
+
+# Deprecated alias — `KbIngestRepository` is the post-fold name. Keeping
+# this around so out-of-tree callers (none in v1, but defensive) don't
+# break. New code should import `KbIngestRepository` directly.
+MembraneSignalRepository = KbIngestRepository

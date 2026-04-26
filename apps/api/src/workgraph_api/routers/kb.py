@@ -21,8 +21,8 @@ from __future__ import annotations
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request
 
 from workgraph_persistence import (
-    MembraneSignalRepository,
-    MembraneSignalRow,
+    KbItemRow,
+    KbIngestRepository,
     session_scope,
 )
 
@@ -65,7 +65,7 @@ def _handle_kb(result: dict) -> dict:
     return result
 
 
-def _kb_list_payload(row: MembraneSignalRow) -> dict:
+def _kb_list_payload(row: KbItemRow) -> dict:
     """Compact list-view payload for a KB item."""
     classification = dict(row.classification_json or {})
     summary = (classification.get("summary") or "") or (row.raw_content or "")
@@ -82,7 +82,7 @@ def _kb_list_payload(row: MembraneSignalRow) -> dict:
     }
 
 
-def _kb_detail_payload(row: MembraneSignalRow) -> dict:
+def _kb_detail_payload(row: KbItemRow) -> dict:
     """Full-detail payload for a single KB item."""
     classification = dict(row.classification_json or {})
     return {
@@ -114,7 +114,7 @@ async def get_kb_list(
 ):
     """List KB items for a project.
 
-    KB items are MembraneSignalRows with `status != 'rejected'` plus any
+    KB items are KbItemRows with `status != 'rejected'` plus any
     future KB sources (not yet in v1). `query` does case-insensitive
     substring match on raw_content, summary, and tags. `source_kind`
     filters on the origin channel (git-commit, rss, user-drop, …).
@@ -126,7 +126,7 @@ async def get_kb_list(
     q = (query or "").strip().lower()
 
     async with session_scope(request.app.state.sessionmaker) as session:
-        rows = await MembraneSignalRepository(session).list_for_project(
+        rows = await KbIngestRepository(session).list_for_project(
             project_id, limit=500
         )
 
@@ -139,7 +139,7 @@ async def get_kb_list(
         rows = [r for r in rows if r.source_kind == source_kind]
 
     if q:
-        filtered: list[MembraneSignalRow] = []
+        filtered: list[KbItemRow] = []
         for r in rows:
             classification = dict(r.classification_json or {})
             haystack = " ".join(
@@ -345,7 +345,7 @@ async def get_kb_item(
         raise HTTPException(status_code=403, detail="not_a_project_member")
 
     async with session_scope(request.app.state.sessionmaker) as session:
-        row = await MembraneSignalRepository(session).get(item_id)
+        row = await KbIngestRepository(session).get(item_id)
 
     if row is None or row.project_id != project_id:
         raise HTTPException(status_code=404, detail="kb_item_not_found")

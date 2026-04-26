@@ -31,7 +31,7 @@ from workgraph_api.services.tools.rss_subscribe import RssItem
 from workgraph_api.services.tools.web_search import SearchHit
 from workgraph_persistence import (
     DecisionRow,
-    MembraneSignalRow,
+    KbItemRow,
     MembraneSubscriptionRow,
     MessageRow,
     RiskRow,
@@ -145,9 +145,9 @@ async def test_paste_creates_proposed_signal(api_env, monkeypatch):
         rows = list(
             (
                 await session.execute(
-                    select(MembraneSignalRow).where(
-                        MembraneSignalRow.project_id == project_id
-                    )
+                    select(KbItemRow)
+                    .where(KbItemRow.source == "ingest")
+                    .where(KbItemRow.project_id == project_id)
                 )
             ).scalars().all()
         )
@@ -240,9 +240,9 @@ async def test_active_scan_generates_queries_and_ingests_hits(api_env, monkeypat
         rows = list(
             (
                 await session.execute(
-                    select(MembraneSignalRow).where(
-                        MembraneSignalRow.project_id == project_id
-                    )
+                    select(KbItemRow)
+                    .where(KbItemRow.source == "ingest")
+                    .where(KbItemRow.project_id == project_id)
                 )
             ).scalars().all()
         )
@@ -287,9 +287,9 @@ async def test_scan_without_tavily_key_is_noop(api_env, monkeypatch):
         rows = list(
             (
                 await session.execute(
-                    select(MembraneSignalRow).where(
-                        MembraneSignalRow.project_id == project_id
-                    )
+                    select(KbItemRow)
+                    .where(KbItemRow.source == "ingest")
+                    .where(KbItemRow.project_id == project_id)
                 )
             ).scalars().all()
         )

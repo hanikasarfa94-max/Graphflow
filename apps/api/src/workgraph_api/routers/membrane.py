@@ -23,7 +23,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, ConfigDict, Field
 
 from workgraph_persistence import (
-    MembraneSignalRepository,
+    KbIngestRepository,
     ProjectMemberRepository,
     session_scope,
 )
@@ -131,7 +131,7 @@ async def post_approve(
 
     # Read the row first to derive project_id for the membership gate.
     async with session_scope(request.app.state.sessionmaker) as session:
-        row = await MembraneSignalRepository(session).get(signal_id)
+        row = await KbIngestRepository(session).get(signal_id)
         if row is None:
             raise HTTPException(status_code=404, detail="signal_not_found")
         project_id = row.project_id

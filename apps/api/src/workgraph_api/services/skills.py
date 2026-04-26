@@ -51,7 +51,6 @@ from workgraph_persistence import (
     ConflictRepository,
     DecisionRepository,
     KbItemRepository,
-    MembraneSignalRepository,
     MessageRepository,
     PlanRepository,
     ProjectGraphRepository,
@@ -186,17 +185,18 @@ class SkillsService:
         query: str = "",
         limit: int = 3,
     ) -> list[dict[str, Any]]:
-        """Text-match over MembraneSignalRow + KbItemRow.
+        """Case-insensitive substring search across the project's KB.
 
-        Two tables, one search surface — same fix as the wiki tree
-        (kb_hierarchy.get_tree). Until 2026-04-25 this skill only
-        scanned MembraneSignalRow, so the LLM reported 'nothing in
-        KB' even when manual notes / file uploads / membrane-staged
-        drafts existed. Now both tables flow through the same
-        case-insensitive substring match. Personal-scope KbItemRow
-        rows are excluded — the LLM's project context is for the
-        whole team, not a specific viewer, so personal forks would
-        leak across users. Rejected / archived rows excluded.
+        Single-table read post-fold (F4): KbItemRow holds both the
+        externally-ingested rows (`source='ingest'`, formerly
+        MembraneSignalRow) and user-authored ones (manual / upload /
+        llm). The renderer switches on `source` to extract the right
+        haystack — classification.summary + raw_content for ingests,
+        title + content_md for user notes. Personal-scope rows are
+        excluded by `list_group_for_project`; LLM context is shared
+        across the team, so personal forks would leak across viewers.
+        Rejected / archived / draft rows excluded — drafts are
+        membrane-staged and not yet canonical.
 
         v1: substring match. Full-text / vector search is v2.
         """
@@ -207,55 +207,51 @@ class SkillsService:
             limit_val = 3
 
         async with session_scope(self._sessionmaker) as session:
-            membrane_rows = [
-                r
-                for r in await MembraneSignalRepository(session).list_for_project(
-                    project_id, limit=200
-                )
-                if r.status != "rejected"
-            ]
+            # F4: single-table read. KbItemRepository returns BOTH
+            # ingest-source rows (the old MembraneSignalRow surface) and
+            # user-authored ones. Status filter excludes the per-source
+            # "not yet canonical" markers:
+            #   * 'rejected' / 'archived' — withheld signals + archived notes
+            #   * 'draft' — membrane-staged, owner hasn't approved yet
             kb_item_rows = [
                 r
                 for r in await KbItemRepository(session).list_group_for_project(
-                    project_id=project_id, limit=200
+                    project_id=project_id, limit=400
                 )
-                if r.status not in ("archived", "draft")
-                # Drafts are membrane-staged; not yet canonical group
-                # context. Including them would have the LLM cite
-                # un-approved content. Once stage-4 review accept
-                # promotes them to 'published' they show up.
+                if r.status not in ("archived", "draft", "rejected")
             ]
 
         matched: list[dict[str, Any]] = []
-        for row in membrane_rows:
-            classification = dict(row.classification_json or {})
-            summary = (classification.get("summary") or "")
-            tags = list(classification.get("tags") or [])
-            haystack_parts = [
-                (row.raw_content or "").lower(),
-                summary.lower(),
-                " ".join(str(t).lower() for t in tags),
-            ]
-            if q and not any(q in part for part in haystack_parts):
-                continue
-            matched.append(
-                {
-                    "id": row.id,
-                    "source_kind": row.source_kind,
-                    "source_identifier": row.source_identifier,
-                    "summary": summary[:200] if summary else (row.raw_content or "")[:200],
-                    "tags": tags,
-                    "status": row.status,
-                    "created_at": (
-                        row.created_at.isoformat() if row.created_at else None
-                    ),
-                }
-            )
-            if len(matched) >= limit_val:
-                break
-
-        if len(matched) < limit_val:
-            for row in kb_item_rows:
+        for row in kb_item_rows:
+            if row.source == "ingest":
+                classification = dict(row.classification_json or {})
+                summary = classification.get("summary") or ""
+                tags = list(classification.get("tags") or [])
+                haystack = [
+                    (row.raw_content or "").lower(),
+                    summary.lower(),
+                    " ".join(str(t).lower() for t in tags),
+                ]
+                if q and not any(q in part for part in haystack):
+                    continue
+                matched.append(
+                    {
+                        "id": row.id,
+                        "source_kind": row.source_kind,
+                        "source_identifier": row.source_identifier,
+                        "summary": (
+                            summary[:200]
+                            if summary
+                            else (row.raw_content or "")[:200]
+                        ),
+                        "tags": tags,
+                        "status": row.status,
+                        "created_at": (
+                            row.created_at.isoformat() if row.created_at else None
+                        ),
+                    }
+                )
+            else:
                 title = (row.title or "").lower()
                 content = (row.content_md or "").lower()
                 if q and q not in title and q not in content:
@@ -267,7 +263,8 @@ class SkillsService:
                             "kb-personal" if row.scope == "personal" else "kb-note"
                         ),
                         "source_identifier": None,
-                        "summary": (row.title or "") + (
+                        "summary": (row.title or "")
+                        + (
                             ": " + (row.content_md or "")[:160]
                             if row.content_md
                             else ""
@@ -279,8 +276,8 @@ class SkillsService:
                         ),
                     }
                 )
-                if len(matched) >= limit_val:
-                    break
+            if len(matched) >= limit_val:
+                break
         return matched
 
     async def _recent_decisions(

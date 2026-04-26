@@ -78,8 +78,26 @@ _INLINE_MAX_BYTES = 32 * 1024  # don't inline beyond 32KB even if text
 _log = logging.getLogger("workgraph.api.kb_items")
 
 VALID_SCOPES = frozenset({"personal", "group"})
-VALID_STATUSES = frozenset({"draft", "published", "archived"})
-VALID_SOURCES = frozenset({"manual", "upload", "llm"})
+# Two status vocabularies share this column since the fold (migration
+# 0022): user-authored items use draft/published/archived; ingested
+# rows (source='ingest') use the membrane lifecycle. Both are valid;
+# enforcement of "only legal transitions for this row's source" lives
+# in the per-source service path, not here.
+VALID_STATUSES = frozenset(
+    {
+        "draft",
+        "published",
+        "archived",
+        "pending-review",
+        "approved",
+        "rejected",
+        "routed",
+    }
+)
+# 'ingest' (added 0022/F2): externally-pulled signals through the
+# membrane pipeline. source_kind discriminates the sub-type
+# (git-commit / rss / user-drop / webhook / etc.).
+VALID_SOURCES = frozenset({"manual", "upload", "llm", "ingest"})
 
 _MAX_CONTENT_BYTES = 64 * 1024  # 64KB; larger needs blob-store v2.
 
