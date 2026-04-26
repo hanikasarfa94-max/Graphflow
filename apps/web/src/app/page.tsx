@@ -4,7 +4,7 @@ import { ActiveSection } from "@/components/home/ActiveSection";
 import { ApprovalsSection } from "@/components/home/ApprovalsSection";
 import { loadHomeData } from "@/components/home/data";
 import { DMsSection } from "@/components/home/DMsSection";
-import { HomeHeader } from "@/components/home/HomeHeader";
+import { HomeHero } from "@/components/home/HomeHero";
 import { PendingSection } from "@/components/home/PendingSection";
 import { ProjectsSection } from "@/components/home/ProjectsSection";
 import { PublicSplit } from "@/components/public/PublicSplit";
@@ -52,14 +52,20 @@ export default async function Home() {
   return (
     <main
       style={{
-        maxWidth: 860,
+        maxWidth: 1180,
         margin: "0 auto",
-        padding: "56px 24px 80px",
+        padding: "32px 28px 80px",
       }}
     >
-      <HomeHeader displayName={user.display_name} />
+      <HomeHero
+        displayName={user.display_name}
+        pendingCount={data.pending.length}
+        pulse={data.pulse}
+      />
 
-      <PendingSection pending={data.pending} />
+      <div id="pending">
+        <PendingSection pending={data.pending} />
+      </div>
 
       {data.is_admin_anywhere ? (
         <ApprovalsSection projects={data.projects} />

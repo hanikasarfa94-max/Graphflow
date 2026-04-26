@@ -143,6 +143,23 @@
   "home": {
     "welcome": "欢迎,{name}",
     "signedInAs": "当前账号:{name}",
+    "hero": {
+      "kicker": "今日工作台",
+      "welcome": "欢迎,{name}",
+      "subtitle": "把会话、决策、任务和知识沉淀为同一张工作图谱。首页不只展示“列表”,而是告诉你:哪些信号需要处理,哪些决策正在等待结晶,哪些项目正在偏离目标。",
+      "primaryCta": "处理路由收件箱 ({count})",
+      "primaryCtaQuiet": "进入项目",
+      "secondaryCta": "查看所有项目",
+      "pulseEyebrow": "系统脉搏",
+      "pulseHeadline": "{count} 项待确认",
+      "pulseBodyActive": "这些信号路由给你,因为系统认为你最适合处理。",
+      "pulseBodyQuiet": "所有路由信号都已回应。可以利用工作台回顾项目、决策与知识变更。",
+      "pulseStat": {
+        "projects": "活跃项目",
+        "nodes": "图谱节点",
+        "decisions7d": "决策 · 7d"
+      }
+    },
     "pending": {
       "title": "需要你回应",
       "empty": "暂无待处理事项",

@@ -76,6 +76,15 @@ export type ActiveContext =
   | ActiveDecisionFallback
   | ActiveCaughtUp;
 
+export interface HomePulseAggregates {
+  /** Number of project memberships (one per active project). */
+  active_project_count: number;
+  /** Total graph nodes (goals + deliverables + constraints + risks + tasks) across the viewer's projects. */
+  total_graph_nodes: number;
+  /** Decisions crystallized in the last 7 days across the viewer's projects. */
+  decisions_last_7d: number;
+}
+
 export interface HomeData {
   user: User;
   pending: PendingSignal[];
@@ -85,6 +94,9 @@ export interface HomeData {
   /** True when the viewer holds an admin-tier role on any project. Drives
    *  the gated-approvals placeholder section per Phase F §3. */
   is_admin_anywhere: boolean;
+  /** System pulse aggregates — drives the hero + pulse card on the
+   *  Batch E.3 home rebuild. */
+  pulse: HomePulseAggregates;
 }
 
 function matchesViewer(target: string, user: User): boolean {
@@ -385,6 +397,26 @@ export async function loadHomeData(user: User): Promise<HomeData> {
     };
   }
 
+  // Pulse aggregates — derive from data already in hand. Cheap.
+  const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+  let totalGraphNodes = 0;
+  let decisionsLast7d = 0;
+  for (const { state } of perProject) {
+    if (!state) continue;
+    totalGraphNodes +=
+      (state.graph?.goals?.length ?? 0) +
+      (state.graph?.deliverables?.length ?? 0) +
+      (state.graph?.constraints?.length ?? 0) +
+      (state.graph?.risks?.length ?? 0) +
+      (state.plan?.tasks?.length ?? 0);
+    for (const d of state.decisions) {
+      if (!d.created_at) continue;
+      if (new Date(d.created_at).getTime() >= sevenDaysAgo) {
+        decisionsLast7d += 1;
+      }
+    }
+  }
+
   return {
     user,
     pending,
@@ -392,5 +424,10 @@ export async function loadHomeData(user: User): Promise<HomeData> {
     projects: projectCards,
     dms: dmCards,
     is_admin_anywhere: isAdminAnywhere,
+    pulse: {
+      active_project_count: projects.length,
+      total_graph_nodes: totalGraphNodes,
+      decisions_last_7d: decisionsLast7d,
+    },
   };
 }

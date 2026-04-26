@@ -143,6 +143,23 @@
   "home": {
     "welcome": "Welcome, {name}",
     "signedInAs": "signed in as {name}",
+    "hero": {
+      "kicker": "Today's bench",
+      "welcome": "Welcome, {name}",
+      "subtitle": "Compress conversations, decisions, tasks and knowledge into one work graph. The home doesn't just list things — it tells you which signals need attention, which decisions are about to crystallize, and where projects are drifting.",
+      "primaryCta": "Handle routing inbox ({count})",
+      "primaryCtaQuiet": "Open projects",
+      "secondaryCta": "Browse projects",
+      "pulseEyebrow": "System pulse",
+      "pulseHeadline": "{count, plural, =0 {Nothing waiting} one {# item awaiting action} other {# items awaiting action}}",
+      "pulseBodyActive": "Pending signals are routed to you because the system thinks you're best positioned to act.",
+      "pulseBodyQuiet": "All routed signals are answered. Use the bench to review projects, decisions and knowledge changes.",
+      "pulseStat": {
+        "projects": "active projects",
+        "nodes": "graph nodes",
+        "decisions7d": "decisions · 7d"
+      }
+    },
     "pending": {
       "title": "Needs your response",
       "empty": "No pending signals",
