@@ -1,0 +1,76 @@
+name: e2e
+
+on:
+  pull_request:
+    paths:
+      - "apps/api/**"
+      - "apps/web/**"
+      - "packages/**"
+      - ".github/workflows/e2e.yml"
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  playwright:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      WORKGRAPH_ENV: dev
+      WORKGRAPH_E2E_DATABASE_URL: "sqlite+aiosqlite:///./apps/web/data/workgraph-e2e-ci.sqlite"
+      # Stub LLM provider — e2e specs assert deterministic state, so
+      # the real DeepSeek path would make them flaky. The api fixture
+      # falls back to stub agents when no DEEPSEEK_API_KEY is set.
+      WORKGRAPH_LOG_LEVEL: WARNING
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
+
+      - name: Install workspace (Python)
+        run: uv sync --all-packages --dev
+
+      # bun runs the web dev server; matches playwright.config.ts.
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install web deps
+        working-directory: apps/web
+        run: bun install --frozen-lockfile
+
+      - name: Install Playwright browsers
+        working-directory: apps/web
+        # chromium-only matches our playwright.config.ts projects list.
+        run: bunx playwright install --with-deps chromium
+
+      - name: Prepare e2e database directory
+        run: mkdir -p apps/web/data
+
+      - name: Run Playwright
+        working-directory: apps/web
+        # Playwright config auto-boots both api (uvicorn) and web
+        # (next dev) on alt ports. The CI flag flips reuseExistingServer
+        # off + retries to 2 + reporter to github.
+        run: bunx playwright test
+        env:
+          CI: "1"
+
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: apps/web/playwright-report/
+          retention-days: 7
