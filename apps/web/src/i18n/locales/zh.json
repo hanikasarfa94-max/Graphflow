@@ -1,7 +1,8 @@
 {
   "brand": {
     "name": "WorkGraph",
-    "tagline": "协作是一张图,而不是一份文档。"
+    "tagline": "协作是一张图,而不是一份文档。",
+    "shortTagline": "AI 原生团队记忆"
   },
   "nav": {
     "home": "首页",
@@ -668,6 +669,7 @@
       "renders": "渲染文档",
       "renders_postmortem": "项目复盘",
       "renders_handoff": "交接文档",
+      "docs": "渲染文档",
       "audit": "审计视图",
       "audit_kicker": "审计视图",
       "audit_subtitle": "图谱、计划、任务、风险与决策属于同一审计域，内部用切页保持在一起。",

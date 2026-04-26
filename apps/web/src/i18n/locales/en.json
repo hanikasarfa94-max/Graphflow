@@ -1,7 +1,8 @@
 {
   "brand": {
     "name": "WorkGraph",
-    "tagline": "Coordination as a graph, not a document."
+    "tagline": "Coordination as a graph, not a document.",
+    "shortTagline": "AI-native team memory"
   },
   "nav": {
     "home": "Home",
@@ -668,6 +669,7 @@
       "renders": "Renders",
       "renders_postmortem": "Postmortem",
       "renders_handoff": "Handoff",
+      "docs": "Rendered docs",
       "audit": "Audit view",
       "audit_kicker": "Audit view",
       "audit_subtitle": "Graph, plan, tasks, risks and decisions belong to the same audit domain — internal tabs keep them together.",

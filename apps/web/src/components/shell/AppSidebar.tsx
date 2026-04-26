@@ -38,12 +38,23 @@ const linkBase: CSSProperties = {
   display: "flex",
   alignItems: "center",
   gap: 8,
-  padding: "7px 12px",
+  padding: "8px 12px",
   fontSize: 13,
   color: "var(--wg-ink)",
   textDecoration: "none",
-  borderRadius: "var(--wg-radius-sm, 4px)",
+  borderRadius: 10,
   lineHeight: 1.3,
+  transition:
+    "background 140ms ease-out, color 140ms ease-out",
+};
+
+// Active-state pill — gradient blue tint, brand-coloured text. Used by
+// every nav row (top-level + project sub-items) so the highlight has a
+// consistent silhouette across the rail.
+const linkActive: CSSProperties = {
+  background: "linear-gradient(135deg, #eaf2ff, #dbeafe)",
+  color: "var(--wg-accent)",
+  fontWeight: 700,
 };
 
 const sectionLabel: CSSProperties = {
@@ -100,22 +111,24 @@ function ProjectNode({
   // visible without requiring an extra click. Small teams typically have
   // 1–3 projects; always-expanded reads better than hidden chat rooms.
   const [open, setOpen] = useState(true);
-  const [rendersOpen, setRendersOpen] = useState(false);
 
+  // Batch E.4 IA simplification — one entry per per-project surface.
+  // The redesign collapses Composition → Org (same authority lens),
+  // drops Meetings from the sidebar (it lives inside Team room
+  // workflow), and unwinds the Renders accordion into a single Docs
+  // entry that lands on the postmortem default. Pages still exist at
+  // their old URLs — only the sidebar surface shrinks.
   const myThread = `/projects/${project.id}`;
   const teamRoom = `/projects/${project.id}/team`;
   const status = `/projects/${project.id}/status`;
   const org = `/projects/${project.id}/org`;
-  const composition = `/projects/${project.id}/composition`;
   const kb = `/projects/${project.id}/kb`;
   const skills = `/projects/${project.id}/skills`;
-  const meetings = `/projects/${project.id}/meetings`;
+  const docs = `/projects/${project.id}/renders/postmortem`;
   // Audit View — Batch B IA reshape. The 5 audit subpages
   // (graph/plan/tasks/risks/decisions) collapse into one sidebar
   // entry; the user lands on the graph tab by default and switches
-  // among the audit views via the in-page AuditTabBar
-  // (components/audit/AuditTabBar.tsx). Keeps the sidebar shorter
-  // and matches the home_redesign HTML's "audit is one domain" intent.
+  // among the audit views via the in-page AuditTabBar.
   const auditDefault = `/projects/${project.id}/detail/graph`;
   const auditActive = pathname?.startsWith(`/projects/${project.id}/detail/`)
     && (pathname.includes("/detail/graph")
@@ -123,17 +136,18 @@ function ProjectNode({
       || pathname.includes("/detail/tasks")
       || pathname.includes("/detail/risks")
       || pathname.includes("/detail/decisions"));
+  const docsActive = pathname?.startsWith(`/projects/${project.id}/renders/`);
 
   const subItem: CSSProperties = {
     ...linkBase,
-    padding: "5px 12px 5px 28px",
+    padding: "6px 12px 6px 28px",
     fontSize: 12,
     color: "var(--wg-ink-soft)",
+    borderRadius: 9,
   };
   const subItemActive: CSSProperties = {
-    background: "var(--wg-accent-soft, #fdf4ec)",
-    color: "var(--wg-accent)",
-    fontWeight: 600,
+    ...linkActive,
+    fontWeight: 700,
   };
 
   return (
@@ -217,17 +231,6 @@ function ProjectNode({
           </li>
           <li>
             <Link
-              href={composition}
-              style={{
-                ...subItem,
-                ...(isActive(pathname, composition) ? subItemActive : null),
-              }}
-            >
-              <span aria-hidden>⚖</span> {t("shell.project.composition")}
-            </Link>
-          </li>
-          <li>
-            <Link
               href={kb}
               style={{
                 ...subItem,
@@ -250,75 +253,14 @@ function ProjectNode({
           </li>
           <li>
             <Link
-              href={meetings}
+              href={docs}
               style={{
                 ...subItem,
-                ...(isActive(pathname, meetings) ? subItemActive : null),
+                ...(docsActive ? subItemActive : null),
               }}
             >
-              <span aria-hidden>·</span> {t("shell.project.meetings")}
+              <span aria-hidden>📝</span> {t("shell.project.docs")}
             </Link>
-          </li>
-          <li>
-            <button
-              type="button"
-              onClick={() => setRendersOpen((v) => !v)}
-              aria-expanded={rendersOpen}
-              style={{
-                ...subItem,
-                background: "transparent",
-                border: "none",
-                cursor: "pointer",
-                textAlign: "left",
-                width: "100%",
-              }}
-            >
-              <span aria-hidden>📝</span> {t("shell.project.renders")}
-              <span
-                style={{ marginLeft: "auto", fontSize: 10 }}
-                aria-hidden
-              >
-                {rendersOpen ? "▾" : "▸"}
-              </span>
-            </button>
-            {rendersOpen && (
-              <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
-                <li>
-                  <Link
-                    href={`/projects/${project.id}/renders/postmortem`}
-                    style={{
-                      ...subItem,
-                      paddingLeft: 44,
-                      ...(isActive(
-                        pathname,
-                        `/projects/${project.id}/renders/postmortem`,
-                      )
-                        ? subItemActive
-                        : null),
-                    }}
-                  >
-                    · {t("shell.project.renders_postmortem")}
-                  </Link>
-                </li>
-                <li>
-                  <Link
-                    href={`/projects/${project.id}/renders/handoff`}
-                    style={{
-                      ...subItem,
-                      paddingLeft: 44,
-                      ...(isActive(
-                        pathname,
-                        `/projects/${project.id}/renders/handoff`,
-                      )
-                        ? subItemActive
-                        : null),
-                    }}
-                  >
-                    · {t("shell.project.renders_handoff")}
-                  </Link>
-                </li>
-              </ul>
-            )}
           </li>
           <li>
             <Link
@@ -367,7 +309,12 @@ export function AppSidebar({
         width: SIDEBAR_WIDTH,
         minWidth: SIDEBAR_WIDTH,
         borderRight: "1px solid var(--wg-line)",
-        background: "#fff",
+        // Glass over the page-level gradient so the sidebar reads as a
+        // surface, not a slab. Backdrop-filter degrades silently on
+        // browsers that don't support it.
+        background: "rgba(255,255,255,0.86)",
+        backdropFilter: "blur(18px)",
+        WebkitBackdropFilter: "blur(18px)",
         display: "flex",
         flexDirection: "column",
         height: "100vh",
@@ -375,30 +322,61 @@ export function AppSidebar({
         top: 0,
       }}
     >
-      {/* Brand */}
-      <div
+      {/* Brand — gradient W mark + name + tagline. The mark is the
+          single most repeated visual; making it a small instrument
+          (gradient + soft shadow) is cheap personality. */}
+      <Link
+        href="/"
         style={{
-          padding: "16px 14px 10px",
+          padding: "16px 14px 14px",
           borderBottom: "1px solid var(--wg-line)",
           display: "flex",
           alignItems: "center",
-          gap: 8,
+          gap: 10,
+          textDecoration: "none",
+          color: "var(--wg-ink)",
         }}
       >
-        <span className="wg-dot" />
-        <Link
-          href="/"
+        <span
+          aria-hidden
           style={{
-            fontSize: 14,
-            fontWeight: 600,
-            color: "var(--wg-ink)",
-            textDecoration: "none",
-            letterSpacing: "-0.01em",
+            width: 32,
+            height: 32,
+            borderRadius: 11,
+            display: "grid",
+            placeItems: "center",
+            background:
+              "linear-gradient(135deg, #38bdf8, var(--wg-accent))",
+            color: "#fff",
+            fontWeight: 800,
+            fontSize: 15,
+            letterSpacing: "-0.02em",
+            boxShadow: "0 8px 18px rgba(37,99,235,0.22)",
           }}
         >
-          {t("brand.name")}
-        </Link>
-      </div>
+          W
+        </span>
+        <span style={{ display: "flex", flexDirection: "column", gap: 1 }}>
+          <span
+            style={{
+              fontSize: 15,
+              fontWeight: 700,
+              letterSpacing: "-0.01em",
+            }}
+          >
+            {t("brand.name")}
+          </span>
+          <span
+            style={{
+              fontSize: 10,
+              color: "var(--wg-ink-soft)",
+              letterSpacing: "0.04em",
+            }}
+          >
+            {t("brand.shortTagline")}
+          </span>
+        </span>
+      </Link>
 
       {/* Scrollable nav */}
       <nav
@@ -417,11 +395,7 @@ export function AppSidebar({
               data-testid="sidebar-home-link"
               style={{
                 ...linkBase,
-                background: homeActive
-                  ? "var(--wg-accent-soft, #fdf4ec)"
-                  : "transparent",
-                color: homeActive ? "var(--wg-accent)" : "var(--wg-ink)",
-                fontWeight: homeActive ? 600 : 400,
+                ...(homeActive ? linkActive : null),
               }}
             >
               <span aria-hidden>🏠</span>
@@ -442,13 +416,7 @@ export function AppSidebar({
               data-testid="sidebar-projects-link"
               style={{
                 ...linkBase,
-                background: projectsActive
-                  ? "var(--wg-accent-soft, #fdf4ec)"
-                  : "transparent",
-                color: projectsActive
-                  ? "var(--wg-accent)"
-                  : "var(--wg-ink)",
-                fontWeight: projectsActive ? 600 : 400,
+                ...(projectsActive ? linkActive : null),
               }}
             >
               <span aria-hidden>🗂</span>
@@ -481,13 +449,7 @@ export function AppSidebar({
                       data-slug={w.slug}
                       style={{
                         ...linkBase,
-                        background: wsActive
-                          ? "var(--wg-accent-soft, #fdf4ec)"
-                          : "transparent",
-                        color: wsActive
-                          ? "var(--wg-accent)"
-                          : "var(--wg-ink)",
-                        fontWeight: wsActive ? 600 : 400,
+                        ...(wsActive ? linkActive : null),
                       }}
                       title={w.name}
                     >
@@ -559,11 +521,7 @@ export function AppSidebar({
                     href={href}
                     style={{
                       ...linkBase,
-                      background: active
-                        ? "var(--wg-accent-soft, #fdf4ec)"
-                        : "transparent",
-                      color: active ? "var(--wg-accent)" : "var(--wg-ink)",
-                      fontWeight: active ? 600 : 400,
+                      ...(active ? linkActive : null),
                     }}
                   >
                     <span aria-hidden>💬</span>
@@ -604,12 +562,7 @@ export function AppSidebar({
           style={{
             ...linkBase,
             padding: "6px 8px",
-            background: isActive(pathname, "/settings/profile")
-              ? "var(--wg-accent-soft, #fdf4ec)"
-              : "transparent",
-            color: isActive(pathname, "/settings/profile")
-              ? "var(--wg-accent)"
-              : "var(--wg-ink)",
+            ...(isActive(pathname, "/settings/profile") ? linkActive : null),
           }}
         >
           <span aria-hidden>👤</span>
