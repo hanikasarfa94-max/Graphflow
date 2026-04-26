@@ -507,9 +507,8 @@ async def lifespan(app: FastAPI):
     # for advisory review (the "decision" kind suggestion crystallizes
     # a DecisionRow on accept; review captures dup-decision warnings).
     im_service.attach_membrane(membrane_service)
-    # Stage A — silent-consensus ratifications also crystallize via the
-    # membrane.
-    silent_consensus_service.attach_membrane(membrane_service)
+    # silent_consensus_service is constructed further down (line ~544);
+    # its attach_membrane() call lives down there to satisfy ordering.
 
     pre_answer_agent = PreAnswerAgent()
     pre_answer_service = PreAnswerService(
@@ -544,6 +543,10 @@ async def lifespan(app: FastAPI):
     silent_consensus_service = SilentConsensusService(
         sessionmaker, event_bus
     )
+    # Stage A — silent-consensus ratifications also crystallize via the
+    # membrane (advisory review). Late-bound here because the service
+    # is constructed below the membrane block above.
+    silent_consensus_service.attach_membrane(membrane_service)
     onboarding_service = OnboardingService(
         sessionmaker, license_context_service
     )

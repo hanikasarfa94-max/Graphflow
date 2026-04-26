@@ -277,6 +277,26 @@
       "offline": "离线"
     }
   },
+  "org": {
+    "kicker": "决策权限",
+    "title": "组织诊断",
+    "subtitle": "权限分布、单点风险与成员负荷。和「状态」(项目健康) 与「技能图谱」(能力地图) 不同 —— 这一页关注「谁有权决定什么」。",
+    "gateKeepers": {
+      "heading": "把关人分布",
+      "subhead": "按决策类别",
+      "empty": "尚未配置受控决策类别。",
+      "unset": "未指定把关人",
+      "noGate": "无把关人",
+      "singlePoint": "单点风险"
+    },
+    "load": {
+      "heading": "成员负荷",
+      "subhead": "已裁决数 + 持有的把关类别",
+      "empty": "暂无成员。",
+      "decisions": "{count} 项裁决",
+      "gateClasses": "{count} 个把关类别"
+    }
+  },
   "status": {
     "title": "项目状态",
     "lastRefreshed": "最后刷新 {time}",
@@ -616,6 +636,8 @@
       "renders": "渲染文档",
       "renders_postmortem": "项目复盘",
       "renders_handoff": "交接文档",
+      "audit": "审计视图",
+      "organization": "组织",
       "detail": "审计视图",
       "detail_graph": "图谱",
       "detail_plan": "计划",

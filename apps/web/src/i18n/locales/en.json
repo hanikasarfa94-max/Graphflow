@@ -277,6 +277,26 @@
       "offline": "Offline"
     }
   },
+  "org": {
+    "kicker": "Decision authority",
+    "title": "Organization",
+    "subtitle": "Where authority concentrates, where single-point risks live, and how load is distributed. Different intent from Status (project health) and Skills (capability map) — this page is about who decides what.",
+    "gateKeepers": {
+      "heading": "Gate-keeper distribution",
+      "subhead": "by decision class",
+      "empty": "No gated decision classes configured.",
+      "unset": "No gate-keeper assigned",
+      "noGate": "no gate",
+      "singlePoint": "single-point risk"
+    },
+    "load": {
+      "heading": "Member load",
+      "subhead": "decisions resolved + gate classes held",
+      "empty": "No project members yet.",
+      "decisions": "{count} decisions",
+      "gateClasses": "{count} gate classes"
+    }
+  },
   "status": {
     "title": "Project status",
     "lastRefreshed": "Last refreshed {time}",
@@ -616,6 +636,8 @@
       "renders": "Renders",
       "renders_postmortem": "Postmortem",
       "renders_handoff": "Handoff",
+      "audit": "Audit view",
+      "organization": "Organization",
       "detail": "Detail",
       "detail_graph": "Graph",
       "detail_plan": "Plan",

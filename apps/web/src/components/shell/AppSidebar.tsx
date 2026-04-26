@@ -101,15 +101,28 @@ function ProjectNode({
   // 1–3 projects; always-expanded reads better than hidden chat rooms.
   const [open, setOpen] = useState(true);
   const [rendersOpen, setRendersOpen] = useState(false);
-  const [detailOpen, setDetailOpen] = useState(false);
 
   const myThread = `/projects/${project.id}`;
   const teamRoom = `/projects/${project.id}/team`;
   const status = `/projects/${project.id}/status`;
+  const org = `/projects/${project.id}/org`;
   const composition = `/projects/${project.id}/composition`;
   const kb = `/projects/${project.id}/kb`;
   const skills = `/projects/${project.id}/skills`;
   const meetings = `/projects/${project.id}/meetings`;
+  // Audit View — Batch B IA reshape. The 5 audit subpages
+  // (graph/plan/tasks/risks/decisions) collapse into one sidebar
+  // entry; the user lands on the graph tab by default and switches
+  // among the audit views via the in-page AuditTabBar
+  // (components/audit/AuditTabBar.tsx). Keeps the sidebar shorter
+  // and matches the home_redesign HTML's "audit is one domain" intent.
+  const auditDefault = `/projects/${project.id}/detail/graph`;
+  const auditActive = pathname?.startsWith(`/projects/${project.id}/detail/`)
+    && (pathname.includes("/detail/graph")
+      || pathname.includes("/detail/plan")
+      || pathname.includes("/detail/tasks")
+      || pathname.includes("/detail/risks")
+      || pathname.includes("/detail/decisions"));
 
   const subItem: CSSProperties = {
     ...linkBase,
@@ -189,6 +202,17 @@ function ProjectNode({
               }}
             >
               <span aria-hidden>📊</span> {t("shell.project.status")}
+            </Link>
+          </li>
+          <li>
+            <Link
+              href={org}
+              style={{
+                ...subItem,
+                ...(isActive(pathname, org) ? subItemActive : null),
+              }}
+            >
+              <span aria-hidden>🏛</span> {t("shell.project.organization")}
             </Link>
           </li>
           <li>
@@ -297,55 +321,15 @@ function ProjectNode({
             )}
           </li>
           <li>
-            <button
-              type="button"
-              onClick={() => setDetailOpen((v) => !v)}
-              aria-expanded={detailOpen}
+            <Link
+              href={auditDefault}
               style={{
                 ...subItem,
-                background: "transparent",
-                border: "none",
-                cursor: "pointer",
-                textAlign: "left",
-                width: "100%",
+                ...(auditActive ? subItemActive : null),
               }}
             >
-              <span aria-hidden>🔎</span> {t("shell.project.detail")}
-              <span style={{ marginLeft: "auto", fontSize: 10 }} aria-hidden>
-                {detailOpen ? "▾" : "▸"}
-              </span>
-            </button>
-            {detailOpen && (
-              <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
-                {(
-                  [
-                    ["graph", "shell.project.detail_graph"],
-                    ["plan", "shell.project.detail_plan"],
-                    ["tasks", "shell.project.detail_tasks"],
-                    ["risks", "shell.project.detail_risks"],
-                    ["decisions", "shell.project.detail_decisions"],
-                  ] as const
-                ).map(([slug, key]) => {
-                  const href = `/projects/${project.id}/detail/${slug}`;
-                  return (
-                    <li key={slug}>
-                      <Link
-                        href={href}
-                        style={{
-                          ...subItem,
-                          paddingLeft: 44,
-                          ...(isActive(pathname, href, true)
-                            ? subItemActive
-                            : null),
-                        }}
-                      >
-                        · {t(key)}
-                      </Link>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
+              <span aria-hidden>🔎</span> {t("shell.project.audit")}
+            </Link>
           </li>
         </ul>
       )}
