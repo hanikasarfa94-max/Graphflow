@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-import { loginViaUi, rando, registerUser } from "./helpers";
+import { apiRequest, loginViaUi, rando, registerUser } from "./helpers";
 
 // Phase 13 — demo-lock canonical fixture.
 //
@@ -13,11 +13,16 @@ import { loginViaUi, rando, registerUser } from "./helpers";
 // first — it has the least moving parts and the sharpest assertions.
 //
 // Budget: PLAN.md Phase 13 AC says the full live demo must fit in 7
-// minutes. This spec only navigates seeded state (no LLM roundtrips),
-// so we hold it to a tighter 90s for the whole spec — leaving cushion
-// for the narration during the live demo.
-
-const DEMO_BUDGET_MS = 90_000;
+// minutes. The spec spends most of its time inside the seed walker,
+// which makes ~17 sequential DeepSeek calls (intake parse → clarify
+// gen → 3x clarify-reply re-parse → planning → ~12x conflict
+// explanations → delivery). Measured 95–115s wall-clock against
+// real DeepSeek with the prompt-cache warm. The 150s budget is the
+// "if this exceeds, something has drifted seriously" guard, not the
+// happy-path target. The original 90s was set when planning was
+// short-circuited via stubs and conflict explanations didn't run
+// per-rule; both costs are now real.
+const DEMO_BUDGET_MS = 150_000;
 
 test.describe("phase 13 — canonical demo seed + UI lock", () => {
   test.setTimeout(DEMO_BUDGET_MS + 30_000); // fail the spec before Playwright's own timeout.
@@ -35,9 +40,15 @@ test.describe("phase 13 — canonical demo seed + UI lock", () => {
     await loginViaUi(page, user);
 
     // Hit the seed endpoint. This walks intake → clarify → plan →
-    // conflict decision → delivery server-side in one call.
-    const seedRes = await request.post("/api/demo/seed", {
+    // conflict decision → delivery server-side in one call. With real
+    // LLMs the walk takes ~90s; the Next.js dev-server proxy hangs up
+    // around 30s for slow upstreams. Bypass the proxy and call the
+    // FastAPI backend directly — see helpers.ts apiRequest() for the
+    // full rationale.
+    const api = await apiRequest();
+    const seedRes = await api.post("/api/demo/seed", {
       data: { username: user.username, password: user.password },
+      timeout: 120_000,
     });
     expect(
       seedRes.ok(),

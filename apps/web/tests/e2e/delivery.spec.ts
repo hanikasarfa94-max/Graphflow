@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-import { intake, loginViaUi, rando, registerUser } from "./helpers";
+import { apiRequest, intake, loginViaUi, rando, registerUser } from "./helpers";
 
 // Phase 10 canonical coverage. After intake + plan, the user opens the
 // Delivery tab, clicks Generate, and sees a rendered summary: headline,
@@ -16,7 +16,12 @@ test.describe("delivery tab", () => {
       "Launch an event signup page next week. Needs invite-code gate, phone validation, admin export.",
     );
 
-    const planRes = await request.post(`/api/projects/${projectId}/plan`);
+    // Real-LLM planning takes ~20s; bypass the dev-server proxy that
+    // hangs up on slow upstreams (see helpers.ts apiRequest).
+    const api = await apiRequest();
+    const planRes = await api.post(`/api/projects/${projectId}/plan`, {
+      timeout: 60_000,
+    });
     expect(planRes.ok(), `plan failed ${planRes.status()}`).toBeTruthy();
 
     await page.goto(`/projects/${projectId}/detail/delivery`);
