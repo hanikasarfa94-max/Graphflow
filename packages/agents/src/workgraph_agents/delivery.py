@@ -19,7 +19,7 @@ from .llm import LLMClient, LLMResult, ParseFailure
 
 _log = logging.getLogger("workgraph.agents.delivery")
 
-PROMPT_VERSION = "2026-04-17.phase10.v1"
+PROMPT_VERSION = "2026-04-26.phase10.v2"
 
 _PROMPT_DIR = Path(__file__).parent / "prompts" / "delivery"
 
@@ -138,7 +138,15 @@ def _build_user_payload(
     assignments: list[dict[str, Any]],
     decisions: list[dict[str, Any]],
     conflicts: list[dict[str, Any]],
+    covered_refs: dict[str, list[str]],
 ) -> str:
+    # `covered_refs` is the service-side authoritative scope→task mapping
+    # (computed by _build_coverage_map in the delivery service). The
+    # prompt v2 instructs the LLM to treat it as the source of truth for
+    # the completed/deferred split — the LLM only writes the narrative
+    # and decision rationale. v1 had the LLM re-derive coverage from the
+    # graph, which occasionally returned semantically-empty output that
+    # passed Pydantic but violated the prompt contract.
     return json.dumps(
         {
             "requirement": requirement,
@@ -147,6 +155,7 @@ def _build_user_payload(
             "assignments": assignments,
             "decisions": decisions,
             "conflicts": conflicts,
+            "covered_refs": covered_refs,
         },
         ensure_ascii=False,
     )
@@ -161,7 +170,7 @@ class DeliveryAgent:
         prompt: str | None = None,
     ) -> None:
         self._llm = llm or LLMClient()
-        self._prompt = prompt or _load_prompt("v1")
+        self._prompt = prompt or _load_prompt("v2")
 
     async def generate(
         self,
@@ -174,6 +183,7 @@ class DeliveryAgent:
         conflicts: list[dict[str, Any]],
         covered_refs: dict[str, list[str]] | None = None,
     ) -> DeliveryOutcome:
+        coverage = covered_refs or {}
         messages = [
             {"role": "system", "content": self._prompt},
             {
@@ -185,6 +195,7 @@ class DeliveryAgent:
                     assignments=assignments,
                     decisions=decisions,
                     conflicts=conflicts,
+                    covered_refs=coverage,
                 ),
             },
         ]
