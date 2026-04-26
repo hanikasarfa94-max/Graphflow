@@ -56,6 +56,7 @@ from workgraph_domain import EventBus
 from workgraph_observability import get_trace_id
 from workgraph_persistence import (
     AgentRunLogRepository,
+    AssignmentRepository,
     EDGE_AGENT_SYSTEM_USER_ID,
     KbItemRepository,
     KbItemRow,
@@ -132,6 +133,14 @@ class MembraneReview:
     user-facing copy. `clarify_question` is populated only when
     action='request_clarification' (Stage 5). `conflict_with` lists
     cell node ids the candidate contradicts (Stage 3).
+
+    `warnings` (Stage 6 — partial collapse of ConflictService): advisory
+    notes about pre-existing issues in the cell that the proposer should
+    know about. Does NOT block the action; the caller decides whether to
+    surface them in UI. Used for graph-integrity signals that show up at
+    promote time but originate elsewhere (e.g., "you're about to add a
+    task to a requirement that already has 2 unstaffed tasks downstream
+    of risks").
     """
 
     action: ReviewAction
@@ -139,6 +148,7 @@ class MembraneReview:
     diff_summary: str | None = None
     clarify_question: str | None = None
     conflict_with: tuple[str, ...] = ()
+    warnings: tuple[str, ...] = ()
 
 
 class MembraneService:
@@ -429,18 +439,66 @@ class MembraneService:
         for row in existing:
             if row.status == "archived":
                 continue
-            if _normalize_title(row.title) == normalized_new:
+            if _normalize_title(row.title) != normalized_new:
+                continue
+
+            # Stage 5: when the new entry differs in body size from the
+            # existing one by a clear margin (>= 2x or <= 0.5x), the
+            # proposer's intent is genuinely ambiguous — supersede,
+            # elaborate as a section, or propose a separate entry under
+            # a sharper title? Asking is more useful than blocking the
+            # owner with a request_review the proposer needs to re-run
+            # anyway. Otherwise (similar size) the existing
+            # request_review path applies — owner decides.
+            existing_len = len(row.content_md or "")
+            new_len = len(candidate.content or "")
+            size_ambiguous = (
+                existing_len > 0
+                and new_len > 0
+                and (
+                    new_len >= existing_len * 2
+                    or new_len <= existing_len * 0.5
+                )
+            )
+            # Skip clarification if the proposer already answered (the
+            # caller re-ran review() with metadata['clarification_answer']
+            # populated). Falls through to request_review then.
+            already_answered = bool(
+                candidate.metadata.get("clarification_answer")
+            )
+
+            if size_ambiguous and not already_answered:
                 return MembraneReview(
-                    action="request_review",
-                    reason="duplicate_title",
+                    action="request_clarification",
+                    reason="duplicate_title_size_diverges",
                     diff_summary=(
-                        f"An existing group KB entry has the same title: "
-                        f"'{row.title}' (id={row.id}, status={row.status}). "
-                        "Owner should decide whether to merge, supersede, "
-                        "or accept as a sibling."
+                        f"Same title as '{row.title}' (id={row.id}), "
+                        f"but content size differs notably "
+                        f"({new_len} vs {existing_len} chars)."
+                    ),
+                    clarify_question=(
+                        f"An existing group KB entry titled '{row.title}' "
+                        "already exists. Are you (a) SUPERSEDING it with "
+                        "this new version, (b) ELABORATING — your entry "
+                        "should become a section under the existing one, "
+                        "or (c) PROPOSING a separate entry under a "
+                        "sharper title? Reply 'supersede', 'elaborate', "
+                        "or 'separate' (with the new title)."
                     ),
                     conflict_with=(row.id,),
                 )
+
+            return MembraneReview(
+                action="request_review",
+                reason="duplicate_title",
+                diff_summary=(
+                    f"An existing group KB entry has the same title: "
+                    f"'{row.title}' (id={row.id}, status={row.status}). "
+                    "Owner should decide whether to merge, supersede, "
+                    "or accept as a sibling."
+                ),
+                conflict_with=(row.id,),
+            )
 
         return MembraneReview(
             action="auto_merge",
@@ -459,19 +517,25 @@ class MembraneService:
         two members each create their own "implement OAuth" task
         without realizing the other one already shipped.
 
-        Checks v0:
-          1. Title near-duplicate against existing plan tasks in the
-             current requirement. Same _normalize_title rules as
-             kb_item_group, so "Implement OAuth" / "implement oauth!"
-             collide.
+        Checks v1:
+          1. Title near-duplicate against ACTIVE plan tasks → blocking
+             (request_review). Owner decides merge/supersede/sibling.
+          2. Title match against done/cancelled siblings → advisory
+             warning. Doesn't block — the proposer may legitimately be
+             re-doing closed work — but surfaces it so they don't miss
+             that prior work exists.
+          3. Estimate-budget overflow vs requirement.budget_hours →
+             advisory warning. Reads candidate.metadata['estimate_hours']
+             as the proposed estimate; sums existing plan estimates;
+             flags if the addition would push past budget.
+          4. Stage 6 conflict-rule scan → advisory warnings about
+             pre-existing graph-integrity issues (orphan tasks with
+             downstream deps). Surfaces "the plan already has staffing
+             gaps you're adding to" without blocking.
 
-        Not yet covered (deferred):
-          - Estimate-budget overflow vs requirement budget (need a
-            requirement-level budget field; currently unstructured).
-          - Assignee coverage (no assignee field on personal tasks
-            yet — proposer is implicit owner).
-          - Status-conflict with archived tasks bearing the same
-            title (we explicitly skip those, mirroring kb_item_group).
+        Not covered (deferred):
+          - Assignee coverage (needs project-member role-skill mapping;
+            ProjectMemberRow.role is admin-scope, not functional).
         """
         normalized_new = _normalize_title(candidate.title)
         if not normalized_new:
@@ -484,40 +548,190 @@ class MembraneService:
             req_repo = RequirementRepository(session)
             latest = await req_repo.latest_for_project(candidate.project_id)
             if latest is None:
-                # No requirement yet — nothing to dup against. Caller
-                # wires the new task into a fresh requirement.
                 return MembraneReview(
                     action="auto_merge",
                     reason="no_requirement_yet",
                 )
             existing = await PlanRepository(session).list_tasks(latest.id)
+            req_budget = latest.budget_hours
 
+        warnings: list[str] = []
+
+        # Check 1 + 2: title scan against existing plan tasks.
+        active_dup: Any = None
+        sibling_done: list[Any] = []
         for row in existing:
-            # Plan tasks have a `status` field similar to KB items; we
-            # don't have a generic "archived" state for tasks but
-            # 'cancelled' / 'done' shouldn't trigger review (the work
-            # is already accounted for, but the proposer's intent might
-            # be to redo it deliberately — let auto-merge through and
-            # rely on the human to dedupe). Only block on active work.
-            if row.status in ("cancelled", "done"):
+            if _normalize_title(row.title) != normalized_new:
                 continue
-            if _normalize_title(row.title) == normalized_new:
-                return MembraneReview(
-                    action="request_review",
-                    reason="duplicate_title",
-                    diff_summary=(
-                        f"An active plan task already has this title: "
-                        f"'{row.title}' (id={row.id}, status={row.status}). "
-                        "Owner should decide whether to merge into it, "
-                        "supersede it, or accept as a sibling task."
-                    ),
-                    conflict_with=(row.id,),
+            if row.status in ("cancelled", "done"):
+                sibling_done.append(row)
+            else:
+                active_dup = row
+                break  # first active dup wins; no need to keep scanning
+        if sibling_done:
+            warnings.append(
+                "A "
+                + ("done" if any(s.status == "done" for s in sibling_done) else "cancelled")
+                + f" plan task with this title exists: '{sibling_done[0].title}' "
+                f"(id={sibling_done[0].id}). Confirm you intend to redo the work "
+                f"rather than reopen the existing row."
+            )
+
+        if active_dup is not None:
+            return MembraneReview(
+                action="request_review",
+                reason="duplicate_title",
+                diff_summary=(
+                    f"An active plan task already has this title: "
+                    f"'{active_dup.title}' (id={active_dup.id}, "
+                    f"status={active_dup.status}). Owner should decide "
+                    "whether to merge into it, supersede it, or accept "
+                    "as a sibling task."
+                ),
+                conflict_with=(active_dup.id,),
+                warnings=tuple(warnings),
+            )
+
+        # Check 3: budget overflow. estimate_hours arrives in metadata
+        # because MembraneCandidate doesn't carry typed task fields —
+        # the caller (promote endpoint) reads task.estimate_hours and
+        # passes it through. Both sides null-safe: skip the check if
+        # no budget set OR no estimate provided.
+        proposed_estimate = candidate.metadata.get("estimate_hours")
+        if (
+            req_budget is not None
+            and isinstance(proposed_estimate, int)
+            and proposed_estimate > 0
+        ):
+            current_total = sum(
+                (t.estimate_hours or 0)
+                for t in existing
+                if t.status not in ("cancelled",)
+            )
+            if current_total + proposed_estimate > req_budget:
+                warnings.append(
+                    f"Adding this task ({proposed_estimate}h) would push "
+                    f"the requirement total ({current_total}h) over the "
+                    f"declared budget ({req_budget}h)."
                 )
+
+        # Check 4: Stage 6 — surface pre-existing orphan-with-downstream
+        # tasks. Mirrors the missing_owner conflict rule but read-only
+        # (advisory, not a block). Cheap because we already have the
+        # task list in memory.
+        downstream_count: dict[str, int] = {}
+        async with session_scope(self._sessionmaker) as session:
+            deps = await PlanRepository(session).list_dependencies(latest.id)
+            for d in deps:
+                downstream_count[d.from_task_id] = (
+                    downstream_count.get(d.from_task_id, 0) + 1
+                )
+            assigned_task_ids: set[str] = set()
+            for a in await AssignmentRepository(session).list_for_project(
+                candidate.project_id
+            ):
+                if getattr(a, "active", True) and a.task_id:
+                    assigned_task_ids.add(a.task_id)
+        orphans_with_downstream = [
+            t
+            for t in existing
+            if (t.assignee_role or "unknown") != "unknown"
+            and t.status not in ("done", "cancelled")
+            and t.id not in assigned_task_ids
+            and downstream_count.get(t.id, 0) > 0
+        ]
+        if orphans_with_downstream:
+            warnings.append(
+                f"The plan already has {len(orphans_with_downstream)} "
+                "unstaffed task(s) blocking downstream work. Promoting "
+                "this task adds to the queue without addressing the gap."
+            )
 
         return MembraneReview(
             action="auto_merge",
             reason="no_conflicts",
+            warnings=tuple(warnings),
         )
+
+    async def notify_clarification(
+        self,
+        *,
+        candidate: MembraneCandidate,
+        review: MembraneReview,
+        linked_id: str | None = None,
+    ) -> bool:
+        """Stage 5 — post the clarify question to the proposer's personal
+        stream when review.action == 'request_clarification'.
+
+        Returns True if delivered, False if no personal stream existed
+        for the proposer in this project (membrane decisions about
+        org-level signals can have no personal target — degrade
+        gracefully).
+
+        The Q lives in the proposer's PERSONAL stream, never team room
+        or DM (docs/membrane-reorg.md Stage 5 spec). The reply pathway
+        — proposer answers, candidate is re-submitted to review() with
+        metadata['clarification_answer'] populated — is a follow-up;
+        for v0 the proposer reads the Q, edits their draft accordingly,
+        and re-submits via the original promote path. Even without the
+        auto-reply loop the surface ships value: today the proposer
+        just sees deferred=true with no actionable detail.
+        """
+        if review.action != "request_clarification":
+            return False
+        if not review.clarify_question:
+            _log.warning(
+                "membrane.notify_clarification: missing clarify_question",
+                extra={
+                    "candidate_kind": candidate.kind,
+                    "project_id": candidate.project_id,
+                },
+            )
+            return False
+        try:
+            stream_payload = await self._stream_service.ensure_personal_stream(
+                user_id=candidate.proposer_user_id,
+                project_id=candidate.project_id,
+            )
+        except Exception:
+            _log.exception(
+                "membrane.notify_clarification: ensure_personal_stream failed",
+                extra={
+                    "proposer_user_id": candidate.proposer_user_id,
+                    "project_id": candidate.project_id,
+                },
+            )
+            return False
+        stream_id = (stream_payload or {}).get("stream_id")
+        if not stream_id:
+            return False
+        body_lines = [
+            f"❓ Membrane wants a quick clarification before "
+            f"accepting your {candidate.kind.replace('_', ' ')}: "
+            f"'{candidate.title}'",
+            "",
+            review.clarify_question,
+        ]
+        if review.diff_summary:
+            body_lines.extend(["", review.diff_summary])
+        try:
+            await self._stream_service.post_system_message(
+                stream_id=stream_id,
+                author_id=EDGE_AGENT_SYSTEM_USER_ID,
+                body="\n".join(body_lines),
+                kind="membrane-clarify",
+                linked_id=linked_id,
+            )
+        except Exception:
+            _log.exception(
+                "membrane.notify_clarification: post_system_message failed",
+                extra={
+                    "proposer_user_id": candidate.proposer_user_id,
+                    "stream_id": stream_id,
+                },
+            )
+            return False
+        return True
 
     async def _route_to_members(
         self,

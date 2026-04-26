@@ -213,12 +213,15 @@ class KbItemService:
             item_payload = _serialize(row)
             kb_item_id = row.id
 
-            # Stage 4: when membrane staged this as a draft, also
-            # create an IMSuggestion(kind='membrane_review') in the
-            # team-room inbox so an owner can one-click approve. The
-            # suggestion needs a message to anchor; post a system
-            # message authored by the edge agent that names the
-            # candidate + the reason for review.
+            # Stage 4: when membrane staged this as a draft via
+            # request_review, create an IMSuggestion in the team-room
+            # inbox so an owner can one-click approve.
+            #
+            # Stage 5 (request_clarification) takes a different path —
+            # the question goes back to the PROPOSER's personal stream,
+            # not the team room. The team owner doesn't decide; the
+            # proposer answers and re-submits. Handled below the inbox
+            # block via membrane_service.notify_clarification.
             if (
                 review is not None
                 and review.action == "request_review"
@@ -266,7 +269,37 @@ class KbItemService:
                         outcome="ok",
                         attempts=1,
                     )
-            return item_payload
+
+        # Stage 5: post the clarify question to the proposer's personal
+        # stream (outside the session_scope block — notify_clarification
+        # opens its own session). The candidate is reconstructed with
+        # the kb_item_id linked so a future reply-handler can correlate
+        # the answer back to the row.
+        if (
+            review is not None
+            and review.action == "request_clarification"
+            and scope == "group"
+            and self._membrane_service is not None
+        ):
+            from .membrane import MembraneCandidate
+
+            await self._membrane_service.notify_clarification(
+                candidate=MembraneCandidate(
+                    kind="kb_item_group",
+                    project_id=project_id,
+                    proposer_user_id=owner_user_id,
+                    title=title,
+                    content=content_md,
+                    metadata={
+                        "source": source,
+                        "status": status,
+                        "kb_item_id": kb_item_id,
+                    },
+                ),
+                review=review,
+                linked_id=kb_item_id,
+            )
+        return item_payload
 
     async def list_visible(
         self, *, project_id: str, viewer_user_id: str, limit: int = 200

@@ -71,6 +71,13 @@ class RequirementRow(Base):
     raw_text: Mapped[str] = mapped_column(String)
     parsed_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     parse_outcome: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    # Migration 0025 — declared budget for the requirement, in hours.
+    # Nullable because most v1 intakes don't carry an explicit budget;
+    # when set, MembraneService._review_task_promote uses it for the
+    # estimate-overflow advisory check during personal→plan promotion.
+    # Surfaced via the requirement-edit UI; LLM intake never writes it
+    # (intake parses scope, not capacity — that's a separate decision).
+    budget_hours: Mapped[int | None] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
     parsed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True

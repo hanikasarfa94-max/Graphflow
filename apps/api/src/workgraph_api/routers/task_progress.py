@@ -141,6 +141,12 @@ class CreatePersonalTaskRequest(BaseModel):
     title: str = Field(min_length=1, max_length=500)
     description: str = Field(default="", max_length=4000)
     source_message_id: str | None = Field(default=None, max_length=64)
+    # Optional at create time; passing them gives the membrane's
+    # task_promote review enough information to do an
+    # estimate-overflow check at promote time. Both are no-ops if
+    # omitted (estimate=null, role='unknown').
+    estimate_hours: int | None = Field(default=None, ge=1, le=10000)
+    assignee_role: str | None = Field(default=None, max_length=32)
 
 
 def _serialize_task(row: Any) -> dict[str, Any]:
@@ -155,6 +161,7 @@ def _serialize_task(row: Any) -> dict[str, Any]:
         "requirement_id": row.requirement_id,
         "source_message_id": row.source_message_id,
         "assignee_role": row.assignee_role,
+        "estimate_hours": row.estimate_hours,
         "created_at": row.created_at.isoformat() if row.created_at else None,
     }
 
@@ -213,6 +220,8 @@ async def post_create_task(
             title=body.title.strip(),
             description=body.description.strip(),
             source_message_id=body.source_message_id,
+            estimate_hours=body.estimate_hours,
+            assignee_role=(body.assignee_role or "unknown").strip() or "unknown",
         )
         return {"ok": True, "task": _serialize_task(row)}
 
@@ -252,6 +261,7 @@ async def post_promote_task(
         project_id = task.project_id
         title = task.title
         description = task.description or ""
+        proposed_estimate = task.estimate_hours
 
     review = await membrane_service.review(
         MembraneCandidate(
@@ -260,7 +270,14 @@ async def post_promote_task(
             proposer_user_id=user.id,
             title=title,
             content=description,
-            metadata={"source": "task_promote", "task_id": task_id},
+            metadata={
+                "source": "task_promote",
+                "task_id": task_id,
+                # Threaded so the membrane's estimate-overflow check
+                # has a typed value to compare against the requirement
+                # budget. None passes through harmlessly.
+                "estimate_hours": proposed_estimate,
+            },
         )
     )
     if review.action == "reject":
@@ -268,7 +285,39 @@ async def post_promote_task(
             status_code=409,
             detail=review.reason or "membrane_rejected",
         )
-    if review.action in ("request_review", "request_clarification"):
+    if review.action == "request_clarification":
+        # Stage 5: question goes to the proposer's PERSONAL stream
+        # (not team room). Proposer answers + can re-promote — for v0
+        # the answer isn't auto-intercepted; the proposer reads the Q
+        # and re-runs through the existing endpoint after addressing
+        # it. Even without auto-reply the surface is real: today the
+        # proposer just sees deferred=true with no actionable detail.
+        await membrane_service.notify_clarification(
+            candidate=MembraneCandidate(
+                kind="task_promote",
+                project_id=project_id,
+                proposer_user_id=user.id,
+                title=title,
+                content=description,
+                metadata={
+                    "source": "task_promote",
+                    "task_id": task_id,
+                    "estimate_hours": proposed_estimate,
+                },
+            ),
+            review=review,
+            linked_id=task_id,
+        )
+        return {
+            "ok": True,
+            "task": None,
+            "deferred": True,
+            "reason": review.reason,
+            "diff_summary": review.diff_summary,
+            "clarify_question": review.clarify_question,
+            "warnings": list(review.warnings),
+        }
+    if review.action == "request_review":
         # Stage 4 inbox enqueue: post a system message in the team
         # stream and an IMSuggestion(kind='membrane_review') so the
         # owner sees the deferred promote in the same inbox surface
@@ -322,6 +371,7 @@ async def post_promote_task(
             "deferred": True,
             "reason": review.reason,
             "diff_summary": review.diff_summary,
+            "warnings": list(review.warnings),
         }
 
     # auto_merge — attach to latest requirement, slot at end of plan.
@@ -345,4 +395,8 @@ async def post_promote_task(
         )
         if promoted is None:
             raise HTTPException(status_code=409, detail="promote_failed")
-        return {"ok": True, "task": _serialize_task(promoted)}
+        return {
+            "ok": True,
+            "task": _serialize_task(promoted),
+            "warnings": list(review.warnings),
+        }

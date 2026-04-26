@@ -455,11 +455,20 @@ class PlanRepository:
         title: str,
         description: str = "",
         source_message_id: str | None = None,
+        estimate_hours: int | None = None,
+        assignee_role: str = "unknown",
     ) -> TaskRow:
         """Self-set personal task. requirement_id stays NULL until
         promoted; sort_order is timestamp-based (ms since epoch
         modulo a day's worth) so it stays roughly chronological
         without coordinating with the plan's sort_order space.
+
+        `estimate_hours` and `assignee_role` are optional at create
+        time. Passing them lets the membrane's task_promote review
+        run a meaningful estimate-overflow check at promote time;
+        omitting them keeps the legacy behavior (NULL estimate, role
+        defaults to 'unknown' so the missing_owner advisory doesn't
+        fire on the candidate itself).
         """
         sort_seed = int(datetime.now(timezone.utc).timestamp() * 1000) % (
             24 * 60 * 60 * 1000
@@ -472,8 +481,8 @@ class PlanRepository:
             deliverable_id=None,
             title=title,
             description=description or "",
-            assignee_role="unknown",
-            estimate_hours=None,
+            assignee_role=assignee_role or "unknown",
+            estimate_hours=estimate_hours,
             acceptance_criteria=None,
             scope="personal",
             owner_user_id=owner_user_id,
