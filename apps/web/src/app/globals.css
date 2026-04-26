@@ -180,16 +180,54 @@ html,
 body {
   margin: 0;
   padding: 0;
-  background-color: var(--wg-surface);
-  /* Paper grain — layered on top of the solid surface color at a low
-     opacity via the SVG data-url. Repeating tile. Static, a11y-neutral. */
-  background-image: var(--wg-paper-grain);
-  background-repeat: repeat;
+  /* Layered surface — radial accents at top corners + horizontal wash
+     to keep the eye moving from sidebar → main without a flat slab.
+     Tokens above keep the colour values centralised; this rule just
+     composes them. */
+  background-color: var(--wg-paper);
+  background-image:
+    radial-gradient(circle at 18% 0, rgba(37, 99, 235, 0.10), transparent 32%),
+    radial-gradient(circle at 82% 8%, rgba(14, 165, 233, 0.08), transparent 30%),
+    linear-gradient(90deg, #ffffff 0%, var(--wg-paper) 48%, #eef5ff 100%);
+  background-attachment: fixed;
   color: var(--wg-ink);
   font-family: var(--wg-font-sans);
   font-weight: 400;
   font-size: 15px;
   line-height: 1.55;
+}
+
+/* Blueprint grid overlay — sits behind everything, fades out in the
+   bottom half so dense content stays legible. Static SVG-equivalent
+   via gradients; no animation, no a11y impact. */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: -1;
+  background-image:
+    linear-gradient(rgba(37, 99, 235, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(37, 99, 235, 0.04) 1px, transparent 1px),
+    radial-gradient(circle at 18px 18px, rgba(37, 99, 235, 0.07) 1.2px, transparent 1.4px);
+  background-size: 36px 36px, 36px 36px, 72px 72px;
+  -webkit-mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 0.85), rgba(0, 0, 0, 0.18));
+  mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 0.85), rgba(0, 0, 0, 0.18));
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) body {
+    background-image:
+      radial-gradient(circle at 18% 0, rgba(59, 130, 246, 0.18), transparent 30%),
+      radial-gradient(circle at 80% 8%, rgba(14, 165, 233, 0.14), transparent 30%),
+      linear-gradient(180deg, #0a1326 0%, var(--wg-paper) 60%);
+  }
+  :root:not([data-theme="light"]) body::before {
+    background-image:
+      linear-gradient(rgba(255, 255, 255, 0.04) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255, 255, 255, 0.04) 1px, transparent 1px),
+      radial-gradient(circle at 18px 18px, rgba(56, 189, 248, 0.10) 1.2px, transparent 1.4px);
+  }
 }
 
 /* Dot motif — 4px filled circle, used at graph nodes, bullets, status. */

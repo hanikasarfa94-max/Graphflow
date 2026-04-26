@@ -118,11 +118,15 @@ export function Card({
       {title ? (
         <header
           style={{
-            padding: "12px 16px",
+            padding: "13px 16px",
             borderBottom: "1px solid var(--wg-line)",
-            background: "var(--wg-surface)",
+            // Subtle blue-tinted gradient head per html2 redesign — keeps
+            // the card from reading as one flat slab without competing
+            // with the body content.
+            background:
+              "linear-gradient(135deg, rgba(248,251,255,0.95), rgba(239,246,255,0.78))",
             display: "flex",
-            alignItems: "baseline",
+            alignItems: "center",
             justifyContent: "space-between",
             gap: 8,
           }}
@@ -130,10 +134,9 @@ export function Card({
           <h3
             style={{
               margin: 0,
-              fontSize: "var(--wg-fs-label)",
-              letterSpacing: "0.08em",
-              textTransform: "uppercase",
-              color: "var(--wg-ink-soft)",
+              fontSize: 14,
+              letterSpacing: "-0.005em",
+              color: "var(--wg-ink)",
               fontWeight: 600,
               fontFamily: "var(--wg-font-sans)",
             }}
