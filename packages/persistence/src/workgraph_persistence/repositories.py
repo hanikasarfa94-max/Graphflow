@@ -3890,8 +3890,3 @@ class OrganizationMemberRepository:
         await self._session.flush()
         return True
 
-
-# Deprecated alias — `KbIngestRepository` is the post-fold name. Keeping
-# this around so out-of-tree callers (none in v1, but defensive) don't
-# break. New code should import `KbIngestRepository` directly.
-MembraneSignalRepository = KbIngestRepository

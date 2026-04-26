@@ -77,7 +77,6 @@ from .repositories import (
     KbItemRepository,
     LicenseAuditRepository,
     MeetingTranscriptRepository,
-    MembraneSignalRepository,  # deprecated alias for KbIngestRepository
     MembraneSubscriptionRepository,
     MessageRepository,
     NotificationRepository,
@@ -178,7 +177,6 @@ __all__ = [
     "KbItemRepository",
     "LicenseAuditRepository",
     "MeetingTranscriptRepository",
-    "MembraneSignalRepository",  # deprecated alias for KbIngestRepository
     "MembraneSubscriptionRepository",
     "MessageRepository",
     "NotificationRepository",

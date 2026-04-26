@@ -28,7 +28,7 @@ from httpx import AsyncClient
 from workgraph_persistence import (
     KbFolderRepository,
     KbItemLicenseRepository,
-    MembraneSignalRepository,
+    KbIngestRepository,
     ProjectMemberRepository,
     ProjectRow,
     UserRepository,
@@ -88,7 +88,7 @@ async def _seed_item(
     """Create a MembraneSignalRow directly — cheaper than going through
     the membrane router and doesn't touch the classifier stub."""
     async with session_scope(maker) as session:
-        repo = MembraneSignalRepository(session)
+        repo = KbIngestRepository(session)
         row = await repo.create(
             project_id=project_id,
             source_kind="user-drop",
