@@ -441,6 +441,144 @@ export function EdgeLLMTurnCard({
   );
 }
 
+// ---------- Kind-specific previews ----------
+
+// Inserted inside SubAgentTurnCard to give richer affordances for the
+// two membrane-driven kinds (B2 / B3 of the full-ship batch). Generic
+// suggestions render the same as before — this only fires when kind +
+// proposal payload match a known shape.
+
+function KindSpecificPreview({
+  suggestion,
+  t,
+}: {
+  suggestion: IMSuggestion;
+  t: ReturnType<typeof useTranslations>;
+}) {
+  const detail =
+    (suggestion.proposal &&
+      typeof (suggestion.proposal as { detail?: unknown }).detail === "object" &&
+      ((suggestion.proposal as { detail: Record<string, unknown> }).detail ??
+        {})) ||
+    {};
+
+  if (suggestion.kind === "membrane_review") {
+    const candidateKind =
+      typeof detail.candidate_kind === "string"
+        ? (detail.candidate_kind as string)
+        : "kb_item_group";
+    const diffSummary =
+      typeof detail.diff_summary === "string"
+        ? (detail.diff_summary as string)
+        : null;
+    const conflictWith = Array.isArray(detail.conflict_with)
+      ? (detail.conflict_with as string[])
+      : [];
+    const candidateLabel =
+      candidateKind === "task_promote"
+        ? t("preview.membraneReview.taskPromote")
+        : t("preview.membraneReview.kbItemGroup");
+    return (
+      <div
+        data-testid="membrane-review-preview"
+        style={{
+          marginTop: 8,
+          padding: "8px 10px",
+          background: "var(--wg-surface-sunk)",
+          border: "1px dashed var(--wg-line)",
+          borderRadius: "var(--wg-radius-sm, 4px)",
+          fontSize: 12,
+        }}
+      >
+        <div
+          style={{
+            fontFamily: "var(--wg-font-mono)",
+            fontSize: 10,
+            letterSpacing: "0.06em",
+            textTransform: "uppercase",
+            color: "var(--wg-ink-faint)",
+            marginBottom: 4,
+          }}
+        >
+          {candidateLabel}
+        </div>
+        {diffSummary ? (
+          <div style={{ color: "var(--wg-ink-soft)", whiteSpace: "pre-wrap" }}>
+            {diffSummary}
+          </div>
+        ) : null}
+        {conflictWith.length > 0 ? (
+          <div
+            style={{
+              marginTop: 6,
+              fontFamily: "var(--wg-font-mono)",
+              fontSize: 11,
+              color: "var(--wg-amber)",
+            }}
+          >
+            ⚠ {t("preview.membraneReview.conflictsWith", {
+              count: conflictWith.length,
+            })}
+          </div>
+        ) : null}
+      </div>
+    );
+  }
+
+  if (suggestion.kind === "wiki_entry") {
+    const contentMd =
+      typeof detail.content_md === "string"
+        ? (detail.content_md as string)
+        : "";
+    return (
+      <div
+        data-testid="wiki-entry-preview"
+        style={{
+          marginTop: 8,
+          padding: "8px 10px",
+          background: "var(--wg-ok-soft)",
+          border: "1px solid var(--wg-line)",
+          borderRadius: "var(--wg-radius-sm, 4px)",
+          fontSize: 12,
+        }}
+      >
+        <div
+          style={{
+            fontFamily: "var(--wg-font-mono)",
+            fontSize: 10,
+            letterSpacing: "0.06em",
+            textTransform: "uppercase",
+            color: "var(--wg-ok)",
+            marginBottom: 4,
+          }}
+        >
+          📚 {t("preview.wikiEntry.label")}
+        </div>
+        {contentMd ? (
+          <div
+            style={{
+              color: "var(--wg-ink)",
+              whiteSpace: "pre-wrap",
+              maxHeight: 120,
+              overflow: "hidden",
+              position: "relative",
+            }}
+          >
+            {contentMd.slice(0, 320)}
+            {contentMd.length > 320 ? "…" : ""}
+          </div>
+        ) : (
+          <div style={{ color: "var(--wg-ink-soft)" }}>
+            {t("preview.wikiEntry.willUseSourceMessage")}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  return null;
+}
+
 // ---------- SubAgentTurnCard ----------
 
 export function SubAgentTurnCard({
@@ -533,6 +671,7 @@ export function SubAgentTurnCard({
           <div style={{ color: "var(--wg-ink-soft)", marginTop: 2 }}>
             {suggestion.proposal.summary}
           </div>
+          <KindSpecificPreview suggestion={suggestion} t={t} />
         </>
       )}
       {!suggestion.proposal && suggestion.targets.length > 0 && (

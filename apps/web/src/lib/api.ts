@@ -1603,7 +1603,20 @@ export function regenerateHandoffRender(
 // catch `ApiError` with `status === 404` and render a "coming soon" state
 // rather than propagating the failure.
 
-export type KbItemStatus = "pending-review" | "approved" | "rejected" | "routed";
+// Two status vocabularies share the kb_items table post-fold:
+//   * ingest rows (source='ingest')      — pending-review|approved|rejected|routed
+//   * user-authored (manual/upload/llm)  — draft|published|archived
+// Both are valid wherever a KB item appears. Renderer code switches on
+// status to show the right chip; the backend doesn't enforce per-source
+// transitions at the type system level.
+export type KbItemStatus =
+  | "pending-review"
+  | "approved"
+  | "rejected"
+  | "routed"
+  | "draft"
+  | "published"
+  | "archived";
 
 export interface KbItem {
   id: string;

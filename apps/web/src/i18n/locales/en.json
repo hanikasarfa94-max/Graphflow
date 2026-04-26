@@ -230,6 +230,17 @@
       "label": "Proposed",
       "references": "References"
     },
+    "preview": {
+      "membraneReview": {
+        "kbItemGroup": "Membrane review · group KB entry",
+        "taskPromote": "Membrane review · personal task → plan",
+        "conflictsWith": "Conflicts with {count} existing item(s)"
+      },
+      "wikiEntry": {
+        "label": "Save to project wiki",
+        "willUseSourceMessage": "Will save the source message body as the entry."
+      }
+    },
     "decision": {
       "recorded": "⚡ Decision recorded"
     },
@@ -421,6 +432,10 @@
         "task_scoped": "Task-scoped",
         "observer": "Observer"
       }
+    },
+    "statusChip": {
+      "draft": "Draft",
+      "pendingReview": "Pending"
     }
   },
   "personal": {

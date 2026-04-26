@@ -819,6 +819,12 @@ function ItemRow({
         >
           {item.title || item.summary || item.source_identifier}
         </Link>
+        {item.status === "draft" || item.status === "pending-review" ? (
+          // Membrane staging signal — the row is in the cell's
+          // membrane, not the cell proper. Lets readers see "this
+          // is queued for owner review" without opening the detail.
+          <DraftChip status={item.status} t={t} />
+        ) : null}
       </div>
       <div role="cell" style={cellStyle}>
         <SourceBadge kind={item.source_kind} />
@@ -838,6 +844,41 @@ function ItemRow({
         <LicenseBadge tier={item.license_tier_override} t={t} />
       </div>
     </>
+  );
+}
+
+function DraftChip({
+  status,
+  t,
+}: {
+  status: string;
+  t: ReturnType<typeof useTranslations>;
+}) {
+  // pending-review (signals) and draft (group KB writes deferred by
+  // membrane) both surface as the same "not yet canonical" chip —
+  // user-facing intent is identical. Different colors keep the
+  // ingest path distinguishable from the user-write path.
+  const isPending = status === "pending-review";
+  return (
+    <span
+      data-testid="kb-draft-chip"
+      style={{
+        marginLeft: 8,
+        fontSize: 9,
+        fontFamily: "var(--wg-font-mono)",
+        padding: "1px 6px",
+        borderRadius: 10,
+        border: `1px solid ${isPending ? "var(--wg-amber)" : "var(--wg-ink-soft)"}`,
+        color: isPending ? "var(--wg-amber)" : "var(--wg-ink-soft)",
+        letterSpacing: "0.04em",
+        textTransform: "uppercase",
+        verticalAlign: "middle",
+      }}
+    >
+      {isPending
+        ? t("kb.statusChip.pendingReview")
+        : t("kb.statusChip.draft")}
+    </span>
   );
 }
 
