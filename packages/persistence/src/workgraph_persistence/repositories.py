@@ -145,6 +145,13 @@ class RequirementRepository:
         )
         return (await self._session.execute(stmt)).scalar_one_or_none()
 
+    async def get(self, requirement_id: str) -> RequirementRow | None:
+        return (
+            await self._session.execute(
+                select(RequirementRow).where(RequirementRow.id == requirement_id)
+            )
+        ).scalar_one_or_none()
+
     async def append_version(
         self,
         *,
@@ -887,6 +894,29 @@ class ProjectMemberRepository:
             )
         ).scalar_one_or_none()
         return row.role if row is not None else None
+
+    async def set_skill_tags(
+        self,
+        *,
+        project_id: str,
+        user_id: str,
+        skill_tags: list[str],
+    ) -> ProjectMemberRow | None:
+        """Replace the member's skill tag list. Caller normalizes input
+        (lowercase, dedup, drops empties); we only persist."""
+        row = (
+            await self._session.execute(
+                select(ProjectMemberRow).where(
+                    ProjectMemberRow.project_id == project_id,
+                    ProjectMemberRow.user_id == user_id,
+                )
+            )
+        ).scalar_one_or_none()
+        if row is None:
+            return None
+        row.skill_tags = list(skill_tags)
+        await self._session.flush()
+        return row
 
 
 class AssignmentRepository:

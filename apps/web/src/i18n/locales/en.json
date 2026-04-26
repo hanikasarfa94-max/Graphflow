@@ -291,6 +291,28 @@
         "observer": "observer"
       }
     },
+    "skills": {
+      "noTags": "No skills declared",
+      "edit": "Edit skills",
+      "addTag": "Add",
+      "removeTag": "Remove",
+      "placeholder": "Type a tag and Enter",
+      "save": "Save",
+      "saving": "Saving…",
+      "cancel": "Cancel",
+      "saveFailed": "Save failed"
+    },
+    "budget": {
+      "label": "Requirement budget",
+      "unset": "not set",
+      "edit": "Edit",
+      "save": "Save",
+      "saving": "Saving…",
+      "cancel": "Cancel",
+      "placeholder": "hours",
+      "invalid": "1–100000",
+      "saveFailed": "Save failed"
+    },
     "tasks": {
       "title": "Active tasks",
       "empty": "No active tasks",
@@ -306,6 +328,9 @@
       "newTaskSave": "Add task",
       "newTaskSaving": "Adding…",
       "newTaskCancel": "Cancel",
+      "newTaskEstimateLabel": "Estimate (hrs)",
+      "newTaskEstimatePlaceholder": "e.g. 4",
+      "newTaskRoleLabel": "Role",
       "createFailed": "Could not create task",
       "draftsHeading": "Personal drafts",
       "draftChip": "Draft",

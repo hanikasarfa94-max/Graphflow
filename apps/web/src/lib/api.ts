@@ -80,6 +80,11 @@ export interface GraphNode {
 export interface ProjectState {
   project: { id: string; title: string };
   requirement_version: number;
+  // Phase membrane-reorg follow-up — surfaces requirement.budget_hours
+  // so owners can edit it inline; the membrane's task_promote review
+  // uses the value for the estimate-overflow check.
+  requirement_id: string | null;
+  budget_hours: number | null;
   parsed: Record<string, unknown>;
   parse_outcome: string | null;
   graph: {
@@ -133,6 +138,10 @@ export interface ProjectState {
     display_name: string;
     role: string;
     license_tier?: "full" | "task_scoped" | "observer";
+    // Per-project functional skill tags (frontend/backend/qa/etc).
+    // Drives the membrane's task_promote assignee-coverage check.
+    // Members can self-edit; owners can edit anyone.
+    skill_tags?: string[];
   }[];
   conflicts: Conflict[];
   conflict_summary: ConflictSummary;
@@ -2374,6 +2383,31 @@ export interface PromoteTaskResponse {
 
 export function promoteTask(taskId: string): Promise<PromoteTaskResponse> {
   return api(`/api/tasks/${taskId}/promote`, { method: "POST" });
+}
+
+export function setRequirementBudget(
+  projectId: string,
+  requirementId: string,
+  budgetHours: number | null,
+): Promise<{ ok: true; requirement_id: string; budget_hours: number | null }> {
+  return api(
+    `/api/projects/${projectId}/requirements/${requirementId}/budget`,
+    {
+      method: "PATCH",
+      body: { budget_hours: budgetHours },
+    },
+  );
+}
+
+export function setMemberSkills(
+  projectId: string,
+  userId: string,
+  skillTags: string[],
+): Promise<{ ok: true; user_id: string; skill_tags: string[] }> {
+  return api(`/api/projects/${projectId}/members/${userId}/skills`, {
+    method: "PATCH",
+    body: { skill_tags: skillTags },
+  });
 }
 
 // ---------- KB items (Phase V — manual-write notes) -------------------

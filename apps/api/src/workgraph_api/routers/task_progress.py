@@ -262,6 +262,7 @@ async def post_promote_task(
         title = task.title
         description = task.description or ""
         proposed_estimate = task.estimate_hours
+        proposed_role = task.assignee_role
 
     review = await membrane_service.review(
         MembraneCandidate(
@@ -277,6 +278,9 @@ async def post_promote_task(
                 # has a typed value to compare against the requirement
                 # budget. None passes through harmlessly.
                 "estimate_hours": proposed_estimate,
+                # Threaded for the assignee-coverage advisory check;
+                # 'unknown' or missing skips the check.
+                "assignee_role": proposed_role,
             },
         )
     )

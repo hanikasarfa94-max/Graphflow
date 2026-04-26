@@ -1,6 +1,7 @@
 import { getTranslations } from "next-intl/server";
 
 import { ArtifactsPanel } from "@/components/status/ArtifactsPanel";
+import { BudgetControl } from "@/components/status/BudgetControl";
 import { DecisionsPanel } from "@/components/status/DecisionsPanel";
 import { MembersPanel } from "@/components/status/MembersPanel";
 import { Panel } from "@/components/status/Panel";
@@ -72,6 +73,18 @@ export default async function ProjectStatusPage({
           {t("status.lastRefreshed", { time: refreshedAt })}
         </Text>
       </header>
+
+      {state?.requirement_id &&
+      (state?.members ?? []).find((m) => m.user_id === user.id)?.role ===
+        "owner" ? (
+        <div style={{ marginBottom: 16 }}>
+          <BudgetControl
+            projectId={id}
+            requirementId={state.requirement_id}
+            initialBudgetHours={state.budget_hours ?? null}
+          />
+        </div>
+      ) : null}
 
       {errorMessage ? (
         <Panel title={t("status.title")}>

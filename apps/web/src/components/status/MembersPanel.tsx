@@ -4,6 +4,7 @@ import type { ProjectState } from "@/lib/api";
 
 import { InlineMemberInvite } from "./InlineMemberInvite";
 import { EmptyState, Panel } from "./Panel";
+import { SkillTagsControl } from "./SkillTagsControl";
 
 type Member = ProjectState["members"][number];
 
@@ -60,6 +61,12 @@ export async function MembersPanel({
           <MemberCard
             key={m.user_id}
             member={m}
+            projectId={projectId}
+            canEditSkills={
+              !!projectId &&
+              !!currentUserId &&
+              (m.user_id === currentUserId || isOwner)
+            }
             observerLabel={t("status.members.observer")}
             roleLabel={t("status.members.roleLabel")}
             presenceLabel={t("stream.presence.online")}
@@ -83,12 +90,16 @@ export async function MembersPanel({
 
 function MemberCard({
   member,
+  projectId,
+  canEditSkills,
   observerLabel,
   roleLabel,
   presenceLabel,
   roleTranslations,
 }: {
   member: Member;
+  projectId?: string;
+  canEditSkills?: boolean;
   observerLabel: string;
   roleLabel: string;
   presenceLabel: string;
@@ -189,6 +200,14 @@ function MemberCard({
             </span>
           ) : null}
         </div>
+        {projectId ? (
+          <SkillTagsControl
+            projectId={projectId}
+            userId={member.user_id}
+            initialTags={member.skill_tags ?? []}
+            canEdit={Boolean(canEditSkills)}
+          />
+        ) : null}
       </div>
     </div>
   );

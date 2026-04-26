@@ -604,6 +604,11 @@ async def api_env():
     # membrane needs stream_service which is constructed after
     # KbItemService.
     kb_item_service.attach_membrane(membrane_service)
+    # Stage 5 of docs/membrane-reorg.md: a personal-stream post that's
+    # a reply to a recent membrane-clarify gets routed back through
+    # MembraneService.handle_clarification_reply. Late-bound here so
+    # the test fixture matches main.py's wiring.
+    personal_service.attach_membrane(membrane_service)
     render_agent = _StubRenderAgent()
     render_service = RenderService(maker, render_agent)
 

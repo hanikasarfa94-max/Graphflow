@@ -463,6 +463,14 @@ class ProjectMemberRow(Base):
     role: Mapped[str] = mapped_column(String(32), default="member")
     # 'full' | 'task_scoped' | 'observer'. v1 enforces 'observer' only.
     license_tier: Mapped[str] = mapped_column(String(16), default="full")
+    # Migration 0026 — per-project functional skill tags. Free-form
+    # strings drawn from the same vocabulary as TaskRow.assignee_role
+    # (pm/frontend/backend/qa/design/business/approver). Used by the
+    # membrane's task_promote review for assignee-coverage checks: a
+    # task tagged role='backend' with no project member carrying that
+    # tag emits an advisory warning. Self-editable per member; owners
+    # can also edit any member's tags.
+    skill_tags: Mapped[list[str]] = mapped_column(JSON, default=list)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 
 

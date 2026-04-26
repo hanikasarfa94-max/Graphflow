@@ -492,6 +492,11 @@ async def lifespan(app: FastAPI):
         event_bus,
         skills_service=skills_service,
     )
+    # Late-bind: a personal-stream post that's a reply to a recent
+    # `kind='membrane-clarify'` system message gets routed through
+    # MembraneService.handle_clarification_reply (Stage 5 reply path).
+    # When None, the intercept degrades to the standard EdgeAgent loop.
+    personal_service.attach_membrane(membrane_service)
 
     pre_answer_agent = PreAnswerAgent()
     pre_answer_service = PreAnswerService(

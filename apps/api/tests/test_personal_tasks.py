@@ -420,3 +420,206 @@ async def test_kb_clarification_posts_to_proposer_personal_stream(api_env):
     assert sugs == []
     assert len(clarify_msgs) == 1
     assert "supersede" in clarify_msgs[0].body.lower()
+
+
+# ---- Stage 5 — reply auto-intercept + re-eval (F6) -------------------
+
+
+@pytest.mark.asyncio
+async def test_clarification_reply_intercepted_and_processed(api_env):
+    """End-to-end: KB clarification posted → proposer replies in their
+    personal stream → reply intercepted, candidate re-reviewed, draft
+    flipped to published. The reply must NOT trigger an EdgeAgent turn.
+    """
+    client, maker, *_ = api_env
+    owner_id = await _register_and_login(client, "clr_owner")
+    member_id = await _register_and_login(client, "clr_mem")
+    pid, _ = await _mk_project_with_requirement(
+        maker, owner_id=owner_id, extra_member_id=member_id
+    )
+
+    # Existing group entry with substantial body.
+    await _login(client, "clr_owner")
+    r = await client.post(
+        f"/api/projects/{pid}/kb-items",
+        json={
+            "title": "release runbook",
+            "content_md": "x" * 800,
+            "scope": "group",
+        },
+    )
+    assert r.status_code == 200, r.text
+
+    # Member writes a tiny same-titled entry → clarification fires.
+    await _login(client, "clr_mem")
+    r = await client.post(
+        f"/api/projects/{pid}/kb-items",
+        json={
+            "title": "release runbook",
+            "content_md": "tl;dr",
+            "scope": "group",
+        },
+    )
+    assert r.status_code == 200, r.text
+    member_item_id = r.json()["id"]
+
+    # Confirm the draft + clarify message exist.
+    async with session_scope(maker) as session:
+        clarify_count = (
+            await session.execute(
+                select(MessageRow).where(
+                    MessageRow.project_id == pid,
+                    MessageRow.kind == "membrane-clarify",
+                )
+            )
+        ).scalars().all()
+        assert len(clarify_count) == 1
+
+    # Member replies in their personal stream — the answer "supersede"
+    # falls through past the size-divergence trigger (already_answered)
+    # and lands at the existing dup-resolution path: request_review.
+    r = await client.post(
+        f"/api/personal/{pid}/post",
+        json={"body": "supersede"},
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body.get("intercepted") is True
+
+    # Side effects: an ack message in the member's personal stream,
+    # and (since re-review returned request_review) a membrane_review
+    # IMSuggestion in the team room.
+    async with session_scope(maker) as session:
+        acks = (
+            await session.execute(
+                select(MessageRow).where(
+                    MessageRow.project_id == pid,
+                    MessageRow.kind == "membrane-clarify-ack",
+                )
+            )
+        ).scalars().all()
+        assert len(acks) == 1
+        sugs = (
+            await session.execute(
+                select(IMSuggestionRow).where(
+                    IMSuggestionRow.project_id == pid,
+                    IMSuggestionRow.kind == "membrane_review",
+                )
+            )
+        ).scalars().all()
+        assert len(sugs) == 1
+        # The IMSuggestion's detail points at the member's draft.
+        proposal = sugs[0].proposal or {}
+        assert (proposal.get("detail") or {}).get("kb_item_id") == member_item_id
+
+
+# ---- F5: assignee-coverage warning + skill_tags endpoint ---------------
+
+
+@pytest.mark.asyncio
+async def test_promote_warns_when_assignee_role_uncovered(api_env):
+    client, maker, *_ = api_env
+    a_id = await _register_and_login(client, "cov_a")
+    pid, req_id = await _mk_project_with_requirement(maker, owner_id=a_id)
+
+    await _login(client, "cov_a")
+    r = await client.post(
+        f"/api/projects/{pid}/tasks",
+        json={"title": "wire stripe", "assignee_role": "backend"},
+    )
+    task_id = r.json()["task"]["id"]
+
+    r = await client.post(f"/api/tasks/{task_id}/promote")
+    assert r.status_code == 200, r.text
+    body = r.json()
+    warnings = body.get("warnings") or []
+    assert any("backend" in w for w in warnings)
+
+
+@pytest.mark.asyncio
+async def test_skill_tags_set_clears_coverage_warning(api_env):
+    """After the proposer declares the role tag on themselves, the
+    assignee-coverage warning disappears."""
+    client, maker, *_ = api_env
+    a_id = await _register_and_login(client, "cov_b_a")
+    pid, _ = await _mk_project_with_requirement(maker, owner_id=a_id)
+
+    await _login(client, "cov_b_a")
+    # Self-declare frontend skill via the new endpoint.
+    r = await client.patch(
+        f"/api/projects/{pid}/members/{a_id}/skills",
+        json={"skill_tags": ["FRONTEND", "qa", "frontend"]},
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    # Lowercased + deduped.
+    assert sorted(body["skill_tags"]) == sorted(["frontend", "qa"])
+
+    # Promote a frontend task → no coverage warning since the proposer
+    # carries the tag.
+    r = await client.post(
+        f"/api/projects/{pid}/tasks",
+        json={"title": "polish landing", "assignee_role": "frontend"},
+    )
+    task_id = r.json()["task"]["id"]
+    r = await client.post(f"/api/tasks/{task_id}/promote")
+    body = r.json()
+    warnings = body.get("warnings") or []
+    assert not any("frontend" in w for w in warnings)
+
+
+@pytest.mark.asyncio
+async def test_non_owner_cannot_edit_other_member_skills(api_env):
+    client, maker, *_ = api_env
+    owner_id = await _register_and_login(client, "skl_o")
+    member_id = await _register_and_login(client, "skl_m")
+    pid, _ = await _mk_project_with_requirement(
+        maker, owner_id=owner_id, extra_member_id=member_id
+    )
+
+    # Member tries to edit owner's skills → 403.
+    await _login(client, "skl_m")
+    r = await client.patch(
+        f"/api/projects/{pid}/members/{owner_id}/skills",
+        json={"skill_tags": ["pm"]},
+    )
+    assert r.status_code == 403
+
+
+# ---- F4: requirement budget edit endpoint ------------------------------
+
+
+@pytest.mark.asyncio
+async def test_owner_sets_requirement_budget(api_env):
+    client, maker, *_ = api_env
+    owner_id = await _register_and_login(client, "bud_o")
+    member_id = await _register_and_login(client, "bud_m")
+    pid, req_id = await _mk_project_with_requirement(
+        maker, owner_id=owner_id, extra_member_id=member_id
+    )
+
+    # Owner sets budget.
+    await _login(client, "bud_o")
+    r = await client.patch(
+        f"/api/projects/{pid}/requirements/{req_id}/budget",
+        json={"budget_hours": 40},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["budget_hours"] == 40
+
+    # Non-owner is forbidden.
+    await _login(client, "bud_m")
+    r = await client.patch(
+        f"/api/projects/{pid}/requirements/{req_id}/budget",
+        json={"budget_hours": 100},
+    )
+    assert r.status_code == 403
+
+    # Owner clears with null.
+    await _login(client, "bud_o")
+    r = await client.patch(
+        f"/api/projects/{pid}/requirements/{req_id}/budget",
+        json={"budget_hours": None},
+    )
+    assert r.status_code == 200
+    assert r.json()["budget_hours"] is None

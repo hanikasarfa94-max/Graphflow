@@ -291,6 +291,28 @@
         "observer": "观察者"
       }
     },
+    "skills": {
+      "noTags": "未声明技能",
+      "edit": "编辑技能",
+      "addTag": "添加",
+      "removeTag": "删除",
+      "placeholder": "输入技能后回车",
+      "save": "保存",
+      "saving": "保存中…",
+      "cancel": "取消",
+      "saveFailed": "保存失败"
+    },
+    "budget": {
+      "label": "需求预算",
+      "unset": "未设置",
+      "edit": "编辑",
+      "save": "保存",
+      "saving": "保存中…",
+      "cancel": "取消",
+      "placeholder": "小时",
+      "invalid": "1–100000",
+      "saveFailed": "保存失败"
+    },
     "tasks": {
       "title": "进行中的任务",
       "empty": "暂无进行中的任务",
@@ -306,6 +328,9 @@
       "newTaskSave": "添加",
       "newTaskSaving": "保存中……",
       "newTaskCancel": "取消",
+      "newTaskEstimateLabel": "预估(小时)",
+      "newTaskEstimatePlaceholder": "如 4",
+      "newTaskRoleLabel": "角色",
       "createFailed": "新建任务失败",
       "draftsHeading": "我的草稿",
       "draftChip": "草稿",

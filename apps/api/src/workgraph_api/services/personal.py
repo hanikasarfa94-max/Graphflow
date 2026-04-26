@@ -207,6 +207,15 @@ class PersonalStreamService:
         # user rehearsing in parallel across two projects doesn't throttle
         # either.
         self._preview_last_seen: dict[tuple[str, str], float] = {}
+        # Late-bound MembraneService — set via attach_membrane() once
+        # both services are constructed (membrane needs StreamService
+        # and is built after PersonalStreamService). When None, the
+        # clarification-reply intercept degrades to a no-op and the
+        # post follows the standard EdgeAgent path.
+        self._membrane_service: Any = None
+
+    def attach_membrane(self, membrane_service: Any) -> None:
+        self._membrane_service = membrane_service
 
     # --------------------------------------------------------------- preview
 
@@ -360,6 +369,31 @@ class PersonalStreamService:
         if not post_result.get("ok"):
             return {"ok": False, "error": post_result.get("error", "stream_post_failed")}
         message_id = post_result["id"]
+
+        # Stage 5 — clarification reply intercept. If this post is the
+        # answer to a recent membrane-clarify question, route it back
+        # through review() and skip the normal EdgeAgent loop. The
+        # intercept already posts an ack message in the stream so the
+        # user sees what happened.
+        if self._membrane_service is not None:
+            try:
+                intercepted = (
+                    await self._membrane_service.handle_clarification_reply(
+                        stream_id=stream_id,
+                        project_id=project_id,
+                        proposer_user_id=user_id,
+                        reply_body=body,
+                    )
+                )
+            except Exception:
+                _log.exception(
+                    "personal.post: clarification-reply handler raised — "
+                    "falling through to EdgeAgent",
+                    extra={"stream_id": stream_id, "user_id": user_id},
+                )
+                intercepted = False
+            if intercepted:
+                return {"ok": True, "message_id": message_id, "intercepted": True}
 
         # Build the EdgeAgent context.
         context = await self._build_respond_context(

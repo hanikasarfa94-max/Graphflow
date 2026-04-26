@@ -647,11 +647,238 @@ class MembraneService:
                 "this task adds to the queue without addressing the gap."
             )
 
+        # Check 5: assignee-coverage. The candidate carries a proposed
+        # role (threaded via metadata['assignee_role']); if no project
+        # member has that role tag in their skill_tags list, surface a
+        # warning. 'unknown' role skips the check (no commitment was
+        # made about who'd own it). Schema added in migration 0026.
+        proposed_role = candidate.metadata.get("assignee_role")
+        if (
+            isinstance(proposed_role, str)
+            and proposed_role
+            and proposed_role != "unknown"
+        ):
+            async with session_scope(self._sessionmaker) as session:
+                members = await ProjectMemberRepository(session).list_for_project(
+                    candidate.project_id
+                )
+            covered = any(
+                proposed_role in (m.skill_tags or []) for m in members
+            )
+            if not covered:
+                warnings.append(
+                    f"No project member has declared the '{proposed_role}' "
+                    "skill tag. Promoting this task may leave it without "
+                    "an owner — consider tagging a member or routing to "
+                    "an external collaborator."
+                )
+
         return MembraneReview(
             action="auto_merge",
             reason="no_conflicts",
             warnings=tuple(warnings),
         )
+
+    async def handle_clarification_reply(
+        self,
+        *,
+        stream_id: str,
+        project_id: str,
+        proposer_user_id: str,
+        reply_body: str,
+    ) -> bool:
+        """Stage 5 reply path — if `reply_body` is the proposer's answer
+        to a recently-posted membrane-clarify question, re-run the
+        candidate through review() with the answer in metadata, then
+        apply the resulting action.
+
+        Returns True if the reply was intercepted (caller should skip
+        the normal Edge agent loop — the user's intent was answering,
+        not starting a new turn). Returns False if no pending clarify
+        question exists for this stream, OR the reply was already
+        intercepted by an earlier handler.
+
+        v0 covers `kb_item_group` candidates only. `task_promote`
+        clarification is wired but doesn't currently trigger from
+        any review check; when it does, extend the kind dispatch
+        below to include it.
+        """
+        from .membrane import MembraneCandidate  # local — same module
+        # Only one outstanding clarify per stream is meaningful — pick
+        # the most recent. Walk back at most ~50 messages so a long
+        # chat history doesn't slow the post path.
+        async with session_scope(self._sessionmaker) as session:
+            recent = await MessageRepository(session).list_for_stream(
+                stream_id, limit=50
+            )
+        # Most recent first via reversed iteration. Match: agent-authored
+        # membrane-clarify with linked_id pointing to a row we can find.
+        clarify_msg = None
+        for msg in reversed(recent):
+            if (
+                msg.kind == "membrane-clarify"
+                and msg.author_id == EDGE_AGENT_SYSTEM_USER_ID
+                and msg.linked_id
+            ):
+                clarify_msg = msg
+                break
+            # The user's own most-recent post might already be in the
+            # window; we ignore non-clarify messages and keep walking.
+        if clarify_msg is None:
+            return False
+
+        # Look up the linked row. Today the linked_id is always a
+        # KbItemRow.id (only kb_item_group emits clarifications); a
+        # missing row just means the draft was deleted between Q + A,
+        # so degrade silently.
+        async with session_scope(self._sessionmaker) as session:
+            kb_repo = KbItemRepository(session)
+            row = await kb_repo.get(clarify_msg.linked_id)
+            if row is None:
+                _log.info(
+                    "membrane.handle_clarification_reply: linked row gone",
+                    extra={
+                        "stream_id": stream_id,
+                        "linked_id": clarify_msg.linked_id,
+                    },
+                )
+                return False
+            # Defensive: only treat the reply as the answer if the
+            # proposer matches. A teammate (somehow ending up in
+            # someone else's personal stream) replying shouldn't
+            # auto-resolve the question.
+            if row.owner_user_id != proposer_user_id:
+                return False
+
+        # Re-run review with the answer threaded through metadata.
+        # The review function uses metadata['clarification_answer']
+        # presence to skip the size-divergence trigger and fall
+        # through to the existing dup-resolution path.
+        review = await self.review(
+            MembraneCandidate(
+                kind="kb_item_group",
+                project_id=project_id,
+                proposer_user_id=proposer_user_id,
+                title=row.title,
+                content=row.content_md or "",
+                metadata={
+                    "source": "clarification_reply",
+                    "kb_item_id": row.id,
+                    "clarification_answer": reply_body.strip(),
+                },
+            )
+        )
+
+        # Apply the new action. For v0, simple branching:
+        #   * auto_merge → flip the draft to published
+        #   * reject → flip to archived (keep audit) + system note
+        #   * request_review → enqueue the standard inbox card
+        #   * request_clarification → ask another round
+        async with session_scope(self._sessionmaker) as session:
+            kb_repo = KbItemRepository(session)
+            if review.action == "auto_merge":
+                await kb_repo.update(item_id=row.id, status="published")
+            elif review.action == "reject":
+                await kb_repo.update(item_id=row.id, status="archived")
+            elif review.action == "request_review":
+                # Defer to the existing inbox-enqueue path. We post the
+                # team-room system message + IMSuggestion here inline
+                # (mirrors KbItemService.create's request_review block).
+                team_stream = await StreamRepository(session).get_for_project(
+                    project_id
+                )
+                if team_stream is not None:
+                    body = (
+                        f"📥 Membrane re-staged a group KB entry after "
+                        f"clarification reply: '{row.title}'. Reason: "
+                        f"{review.reason}."
+                    )
+                    if review.diff_summary:
+                        body = f"{body}\n{review.diff_summary}"
+                    msg = await MessageRepository(session).append(
+                        project_id=project_id,
+                        author_id=EDGE_AGENT_SYSTEM_USER_ID,
+                        body=body,
+                        stream_id=team_stream.id,
+                        kind="membrane-review",
+                        linked_id=row.id,
+                    )
+                    from workgraph_persistence import IMSuggestionRepository
+
+                    await IMSuggestionRepository(session).append(
+                        project_id=project_id,
+                        message_id=msg.id,
+                        kind="membrane_review",
+                        confidence=1.0,
+                        targets=list(review.conflict_with),
+                        proposal={
+                            "action": "approve_membrane_candidate",
+                            "summary": (
+                                review.diff_summary
+                                or f"Approve '{row.title}' for the group wiki"
+                            ),
+                            "detail": {
+                                "candidate_kind": "kb_item_group",
+                                "kb_item_id": row.id,
+                                "diff_summary": review.diff_summary,
+                                "conflict_with": list(review.conflict_with),
+                            },
+                        },
+                        reasoning=review.reason or "membrane request_review",
+                        prompt_version=None,
+                        outcome="ok",
+                        attempts=1,
+                    )
+            # request_clarification → fall through; notify_clarification
+            # below handles posting the next question.
+
+        if review.action == "request_clarification":
+            await self.notify_clarification(
+                candidate=MembraneCandidate(
+                    kind="kb_item_group",
+                    project_id=project_id,
+                    proposer_user_id=proposer_user_id,
+                    title=row.title,
+                    content=row.content_md or "",
+                    metadata={
+                        "source": "clarification_reply",
+                        "kb_item_id": row.id,
+                        # Pre-populate so the next reply round sees the
+                        # prior answer too. The review() handler skips
+                        # the size-divergence trigger when
+                        # clarification_answer is set, so a second
+                        # ambiguity check needs new criteria — for v0
+                        # we just route to request_review.
+                        "clarification_answer": reply_body.strip(),
+                    },
+                ),
+                review=review,
+                linked_id=row.id,
+            )
+
+        # Post a small confirmation in the proposer's personal stream
+        # so they see "ok, processed" — important UX cue since their
+        # message disappears into the membrane otherwise.
+        outcome_text = {
+            "auto_merge": "✅ Thanks — your KB entry is now published.",
+            "reject": "❌ The KB entry was rejected after review.",
+            "request_review": "📥 Forwarded to team for owner review.",
+            "request_clarification": "❓ Membrane has another question (see above).",
+        }.get(review.action, "↪ Reply received.")
+        try:
+            await self._stream_service.post_system_message(
+                stream_id=stream_id,
+                author_id=EDGE_AGENT_SYSTEM_USER_ID,
+                body=outcome_text,
+                kind="membrane-clarify-ack",
+                linked_id=row.id,
+            )
+        except Exception:
+            _log.exception(
+                "membrane.handle_clarification_reply: ack post failed",
+                extra={"stream_id": stream_id, "linked_id": row.id},
+            )
+        return True
 
     async def notify_clarification(
         self,
