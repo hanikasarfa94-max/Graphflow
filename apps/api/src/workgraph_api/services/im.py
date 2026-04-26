@@ -76,8 +76,16 @@ class IMService:
         # Optional — only the wiki_entry apply branch needs it. Other
         # apply branches don't touch KB. Tests construct without it.
         self._kb_item_service = kb_item_service
+        # Late-bound MembraneService — set via attach_membrane(). The
+        # accept handler routes IM-suggestion-derived decisions through
+        # the membrane for advisory review (Stage A). When None, the
+        # crystallization proceeds without review (existing behavior).
+        self._membrane_service: Any = None
         # Keep in-flight classification tasks so tests + shutdown can await.
         self._pending: set[asyncio.Task] = set()
+
+    def attach_membrane(self, membrane_service: Any) -> None:
+        self._membrane_service = membrane_service
 
     async def post_message(
         self,
@@ -369,6 +377,7 @@ class IMService:
             # links back to the suggestion. "apply_outcome" mirrors whether
             # the associated graph mutation actually landed.
             decision_payload: dict[str, Any] | None = None
+            membrane_warnings: list[str] = []
             if kind == "decision" and confidence >= 0.6:
                 proposal = row.proposal or {}
                 action = (
@@ -377,6 +386,33 @@ class IMService:
                 detail = (
                     proposal.get("detail", {}) if isinstance(proposal, dict) else {}
                 )
+                # Stage A — membrane review for IM-derived decisions.
+                # Always advisory (auto_merge with warnings) in v0; the
+                # path completes as before, warnings surface in the
+                # response. The review opens its own session for the
+                # recent-decisions scan; aiosqlite serializes reads
+                # cleanly so nesting under our outer session is safe.
+                if self._membrane_service is not None:
+                    from .membrane import MembraneCandidate
+
+                    review_title = (
+                        proposal.get("summary", "") if isinstance(proposal, dict) else ""
+                    )[:200]
+                    review = await self._membrane_service.review(
+                        MembraneCandidate(
+                            kind="decision_crystallize",
+                            project_id=project_id,
+                            proposer_user_id=actor_id,
+                            title=review_title,
+                            content="",
+                            metadata={
+                                "source": "im_apply",
+                                "suggestion_id": suggestion_id,
+                                "rationale": row.reasoning or "",
+                            },
+                        )
+                    )
+                    membrane_warnings = list(review.warnings)
                 crystallize_outcome = (
                     "ok" if applied.get("graph_touched") else "advisory"
                 )
@@ -442,6 +478,7 @@ class IMService:
             "applied": applied,
             "suggestion": payload,
             "decision": decision_payload,
+            "warnings": membrane_warnings,
         }
 
     async def dismiss(self, *, suggestion_id: str, actor_id: str) -> dict:

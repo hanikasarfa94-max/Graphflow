@@ -497,6 +497,19 @@ async def lifespan(app: FastAPI):
     # MembraneService.handle_clarification_reply (Stage 5 reply path).
     # When None, the intercept degrades to the standard EdgeAgent loop.
     personal_service.attach_membrane(membrane_service)
+    # Stage A — every Decision crystallization goes through the
+    # membrane for advisory review. v0 is warning-only; flows complete
+    # as before but the response carries any membrane observations
+    # (dup-decision, missing rationale, etc.). When None, decision
+    # creation skips the review.
+    decision_service.attach_membrane(membrane_service)
+    # Stage A — IM-derived decisions also pass through the membrane
+    # for advisory review (the "decision" kind suggestion crystallizes
+    # a DecisionRow on accept; review captures dup-decision warnings).
+    im_service.attach_membrane(membrane_service)
+    # Stage A — silent-consensus ratifications also crystallize via the
+    # membrane.
+    silent_consensus_service.attach_membrane(membrane_service)
 
     pre_answer_agent = PreAnswerAgent()
     pre_answer_service = PreAnswerService(

@@ -609,6 +609,14 @@ async def api_env():
     # MembraneService.handle_clarification_reply. Late-bound here so
     # the test fixture matches main.py's wiring.
     personal_service.attach_membrane(membrane_service)
+    # Stage A: decisions go through the membrane for advisory review.
+    # v0 returns auto_merge with warnings; existing tests stay green
+    # because the flow is unchanged.
+    decision_service.attach_membrane(membrane_service)
+    # Stage A: IM-derived decisions also pass through membrane.
+    im_service.attach_membrane(membrane_service)
+    # Stage A: silent-consensus ratify also through membrane.
+    silent_consensus_service.attach_membrane(membrane_service)
     render_agent = _StubRenderAgent()
     render_service = RenderService(maker, render_agent)
 

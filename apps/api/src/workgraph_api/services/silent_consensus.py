@@ -131,6 +131,14 @@ class SilentConsensusService:
         # The dedupe guard inside scan() is the authoritative
         # correctness layer; the lock just keeps the event log clean.
         self._scan_locks: dict[str, asyncio.Lock] = {}
+        # Late-bound MembraneService — set via attach_membrane() so
+        # ratify() can route the resulting Decision through the
+        # advisory review (Stage A). When None, decisions crystallize
+        # without review (existing behavior).
+        self._membrane_service: Any = None
+
+    def attach_membrane(self, membrane_service: Any) -> None:
+        self._membrane_service = membrane_service
 
     # ---- membership helpers ---------------------------------------------
 
@@ -433,13 +441,43 @@ class SilentConsensusService:
                 f"Ratified silent consensus: {row.topic_text}\n\n"
                 f"Supporting actions: [{lineage_line}]"
             )
+            review_title = (row.inferred_decision_summary or row.topic_text or "")[:200]
+            topic_text = row.topic_text
+            # Capture fields needed in the second session (the ORM row
+            # detaches when this scope exits).
+            inferred_summary = row.inferred_decision_summary
 
+        # Membrane review (Stage A — advisory) outside the session so
+        # the recent-decisions scan can use its own connection.
+        membrane_warnings: list[str] = []
+        if self._membrane_service is not None:
+            from .membrane import MembraneCandidate
+
+            review = await self._membrane_service.review(
+                MembraneCandidate(
+                    kind="decision_crystallize",
+                    project_id=project_id,
+                    proposer_user_id=ratifier_user_id,
+                    title=review_title,
+                    content="",
+                    metadata={
+                        "source": "silent_consensus",
+                        "silent_consensus_id": sc_id,
+                        "topic_text": topic_text,
+                        "rationale": rationale,
+                    },
+                )
+            )
+            membrane_warnings = list(review.warnings)
+
+        async with session_scope(self._sessionmaker) as session:
+            sc_repo = SilentConsensusRepository(session)
             decision = await DecisionRepository(session).create(
                 conflict_id=None,
                 project_id=project_id,
                 resolver_id=ratifier_user_id,
                 option_index=None,
-                custom_text=row.inferred_decision_summary,
+                custom_text=inferred_summary,
                 rationale=rationale,
                 apply_actions=[],
                 source_suggestion_id=None,
@@ -479,7 +517,12 @@ class SilentConsensusService:
                 "detail": {"source": "silent_consensus", "sc_id": sc_id},
             },
         )
-        return {"ok": True, "proposal": payload, "decision_id": decision_id}
+        return {
+            "ok": True,
+            "proposal": payload,
+            "decision_id": decision_id,
+            "warnings": membrane_warnings,
+        }
 
     async def reject(
         self,

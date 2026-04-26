@@ -394,8 +394,9 @@ class MembraneService:
             return await self._review_kb_item_group(candidate)
         if candidate.kind == "task_promote":
             return await self._review_task_promote(candidate)
-        # decision_crystallize / graph_edge: still passthrough until
-        # their respective stages wire conflict detection.
+        if candidate.kind == "decision_crystallize":
+            return await self._review_decision_crystallize(candidate)
+        # graph_edge: still passthrough until conflict detection lands.
         return MembraneReview(
             action="auto_merge",
             reason="no_check_for_kind",
@@ -879,6 +880,105 @@ class MembraneService:
                 extra={"stream_id": stream_id, "linked_id": row.id},
             )
         return True
+
+    async def _review_decision_crystallize(
+        self, candidate: MembraneCandidate
+    ) -> MembraneReview:
+        """Pre-crystallize checks for a Decision about to enter the cell.
+
+        QA-confusion fix: decisions today land in the graph through 7
+        different code paths (conflict resolve, IM apply, gated proposal
+        approve/vote, silent consensus ratify, scrimmage convergence,
+        meeting signal accept). Each path has its own upstream gate
+        (a conflict opened, a vote threshold reached, an owner ratifying
+        consensus, etc.), which is why "how does a decision get into the
+        graph?" is hard to answer. Routing them all through
+        MembraneService.review() gives one mental model: every decision
+        crosses the same boundary before becoming a load-bearing fact
+        in the cell.
+
+        Stage A v0 — ADVISORY ONLY. Always returns `auto_merge` so the
+        path completes as before, but `warnings` carries the membrane's
+        observations. The caller surfaces them in the response (and
+        eventually the membrane-notes UI). This keeps the existing
+        flows working while still:
+          - Audit-logging that the membrane was consulted on every
+            decision
+          - Giving us a single place to add real blocking rules later
+            (LLM contradiction check, scope re-litigation, gated
+            reversal — all deferred to Stage A+1)
+          - Letting the proposer / owner notice "FYI: this overlaps with
+            an earlier crystallized decision" without disrupting the
+            decision-making cadence
+
+        Why advisory-not-blocking: every upstream path that calls us
+        (conflict resolve, gated proposal approve, ratify, etc.) has
+        ALREADY been reviewed by humans. Blocking again would feel like
+        the system second-guessing the human's own gate. Surfacing
+        warnings, on the other hand, is the membrane being a good
+        nervous system: noticing patterns the humans might have missed
+        because each gate sees only its own slice. The 5 load-bearing
+        rules for decisions get their day when we have the eval data
+        to trust them.
+
+        Rules v0:
+          1. Title near-duplicate against an existing crystallized
+             decision in this project → warning. Symmetric to
+             kb_item_group's dup-check; same _normalize_title rules.
+             Surfaces "you might be silently overwriting prior intent."
+          2. Missing rationale → warning. Decisions without a recorded
+             "why" are weaker audit material. Skipped for gated proposal
+             and scrimmage sources whose rationale lives elsewhere.
+        """
+        warnings: list[str] = []
+
+        rationale = (
+            (candidate.metadata.get("rationale") or "").strip()
+            if isinstance(candidate.metadata, dict)
+            else ""
+        )
+        source = (
+            candidate.metadata.get("source")
+            if isinstance(candidate.metadata, dict)
+            else None
+        )
+
+        # Rule 2: missing rationale → advisory warning.
+        if not rationale and source not in ("gated_proposal", "scrimmage"):
+            warnings.append(
+                "This decision was crystallized without a recorded "
+                "rationale. Future readers will see the action but not "
+                "the why — consider adding one before the next gate."
+            )
+
+        # Rule 1: title near-duplicate scan against recent crystallized
+        # decisions in this project.
+        normalized_new = _normalize_title(candidate.title)
+        if normalized_new:
+            async with session_scope(self._sessionmaker) as session:
+                from workgraph_persistence import DecisionRepository
+
+                recent = await DecisionRepository(session).list_for_project(
+                    candidate.project_id, limit=100
+                )
+            for row in recent:
+                if row.apply_outcome in ("rejected", "pending_scrimmage"):
+                    continue
+                row_title = (row.custom_text or row.rationale or "")[:500]
+                if _normalize_title(row_title) == normalized_new:
+                    warnings.append(
+                        f"A prior decision in this project has the same "
+                        f"title-equivalent: '{row_title[:120]}' "
+                        f"(id={row.id}). Confirm this is a deliberate "
+                        f"supersede, not an accidental re-litigation."
+                    )
+                    break  # one collision warning is enough
+
+        return MembraneReview(
+            action="auto_merge",
+            reason="advisory_only" if warnings else "no_conflicts",
+            warnings=tuple(warnings),
+        )
 
     async def notify_clarification(
         self,
