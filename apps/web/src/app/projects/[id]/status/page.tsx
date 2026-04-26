@@ -4,12 +4,17 @@ import { ArtifactsPanel } from "@/components/status/ArtifactsPanel";
 import { BudgetControl } from "@/components/status/BudgetControl";
 import { DecisionsPanel } from "@/components/status/DecisionsPanel";
 import { MembersPanel } from "@/components/status/MembersPanel";
+import { MembraneNotesPanel } from "@/components/status/MembraneNotesPanel";
 import { Panel } from "@/components/status/Panel";
 import { RenderTriggers } from "@/components/status/RenderTriggers";
 import { RisksPanel } from "@/components/status/RisksPanel";
 import { TasksPanel } from "@/components/status/TasksPanel";
 import { Heading, Text } from "@/components/ui";
-import type { PersonalTask, ProjectState } from "@/lib/api";
+import type {
+  MembraneNotesResponse,
+  PersonalTask,
+  ProjectState,
+} from "@/lib/api";
 import { requireUser, serverFetch } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
@@ -52,6 +57,18 @@ export default async function ProjectStatusPage({
     personalTasks = r.tasks ?? [];
   } catch {
     /* non-fatal — drafts surface stays empty */
+  }
+
+  // Batch C — membrane notes (pending reviews + clarifications).
+  // Surfaces the membrane's outstanding work so it's not invisible.
+  // Empty state is the calm default; loud only when there's work.
+  let membraneNotes: MembraneNotesResponse | null = null;
+  try {
+    membraneNotes = await serverFetch<MembraneNotesResponse>(
+      `/api/projects/${id}/membrane/notes`,
+    );
+  } catch {
+    /* non-fatal */
   }
 
   const refreshedAt = new Date().toLocaleString();
@@ -110,6 +127,9 @@ export default async function ProjectStatusPage({
             projectId={id}
             currentUserId={user.id}
           />
+        </div>
+        <div style={{ gridColumn: "1 / -1" }}>
+          <MembraneNotesPanel projectId={id} notes={membraneNotes} />
         </div>
         <TasksPanel
           tasks={state?.plan.tasks ?? []}

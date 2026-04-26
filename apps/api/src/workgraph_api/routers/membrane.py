@@ -22,9 +22,14 @@ from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, ConfigDict, Field
 
+from sqlalchemy import select
+
 from workgraph_persistence import (
+    IMSuggestionRow,
     KbIngestRepository,
+    MessageRow,
     ProjectMemberRepository,
+    UserRepository,
     session_scope,
 )
 
@@ -296,6 +301,94 @@ async def delete_subscription(
         status_map = {"not_found": 404}
         raise HTTPException(status_code=status_map.get(err, 400), detail=err)
     return result
+
+
+@router.get("/projects/{project_id}/membrane/notes")
+async def get_membrane_notes(
+    project_id: str,
+    request: Request,
+    limit: int = Query(default=50, ge=1, le=200),
+    user: AuthenticatedUser = Depends(require_user),
+):
+    """Membrane's outstanding work for this project — Batch C surface.
+
+    Two queues:
+      * pending_reviews: IMSuggestion(kind='membrane_review',
+        status='pending') rows. Each one is a draft (kb_item_group or
+        task_promote) waiting for an owner to accept. The proposal
+        carries detail.candidate_kind, detail.kb_item_id /
+        detail.task_id, and detail.diff_summary.
+      * pending_clarifications: recent membrane-clarify messages from
+        the edge agent that haven't been resolved (the proposer
+        hasn't answered yet, or the answer hasn't re-merged the
+        candidate). We don't track per-message resolution today, so
+        v0 returns the most recent N regardless of state — caller
+        can filter by linked_id existence.
+
+    Used by the FE MembraneNotesPanel on the Status page. Membership-
+    gated; everyone in the project sees the same queue (the membrane
+    queue is project-wide audit material, not per-viewer inbox).
+    """
+    sessionmaker = request.app.state.sessionmaker
+    async with session_scope(sessionmaker) as session:
+        if not await ProjectMemberRepository(session).is_member(
+            project_id, user.id
+        ):
+            raise HTTPException(status_code=403, detail="not a project member")
+
+        review_rows = list(
+            (
+                await session.execute(
+                    select(IMSuggestionRow)
+                    .where(IMSuggestionRow.project_id == project_id)
+                    .where(IMSuggestionRow.kind == "membrane_review")
+                    .where(IMSuggestionRow.status == "pending")
+                    .order_by(IMSuggestionRow.created_at.desc())
+                    .limit(limit)
+                )
+            ).scalars().all()
+        )
+        clarify_rows = list(
+            (
+                await session.execute(
+                    select(MessageRow)
+                    .where(MessageRow.project_id == project_id)
+                    .where(MessageRow.kind == "membrane-clarify")
+                    .order_by(MessageRow.created_at.desc())
+                    .limit(limit)
+                )
+            ).scalars().all()
+        )
+        # Resolve the proposer username for each clarify (the message's
+        # author is the system; the proposer is the stream owner — but
+        # for simplicity we surface the linked_id, which is the kb_item
+        # or task id, and let the caller resolve the human if needed).
+        # No second join here for v0 — keeps the endpoint cheap.
+
+    return {
+        "ok": True,
+        "pending_reviews": [
+            {
+                "id": r.id,
+                "message_id": r.message_id,
+                "kind": r.kind,
+                "proposal": r.proposal,
+                "reasoning": r.reasoning,
+                "created_at": r.created_at.isoformat() if r.created_at else None,
+            }
+            for r in review_rows
+        ],
+        "pending_clarifications": [
+            {
+                "id": m.id,
+                "linked_id": m.linked_id,
+                "body": m.body,
+                "stream_id": m.stream_id,
+                "created_at": m.created_at.isoformat() if m.created_at else None,
+            }
+            for m in clarify_rows
+        ],
+    }
 
 
 @router.post("/projects/{project_id}/membrane/scan-now")

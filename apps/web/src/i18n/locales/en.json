@@ -394,6 +394,17 @@
       "title": "External artifacts",
       "empty": "No git commits or docs linked yet"
     },
+    "membraneNotes": {
+      "title": "Membrane notes",
+      "empty": "Membrane has nothing waiting on humans.",
+      "pendingReviews": "Pending reviews",
+      "pendingClarifications": "Open clarifications",
+      "kind": {
+        "taskPromote": "task → plan",
+        "kbItemGroup": "personal → group KB",
+        "clarify": "needs answer"
+      }
+    },
     "age": {
       "justNow": "just now",
       "minutes": "{n}m",

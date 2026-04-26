@@ -2410,6 +2410,46 @@ export function setMemberSkills(
   });
 }
 
+// Batch C — membrane notes panel surface. Lists the project's
+// outstanding membrane work: drafts waiting for owner review, and
+// recent clarification questions waiting for proposer answers.
+export interface MembraneReviewNote {
+  id: string;
+  message_id: string;
+  kind: string;
+  proposal: {
+    action?: string;
+    summary?: string;
+    detail?: {
+      candidate_kind?: string;
+      kb_item_id?: string;
+      task_id?: string;
+      diff_summary?: string | null;
+      conflict_with?: string[];
+    };
+  } | null;
+  reasoning: string | null;
+  created_at: string | null;
+}
+export interface MembraneClarifyNote {
+  id: string;
+  linked_id: string | null;
+  body: string;
+  stream_id: string | null;
+  created_at: string | null;
+}
+export interface MembraneNotesResponse {
+  ok: true;
+  pending_reviews: MembraneReviewNote[];
+  pending_clarifications: MembraneClarifyNote[];
+}
+export function fetchMembraneNotes(
+  projectId: string,
+  baseUrl?: string,
+): Promise<MembraneNotesResponse> {
+  return api(`/api/projects/${projectId}/membrane/notes`, { baseUrl });
+}
+
 // ---------- KB items (Phase V — manual-write notes) -------------------
 
 export type KbNoteScope = "personal" | "group";

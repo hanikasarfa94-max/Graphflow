@@ -394,6 +394,17 @@
       "title": "外部产物",
       "empty": "尚未关联任何 git 提交或文档"
     },
+    "membraneNotes": {
+      "title": "膜层待办",
+      "empty": "膜层目前没有需要人工处理的事项。",
+      "pendingReviews": "待审核",
+      "pendingClarifications": "待澄清",
+      "kind": {
+        "taskPromote": "任务 → 计划",
+        "kbItemGroup": "个人 → 团队知识库",
+        "clarify": "需回复"
+      }
+    },
     "age": {
       "justNow": "刚刚",
       "minutes": "{n} 分钟",
