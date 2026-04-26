@@ -1,4 +1,24 @@
 {
+  "topbar": {
+    "searchPlaceholder": "Search projects, decisions, tasks or knowledge",
+    "notifications": "Notifications",
+    "newCta": "New"
+  },
+  "inboxPage": {
+    "kicker": "Routing signals",
+    "title": "Routing inbox",
+    "subtitle": "The inbox isn't a message pile — it's the queue of signals the system thinks need a human: who is asking, why, what they will see, and whether sign-off is required.",
+    "totalPending": "{count} pending",
+    "routedHeading": "Routed to you",
+    "routedEmpty": "Nothing routed to you right now.",
+    "routedTag": "EDGE · routed",
+    "routedNoFraming": "(no framing yet)",
+    "gatedHeading": "Gated approvals",
+    "gatedEmpty": "No gated proposals waiting on you.",
+    "gatedTag": "GATED · {cls}",
+    "gatedNoSummary": "(no summary)",
+    "openInTeamRoom": "Answer in team room"
+  },
   "brand": {
     "name": "WorkGraph",
     "tagline": "Coordination as a graph, not a document.",

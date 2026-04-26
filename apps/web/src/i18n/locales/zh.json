@@ -1,4 +1,24 @@
 {
+  "topbar": {
+    "searchPlaceholder": "搜索项目、决策、任务或知识",
+    "notifications": "通知",
+    "newCta": "新建"
+  },
+  "inboxPage": {
+    "kicker": "路由信号",
+    "title": "路由收件箱",
+    "subtitle": "收件箱不是消息堆,而是系统认为需要人类介入的信号队列:问谁、为何问、对方会看到什么、是否需要审查。",
+    "totalPending": "{count} 项待处理",
+    "routedHeading": "路由给你的",
+    "routedEmpty": "目前没有路由给你的信号。",
+    "routedTag": "EDGE · 路由",
+    "routedNoFraming": "(尚无措辞)",
+    "gatedHeading": "等你签字的提案",
+    "gatedEmpty": "目前没有等你签字的提案。",
+    "gatedTag": "GATED · {cls}",
+    "gatedNoSummary": "(无摘要)",
+    "openInTeamRoom": "去团队会议室回应"
+  },
   "brand": {
     "name": "WorkGraph",
     "tagline": "协作是一张图,而不是一份文档。",

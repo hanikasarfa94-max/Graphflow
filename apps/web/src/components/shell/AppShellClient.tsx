@@ -27,6 +27,7 @@ import type { User } from "@/lib/api";
 
 import { AppSidebar } from "./AppSidebar";
 import { RoutedInboundDrawer } from "./RoutedInboundDrawer";
+import { Topbar } from "./Topbar";
 
 export interface ShellProject {
   id: string;
@@ -120,15 +121,25 @@ export function AppShellClient({
           onOpenInbox={openInbox}
           workspaces={workspaces ?? []}
         />
-        <main
+        <div
           style={{
             flex: 1,
             minWidth: 0,
-            overflowX: "auto",
+            display: "flex",
+            flexDirection: "column",
           }}
         >
-          {children}
-        </main>
+          <Topbar />
+          <main
+            style={{
+              flex: 1,
+              minWidth: 0,
+              overflowX: "auto",
+            }}
+          >
+            {children}
+          </main>
+        </div>
         <RoutedInboundDrawer
           open={drawerOpen}
           onClose={closeInbox}
