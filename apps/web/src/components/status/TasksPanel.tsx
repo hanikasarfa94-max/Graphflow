@@ -1,10 +1,11 @@
 import { getTranslations } from "next-intl/server";
 
-import type { ProjectState } from "@/lib/api";
+import type { PersonalTask, ProjectState } from "@/lib/api";
 
 import { ageSecondsFrom, formatAge } from "./age";
 import { NewTaskComposer } from "./NewTaskComposer";
 import { EmptyState, Panel } from "./Panel";
+import { PromoteTaskButton } from "./PromoteTaskButton";
 import { TaskScoreCell, TaskStatusCell } from "./TaskRowControls";
 
 type Task = ProjectState["plan"]["tasks"][number];
@@ -42,6 +43,7 @@ function statusColor(status: string): string {
 
 export async function TasksPanel({
   tasks,
+  personalTasks = [],
   assignments,
   members,
   currentUserId,
@@ -49,6 +51,9 @@ export async function TasksPanel({
   projectId,
 }: {
   tasks: Task[];
+  // Phase T+1 — personal-scope drafts the current viewer owns. Render
+  // above the canonical plan tasks with a draft chip + promote button.
+  personalTasks?: PersonalTask[];
   assignments: Record<string, unknown>[];
   members: Member[];
   // Phase U row controls — assignee sees a status dropdown, project
@@ -101,6 +106,13 @@ export async function TasksPanel({
       return bSec - aSec;
     });
 
+  // Personal drafts the viewer owns. Filter terminal too — promoted
+  // tasks flip scope to 'plan' and disappear; canceled drafts are
+  // considered abandoned and don't need an inline action.
+  const drafts = personalTasks.filter(
+    (t) => !TERMINAL_STATUSES.has(t.status),
+  );
+
   return (
     <Panel
       title={t("status.tasks.title")}
@@ -108,6 +120,9 @@ export async function TasksPanel({
     >
       {projectId && currentUserId ? (
         <NewTaskComposer projectId={projectId} />
+      ) : null}
+      {drafts.length > 0 ? (
+        <DraftsSection tasks={drafts} />
       ) : null}
       {active.length === 0 ? (
         <EmptyState>{t("status.tasks.empty")}</EmptyState>
@@ -232,5 +247,94 @@ function Td({
     <td style={{ padding: "8px 10px", verticalAlign: "top", ...style }}>
       {children}
     </td>
+  );
+}
+
+async function DraftsSection({ tasks }: { tasks: PersonalTask[] }) {
+  const t = await getTranslations();
+  return (
+    <div
+      data-testid="task-drafts"
+      style={{
+        marginBottom: 14,
+        padding: 10,
+        background: "var(--wg-surface-sunk)",
+        border: "1px dashed var(--wg-line)",
+        borderRadius: "var(--wg-radius)",
+      }}
+    >
+      <div
+        style={{
+          fontSize: 11,
+          letterSpacing: "0.06em",
+          textTransform: "uppercase",
+          color: "var(--wg-ink-soft)",
+          fontFamily: "var(--wg-font-mono)",
+          marginBottom: 8,
+        }}
+      >
+        {t("status.tasks.draftsHeading")} · {tasks.length}
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        {tasks.map((task) => (
+          <div
+            key={task.id}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+              padding: "6px 10px",
+              background: "var(--wg-surface)",
+              border: "1px solid var(--wg-line)",
+              borderRadius: "var(--wg-radius-sm, 4px)",
+            }}
+          >
+            <span
+              style={{
+                padding: "1px 8px",
+                fontSize: 10,
+                fontFamily: "var(--wg-font-mono)",
+                fontWeight: 600,
+                color: "var(--wg-ink-soft)",
+                background: "var(--wg-surface-sunk)",
+                border: "1px solid var(--wg-line)",
+                borderRadius: 999,
+                textTransform: "uppercase",
+                letterSpacing: "0.04em",
+              }}
+            >
+              {t("status.tasks.draftChip")}
+            </span>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div
+                style={{
+                  fontWeight: 600,
+                  fontSize: 13,
+                  whiteSpace: "nowrap",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                }}
+              >
+                {task.title}
+              </div>
+              {task.description ? (
+                <div
+                  style={{
+                    fontSize: 11,
+                    color: "var(--wg-ink-soft)",
+                    whiteSpace: "nowrap",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                  }}
+                >
+                  {task.description}
+                </div>
+              ) : null}
+            </div>
+            <PromoteTaskButton taskId={task.id} />
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }

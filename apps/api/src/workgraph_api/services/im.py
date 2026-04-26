@@ -854,27 +854,74 @@ class IMService:
             or action == "approve_membrane_candidate"
         ):
             # Stage 4 of docs/membrane-reorg.md. The membrane staged a
-            # group-scope KB write as draft + queued this suggestion;
-            # the owner just clicked accept. Flip the linked draft to
-            # published so it joins canonical group context.
-            kb_item_id = (
-                detail.get("kb_item_id") if isinstance(detail, dict) else None
-            )
-            if not kb_item_id:
-                return {"ok": False, "error": "missing_kb_item_id"}
-            from workgraph_persistence import KbItemRepository
+            # candidate + queued this suggestion; the owner just clicked
+            # accept. Branch on candidate_kind because the cell-side
+            # write differs:
+            #   * kb_item_group  → flip the linked draft to published
+            #   * task_promote   → promote the personal task to plan
+            candidate_kind = (
+                detail.get("candidate_kind")
+                if isinstance(detail, dict)
+                else None
+            ) or "kb_item_group"  # legacy: pre-T+1 only kb_item_group
+                                  # ever queued, no field was set.
 
-            updated = await KbItemRepository(session).update(
-                item_id=kb_item_id, status="published"
-            )
-            if updated is None:
-                return {"ok": False, "error": "kb_item_not_found"}
-            return {
-                "ok": True,
-                "graph_touched": True,
-                "kb_item_id": kb_item_id,
-                "action": "approve_membrane_candidate",
-            }
+            if candidate_kind == "kb_item_group":
+                kb_item_id = (
+                    detail.get("kb_item_id")
+                    if isinstance(detail, dict)
+                    else None
+                )
+                if not kb_item_id:
+                    return {"ok": False, "error": "missing_kb_item_id"}
+                from workgraph_persistence import KbItemRepository
+
+                updated = await KbItemRepository(session).update(
+                    item_id=kb_item_id, status="published"
+                )
+                if updated is None:
+                    return {"ok": False, "error": "kb_item_not_found"}
+                return {
+                    "ok": True,
+                    "graph_touched": True,
+                    "kb_item_id": kb_item_id,
+                    "action": "approve_membrane_candidate",
+                }
+
+            if candidate_kind == "task_promote":
+                task_id = (
+                    detail.get("task_id")
+                    if isinstance(detail, dict)
+                    else None
+                )
+                if not task_id:
+                    return {"ok": False, "error": "missing_task_id"}
+                req = await RequirementRepository(session).latest_for_project(
+                    row.project_id
+                )
+                if req is None:
+                    return {"ok": False, "error": "no_requirement_to_attach_to"}
+                existing = await PlanRepository(session).list_tasks(req.id)
+                next_sort = (
+                    max((t.sort_order or 0) for t in existing) + 1
+                    if existing
+                    else 0
+                )
+                promoted = await PlanRepository(session).promote_personal_to_plan(
+                    task_id=task_id,
+                    requirement_id=req.id,
+                    sort_order=next_sort,
+                )
+                if promoted is None:
+                    return {"ok": False, "error": "promote_failed"}
+                return {
+                    "ok": True,
+                    "graph_touched": True,
+                    "task_id": task_id,
+                    "action": "approve_membrane_candidate",
+                }
+
+            return {"ok": False, "error": f"unknown_candidate_kind:{candidate_kind}"}
 
         # tag or `none` kinds have nothing to apply.
         return {"ok": True, "graph_touched": False, "action": action or "noop"}

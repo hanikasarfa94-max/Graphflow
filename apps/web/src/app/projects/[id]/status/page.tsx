@@ -8,7 +8,7 @@ import { RenderTriggers } from "@/components/status/RenderTriggers";
 import { RisksPanel } from "@/components/status/RisksPanel";
 import { TasksPanel } from "@/components/status/TasksPanel";
 import { Heading, Text } from "@/components/ui";
-import type { ProjectState } from "@/lib/api";
+import type { PersonalTask, ProjectState } from "@/lib/api";
 import { requireUser, serverFetch } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
@@ -34,11 +34,23 @@ export default async function ProjectStatusPage({
   const user = await requireUser(`/projects/${id}/status`);
 
   let state: ProjectState | null = null;
+  let personalTasks: PersonalTask[] = [];
   let errorMessage: string | null = null;
   try {
     state = await serverFetch<ProjectState>(`/api/projects/${id}/state`);
   } catch (e) {
     errorMessage = e instanceof Error ? e.message : "failed to load project";
+  }
+  // Personal tasks live in a separate fetch — they're per-viewer and
+  // not part of /state (which is project-wide). Failure here is non-
+  // fatal: the panel still renders the plan-scope tasks.
+  try {
+    const r = await serverFetch<{ ok: true; tasks: PersonalTask[] }>(
+      `/api/projects/${id}/personal-tasks`,
+    );
+    personalTasks = r.tasks ?? [];
+  } catch {
+    /* non-fatal — drafts surface stays empty */
   }
 
   const refreshedAt = new Date().toLocaleString();
@@ -88,6 +100,7 @@ export default async function ProjectStatusPage({
         </div>
         <TasksPanel
           tasks={state?.plan.tasks ?? []}
+          personalTasks={personalTasks}
           assignments={state?.assignments ?? []}
           members={state?.members ?? []}
           currentUserId={user.id}

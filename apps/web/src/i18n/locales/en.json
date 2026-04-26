@@ -295,7 +295,13 @@
       "newTaskSave": "Add task",
       "newTaskSaving": "Adding…",
       "newTaskCancel": "Cancel",
-      "createFailed": "Could not create task"
+      "createFailed": "Could not create task",
+      "draftsHeading": "Personal drafts",
+      "draftChip": "Draft",
+      "promote": "Promote",
+      "promoting": "Promoting…",
+      "promoteDeferred": "Sent for review",
+      "promoteFailed": "Promote failed"
     },
     "risks": {
       "title": "Open risks",

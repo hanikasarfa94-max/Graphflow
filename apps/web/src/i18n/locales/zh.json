@@ -295,7 +295,13 @@
       "newTaskSave": "添加",
       "newTaskSaving": "保存中……",
       "newTaskCancel": "取消",
-      "createFailed": "新建任务失败"
+      "createFailed": "新建任务失败",
+      "draftsHeading": "我的草稿",
+      "draftChip": "草稿",
+      "promote": "提交计划",
+      "promoting": "提交中……",
+      "promoteDeferred": "已送审",
+      "promoteFailed": "提交失败"
     },
     "risks": {
       "title": "未解决的风险",

@@ -721,7 +721,17 @@ export interface IMSuggestion {
   id: string;
   message_id: string;
   project_id: string;
-  kind: "none" | "tag" | "decision" | "blocker";
+  // Phase L: 'wiki_entry' (IM-assist proposes saving the message to
+  // the project wiki). Phase membrane-reorg.S4: 'membrane_review' (the
+  // membrane staged a kb_item_group or task_promote candidate; the
+  // owner accepts here to flip draft → published / personal → plan).
+  kind:
+    | "none"
+    | "tag"
+    | "decision"
+    | "blocker"
+    | "wiki_entry"
+    | "membrane_review";
   confidence: number;
   targets: string[];
   proposal: IMSuggestionProposal | null;
@@ -2312,6 +2322,45 @@ export function fetchTaskHistory(
   baseUrl?: string,
 ): Promise<TaskHistoryPayload> {
   return api(`/api/tasks/${taskId}/history`, { baseUrl });
+}
+
+// Phase T — personal-task surface. The owner of a personal task can
+// list their own + promote individually to the group plan via the
+// membrane review pathway.
+
+export type TaskScope = "plan" | "personal";
+
+export interface PersonalTask {
+  id: string;
+  project_id: string;
+  title: string;
+  description: string | null;
+  scope: TaskScope;
+  status: string;
+  owner_user_id: string | null;
+  requirement_id: string | null;
+  source_message_id: string | null;
+  assignee_role: string | null;
+  created_at: string | null;
+}
+
+export function fetchPersonalTasks(
+  projectId: string,
+  baseUrl?: string,
+): Promise<{ ok: true; tasks: PersonalTask[] }> {
+  return api(`/api/projects/${projectId}/personal-tasks`, { baseUrl });
+}
+
+export interface PromoteTaskResponse {
+  ok: true;
+  task: PersonalTask | null;
+  deferred?: boolean;
+  reason?: string;
+  diff_summary?: string | null;
+}
+
+export function promoteTask(taskId: string): Promise<PromoteTaskResponse> {
+  return api(`/api/tasks/${taskId}/promote`, { method: "POST" });
 }
 
 // ---------- KB items (Phase V — manual-write notes) -------------------

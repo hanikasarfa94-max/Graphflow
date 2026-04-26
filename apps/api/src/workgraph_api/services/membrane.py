@@ -58,11 +58,13 @@ from workgraph_persistence import (
     AgentRunLogRepository,
     EDGE_AGENT_SYSTEM_USER_ID,
     KbItemRepository,
-    MembraneSignalRepository,
-    MembraneSignalRow,
+    KbItemRow,
+    KbIngestRepository,
     MessageRepository,
+    PlanRepository,
     ProjectMemberRepository,
     ProjectRow,
+    RequirementRepository,
     StreamRepository,
     UserRepository,
     session_scope,
@@ -96,12 +98,12 @@ ReviewAction = Literal[
 
 # Candidate kinds the membrane review() understands. Each promote
 # path picks one; the review function uses it to choose which checks
-# to run. Stage 2 only wires `kb_item_group` (group-scope KB write);
-# other kinds reserved for Stage 3+.
+# to run.
 CandidateKind = Literal[
     "kb_item_group",         # group-scope KbItemRow about to be created
+    "task_promote",          # personal TaskRow being promoted to plan
     "decision_crystallize",  # DecisionRow about to crystallize
-    "graph_edge",             # graph node/edge promotion
+    "graph_edge",            # graph node/edge promotion
 ]
 
 
@@ -181,7 +183,7 @@ class MembraneService:
             if project is None:
                 return {"ok": False, "error": "project_not_found"}
 
-            repo = MembraneSignalRepository(session)
+            repo = KbIngestRepository(session)
             existing = await repo.find_by_source(
                 project_id=project_id,
                 source_identifier=source_identifier,
@@ -258,7 +260,7 @@ class MembraneService:
                 extra={"signal_id": signal_id},
             )
             async with session_scope(self._sessionmaker) as session:
-                fresh = await MembraneSignalRepository(session).get(signal_id)
+                fresh = await KbIngestRepository(session).get(signal_id)
             return {
                 "ok": True,
                 "created": True,
@@ -297,7 +299,7 @@ class MembraneService:
 
         # Persist classification + agent log + optional routing.
         async with session_scope(self._sessionmaker) as session:
-            await MembraneSignalRepository(session).set_classification(
+            await KbIngestRepository(session).set_classification(
                 signal_id,
                 classification=classification.model_dump(),
                 status=new_status,
@@ -326,7 +328,7 @@ class MembraneService:
             )
 
         async with session_scope(self._sessionmaker) as session:
-            fresh = await MembraneSignalRepository(session).get(signal_id)
+            fresh = await KbIngestRepository(session).get(signal_id)
         payload = self._signal_payload(fresh) if fresh else None
 
         await self._event_bus.emit(
@@ -380,7 +382,10 @@ class MembraneService:
         )
         if candidate.kind == "kb_item_group":
             return await self._review_kb_item_group(candidate)
-        # Stages 4+ will fill in decision_crystallize / graph_edge.
+        if candidate.kind == "task_promote":
+            return await self._review_task_promote(candidate)
+        # decision_crystallize / graph_edge: still passthrough until
+        # their respective stages wire conflict detection.
         return MembraneReview(
             action="auto_merge",
             reason="no_check_for_kind",
@@ -433,6 +438,78 @@ class MembraneService:
                         f"'{row.title}' (id={row.id}, status={row.status}). "
                         "Owner should decide whether to merge, supersede, "
                         "or accept as a sibling."
+                    ),
+                    conflict_with=(row.id,),
+                )
+
+        return MembraneReview(
+            action="auto_merge",
+            reason="no_conflicts",
+        )
+
+    async def _review_task_promote(
+        self, candidate: MembraneCandidate
+    ) -> MembraneReview:
+        """Pre-promote checks for a personal-task → plan candidate.
+
+        Stage T+1 of the membrane reorg. Symmetric to
+        `_review_kb_item_group` but the corpus is plan-scope tasks
+        attached to the project's latest requirement, not group KB
+        items. The crowd-wiki failure mode applies to plans too:
+        two members each create their own "implement OAuth" task
+        without realizing the other one already shipped.
+
+        Checks v0:
+          1. Title near-duplicate against existing plan tasks in the
+             current requirement. Same _normalize_title rules as
+             kb_item_group, so "Implement OAuth" / "implement oauth!"
+             collide.
+
+        Not yet covered (deferred):
+          - Estimate-budget overflow vs requirement budget (need a
+            requirement-level budget field; currently unstructured).
+          - Assignee coverage (no assignee field on personal tasks
+            yet — proposer is implicit owner).
+          - Status-conflict with archived tasks bearing the same
+            title (we explicitly skip those, mirroring kb_item_group).
+        """
+        normalized_new = _normalize_title(candidate.title)
+        if not normalized_new:
+            return MembraneReview(
+                action="auto_merge",
+                reason="empty_title_lets_caller_validate",
+            )
+
+        async with session_scope(self._sessionmaker) as session:
+            req_repo = RequirementRepository(session)
+            latest = await req_repo.latest_for_project(candidate.project_id)
+            if latest is None:
+                # No requirement yet — nothing to dup against. Caller
+                # wires the new task into a fresh requirement.
+                return MembraneReview(
+                    action="auto_merge",
+                    reason="no_requirement_yet",
+                )
+            existing = await PlanRepository(session).list_tasks(latest.id)
+
+        for row in existing:
+            # Plan tasks have a `status` field similar to KB items; we
+            # don't have a generic "archived" state for tasks but
+            # 'cancelled' / 'done' shouldn't trigger review (the work
+            # is already accounted for, but the proposer's intent might
+            # be to redo it deliberately — let auto-merge through and
+            # rely on the human to dedupe). Only block on active work.
+            if row.status in ("cancelled", "done"):
+                continue
+            if _normalize_title(row.title) == normalized_new:
+                return MembraneReview(
+                    action="request_review",
+                    reason="duplicate_title",
+                    diff_summary=(
+                        f"An active plan task already has this title: "
+                        f"'{row.title}' (id={row.id}, status={row.status}). "
+                        "Owner should decide whether to merge into it, "
+                        "supersede it, or accept as a sibling task."
                     ),
                     conflict_with=(row.id,),
                 )
@@ -514,7 +591,7 @@ class MembraneService:
             return {"ok": False, "error": "invalid_decision"}
 
         async with session_scope(self._sessionmaker) as session:
-            repo = MembraneSignalRepository(session)
+            repo = KbIngestRepository(session)
             row = await repo.get(signal_id)
             if row is None:
                 return {"ok": False, "error": "signal_not_found"}
@@ -534,7 +611,7 @@ class MembraneService:
 
         if decision == "reject":
             async with session_scope(self._sessionmaker) as session:
-                updated = await MembraneSignalRepository(session).mark_status(
+                updated = await KbIngestRepository(session).mark_status(
                     signal_id,
                     status="rejected",
                     approved_by_user_id=approver_user_id,
@@ -590,7 +667,7 @@ class MembraneService:
 
         new_status = "routed" if routed_count > 0 else "approved"
         async with session_scope(self._sessionmaker) as session:
-            updated = await MembraneSignalRepository(session).mark_status(
+            updated = await KbIngestRepository(session).mark_status(
                 signal_id,
                 status=new_status,
                 approved_by_user_id=approver_user_id,
@@ -626,12 +703,12 @@ class MembraneService:
         limit: int = 100,
     ) -> list[dict]:
         async with session_scope(self._sessionmaker) as session:
-            rows = await MembraneSignalRepository(session).list_for_project(
+            rows = await KbIngestRepository(session).list_for_project(
                 project_id, status=status, limit=limit
             )
             return [self._signal_payload(r) for r in rows]
 
-    def _signal_payload(self, row: MembraneSignalRow) -> dict[str, Any]:
+    def _signal_payload(self, row: KbItemRow) -> dict[str, Any]:
         return {
             "id": row.id,
             "project_id": row.project_id,

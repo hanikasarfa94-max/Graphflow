@@ -26,9 +26,13 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field
 
 from workgraph_persistence import (
+    EDGE_AGENT_SYSTEM_USER_ID,
+    IMSuggestionRepository,
+    MessageRepository,
     PlanRepository,
     ProjectMemberRepository,
     RequirementRepository,
+    StreamRepository,
     session_scope,
 )
 
@@ -155,6 +159,32 @@ def _serialize_task(row: Any) -> dict[str, Any]:
     }
 
 
+@router.get("/api/projects/{project_id}/personal-tasks")
+async def list_personal_tasks(
+    project_id: str,
+    request: Request,
+    user: AuthenticatedUser = Depends(require_user),
+):
+    """Personal-scope tasks the current user owns in this project.
+
+    Mirrors the KB tree's "personal items only the owner sees" rule —
+    a draft surface so members can promote their own self-set tasks
+    without leaking them to peers. Empty list if the user owns none.
+    """
+    sessionmaker = request.app.state.sessionmaker
+    async with session_scope(sessionmaker) as session:
+        if not await ProjectMemberRepository(session).is_member(
+            project_id, user.id
+        ):
+            raise HTTPException(
+                status_code=403, detail="not a project member"
+            )
+        rows = await PlanRepository(session).list_personal_for_owner(
+            project_id=project_id, owner_user_id=user.id
+        )
+        return {"ok": True, "tasks": [_serialize_task(r) for r in rows]}
+
+
 @router.post("/api/projects/{project_id}/tasks")
 async def post_create_task(
     project_id: str,
@@ -225,10 +255,7 @@ async def post_promote_task(
 
     review = await membrane_service.review(
         MembraneCandidate(
-            kind="kb_item_group",  # reuse the same review handler for now;
-            # stage T+1 adds a dedicated 'task_promote' kind so the
-            # membrane can apply task-specific rules (e.g., title-dup
-            # against existing plan tasks, not KB items).
+            kind="task_promote",
             project_id=project_id,
             proposer_user_id=user.id,
             title=title,
@@ -242,9 +269,53 @@ async def post_promote_task(
             detail=review.reason or "membrane_rejected",
         )
     if review.action in ("request_review", "request_clarification"):
-        # Stage 4 inbox enqueue not yet wired for tasks; for now just
-        # tell the caller it's deferred and leave the personal task
-        # as-is. Owner can resolve manually.
+        # Stage 4 inbox enqueue: post a system message in the team
+        # stream and an IMSuggestion(kind='membrane_review') so the
+        # owner sees the deferred promote in the same inbox surface
+        # used for KB membrane reviews. Mirrors kb_items.py:204-250.
+        async with session_scope(sessionmaker) as session:
+            team_stream = await StreamRepository(session).get_for_project(
+                project_id
+            )
+            if team_stream is not None:
+                body = (
+                    f"📥 Membrane staged a personal task for promote review: "
+                    f"'{title}'. Reason: {review.reason}."
+                )
+                if review.diff_summary:
+                    body = f"{body}\n{review.diff_summary}"
+                msg = await MessageRepository(session).append(
+                    project_id=project_id,
+                    author_id=EDGE_AGENT_SYSTEM_USER_ID,
+                    body=body,
+                    stream_id=team_stream.id,
+                    kind="membrane-review",
+                    linked_id=task_id,
+                )
+                await IMSuggestionRepository(session).append(
+                    project_id=project_id,
+                    message_id=msg.id,
+                    kind="membrane_review",
+                    confidence=1.0,
+                    targets=list(review.conflict_with),
+                    proposal={
+                        "action": "approve_membrane_candidate",
+                        "summary": (
+                            review.diff_summary
+                            or f"Approve '{title}' for the project plan"
+                        ),
+                        "detail": {
+                            "candidate_kind": "task_promote",
+                            "task_id": task_id,
+                            "diff_summary": review.diff_summary,
+                            "conflict_with": list(review.conflict_with),
+                        },
+                    },
+                    reasoning=review.reason or "membrane request_review",
+                    prompt_version=None,
+                    outcome="ok",
+                    attempts=1,
+                )
         return {
             "ok": True,
             "task": None,
