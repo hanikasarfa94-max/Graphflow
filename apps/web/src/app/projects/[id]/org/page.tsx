@@ -16,7 +16,7 @@
 
 import { getTranslations } from "next-intl/server";
 
-import { Heading, Text } from "@/components/ui";
+import { Heading, PageHeader, Tag, Text } from "@/components/ui";
 import type { ProjectState } from "@/lib/api";
 import { requireUser, serverFetch } from "@/lib/auth";
 
@@ -80,17 +80,11 @@ export default async function OrgPage({
 
   return (
     <main style={{ padding: "20px 24px", maxWidth: 1100 }}>
-      <header style={{ marginBottom: 28 }}>
-        <Text variant="caption" muted style={{ letterSpacing: "0.14em" }}>
-          {t("kicker")}
-        </Text>
-        <Heading level={1} style={{ marginTop: 8 }}>
-          {t("title")}
-        </Heading>
-        <Text variant="body" muted style={{ marginTop: 6, maxWidth: 720 }}>
-          {t("subtitle")}
-        </Text>
-      </header>
+      <PageHeader
+        kicker={t("kicker")}
+        title={t("title")}
+        subtitle={t("subtitle")}
+      />
 
       {/* Gate-keeper distribution */}
       <section
@@ -163,33 +157,9 @@ export default async function OrgPage({
                     )}
                   </div>
                   {!hasGate ? (
-                    <span
-                      style={{
-                        padding: "2px 10px",
-                        borderRadius: 999,
-                        fontSize: 11,
-                        fontFamily: "var(--wg-font-mono)",
-                        fontWeight: 600,
-                        background: "var(--wg-amber-soft)",
-                        color: "var(--wg-amber)",
-                      }}
-                    >
-                      {t("gateKeepers.noGate")}
-                    </span>
+                    <Tag tone="amber">{t("gateKeepers.noGate")}</Tag>
                   ) : isSinglePoint ? (
-                    <span
-                      style={{
-                        padding: "2px 10px",
-                        borderRadius: 999,
-                        fontSize: 11,
-                        fontFamily: "var(--wg-font-mono)",
-                        fontWeight: 600,
-                        background: "rgba(220, 38, 38, 0.10)",
-                        color: "var(--wg-danger)",
-                      }}
-                    >
-                      {t("gateKeepers.singlePoint")}
-                    </span>
+                    <Tag tone="danger">{t("gateKeepers.singlePoint")}</Tag>
                   ) : null}
                 </div>
               );
@@ -267,32 +237,13 @@ export default async function OrgPage({
                       gap: 6,
                     }}
                   >
-                    <span
-                      style={{
-                        padding: "1px 8px",
-                        borderRadius: 10,
-                        background: "var(--wg-surface-sunk)",
-                        fontSize: 11,
-                        fontFamily: "var(--wg-font-mono)",
-                        color: "var(--wg-ink-soft)",
-                      }}
-                    >
+                    <Tag tone="neutral">
                       {t("load.decisions", { count: decisionCount })}
-                    </span>
+                    </Tag>
                     {gateClasses.length > 0 ? (
-                      <span
-                        style={{
-                          padding: "1px 8px",
-                          borderRadius: 10,
-                          background: "var(--wg-accent-soft)",
-                          fontSize: 11,
-                          fontFamily: "var(--wg-font-mono)",
-                          color: "var(--wg-accent)",
-                          fontWeight: 600,
-                        }}
-                      >
+                      <Tag tone="accent">
                         {t("load.gateClasses", { count: gateClasses.length })}
-                      </span>
+                      </Tag>
                     ) : null}
                   </div>
                   {(m.skill_tags?.length ?? 0) > 0 ? (

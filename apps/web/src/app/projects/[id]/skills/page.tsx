@@ -2,6 +2,7 @@ import Link from "next/link";
 import { getTranslations } from "next-intl/server";
 
 import { MemberHandoffButton } from "@/components/skills/MemberHandoffButton";
+import { PageHeader } from "@/components/ui";
 import { serverFetch } from "@/lib/auth";
 import type {
   HandoffListPayload,
@@ -83,6 +84,7 @@ export default async function SkillsAtlasPage({
     >
       <BackStrip projectId={projectId} label={t("backToProject")} />
       <Header
+        kicker={t("kicker")}
         title={t("title")}
         subtitle={t("subtitle")}
         scopeLabel={
@@ -207,32 +209,19 @@ function Header({
   title,
   subtitle,
   scopeLabel,
+  kicker,
 }: {
   title: string;
   subtitle: string;
   scopeLabel: string;
+  kicker: string;
 }) {
   return (
-    <header style={{ marginBottom: 22 }}>
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "baseline",
-          gap: 16,
-          flexWrap: "wrap",
-        }}
-      >
-        <h1
-          style={{
-            margin: 0,
-            fontSize: 28,
-            fontWeight: 600,
-            color: "var(--wg-ink)",
-          }}
-        >
-          {title}
-        </h1>
+    <PageHeader
+      kicker={kicker}
+      title={title}
+      subtitle={subtitle}
+      right={
         <span
           style={{
             fontSize: 11,
@@ -244,19 +233,8 @@ function Header({
         >
           {scopeLabel}
         </span>
-      </div>
-      <p
-        style={{
-          margin: "8px 0 0",
-          color: "var(--wg-ink-soft)",
-          fontSize: 14,
-          lineHeight: 1.55,
-          maxWidth: 640,
-        }}
-      >
-        {subtitle}
-      </p>
-    </header>
+      }
+    />
   );
 }
 

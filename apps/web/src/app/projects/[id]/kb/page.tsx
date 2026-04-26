@@ -6,7 +6,7 @@
 // the loop) we gracefully fall back to the "coming soon" empty state
 // instead of crashing.
 
-import { Heading } from "@/components/ui";
+import { PageHeader } from "@/components/ui";
 import { KbTreeBrowser } from "@/components/kb/KbTreeBrowser";
 import { NotesSection } from "@/components/kb/NotesSection";
 import {
@@ -70,9 +70,11 @@ export default async function KbPage({
 
   return (
     <main>
-      <header style={{ marginBottom: 16 }}>
-        <Heading level={1}>{t("kb.title")}</Heading>
-      </header>
+      <PageHeader
+        kicker={t("kb.kicker")}
+        title={t("kb.title")}
+        subtitle={t("kb.subtitle")}
+      />
       {/* Phase V — user-authored notes section. Project members can
           write personal notes (only they see), promote to group when
           ready. Lives above the membrane tree so the "I just wrote a

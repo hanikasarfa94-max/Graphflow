@@ -298,7 +298,9 @@
     }
   },
   "status": {
+    "kicker": "Project health",
     "title": "Project status",
+    "subtitle": "Critical path, risks, decisions, external artifacts and what's next.",
     "lastRefreshed": "Last refreshed {time}",
     "members": {
       "title": "Team",
@@ -431,6 +433,8 @@
     }
   },
   "kb": {
+    "kicker": "Knowledge base",
+    "subtitle": "Memory layer of the graph — sources, licenses, inheritance and citation chains.",
     "title": "Knowledge base",
     "search": "Search KB…",
     "empty": "No items match your query.",
@@ -648,6 +652,8 @@
       "renders_postmortem": "Postmortem",
       "renders_handoff": "Handoff",
       "audit": "Audit view",
+      "audit_kicker": "Audit view",
+      "audit_subtitle": "Graph, plan, tasks, risks and decisions belong to the same audit domain — internal tabs keep them together.",
       "organization": "Organization",
       "detail": "Detail",
       "detail_graph": "Graph",
@@ -1028,6 +1034,7 @@
     "members": "Members"
   },
   "skillAtlas": {
+    "kicker": "Capability graph",
     "title": "Skill atlas",
     "subtitle": "Two skills lock to every member: the role skill (imposed by the role, stays with the role) and the profile skill (declared by the person, validated by what the graph actually saw). Together they are the group's capital, beside the knowledge base.",
     "backToProject": "Back to project",

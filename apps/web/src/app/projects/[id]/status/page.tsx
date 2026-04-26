@@ -9,7 +9,7 @@ import { Panel } from "@/components/status/Panel";
 import { RenderTriggers } from "@/components/status/RenderTriggers";
 import { RisksPanel } from "@/components/status/RisksPanel";
 import { TasksPanel } from "@/components/status/TasksPanel";
-import { Heading, Text } from "@/components/ui";
+import { PageHeader, Text } from "@/components/ui";
 import type {
   MembraneNotesResponse,
   PersonalTask,
@@ -75,21 +75,17 @@ export default async function ProjectStatusPage({
 
   return (
     <main>
-      <header
-        style={{
-          display: "flex",
-          alignItems: "baseline",
-          justifyContent: "space-between",
-          gap: 12,
-          marginBottom: 20,
-          flexWrap: "wrap",
-        }}
-      >
-        <Heading level={2}>{t("status.title")}</Heading>
-        <Text variant="caption" muted>
-          {t("status.lastRefreshed", { time: refreshedAt })}
-        </Text>
-      </header>
+      <PageHeader
+        kicker={t("status.kicker")}
+        title={t("status.title")}
+        subtitle={t("status.subtitle")}
+        right={
+          <Text variant="caption" muted>
+            {t("status.lastRefreshed", { time: refreshedAt })}
+          </Text>
+        }
+      />
+
 
       {state?.requirement_id &&
       (state?.members ?? []).find((m) => m.user_id === user.id)?.role ===

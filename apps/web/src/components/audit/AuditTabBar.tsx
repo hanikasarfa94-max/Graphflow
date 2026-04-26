@@ -20,6 +20,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useTranslations } from "next-intl";
 
+import { PageHeader } from "@/components/ui";
+
 const AUDIT_TABS = [
   ["graph", "shell.project.detail_graph"],
   ["plan", "shell.project.detail_plan"],
@@ -45,6 +47,12 @@ export function AuditTabBar({ projectId }: { projectId: string }) {
   }
 
   return (
+    <>
+      <PageHeader
+        kicker={t("shell.project.audit_kicker")}
+        title={t("shell.project.audit")}
+        subtitle={t("shell.project.audit_subtitle")}
+      />
     <nav
       aria-label="Audit view"
       data-testid="audit-tab-bar"
@@ -52,7 +60,7 @@ export function AuditTabBar({ projectId }: { projectId: string }) {
         display: "flex",
         gap: 8,
         flexWrap: "wrap",
-        padding: "12px 0 18px",
+        padding: "0 0 18px",
         borderBottom: "1px solid var(--wg-line-soft)",
         marginBottom: 18,
       }}
@@ -84,5 +92,6 @@ export function AuditTabBar({ projectId }: { projectId: string }) {
         );
       })}
     </nav>
+    </>
   );
 }

@@ -298,6 +298,8 @@
     }
   },
   "status": {
+    "kicker": "项目健康度",
+    "subtitle": "关键路径、风险、决策、外部产物与下一步。",
     "title": "项目状态",
     "lastRefreshed": "最后刷新 {time}",
     "members": {
@@ -431,6 +433,8 @@
     }
   },
   "kb": {
+    "kicker": "知识库",
+    "subtitle": "图谱的记忆层：来源、授权、继承关系与引用链。",
     "title": "知识库",
     "search": "搜索知识库…",
     "empty": "没有匹配的条目。",
@@ -648,6 +652,8 @@
       "renders_postmortem": "项目复盘",
       "renders_handoff": "交接文档",
       "audit": "审计视图",
+      "audit_kicker": "审计视图",
+      "audit_subtitle": "图谱、计划、任务、风险与决策属于同一审计域，内部用切页保持在一起。",
       "organization": "组织",
       "detail": "审计视图",
       "detail_graph": "图谱",
@@ -1028,6 +1034,7 @@
     "members": "成员"
   },
   "skillAtlas": {
+    "kicker": "能力图谱",
     "title": "技能图谱",
     "subtitle": "每位成员绑定两种技能:角色技能(由角色赋予,随角色交接传承)与个人技能(由本人声明,由图谱实际观察到的工作验证)。它们与知识库一起,构成小组的资本。",
     "backToProject": "返回项目",
