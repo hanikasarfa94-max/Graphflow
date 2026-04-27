@@ -39,8 +39,8 @@ Loaded via Bunny Fonts CDN (no Google telemetry) or self-hosted from `apps/web/p
 **Type scale (tokens, use these — no inline sizes):**
 
 ```
---wg-fs-hero:    40px  /  2.5rem   (serif display only)
---wg-fs-h1:      28px  /  1.75rem  (serif or sans)
+--wg-fs-hero:    48px  /  3rem      (serif display only)
+--wg-fs-h1:      32px  /  2rem       (serif or sans)
 --wg-fs-h2:      18px  /  1.125rem
 --wg-fs-h3:      14px  /  0.875rem
 --wg-fs-body:    13px  /  0.8125rem
@@ -138,7 +138,7 @@ Dark-mode grid stays but at lower opacity. Every component must be authored with
 - **Stream (primary surface):** Single column max-width 820px centered. User messages right-aligned 70% max-width, agent turns flowing left-flat. **No cards for agent turns — only for structural events** (⚡ decision, drift, scrimmage result, silent-consensus proposal, routed-inbound).
 - **Audit views (`/detail/*`):** Grid-disciplined, dense, minimum chrome.
 - **Landing page:** Creative-editorial. Hero uses serif display at 40px. Asymmetric grid. This is the "first 3 seconds" surface.
-- **Border radius scale:** `sm: 4px · md: 6px · lg: 12px · full: 9999px`. No uniform-bubble radius everywhere — chip 4px, card 6px, modal 12px, avatar full. Variation signals hierarchy.
+- **Border radius scale:** `sm: 12px · md: 18px · lg: 26px · full: 9999px`. No uniform-bubble radius everywhere — chip 12px, card 18px, hero/modal 26px, avatar full. Variation signals hierarchy. Bumped 2026-04-27 from the prior 4/6/12 scale to align with the html2 sidebar-first prototype: softer corners read as "blueprint paper" rather than "Material slab."
 
 ---
 

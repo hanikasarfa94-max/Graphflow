@@ -62,6 +62,7 @@ import {
 import { SkillDeclarationBanner } from "@/components/onboarding/SkillDeclarationBanner";
 
 import { DriftCard } from "./DriftCard";
+import { getStreamScope } from "./StreamContextPanel";
 import { SlaCard } from "./SlaCard";
 import { EdgeReplyCard } from "./EdgeReplyCard";
 import { MembraneCard } from "./MembraneCard";
@@ -83,6 +84,9 @@ type Props = {
   // QA finding #9b — optional so non-breaking; falls back to the project
   // id prefix when the caller can't supply the human title.
   projectTitle?: string;
+  // StreamContextPanel scope key — when set, postPersonalMessage carries
+  // the user's current toggle selection on the wire.
+  streamKey?: string;
 };
 
 // WS reconnect backoff — 1s, 2s, 4s, 8s, capped at 10s. Matches
@@ -226,6 +230,7 @@ export function PersonalStream({
   currentUserId,
   members,
   projectTitle,
+  streamKey,
 }: Props) {
   const t = useTranslations("personal");
   const tStream = useTranslations("stream");
@@ -483,7 +488,8 @@ export function PersonalStream({
     requestAnimationFrame(autosize);
 
     try {
-      const res = await postPersonalMessage(projectId, body);
+      const scope = streamKey ? getStreamScope(streamKey) : null;
+      const res = await postPersonalMessage(projectId, body, scope);
       // Replace optimistic row with the real id from the server. Also
       // drop any row that already has the real id — the WS frame may
       // have landed during the POST round-trip, in which case mapping

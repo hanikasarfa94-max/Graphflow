@@ -50,15 +50,26 @@
   --wg-line: #d9e3f4;
   --wg-line-soft: #eef3fb;
 
-  /* Border-radius scale — chip 4px, card 6px, modal 12px, pill full.
-     Variation signals hierarchy (DESIGN.md §Layout). Legacy aliases
-     --wg-radius / --wg-radius-sm stay as-is for existing callers. */
-  --wg-radius-sm: 4px;
-  --wg-radius-md: 6px;
-  --wg-radius-lg: 12px;
+  /* Border-radius scale — chip 12px, card 18px, hero/modal 26px, pill full.
+     Variation signals hierarchy (DESIGN.md §Layout). Bumped 2026-04-27
+     to match html2 prototype (sidebar-first blue/white surface): the
+     softer corner radius is what makes the layout feel like a paper
+     blueprint rather than a Material slab. Legacy aliases --wg-radius
+     / --wg-radius-sm stay as-is for existing callers. */
+  --wg-radius-sm: 12px;
+  --wg-radius-md: 18px;
+  --wg-radius-lg: 26px;
   --wg-radius-full: 9999px;
-  --wg-radius: 6px;
+  --wg-radius: 18px;
   --wg-dot: 4px;
+
+  /* Elevation — blue-tinted shadows that sit on the cool-white surface
+     without muddying it. The tints come from html2; layered so cards
+     can opt into a heavier resting elevation when they need to read as
+     "sheet of paper" rather than "card on grid." */
+  --wg-shadow-sm: 0 4px 12px rgba(30, 64, 175, 0.05);
+  --wg-shadow: 0 8px 22px rgba(30, 64, 175, 0.055);
+  --wg-shadow-lg: 0 18px 45px rgba(30, 64, 175, 0.08);
 
   /* Spacing scale (4px base). */
   --wg-s-1: 4px;
@@ -91,9 +102,13 @@
   --wg-motion-fast: 120ms ease-out;
   --wg-motion-base: 200ms ease-out;
 
-  /* Type scale — single source of truth. Numbers match DESIGN.md. */
-  --wg-fs-hero: 40px;
-  --wg-fs-h1: 28px;
+  /* Type scale — single source of truth. Numbers match DESIGN.md.
+     Hero + h1 bumped 2026-04-27 to match html2's larger-display rhythm
+     (54/38 in the mockup; we land slightly tighter to keep
+     existing layouts intact). Body/label/caption unchanged so dense
+     surfaces (tables, lists) keep their ratios. */
+  --wg-fs-hero: 48px;
+  --wg-fs-h1: 32px;
   --wg-fs-h2: 18px;
   --wg-fs-h3: 14px;
   --wg-fs-body: 13px;

@@ -430,7 +430,7 @@ export function EdgeLLMTurnCard({
         }}
       >
         <span>
-          <span aria-hidden>🧠</span> {t("attribution.edge")}
+          <span aria-hidden>☁</span> {t("attribution.edge")}
         </span>
         <span title={new Date(message.created_at).toLocaleString()}>
           {relativeTime(message.created_at)}

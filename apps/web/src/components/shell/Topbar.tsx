@@ -174,7 +174,7 @@ export function Topbar() {
           }}
           aria-label={t("notifications")}
         >
-          <span aria-hidden>🔔</span>
+          <span aria-hidden>✦</span>
           <span>{t("notifications")}</span>
           {inboxCount > 0 ? (
             <span

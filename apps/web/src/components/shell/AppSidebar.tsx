@@ -8,14 +8,20 @@
 //   * Brand / app name
 //   * Home link (with routed-inbox badge)
 //   * Expandable project list — each project expands into sub-items:
-//       🧠 My thread     /projects/[id]
-//       👥 Team room     /projects/[id]/team
-//       📊 Status        /projects/[id]/status
-//       📚 KB            /projects/[id]/kb (page may 404 — ok, Phase Q-A)
-//       📝 Renders       /projects/[id]/renders/postmortem|handoff
-//       🔎 Detail        /projects/[id]/detail/{graph,plan,…}
+//       ☁ My thread     /projects/[id]
+//       ♟ Team room     /projects/[id]/team
+//       ▣ Status        /projects/[id]/status
+//       ⌬ Org           /projects/[id]/org
+//       ▥ KB            /projects/[id]/kb
+//       ✣ Skills        /projects/[id]/skills
+//       ▤ Docs          /projects/[id]/renders/postmortem|handoff
+//       ⌕ Audit         /projects/[id]/detail/{graph,plan,…}
 //   * Direct messages list
 //   * Footer: Profile link, Language switcher, Sign out
+//
+// Glyphs come from the html2 sidebar-first prototype — a monochrome
+// geometric set that renders identically across OSes (no platform-emoji
+// drift) and reads as "instrument" rather than "social app."
 //
 // Active route is highlighted. The routed-inbox badge is clickable — it
 // opens the drawer via the onOpenInbox callback owned by AppShellClient.
@@ -193,7 +199,7 @@ function ProjectNode({
                 ...(isActive(pathname, myThread, true) ? subItemActive : null),
               }}
             >
-              <span aria-hidden>🧠</span> {t("shell.project.myThread")}
+              <span aria-hidden>☁</span> {t("shell.project.myThread")}
             </Link>
           </li>
           <li>
@@ -204,7 +210,7 @@ function ProjectNode({
                 ...(isActive(pathname, teamRoom) ? subItemActive : null),
               }}
             >
-              <span aria-hidden>👥</span> {t("shell.project.teamRoom")}
+              <span aria-hidden>♟</span> {t("shell.project.teamRoom")}
             </Link>
           </li>
           <li>
@@ -215,7 +221,7 @@ function ProjectNode({
                 ...(isActive(pathname, status) ? subItemActive : null),
               }}
             >
-              <span aria-hidden>📊</span> {t("shell.project.status")}
+              <span aria-hidden>▣</span> {t("shell.project.status")}
             </Link>
           </li>
           <li>
@@ -226,7 +232,7 @@ function ProjectNode({
                 ...(isActive(pathname, org) ? subItemActive : null),
               }}
             >
-              <span aria-hidden>🏛</span> {t("shell.project.organization")}
+              <span aria-hidden>⌬</span> {t("shell.project.organization")}
             </Link>
           </li>
           <li>
@@ -237,7 +243,7 @@ function ProjectNode({
                 ...(isActive(pathname, kb) ? subItemActive : null),
               }}
             >
-              <span aria-hidden>📚</span> {t("shell.project.kb")}
+              <span aria-hidden>▥</span> {t("shell.project.kb")}
             </Link>
           </li>
           <li>
@@ -248,7 +254,7 @@ function ProjectNode({
                 ...(isActive(pathname, skills) ? subItemActive : null),
               }}
             >
-              <span aria-hidden>🧩</span> {t("shell.project.skills")}
+              <span aria-hidden>✣</span> {t("shell.project.skills")}
             </Link>
           </li>
           <li>
@@ -259,7 +265,7 @@ function ProjectNode({
                 ...(docsActive ? subItemActive : null),
               }}
             >
-              <span aria-hidden>📝</span> {t("shell.project.docs")}
+              <span aria-hidden>▤</span> {t("shell.project.docs")}
             </Link>
           </li>
           <li>
@@ -270,7 +276,7 @@ function ProjectNode({
                 ...(auditActive ? subItemActive : null),
               }}
             >
-              <span aria-hidden>🔎</span> {t("shell.project.audit")}
+              <span aria-hidden>⌕</span> {t("shell.project.audit")}
             </Link>
           </li>
         </ul>
@@ -398,7 +404,7 @@ export function AppSidebar({
                 ...(homeActive ? linkActive : null),
               }}
             >
-              <span aria-hidden>🏠</span>
+              <span aria-hidden>⌂</span>
               <span>{t("shell.home")}</span>
             </Link>
           </li>
@@ -419,7 +425,7 @@ export function AppSidebar({
                 ...(projectsActive ? linkActive : null),
               }}
             >
-              <span aria-hidden>🗂</span>
+              <span aria-hidden>▦</span>
               <span>{t("nav.projects")}</span>
             </Link>
           </li>
@@ -453,7 +459,7 @@ export function AppSidebar({
                       }}
                       title={w.name}
                     >
-                      <span aria-hidden>🏢</span>
+                      <span aria-hidden>⊞</span>
                       <span
                         style={{
                           overflow: "hidden",
@@ -524,7 +530,7 @@ export function AppSidebar({
                       ...(active ? linkActive : null),
                     }}
                   >
-                    <span aria-hidden>💬</span>
+                    <span aria-hidden>☁</span>
                     <span
                       style={{
                         overflow: "hidden",
@@ -565,7 +571,24 @@ export function AppSidebar({
             ...(isActive(pathname, "/settings/profile") ? linkActive : null),
           }}
         >
-          <span aria-hidden>👤</span>
+          <span
+            aria-hidden
+            style={{
+              width: 24,
+              height: 24,
+              borderRadius: "50%",
+              display: "grid",
+              placeItems: "center",
+              background: "var(--wg-accent-soft)",
+              color: "var(--wg-accent)",
+              fontSize: 11,
+              fontWeight: 700,
+              fontFamily: "var(--wg-font-mono)",
+              flexShrink: 0,
+            }}
+          >
+            {(user.display_name || user.username || "?").slice(0, 1)}
+          </span>
           <span
             style={{
               overflow: "hidden",

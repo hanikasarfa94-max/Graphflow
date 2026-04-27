@@ -112,7 +112,7 @@ export function RoutedInboundCard({ message, memberById }: StreamProps) {
       }}
     >
       <span>
-        <span aria-hidden>🔔</span>{" "}
+        <span aria-hidden>✦</span>{" "}
         <span>{t("inbound.inlineLine", { name: sourceName })}</span>
       </span>
       <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>

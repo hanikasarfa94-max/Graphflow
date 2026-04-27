@@ -286,6 +286,48 @@
     }
   },
   "stream": {
+    "recap": {
+      "kicker": "当前会议焦点",
+      "title": "这间房现在该思考的事",
+      "dismiss": "本次会话内不再显示",
+      "chips": {
+        "medRisks": "另有 {n} 项开放风险",
+        "commitments": "{n} 项未结承诺",
+        "recentDecisions": "{n} 条近期决策"
+      },
+      "suggestion": {
+        "ask_or_decide": "请在下一条消息中明确:你是在询问事实,还是在请求决策?",
+        "follow_up_risk": "首要的开放风险就是关键所在 —— 直接处理它,而非偏离到次要话题。",
+        "ratify_decision": "近期的决策尚未在群里确认 —— 请确认或重新讨论。"
+      }
+    },
+    "contextPanel": {
+      "buttonLabel": "上下文口径",
+      "buttonCount": "{n}/{total} 启用",
+      "buttonLoading": "加载中…",
+      "hint": "选择 Edge 在此会话中可读取的上下文源",
+      "kicker": "会话上下文",
+      "title": "Agent 在这里可以看哪些?",
+      "subtitle": "决定 Edge 在此会话中应答时会引用哪些来源。默认设置兼顾可信度,同时避免私信权限跨房间泄露。",
+      "source": {
+        "graph": {
+          "label": "项目图谱",
+          "hint": "任务、交付物、风险、决策"
+        },
+        "kb": {
+          "label": "知识库",
+          "hint": "Wiki、附件、决策日志"
+        },
+        "dms": {
+          "label": "私信",
+          "hint": "默认关闭,避免权限污染"
+        },
+        "audit": {
+          "label": "审计记录",
+          "hint": "信息密度高,仅在解释来龙去脉时启用"
+        }
+      }
+    },
     "loading": "正在加载会话…",
     "empty": "还没有消息 —— 在下方开始吧。",
     "messageCount": "条消息",
@@ -927,6 +969,7 @@
     "noPending": "暂无等待你处理的事项。",
     "openDrawer": "打开路由收件箱",
     "openDrawerN": "打开路由收件箱(还有 {n} 条待处理)",
+    "doubleClickHint": "单击预览侧栏 · 双击进入完整收件箱",
     "newRoutedFrom": "来自 {name} 的新路由询问",
     "pendingLabel": "待处理",
     "repliedLabel": "已回复"

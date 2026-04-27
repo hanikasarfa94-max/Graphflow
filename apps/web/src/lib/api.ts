@@ -1215,10 +1215,11 @@ export function edgeKindToMessageKind(
 export function postPersonalMessage(
   projectId: string,
   body: string,
+  scope?: Record<string, boolean> | null,
 ): Promise<PersonalPostResponse> {
   return api<PersonalPostResponse>(`/api/personal/${projectId}/post`, {
     method: "POST",
-    body: { body },
+    body: scope ? { body, scope } : { body },
   });
 }
 

@@ -36,6 +36,8 @@ import { useTranslations } from "next-intl";
 
 import { ApiError, api, type IMMessage } from "@/lib/api";
 
+import { getStreamScope } from "./StreamContextPanel";
+
 // 500ms matches north-star §pre-commit rehearsal: long enough that typing
 // bursts don't thrash the edge endpoint, short enough that users feel the
 // card respond to each thought they finish.
@@ -64,6 +66,14 @@ type Props = {
   // the draft falls below the min length). If unset, the composer just
   // stops firing onPreview.
   onPreviewClear?: () => void;
+  // Identifies which StreamContextPanel scope this composer should
+  // attach to outgoing messages. When set, send() reads the latest
+  // scope from localStorage (StreamContextPanel writes it there) and
+  // includes it on the POST body. The backend may ignore the field
+  // until the agent context-builder is wired through; until then this
+  // is forward-compat scaffolding so the UI lever doesn't drift out
+  // of sync with the wire.
+  streamKey?: string;
 };
 
 const MAX_ROWS = 8;
@@ -88,6 +98,7 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
     onError,
     onPreview,
     onPreviewClear,
+    streamKey,
   },
   ref,
 ) {
@@ -202,9 +213,10 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
     requestAnimationFrame(autosize);
 
     try {
+      const scope = streamKey ? getStreamScope(streamKey) : null;
       await api(`/api/projects/${projectId}/messages`, {
         method: "POST",
-        body: { body },
+        body: scope ? { body, scope } : { body },
       });
       // The WS frame will carry the real message — remove the optimistic
       // row so the real one can take its place. (The reducer dedups by id,

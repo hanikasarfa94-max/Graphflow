@@ -286,6 +286,48 @@
     }
   },
   "stream": {
+    "recap": {
+      "kicker": "Current focus",
+      "title": "What this room should be thinking about",
+      "dismiss": "Dismiss for this session",
+      "chips": {
+        "medRisks": "{n} other open risks",
+        "commitments": "{n} open commitments",
+        "recentDecisions": "{n} recent decisions"
+      },
+      "suggestion": {
+        "ask_or_decide": "Make the next message explicit: are you asking for a fact, or asking for a decision?",
+        "follow_up_risk": "The top open risk is the load-bearing one — surface it directly before drifting to side topics.",
+        "ratify_decision": "Recent decisions are not yet ratified by the room — confirm them or reopen the discussion."
+      }
+    },
+    "contextPanel": {
+      "buttonLabel": "Context scope",
+      "buttonCount": "{n}/{total} on",
+      "buttonLoading": "loading…",
+      "hint": "Choose which sources Edge can read in this stream",
+      "kicker": "Stream context",
+      "title": "What can the agent read here?",
+      "subtitle": "Toggle which sources Edge consults when it answers in this stream. Defaults err on the side of trust without leaking private context across the room.",
+      "source": {
+        "graph": {
+          "label": "Project graph",
+          "hint": "Tasks, deliverables, risks, decisions"
+        },
+        "kb": {
+          "label": "Knowledge base",
+          "hint": "Wiki entries, attachments, decision logs"
+        },
+        "dms": {
+          "label": "Direct messages",
+          "hint": "Off by default to avoid permission contamination"
+        },
+        "audit": {
+          "label": "Audit log",
+          "hint": "Verbose — opt in only when explaining causation"
+        }
+      }
+    },
     "loading": "Loading stream…",
     "empty": "No messages yet — kick things off below.",
     "messageCount": "messages",
@@ -927,6 +969,7 @@
     "noPending": "Nothing waiting on you.",
     "openDrawer": "Open routed inbox",
     "openDrawerN": "Open routed inbox ({n} pending)",
+    "doubleClickHint": "Click for drawer · double-click for full inbox",
     "newRoutedFrom": "New routed question from {name}",
     "pendingLabel": "Pending",
     "repliedLabel": "Replied"
