@@ -1024,6 +1024,30 @@
     "scanning": "扫描中…",
     "scanDone": "扫描完成 — 新增 {count} 条待审信号。"
   },
+  "renders": {
+    "index": {
+      "kicker": "渲染产物",
+      "title": "渲染文档",
+      "subtitle": "该页只保留由图谱衍生的文档:复盘、交接、外部汇报。计划、任务、风险都在审计视图。",
+      "postmortem": {
+        "title": "项目复盘",
+        "subtitle": "上次生成",
+        "heading": "{project} — 复盘",
+        "headingNoProject": "项目复盘",
+        "generatedAt": "生成于 {time}",
+        "notGenerated": "尚未生成",
+        "unavailable": "暂不可用",
+        "view": "查看",
+        "generate": "生成"
+      },
+      "handoff": {
+        "title": "交接文档",
+        "subtitle": "按成员",
+        "empty": "尚无队友 — 邀请成员后即可生成交接。",
+        "generate": "生成"
+      }
+    }
+  },
   "render": {
     "loading": "正在生成文档……",
     "loadFailed": "无法加载该渲染,请尝试重新生成,或确认你是项目成员。",

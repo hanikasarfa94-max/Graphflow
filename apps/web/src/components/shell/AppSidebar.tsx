@@ -124,7 +124,7 @@ function ProjectNode({
   const org = `/projects/${project.id}/org`;
   const kb = `/projects/${project.id}/kb`;
   const skills = `/projects/${project.id}/skills`;
-  const docs = `/projects/${project.id}/renders/postmortem`;
+  const docs = `/projects/${project.id}/renders`;
   // Audit View — Batch B IA reshape. The 5 audit subpages
   // (graph/plan/tasks/risks/decisions) collapse into one sidebar
   // entry; the user lands on the graph tab by default and switches

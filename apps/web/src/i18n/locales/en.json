@@ -1024,6 +1024,30 @@
     "scanning": "Scanning…",
     "scanDone": "Scan complete — {count} new proposed signals."
   },
+  "renders": {
+    "index": {
+      "kicker": "Generated artifacts",
+      "title": "Rendered docs",
+      "subtitle": "The renders surface only keeps graph-derived documents — postmortems, handoffs, external reports. Plans, tasks and risks live in the audit view.",
+      "postmortem": {
+        "title": "Project postmortem",
+        "subtitle": "last generated",
+        "heading": "{project} — postmortem",
+        "headingNoProject": "Project postmortem",
+        "generatedAt": "Generated {time}",
+        "notGenerated": "not generated yet",
+        "unavailable": "unavailable",
+        "view": "View",
+        "generate": "Generate"
+      },
+      "handoff": {
+        "title": "Handoff docs",
+        "subtitle": "by member",
+        "empty": "No teammates yet — invite someone to enable handoff renders.",
+        "generate": "Generate"
+      }
+    }
+  },
   "render": {
     "loading": "Generating document…",
     "loadFailed": "Couldn't load this render. Try regenerating or check you're a project member.",
