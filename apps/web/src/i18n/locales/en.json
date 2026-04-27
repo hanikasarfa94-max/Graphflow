@@ -186,7 +186,19 @@
       "empty": "No pending signals",
       "jumpToTurn": "Jump to turn →",
       "showMore": "Show {count} more",
+      "viewAll": "Show {count} more in inbox",
       "fromProject": "in {project}"
+    },
+    "miniGraph": {
+      "title": "Work graph",
+      "empty": "No graph snapshot yet — start a project to see its shape.",
+      "openGraph": "Open graph",
+      "legend": {
+        "decision": "decision",
+        "deliverable": "deliverable",
+        "risk": "risk",
+        "task": "task"
+      }
     },
     "approvals": {
       "title": "Gated approvals",

@@ -76,6 +76,25 @@ export type ActiveContext =
   | ActiveDecisionFallback
   | ActiveCaughtUp;
 
+export interface HomeMiniGraphNode {
+  id: string;
+  title: string;
+  /** Maps to the legend chip colour: decision/task/risk/deliverable/goal. */
+  kind: "goal" | "deliverable" | "decision" | "task" | "risk";
+}
+
+export interface HomeMiniGraphEdge {
+  from: string;
+  to: string;
+}
+
+export interface HomeTopProjectSnapshot {
+  project_id: string;
+  project_title: string;
+  nodes: HomeMiniGraphNode[];
+  edges: HomeMiniGraphEdge[];
+}
+
 export interface HomePulseAggregates {
   /** Number of project memberships (one per active project). */
   active_project_count: number;
@@ -97,6 +116,9 @@ export interface HomeData {
   /** System pulse aggregates — drives the hero + pulse card on the
    *  Batch E.3 home rebuild. */
   pulse: HomePulseAggregates;
+  /** Snapshot of the most-active project for the home mini-graph
+   *  (Batch F.1). Null when the user has no projects. */
+  top_project: HomeTopProjectSnapshot | null;
 }
 
 function matchesViewer(target: string, user: User): boolean {
@@ -417,6 +439,53 @@ export async function loadHomeData(user: User): Promise<HomeData> {
     }
   }
 
+  // Top-project snapshot for the home mini-graph (Batch F.1). Pick the
+  // most-recently-active project for which we have a state payload, then
+  // surface up to 5 of its most-relevant nodes (goal, deliverable,
+  // decision, task, risk in roughly that priority) and a few connecting
+  // edges from the dependency list.
+  let topProject: HomeTopProjectSnapshot | null = null;
+  const orderedProjects = perProject.filter((p) => p.state !== null);
+  // Sort by the same activity proxy used for the project cards: stream
+  // last_activity_at if available, else project.updated_at.
+  orderedProjects.sort((a, b) => {
+    const aTime = projectStreamByProjectId.get(a.project.id)?.last_activity_at
+      ?? a.project.updated_at ?? null;
+    const bTime = projectStreamByProjectId.get(b.project.id)?.last_activity_at
+      ?? b.project.updated_at ?? null;
+    const at = aTime ? new Date(aTime).getTime() : 0;
+    const bt = bTime ? new Date(bTime).getTime() : 0;
+    return bt - at;
+  });
+  const top = orderedProjects[0];
+  if (top && top.state) {
+    const nodes: HomeMiniGraphNode[] = [];
+    const pushNode = (id: string, title: string, kind: HomeMiniGraphNode["kind"]) => {
+      if (nodes.length >= 5 || !id || !title) return;
+      nodes.push({ id, title, kind });
+    };
+    for (const g of top.state.graph?.goals ?? []) pushNode(g.id, g.title, "goal");
+    for (const d of top.state.graph?.deliverables ?? []) pushNode(d.id, d.title, "deliverable");
+    for (const dec of top.state.decisions.slice(0, 2))
+      pushNode(dec.id, dec.rationale || dec.custom_text || "decision", "decision");
+    for (const t of top.state.plan.tasks ?? []) pushNode(t.id, t.title, "task");
+    for (const r of top.state.graph?.risks ?? []) pushNode(r.id, r.title, "risk");
+    const knownIds = new Set(nodes.map((n) => n.id));
+    const edges: HomeMiniGraphEdge[] = [];
+    for (const dep of top.state.plan.dependencies ?? []) {
+      if (edges.length >= 4) break;
+      if (knownIds.has(dep.from_task_id) && knownIds.has(dep.to_task_id)) {
+        edges.push({ from: dep.from_task_id, to: dep.to_task_id });
+      }
+    }
+    topProject = {
+      project_id: top.project.id,
+      project_title: top.project.title,
+      nodes,
+      edges,
+    };
+  }
+
   return {
     user,
     pending,
@@ -429,5 +498,6 @@ export async function loadHomeData(user: User): Promise<HomeData> {
       total_graph_nodes: totalGraphNodes,
       decisions_last_7d: decisionsLast7d,
     },
+    top_project: topProject,
   };
 }

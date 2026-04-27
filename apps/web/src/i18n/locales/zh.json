@@ -186,7 +186,19 @@
       "empty": "暂无待处理事项",
       "jumpToTurn": "跳到对话 →",
       "showMore": "再看 {count} 条",
+      "viewAll": "在收件箱中再看 {count} 条",
       "fromProject": "来自 {project}"
+    },
+    "miniGraph": {
+      "title": "工作图谱",
+      "empty": "暂无图谱快照 — 创建项目以查看其结构。",
+      "openGraph": "打开图谱",
+      "legend": {
+        "decision": "决策",
+        "deliverable": "交付物",
+        "risk": "风险",
+        "task": "任务"
+      }
     },
     "approvals": {
       "title": "待你审批",

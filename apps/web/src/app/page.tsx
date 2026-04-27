@@ -1,11 +1,11 @@
 import { Suspense } from "react";
 
-import { ActiveSection } from "@/components/home/ActiveSection";
 import { ApprovalsSection } from "@/components/home/ApprovalsSection";
 import { loadHomeData } from "@/components/home/data";
 import { DMsSection } from "@/components/home/DMsSection";
 import { HomeHero } from "@/components/home/HomeHero";
-import { PendingSection } from "@/components/home/PendingSection";
+import { HomeMiniGraph } from "@/components/home/HomeMiniGraph";
+import { HomeNeedsCard } from "@/components/home/HomeNeedsCard";
 import { ProjectsSection } from "@/components/home/ProjectsSection";
 import { PublicSplit } from "@/components/public/PublicSplit";
 import { optionalUser } from "@/lib/auth";
@@ -63,15 +63,22 @@ export default async function Home() {
         pulse={data.pulse}
       />
 
-      <div id="pending">
-        <PendingSection pending={data.pending} />
-      </div>
+      <section
+        id="pending"
+        style={{
+          display: "grid",
+          gridTemplateColumns: "minmax(0, 1.1fr) minmax(0, 0.9fr)",
+          gap: 18,
+          marginBottom: 24,
+        }}
+      >
+        <HomeNeedsCard pending={data.pending} active={data.active} />
+        <HomeMiniGraph snapshot={data.top_project} />
+      </section>
 
       {data.is_admin_anywhere ? (
         <ApprovalsSection projects={data.projects} />
       ) : null}
-
-      <ActiveSection active={data.active} />
 
       <ProjectsSection projects={data.projects} />
 
