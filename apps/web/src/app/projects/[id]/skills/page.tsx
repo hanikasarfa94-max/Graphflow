@@ -84,7 +84,6 @@ export default async function SkillsAtlasPage({
     >
       <BackStrip projectId={projectId} label={t("backToProject")} />
       <Header
-        kicker={t("kicker")}
         title={t("title")}
         subtitle={t("subtitle")}
         scopeLabel={
@@ -209,16 +208,13 @@ function Header({
   title,
   subtitle,
   scopeLabel,
-  kicker,
 }: {
   title: string;
   subtitle: string;
   scopeLabel: string;
-  kicker: string;
 }) {
   return (
     <PageHeader
-      kicker={kicker}
       title={title}
       subtitle={subtitle}
       right={

@@ -82,7 +82,6 @@ export default async function ProjectsPage() {
   return (
     <main style={{ maxWidth: 1180, margin: "0 auto", padding: "32px 28px 80px" }}>
       <PageHeader
-        kicker={t("projects.kicker")}
         title={t("projects.heading")}
         subtitle={t("projects.subtitle")}
       />

@@ -10,10 +10,12 @@ export const dynamic = "force-dynamic";
 // routed-inbox badge. The old in-page breadcrumb + h1 + sub-nav ate
 // ~175px at the top of every chat view; gone.
 //
-// We keep a thin title strip so the user knows which project they're in
-// when glancing at the main pane (redundant with sidebar highlighting,
-// but useful when scrolled deep or sharing a screenshot). The project
-// counts are rendered here in a tiny line — one glance, no chrome.
+// F.16 prod-density pass: the project-title h1 is gone too. The
+// sidebar already shows which project is selected, the URL has the id,
+// and most pages render their own PageHeader — repeating the project
+// title at the top of every subpage was pure chrome. We keep the
+// metadata strip (tasks · deliverables · version) since it's signal,
+// not chrome — one glance to see project size at any depth.
 export default async function ProjectLayout({
   params,
   children,
@@ -41,39 +43,17 @@ export default async function ProjectLayout({
       {state ? (
         <div
           style={{
-            display: "flex",
-            alignItems: "baseline",
-            gap: 12,
             marginBottom: 10,
             paddingBottom: 8,
             borderBottom: "1px solid var(--wg-line)",
+            fontSize: 11,
+            fontFamily: "var(--wg-font-mono)",
+            color: "var(--wg-ink-faint)",
+            whiteSpace: "nowrap",
           }}
         >
-          <h1
-            style={{
-              fontSize: 14,
-              fontWeight: 600,
-              margin: 0,
-              color: "var(--wg-ink)",
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              whiteSpace: "nowrap",
-            }}
-            title={state.project.title}
-          >
-            {state.project.title}
-          </h1>
-          <span
-            style={{
-              fontSize: 11,
-              fontFamily: "var(--wg-font-mono)",
-              color: "var(--wg-ink-faint)",
-              whiteSpace: "nowrap",
-            }}
-          >
-            {state.plan.tasks.length} tasks · {state.graph.deliverables.length}{" "}
-            deliverables · v{state.requirement_version}
-          </span>
+          {state.plan.tasks.length} tasks · {state.graph.deliverables.length}{" "}
+          deliverables · v{state.requirement_version}
         </div>
       ) : null}
       {children}

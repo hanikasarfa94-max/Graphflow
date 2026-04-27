@@ -80,11 +80,7 @@ export default async function OrgPage({
 
   return (
     <main style={{ padding: "20px 24px", maxWidth: 1100 }}>
-      <PageHeader
-        kicker={t("kicker")}
-        title={t("title")}
-        subtitle={t("subtitle")}
-      />
+      <PageHeader title={t("title")} subtitle={t("subtitle")} />
 
       {/* Gate-keeper distribution */}
       <section

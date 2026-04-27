@@ -69,11 +69,10 @@ export default async function KbPage({
 
   return (
     <main>
-      <PageHeader
-        kicker={t("kb.kicker")}
-        title={t("kb.title")}
-        subtitle={t("kb.subtitle")}
-      />
+      {/* F.16 prod-density: kicker dropped — was a literal duplicate of
+          title (both rendered "Knowledge base" / "知识库"). The sidebar
+          nav already labels this page; one heading is enough. */}
+      <PageHeader title={t("kb.title")} subtitle={t("kb.subtitle")} />
       {/* Notes are KB items now. The tree returns scope='personal' and
           scope='group' rows in one payload (kb_hierarchy.get_tree
           §F4 single-table read), and the right-pane "+ New note"

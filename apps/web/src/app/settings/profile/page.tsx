@@ -83,7 +83,6 @@ export default async function SettingsProfilePage() {
       }}
     >
       <PageHeader
-        kicker={`WorkGraph · `}
         title={t.title}
         subtitle={t.subtitle}
         right={

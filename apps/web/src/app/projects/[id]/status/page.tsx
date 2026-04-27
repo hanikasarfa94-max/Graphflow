@@ -76,7 +76,6 @@ export default async function ProjectStatusPage({
   return (
     <main>
       <PageHeader
-        kicker={t("status.kicker")}
         title={t("status.title")}
         subtitle={t("status.subtitle")}
         right={

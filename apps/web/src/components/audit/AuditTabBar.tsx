@@ -49,7 +49,6 @@ export function AuditTabBar({ projectId }: { projectId: string }) {
   return (
     <>
       <PageHeader
-        kicker={t("shell.project.audit_kicker")}
         title={t("shell.project.audit")}
         subtitle={t("shell.project.audit_subtitle")}
       />

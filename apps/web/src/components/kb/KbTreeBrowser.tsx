@@ -45,6 +45,7 @@ import {
   type KbTreeItem,
   type KbTreeResponse,
   moveKbItem,
+  promoteKbNote,
   reparentKbFolder,
 } from "@/lib/api";
 
@@ -292,6 +293,27 @@ export function KbTreeBrowser({
           ? t("kb.folder.moveFailed")
           : t("kb.folder.moveFailed"),
       );
+    }
+  };
+
+  // Inline promote (F.16). Personal-scope rows are forks of the
+  // shared knowledge center; the membrane decides whether the
+  // promote is auto-merged or staged for owner review (the row
+  // status flips to 'draft' in the staged case). We just call the
+  // endpoint, refresh, and toast the right thing based on the
+  // returned status.
+  const handlePromoteItem = async (itemId: string) => {
+    if (!window.confirm(t("kbNotes.promoteConfirm"))) return;
+    try {
+      const result = await promoteKbNote(itemId);
+      flashToast(
+        result.status === "draft"
+          ? t("kbNotes.promoteDeferred")
+          : t("kbNotes.promoted"),
+      );
+      await refresh();
+    } catch {
+      flashToast(t("kbNotes.promoteFailed"));
     }
   };
 
@@ -560,6 +582,7 @@ export function KbTreeBrowser({
           <ItemsTable
             projectId={projectId}
             items={items}
+            onPromote={handlePromoteItem}
             t={t}
           />
         )}
@@ -848,10 +871,12 @@ function FolderNode({
 function ItemsTable({
   projectId,
   items,
+  onPromote,
   t,
 }: {
   projectId: string;
   items: KbTreeItem[];
+  onPromote: (itemId: string) => void;
   t: ReturnType<typeof useTranslations>;
 }) {
   return (
@@ -872,6 +897,7 @@ function ItemsTable({
             key={item.id}
             projectId={projectId}
             item={item}
+            onPromote={onPromote}
             t={t}
           />
         ))}
@@ -916,10 +942,12 @@ function TableHeader({
 function ItemRow({
   projectId,
   item,
+  onPromote,
   t,
 }: {
   projectId: string;
   item: KbTreeItem;
+  onPromote: (itemId: string) => void;
   t: ReturnType<typeof useTranslations>;
 }) {
   const cellStyle: React.CSSProperties = {
@@ -935,11 +963,22 @@ function ItemRow({
     e.dataTransfer.effectAllowed = "move";
   };
 
+  // source_kind='kb-personal' is the FE-visible signal that the row
+  // is scope='personal' and the viewer owns it (the API only returns
+  // the viewer's own personal rows). Owner of the row can always
+  // promote, so we render the inline action whenever this is true.
+  const canPromote = item.source_kind === "kb-personal";
+
   return (
     <>
       <div
         role="cell"
-        style={cellStyle}
+        style={{
+          ...cellStyle,
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+        }}
         draggable
         onDragStart={onDragStart}
       >
@@ -949,6 +988,11 @@ function ItemRow({
             color: "var(--wg-ink)",
             textDecoration: "none",
             fontWeight: 500,
+            flex: 1,
+            minWidth: 0,
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
           }}
         >
           {item.title || item.summary || item.source_identifier}
@@ -958,6 +1002,27 @@ function ItemRow({
           // membrane, not the cell proper. Lets readers see "this
           // is queued for owner review" without opening the detail.
           <DraftChip status={item.status} t={t} />
+        ) : null}
+        {canPromote ? (
+          <button
+            type="button"
+            data-testid="kb-row-promote"
+            onClick={() => onPromote(item.id)}
+            style={{
+              flexShrink: 0,
+              padding: "2px 8px",
+              fontSize: 11,
+              fontFamily: "var(--wg-font-mono)",
+              border: "1px solid var(--wg-line)",
+              borderRadius: 999,
+              background: "#fff",
+              color: "var(--wg-ink-soft)",
+              cursor: "pointer",
+              whiteSpace: "nowrap",
+            }}
+          >
+            {t("kbNotes.promote")}
+          </button>
         ) : null}
       </div>
       <div role="cell" style={cellStyle}>

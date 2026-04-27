@@ -64,11 +64,7 @@ export default async function RendersIndexPage({
 
   return (
     <main style={{ maxWidth: 1180, margin: "0 auto", padding: "32px 28px 80px" }}>
-      <PageHeader
-        kicker={t("kicker")}
-        title={t("title")}
-        subtitle={t("subtitle")}
-      />
+      <PageHeader title={t("title")} subtitle={t("subtitle")} />
 
       <section
         style={{
