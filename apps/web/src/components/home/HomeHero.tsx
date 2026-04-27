@@ -13,7 +13,7 @@
 import Link from "next/link";
 import { getTranslations } from "next-intl/server";
 
-import { Heading, Text } from "@/components/ui";
+import { Heading, Metric, Text } from "@/components/ui";
 
 import type { HomePulseAggregates } from "./data";
 
@@ -224,44 +224,11 @@ export async function HomeHero({
             marginTop: 18,
           }}
         >
-          <PulseStat label={t("pulseStat.projects")} value={pulse.active_project_count} />
-          <PulseStat label={t("pulseStat.nodes")} value={pulse.total_graph_nodes} />
-          <PulseStat label={t("pulseStat.decisions7d")} value={pulse.decisions_last_7d} />
+          <Metric tone="onDark" label={t("pulseStat.projects")} value={pulse.active_project_count} />
+          <Metric tone="onDark" label={t("pulseStat.nodes")} value={pulse.total_graph_nodes} />
+          <Metric tone="onDark" label={t("pulseStat.decisions7d")} value={pulse.decisions_last_7d} />
         </div>
       </article>
     </section>
-  );
-}
-
-function PulseStat({ label, value }: { label: string; value: number }) {
-  return (
-    <div
-      style={{
-        background: "rgba(255,255,255,0.10)",
-        border: "1px solid rgba(255,255,255,0.14)",
-        borderRadius: 14,
-        padding: "10px 12px",
-      }}
-    >
-      <div
-        style={{
-          fontSize: 22,
-          fontWeight: 600,
-          lineHeight: 1.1,
-          letterSpacing: "-0.02em",
-        }}
-      >
-        {value}
-      </div>
-      <div
-        style={{
-          marginTop: 2,
-          fontSize: 11,
-          color: "rgba(199,208,224,0.8)",
-        }}
-      >
-        {label}
-      </div>
-    </div>
   );
 }
