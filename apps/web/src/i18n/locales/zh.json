@@ -151,10 +151,32 @@
     }
   },
   "projects": {
+    "kicker": "项目",
+    "subtitle": "用自然语言立项,或挑选一个已有项目。执行、审计、知识与组织都回到侧边栏。",
     "heading": "项目",
     "signedInAs": "当前账号:{name}",
     "empty": "还没有项目。在上方发出第一条需求消息即可开启。",
-    "roleLabel": "角色"
+    "roleLabel": "角色",
+    "intake": {
+      "title": "自然语言立项",
+      "subtitle": "目标 → 图谱种子"
+    },
+    "portfolio": {
+      "title": "项目总览",
+      "subtitle": "你参与的所有项目",
+      "projects": "项目",
+      "attention": "需要介入",
+      "singlePoint": "单点风险",
+      "members": "独立成员"
+    },
+    "listHeading": "你的项目",
+    "listSubtitle": "按活跃度排序,行内显示最关键的健康指标",
+    "row": {
+      "tasks": "{count} 任务",
+      "deliverables": "{count} 交付物",
+      "risks": "{count} 开放风险",
+      "open": "进入"
+    }
   },
   "language": {
     "switcher": "语言",

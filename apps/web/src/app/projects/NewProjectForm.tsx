@@ -40,28 +40,12 @@ export function NewProjectForm() {
     }
   }
 
+  // Card chrome lives in the parent (see /projects page) — this form
+  // is now flush content. The intake textarea is the only field; the
+  // submit posts to /api/intake/message which both creates a project
+  // (when none matches) and pushes the message into intake routing.
   return (
-    <form
-      onSubmit={handleSubmit}
-      style={{
-        marginBottom: 24,
-        padding: 16,
-        border: "1px solid var(--wg-line)",
-        borderRadius: "var(--wg-radius)",
-        background: "#fff",
-      }}
-    >
-      <label
-        style={{
-          display: "block",
-          fontSize: 12,
-          fontFamily: "var(--wg-font-mono)",
-          color: "var(--wg-ink-soft)",
-          marginBottom: 6,
-        }}
-      >
-        NEW INTAKE — paste a goal, the agent will parse it
-      </label>
+    <form onSubmit={handleSubmit}>
       <textarea
         value={text}
         onChange={(e) => setText(e.target.value)}
@@ -69,13 +53,14 @@ export function NewProjectForm() {
         placeholder="e.g., Ship an event registration page in one week."
         style={{
           width: "100%",
-          padding: "10px 12px",
+          padding: "12px 14px",
           border: "1px solid var(--wg-line)",
-          borderRadius: "var(--wg-radius)",
+          borderRadius: 14,
           fontFamily: "var(--wg-font-sans)",
           fontSize: 14,
           background: "var(--wg-surface)",
           resize: "vertical",
+          color: "var(--wg-ink)",
         }}
       />
       {error && (
@@ -84,27 +69,28 @@ export function NewProjectForm() {
           style={{
             marginTop: 8,
             fontSize: 13,
-            color: "var(--wg-accent)",
+            color: "var(--wg-danger)",
             fontFamily: "var(--wg-font-mono)",
           }}
         >
           {error}
         </div>
       )}
-      <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 10 }}>
+      <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 12 }}>
         <button
           type="submit"
           disabled={pending || !text.trim()}
           style={{
-            padding: "8px 16px",
+            padding: "9px 18px",
             background: "var(--wg-accent)",
             color: "#fff",
             border: "none",
-            borderRadius: "var(--wg-radius)",
-            fontSize: 14,
-            fontWeight: 600,
+            borderRadius: 12,
+            fontSize: 13,
+            fontWeight: 700,
             cursor: pending ? "progress" : "pointer",
             opacity: pending || !text.trim() ? 0.6 : 1,
+            boxShadow: "0 6px 14px rgba(37,99,235,0.22)",
           }}
         >
           {pending ? "parsing…" : "Intake →"}

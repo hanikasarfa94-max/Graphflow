@@ -151,10 +151,32 @@
     }
   },
   "projects": {
+    "kicker": "Projects",
+    "subtitle": "Natural-language intake or pick an existing project. Execution, audit, knowledge and organization live in the sidebar.",
     "heading": "Projects",
     "signedInAs": "signed in as {name}",
     "empty": "No projects yet. Post the first intake message above to kick one off.",
-    "roleLabel": "role"
+    "roleLabel": "role",
+    "intake": {
+      "title": "Natural-language intake",
+      "subtitle": "goal → graph seed"
+    },
+    "portfolio": {
+      "title": "Portfolio overview",
+      "subtitle": "across the projects you're on",
+      "projects": "projects",
+      "attention": "needing attention",
+      "singlePoint": "single-point risks",
+      "members": "unique members"
+    },
+    "listHeading": "Your projects",
+    "listSubtitle": "ranked by activity, with the cheapest health chips per row",
+    "row": {
+      "tasks": "{count} tasks",
+      "deliverables": "{count} deliverables",
+      "risks": "{count} open risk",
+      "open": "Open"
+    }
   },
   "language": {
     "switcher": "Language",
