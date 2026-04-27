@@ -7,8 +7,11 @@
 // The team stream lives at `/projects/[id]/team`; nothing else about
 // the project layout / audit navigation changes.
 
+import { getTranslations } from "next-intl/server";
+
 import { OnboardingOverlay } from "@/components/onboarding/OnboardingOverlay";
 import { PersonalStream } from "@/components/stream/PersonalStream";
+import { StreamCompactToolbar } from "@/components/stream/StreamCompactToolbar";
 import type { StreamMember } from "@/components/stream/types";
 import type { OnboardingWalkthroughResponse, ProjectState } from "@/lib/api";
 import { requireUser, serverFetch } from "@/lib/auth";
@@ -22,6 +25,7 @@ export default async function ProjectPersonalPage({
 }) {
   const { id } = await params;
   const user = await requireUser(`/projects/${id}`);
+  const t = await getTranslations();
 
   let state: ProjectState | null = null;
   try {
@@ -63,6 +67,14 @@ export default async function ProjectPersonalPage({
           initialState={onboarding.state}
         />
       ) : null}
+      <StreamCompactToolbar
+        title={t("personal.title")}
+        meta={
+          state?.project?.title
+            ? `Edge · ${state.project.title}`
+            : t("personal.subtitle")
+        }
+      />
       <PersonalStream
         projectId={id}
         currentUserId={user.id}
