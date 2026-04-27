@@ -24,7 +24,8 @@ import { Button } from "@/components/ui";
 import type { CitedClaim, PersonalMessage } from "@/lib/api";
 
 import { CitedClaimList } from "./CitedClaimList";
-import { relativeTime } from "./types";
+import { relativeTime,
+  formatMessageTime } from "./types";
 
 type Props = {
   message: PersonalMessage;
@@ -205,7 +206,7 @@ export function DriftCard({ message, onDiscuss }: Props) {
             <strong>{t("alertTitle")}</strong>
           </span>
           <span title={new Date(message.created_at).toLocaleString()}>
-            {relativeTime(message.created_at)}
+            {formatMessageTime(message.created_at)}
           </span>
         </div>
         {message.body}
@@ -248,7 +249,7 @@ export function DriftCard({ message, onDiscuss }: Props) {
           </span>
         </span>
         <span title={new Date(message.created_at).toLocaleString()}>
-          {relativeTime(message.created_at)}
+          {formatMessageTime(message.created_at)}
         </span>
       </div>
 

@@ -435,9 +435,19 @@ class EdgeAgent:
             },
         ]
         try:
+            # F.17 — bumped from the LLMClient default (0.1) to 0.4.
+            # The Edge agent's respond() is the conversational surface;
+            # at 0.1 it locked onto `silence` for any borderline message
+            # (brainstorms, half-finished thoughts, follow-ups). 0.4
+            # gives the model enough variety to engage on substantive
+            # content while complete_structured's parse-retry path keeps
+            # JSON output stable (retries drop to 0.0 on parse fail).
+            # Other EdgeAgent helper paths (options, reply-frame) keep
+            # the cold default — they're more classification than chat.
             parsed, result, attempts = await self._llm.complete_structured(
                 messages,
                 pydantic_cls=EdgeResponse,
+                temperature=0.4,
                 max_attempts=3,
             )
         except ParseFailure as e:

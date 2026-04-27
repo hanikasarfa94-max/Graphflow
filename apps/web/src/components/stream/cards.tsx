@@ -39,6 +39,7 @@ import {
   attributionFor,
   presenceDotColor,
   relativeTime,
+  formatMessageTime,
   type StreamMember,
 } from "./types";
 
@@ -129,7 +130,7 @@ function AuthorHeader({
             color: "var(--wg-ink-soft)",
           }}
         >
-          {relativeTime(timestamp)}
+          {formatMessageTime(timestamp)}
         </span>
       </div>
     </div>
@@ -433,7 +434,7 @@ export function EdgeLLMTurnCard({
           <span aria-hidden>☁</span> {t("attribution.edge")}
         </span>
         <span title={new Date(message.created_at).toLocaleString()}>
-          {relativeTime(message.created_at)}
+          {formatMessageTime(message.created_at)}
         </span>
       </div>
       <div style={{ color: "var(--wg-ink)" }}>{renderBody(message.body)}</div>
@@ -888,7 +889,7 @@ export function AmbientSignalCard({
         {detail ? ` — ${detail}` : ""}
       </span>
       <span title={new Date(timestamp).toLocaleString()}>
-        {relativeTime(timestamp)}
+        {formatMessageTime(timestamp)}
       </span>
     </div>
   );

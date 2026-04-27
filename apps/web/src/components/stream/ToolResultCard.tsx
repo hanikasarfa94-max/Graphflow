@@ -24,7 +24,8 @@ import { useTranslations } from "next-intl";
 
 import type { PersonalMessage } from "@/lib/api";
 
-import { relativeTime } from "./types";
+import { relativeTime,
+  formatMessageTime } from "./types";
 
 type ToolResult = {
   ok?: boolean;
@@ -457,7 +458,7 @@ export function ToolResultCard({
             style={{ fontSize: 10, color: "var(--wg-ink-faint)" }}
             title={new Date(message.created_at).toLocaleString()}
           >
-            {relativeTime(message.created_at)}
+            {formatMessageTime(message.created_at)}
           </span>
           <button
             type="button"

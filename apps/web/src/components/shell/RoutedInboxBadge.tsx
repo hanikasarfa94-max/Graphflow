@@ -2,17 +2,23 @@
 
 // RoutedInboxBadge — Phase Q sidebar entry for routed inbound.
 //
-// Renders as a sidebar item: "✦ Routed inbox (N)" with the count
-// highlighted. Click pattern (per html2 redesign):
-//   single-click → opens the RoutedInboundDrawer for fast triage
-//   double-click → navigates to the full /inbox surface for at-pace work
+// Renders as a sidebar Link item: "✦ Routed inbox (N)" with the count
+// highlighted. F.17: dropped the dual-click dance (single → drawer,
+// double → page). Single-click goes straight to /inbox. The 220ms
+// timer that used to make every click feel laggy is gone. The
+// per-project notification bell at top-right covers the
+// quick-glance use case the drawer used to serve.
 //
-// Count of zero still renders the item — users need to be able to open
-// the drawer to see history even when empty.
+// Count of zero still renders the item — users need to be able to
+// reach the inbox to see history even when empty.
+//
+// Kept as a button (not a Link) because the AppShellClient still
+// passes a no-op onClick callback for symmetry with the legacy
+// drawer-opener slot. We just navigate manually instead of opening it.
 
-import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { useTranslations } from "next-intl";
-import { useRef, type CSSProperties } from "react";
+import type { CSSProperties } from "react";
 
 const base: CSSProperties = {
   display: "flex",
@@ -21,9 +27,7 @@ const base: CSSProperties = {
   padding: "7px 12px",
   fontSize: 13,
   width: "100%",
-  background: "transparent",
-  border: "none",
-  cursor: "pointer",
+  textDecoration: "none",
   textAlign: "left",
   color: "var(--wg-ink)",
   borderRadius: "var(--wg-radius-sm, 4px)",
@@ -33,54 +37,26 @@ const base: CSSProperties = {
 
 export function RoutedInboxBadge({
   count,
-  onClick,
 }: {
   count: number;
-  onClick: () => void;
+  // onClick kept on the prop signature for backward-compat with
+  // AppSidebar's prop wiring; the badge no longer uses it (we
+  // navigate to /inbox directly). Removing requires touching
+  // AppShellClient + AppSidebar, defer to a follow-up.
+  onClick?: () => void;
 }) {
   const t = useTranslations("shell");
   const tInbox = useTranslations("inbox");
-  const router = useRouter();
-
-  // Distinguish single- vs double-click without firing the drawer
-  // twice on a real double-click. We delay the single-click side-effect
-  // by ~220ms — long enough that a follow-up click cancels it. If the
-  // user only single-clicked, the timeout fires and the drawer opens.
-  // Threshold tuned to feel responsive without misfiring.
-  const clickTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
   const hasPending = count > 0;
 
-  const handleClick = () => {
-    if (clickTimer.current) {
-      clearTimeout(clickTimer.current);
-      clickTimer.current = null;
-    }
-    clickTimer.current = setTimeout(() => {
-      clickTimer.current = null;
-      onClick();
-    }, 220);
-  };
-
-  const handleDoubleClick = () => {
-    if (clickTimer.current) {
-      clearTimeout(clickTimer.current);
-      clickTimer.current = null;
-    }
-    router.push("/inbox");
-  };
-
   return (
-    <button
-      type="button"
-      onClick={handleClick}
-      onDoubleClick={handleDoubleClick}
+    <Link
+      href="/inbox"
       data-testid="sidebar-inbox-badge"
       data-count={count}
       aria-label={
         hasPending ? tInbox("openDrawerN", { n: count }) : tInbox("openDrawer")
       }
-      title={tInbox("doubleClickHint")}
       style={{
         ...base,
         color: hasPending ? "var(--wg-accent)" : "var(--wg-ink)",
@@ -108,6 +84,6 @@ export function RoutedInboxBadge({
           {count > 99 ? "99+" : count}
         </span>
       )}
-    </button>
+    </Link>
   );
 }

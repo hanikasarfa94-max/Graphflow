@@ -36,7 +36,8 @@ import {
 
 import { CitedClaimList } from "./CitedClaimList";
 import type { StreamMember } from "./types";
-import { relativeTime } from "./types";
+import { relativeTime,
+  formatMessageTime } from "./types";
 
 type Props = {
   message: PersonalMessage;
@@ -276,7 +277,7 @@ export function RoutedReplyCard({ message, memberById, onFollowUp }: Props) {
           </strong>
         </span>
         <span title={new Date(message.created_at).toLocaleString()}>
-          {relativeTime(message.created_at)}
+          {formatMessageTime(message.created_at)}
         </span>
       </div>
 

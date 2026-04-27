@@ -22,7 +22,8 @@ import { Button } from "@/components/ui";
 import type { PersonalMessage } from "@/lib/api";
 
 import { CitedClaimList } from "./CitedClaimList";
-import { relativeTime } from "./types";
+import { relativeTime,
+  formatMessageTime } from "./types";
 
 type Props = {
   message: PersonalMessage;
@@ -114,7 +115,7 @@ export function EdgeReplyCard({
             title={new Date(message.created_at).toLocaleString()}
             style={{ color: "var(--wg-ink-faint)" }}
           >
-            {relativeTime(message.created_at)}
+            {formatMessageTime(message.created_at)}
           </span>
         </div>
       )}

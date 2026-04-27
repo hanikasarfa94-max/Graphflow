@@ -22,7 +22,8 @@ import {
   type PersonalMessage,
 } from "@/lib/api";
 
-import { relativeTime, type StreamMember } from "./types";
+import { relativeTime,
+  formatMessageTime, type StreamMember } from "./types";
 
 type Props = {
   message: PersonalMessage;
@@ -189,7 +190,7 @@ export function GatedProposalPendingCard({ message, memberById }: Props) {
             fontWeight: 400,
           }}
         >
-          {relativeTime(message.created_at)}
+          {formatMessageTime(message.created_at)}
         </span>
       </div>
 

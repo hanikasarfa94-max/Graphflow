@@ -75,7 +75,8 @@ import { SilentConsensusCard } from "./SilentConsensusCard";
 import { ToolCallCard } from "./ToolCallCard";
 import { ToolResultCard } from "./ToolResultCard";
 import type { StreamMember } from "./types";
-import { relativeTime } from "./types";
+import { relativeTime,
+  formatMessageTime } from "./types";
 
 type Props = {
   projectId: string;
@@ -363,6 +364,19 @@ export function PersonalStream({
       }
     };
   }, [streamId]);
+
+  // Mark stream as read whenever we're viewing + receive new messages.
+  // Mirrors DMStream/StreamView. F.17 fix — was missing here, so the
+  // sidebar UnreadDot never decremented for the personal stream when
+  // the user actually opened it. Fire-and-forget; the badge re-poll on
+  // next /api/streams refresh picks up the new last_read_at.
+  useEffect(() => {
+    if (!streamId) return;
+    void fetch(`/api/streams/${streamId}/read`, {
+      method: "POST",
+      credentials: "include",
+    }).catch(() => undefined);
+  }, [streamId, messages.length]);
 
   // Pin to bottom on new rows.
   useEffect(() => {
@@ -680,7 +694,7 @@ export function PersonalStream({
                 padding: mine ? "0 4px 0 0" : "0 0 0 4px",
               }}
             >
-              {relativeTime(m.created_at)}
+              {formatMessageTime(m.created_at)}
             </span>
           </div>
         );
@@ -805,7 +819,7 @@ export function PersonalStream({
           >
             <span>{m.body}</span>
             <span title={new Date(m.created_at).toLocaleString()}>
-              {relativeTime(m.created_at)}
+              {formatMessageTime(m.created_at)}
             </span>
           </div>,
         );
@@ -837,7 +851,7 @@ export function PersonalStream({
               }}
             >
               <span>{m.kind}</span>
-              <span>{relativeTime(m.created_at)}</span>
+              <span>{formatMessageTime(m.created_at)}</span>
             </div>
             <div style={{ whiteSpace: "pre-wrap", color: "var(--wg-ink)" }}>
               {m.body}

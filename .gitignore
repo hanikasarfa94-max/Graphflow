@@ -67,3 +67,10 @@ data/*.db-journal
 docs/report.md
 docs/feishu_competation.md
 docs/product_flowcharts.md
+
+# Graphify outputs — local-only knowledge graph artifacts. Regenerate
+# per machine with `/graphify --update` (or full re-run). CLAUDE.md
+# §"Codebase map" points future sessions at GRAPH_REPORT.md; if a
+# fresh clone has no report yet, run /graphify before relying on it.
+graphify-out/
+.graphify_*

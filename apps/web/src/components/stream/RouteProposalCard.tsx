@@ -37,7 +37,8 @@ import {
   DecisionProposalCard,
   ScrimmageRunningCard,
 } from "./ScrimmageCards";
-import { relativeTime } from "./types";
+import { relativeTime,
+  formatMessageTime } from "./types";
 
 type Props = {
   message: PersonalMessage;
@@ -361,7 +362,7 @@ export function RouteProposalCard({
           title={new Date(message.created_at).toLocaleString()}
           style={{ color: "var(--wg-ink-soft)", textTransform: "none", fontWeight: 400 }}
         >
-          {relativeTime(message.created_at)}
+          {formatMessageTime(message.created_at)}
         </span>
       </div>
 
@@ -1073,7 +1074,7 @@ function GatedProposalCard({
             fontWeight: 400,
           }}
         >
-          {relativeTime(message.created_at)}
+          {formatMessageTime(message.created_at)}
         </span>
       </div>
 

@@ -14,7 +14,8 @@ import { useTranslations } from "next-intl";
 
 import type { PersonalMessage } from "@/lib/api";
 
-import { relativeTime } from "./types";
+import { relativeTime,
+  formatMessageTime } from "./types";
 
 type SlaBand = "due_soon" | "overdue";
 
@@ -125,7 +126,7 @@ export function SlaCard({ message, onOpen }: Props) {
             color: "var(--wg-ink-faint)",
           }}
         >
-          {relativeTime(message.created_at)}
+          {formatMessageTime(message.created_at)}
         </span>
       </div>
       <div style={{ fontSize: 14, color: "var(--wg-ink)", lineHeight: 1.4 }}>
