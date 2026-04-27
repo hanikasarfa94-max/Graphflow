@@ -554,11 +554,13 @@
   },
   "kb": {
     "kicker": "知识库",
-    "subtitle": "图谱的记忆层：来源、授权、继承关系与引用链。",
+    "subtitle": "图谱的记忆层:来源、授权、继承关系与引用链。笔记是个人范围的 KB 条目,知识树是团队共享范围 —— 同一种类型,可见性不同。",
     "title": "知识库",
     "search": "搜索知识库…",
     "empty": "没有匹配的条目。",
     "notAvailable": "知识库即将上线。",
+    "sharedHeading": "团队知识树",
+    "sharedSubtitle": "团队共享的 KB 条目 —— 由个人笔记提升而来、从 Wiki/Git/RSS 摄入、或从消息流保存。项目内所有成员可见。",
     "filters": {
       "all": "全部",
       "wiki": "Wiki",
@@ -1498,7 +1500,8 @@
     "cancel": "取消"
   },
   "kbNotes": {
-    "title": "笔记",
+    "title": "个人知识库笔记",
+    "scopeExplainer": "这些是个人范围的 KB 条目 —— 仅你可见。点击「提升」即可与团队共享;共享后的条目会出现在下方的团队知识树中。",
     "newNote": "+ 新笔记",
     "cancelNew": "取消",
     "loading": "加载中……",

@@ -28,6 +28,8 @@ function kindToTone(kind: PendingSignal["kind"]): Tone {
       return "danger";
     case "tag":
       return "neutral";
+    case "routing":
+      return "accent";
     default:
       return "amber";
   }
@@ -41,6 +43,8 @@ function kindToIcon(kind: PendingSignal["kind"]): string {
       return "↯";
     case "tag":
       return "✓";
+    case "routing":
+      return "✦";
     default:
       return "◦";
   }

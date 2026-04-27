@@ -99,12 +99,45 @@ export default async function KbPage({
           {errorMessage ?? t("kb.notAvailable")}
         </div>
       ) : (
-        <KbTreeBrowser
-          projectId={id}
-          initialTree={tree}
-          role={role}
-          tier={tier}
-        />
+        <>
+          <header
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: 4,
+              padding: "8px 0 12px",
+              marginTop: 4,
+            }}
+          >
+            <h3
+              style={{
+                margin: 0,
+                fontSize: 12,
+                fontFamily: "var(--wg-font-mono)",
+                color: "var(--wg-ink-soft)",
+                letterSpacing: "0.08em",
+                textTransform: "uppercase",
+              }}
+            >
+              {t("kb.sharedHeading")}
+            </h3>
+            <span
+              style={{
+                fontSize: 11,
+                color: "var(--wg-ink-faint)",
+                lineHeight: 1.4,
+              }}
+            >
+              {t("kb.sharedSubtitle")}
+            </span>
+          </header>
+          <KbTreeBrowser
+            projectId={id}
+            initialTree={tree}
+            role={role}
+            tier={tier}
+          />
+        </>
       )}
     </main>
   );

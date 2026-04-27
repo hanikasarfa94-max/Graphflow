@@ -328,7 +328,12 @@ class PersonalStreamService:
     # ------------------------------------------------------------------ post
 
     async def post(
-        self, *, user_id: str, project_id: str, body: str
+        self,
+        *,
+        user_id: str,
+        project_id: str,
+        body: str,
+        scope: dict[str, bool] | None = None,
     ) -> dict[str, Any]:
         """User posts into their personal project stream. Edge sub-agent
         metabolizes and may post a follow-up system message.
@@ -402,6 +407,7 @@ class PersonalStreamService:
             project_id=project_id,
             project_title=project_title,
             stream_id=stream_id,
+            scope=scope,
         )
 
         # Agent loop — the EdgeAgent may request up to
@@ -1105,6 +1111,7 @@ class PersonalStreamService:
         project_id: str,
         project_title: str,
         stream_id: str,
+        scope: dict[str, bool] | None = None,
     ) -> dict[str, Any]:
         """Shape the EdgeAgent.respond context. See edge.py prompt contract.
 
@@ -1218,6 +1225,33 @@ class PersonalStreamService:
         user_profile = (
             dict(user_row.profile) if user_row and user_row.profile else {}
         )
+        # Apply StreamContextPanel scope. Default = graph + kb on, dms +
+        # audit off (matches the panel defaults). When graph is off, the
+        # agent still gets the user, recent messages, and the project
+        # title — but no member abilities, no gate-keeper map, no
+        # authority pool sizes. KB / DMs / audit are accepted but no-op
+        # for now (those sources aren't loaded in this builder yet).
+        graph_on = scope.get("graph", True) if scope else True
+        if graph_on:
+            project_block: dict[str, Any] = {
+                "id": project_id,
+                "title": project_title,
+                "member_summaries": member_summaries,
+                "gate_keeper_map": gate_keeper_map,
+                "valid_decision_classes": sorted(EDGE_VALID_DECISION_CLASSES),
+                "authority_pool_sizes": authority_pool_sizes,
+            }
+            teammates = member_summaries
+        else:
+            project_block = {
+                "id": project_id,
+                "title": project_title,
+                "member_summaries": [],
+                "gate_keeper_map": {},
+                "valid_decision_classes": sorted(EDGE_VALID_DECISION_CLASSES),
+                "authority_pool_sizes": {},
+            }
+            teammates = []
         return {
             "user": {
                 "id": user_id,
@@ -1232,17 +1266,8 @@ class PersonalStreamService:
                 ),
                 "profile": user_profile,
             },
-            "project": {
-                "id": project_id,
-                "title": project_title,
-                "member_summaries": member_summaries,
-                "gate_keeper_map": gate_keeper_map,
-                "valid_decision_classes": sorted(
-                    EDGE_VALID_DECISION_CLASSES
-                ),
-                "authority_pool_sizes": authority_pool_sizes,
-            },
-            "teammates": member_summaries,  # legacy alias; keep until tests migrate
+            "project": project_block,
+            "teammates": teammates,  # legacy alias; keep until tests migrate
             "recent_messages": recent_messages,
             "background": [],
         }

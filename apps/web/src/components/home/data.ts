@@ -20,6 +20,8 @@ import type {
   PendingSignal,
   ProjectState,
   ProjectSummary,
+  RoutingInboxResponse,
+  RoutingSignal,
   StreamSummary,
   User,
 } from "@/lib/api";
@@ -166,16 +168,23 @@ async function fetchProjectState(
 }
 
 export async function loadHomeData(user: User): Promise<HomeData> {
-  // --- Projects + streams in parallel ---
-  const [projects, streamsResp] = await Promise.all([
+  // --- Projects + streams + routing-inbox in parallel ---
+  // Routing inbox is fetched here so home can include peer-routed asks
+  // in the "needs your response" list — matches what the sidebar
+  // inbox badge counts, so the two surfaces stay aligned.
+  const [projects, streamsResp, routingResp] = await Promise.all([
     serverFetch<ProjectSummary[]>(`/api/projects`).catch(
       () => [] as ProjectSummary[],
     ),
     serverFetch<{ streams: StreamSummary[] }>(`/api/streams`).catch(
       () => ({ streams: [] as StreamSummary[] }),
     ),
+    serverFetch<RoutingInboxResponse>(
+      `/api/routing/inbox?status=pending&limit=50`,
+    ).catch(() => ({ signals: [] as RoutingSignal[] })),
   ]);
   const streams = streamsResp.streams ?? [];
+  const routingSignals = routingResp.signals ?? [];
 
   // Index project streams by project_id for unread lookup + mark-read.
   const projectStreamByProjectId = new Map<string, StreamSummary>();
@@ -277,6 +286,29 @@ export async function loadHomeData(user: User): Promise<HomeData> {
         jump_href: `/projects/${project.id}#msg-${m.id}`,
       });
     }
+  }
+  // Routing-inbox signals — peer-routed asks that haven't been answered
+  // yet. Mapped into the same PendingSignal shape so the home
+  // "needs your response" list shows IM suggestions and routing asks
+  // in one flow, ordered by created_at. Project title is looked up
+  // from the projects array; falls back to the project id when the
+  // signal references a project the viewer no longer belongs to.
+  const projectTitleById = new Map<string, string>(
+    projects.map((p) => [p.id, p.title]),
+  );
+  for (const s of routingSignals) {
+    if (s.target_user_id !== user.id) continue;
+    if (s.status !== "pending") continue;
+    pending.push({
+      suggestion_id: `routing-${s.id}`,
+      message_id: s.target_stream_id,
+      project_id: s.project_id,
+      project_title: projectTitleById.get(s.project_id) ?? s.project_id,
+      summary: s.framing || "(routed ask)",
+      kind: "routing",
+      created_at: s.created_at ?? new Date(0).toISOString(),
+      jump_href: `/inbox`,
+    });
   }
   // Most recent first.
   pending.sort((a, b) => {
@@ -420,6 +452,18 @@ export async function loadHomeData(user: User): Promise<HomeData> {
   }
 
   // Pulse aggregates — derive from data already in hand. Cheap.
+  //
+  // Graph nodes counted: goals + deliverables + risks + tasks +
+  // decisions. Constraints are intentionally excluded — they're a
+  // side-channel of risks (severity-coded blockers) and would
+  // double-count what `risks` already captures. Decisions ARE counted
+  // because the audit-graph view treats them as first-class nodes
+  // (see html2 audit panel). Net: matches what the user sees totalled
+  // across the per-project Status page metrics.
+  //
+  // Decisions in the last 7d count: skip apply_outcome="failed" — a
+  // decision whose mechanical follow-through failed isn't a
+  // crystallized one, so it shouldn't pad the weekly cadence number.
   const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
   let totalGraphNodes = 0;
   let decisionsLast7d = 0;
@@ -428,11 +472,12 @@ export async function loadHomeData(user: User): Promise<HomeData> {
     totalGraphNodes +=
       (state.graph?.goals?.length ?? 0) +
       (state.graph?.deliverables?.length ?? 0) +
-      (state.graph?.constraints?.length ?? 0) +
       (state.graph?.risks?.length ?? 0) +
-      (state.plan?.tasks?.length ?? 0);
+      (state.plan?.tasks?.length ?? 0) +
+      (state.decisions?.length ?? 0);
     for (const d of state.decisions) {
       if (!d.created_at) continue;
+      if (d.apply_outcome === "failed") continue;
       if (new Date(d.created_at).getTime() >= sevenDaysAgo) {
         decisionsLast7d += 1;
       }

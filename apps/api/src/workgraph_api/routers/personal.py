@@ -28,6 +28,9 @@ class PostRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     body: str = Field(min_length=1, max_length=4000)
+    # Per-stream context-source toggles from StreamContextPanel.
+    # Keys: graph / kb / dms / audit. Absent → server defaults.
+    scope: dict[str, bool] | None = None
 
 
 class PreviewRequest(BaseModel):
@@ -64,7 +67,10 @@ async def post_personal_turn(
 ):
     service = _get_service(request)
     result = await service.post(
-        user_id=user.id, project_id=project_id, body=body.body
+        user_id=user.id,
+        project_id=project_id,
+        body=body.body,
+        scope=body.scope,
     )
     if not result.get("ok"):
         err = result.get("error", "post_failed")

@@ -874,7 +874,11 @@ export interface PendingSignal {
   project_id: string;
   project_title: string;
   summary: string;
-  kind: IMSuggestion["kind"];
+  /** IMSuggestion kind for AI-generated signals, or `"routing"` for an
+   *  unanswered peer routing inbox item. The home renders both in the
+   *  same "needs your response" list so the count aligns with the
+   *  sidebar inbox badge. */
+  kind: IMSuggestion["kind"] | "routing";
   created_at: string;
   jump_href: string;
 }

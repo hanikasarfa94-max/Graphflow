@@ -554,11 +554,13 @@
   },
   "kb": {
     "kicker": "Knowledge base",
-    "subtitle": "Memory layer of the graph — sources, licenses, inheritance and citation chains.",
+    "subtitle": "Memory layer of the graph — sources, licenses, inheritance and citation chains. Notes are personal-scope KB items; the tree is the team-shared scope. Same type, different visibility.",
     "title": "Knowledge base",
     "search": "Search KB…",
     "empty": "No items match your query.",
     "notAvailable": "Knowledge base will be available soon.",
+    "sharedHeading": "Shared knowledge tree",
+    "sharedSubtitle": "Team-scope KB items — promoted from personal notes, ingested from wiki/git/RSS, or saved from stream messages. Everyone in the project sees these.",
     "filters": {
       "all": "All",
       "wiki": "Wiki",
@@ -1498,7 +1500,8 @@
     "cancel": "Cancel"
   },
   "kbNotes": {
-    "title": "Notes",
+    "title": "Personal KB notes",
+    "scopeExplainer": "These are personal-scope KB items — only you see them. Promote any to share with the team; promoted items appear in the shared knowledge tree below.",
     "newNote": "+ New note",
     "cancelNew": "Cancel",
     "loading": "Loading…",

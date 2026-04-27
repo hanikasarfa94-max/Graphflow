@@ -93,6 +93,7 @@ class IMService:
         project_id: str,
         author_id: str,
         body: str,
+        scope: dict[str, bool] | None = None,
     ) -> dict[str, Any]:
         post_result = await self._messages.post(
             project_id=project_id, author_id=author_id, body=body
@@ -110,6 +111,7 @@ class IMService:
                 author_id=author_id,
                 message_id=message_id,
                 body=body,
+                scope=scope,
             ),
             name=f"im-classify-{message_id}",
         )
@@ -123,8 +125,19 @@ class IMService:
         await asyncio.gather(*list(self._pending), return_exceptions=True)
 
     async def _project_snapshot(
-        self, project_id: str, *, recent_msgs_limit: int = 5
+        self,
+        project_id: str,
+        *,
+        recent_msgs_limit: int = 5,
+        scope: dict[str, bool] | None = None,
     ) -> tuple[dict, dict, list[dict]]:
+        # Resolve effective scope flags. Defaults match StreamContextPanel:
+        # graph + kb on, dms + audit off. Absent dict → all defaults.
+        # Today only `graph` is gateable here (KB/DMs/audit aren't
+        # wired into IM context yet); the other flags are accepted as
+        # forward-compat scaffolding so a future enrichment doesn't need
+        # a fresh request-model migration.
+        graph_on = scope.get("graph", True) if scope else True
         async with session_scope(self._sessionmaker) as session:
             project = (
                 await session.execute(
@@ -139,7 +152,10 @@ class IMService:
             tasks: list[TaskRow] = []
             risks: list[RiskRow] = []
             goal_text = project.title
-            if req is not None:
+            # Skip the graph fan-out entirely when the user toggled it off
+            # in StreamContextPanel — we still keep title + recent_messages
+            # so the agent can reply, just without the structural context.
+            if req is not None and graph_on:
                 graph_repo = ProjectGraphRepository(session)
                 deliverables = await graph_repo.list_deliverables(req.id)
                 risks = await graph_repo.list_risks(req.id)
@@ -204,9 +220,12 @@ class IMService:
         author_id: str,
         message_id: str,
         body: str,
+        scope: dict[str, bool] | None = None,
     ) -> None:
         try:
-            project_snapshot, _, recent_msgs = await self._project_snapshot(project_id)
+            project_snapshot, _, recent_msgs = await self._project_snapshot(
+                project_id, scope=scope
+            )
             async with session_scope(self._sessionmaker) as session:
                 user = await UserRepository(session).get(author_id)
                 author_payload = (

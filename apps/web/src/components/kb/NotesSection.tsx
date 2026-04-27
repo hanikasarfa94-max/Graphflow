@@ -118,18 +118,29 @@ export function NotesSection({
           marginBottom: 10,
         }}
       >
-        <h3
-          style={{
-            margin: 0,
-            fontSize: 12,
-            fontFamily: "var(--wg-font-mono)",
-            color: "var(--wg-ink-soft)",
-            letterSpacing: "0.08em",
-            textTransform: "uppercase",
-          }}
-        >
-          {t("title")}
-        </h3>
+        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          <h3
+            style={{
+              margin: 0,
+              fontSize: 12,
+              fontFamily: "var(--wg-font-mono)",
+              color: "var(--wg-ink-soft)",
+              letterSpacing: "0.08em",
+              textTransform: "uppercase",
+            }}
+          >
+            {t("title")}
+          </h3>
+          <span
+            style={{
+              fontSize: 11,
+              color: "var(--wg-ink-faint)",
+              lineHeight: 1.4,
+            }}
+          >
+            {t("scopeExplainer")}
+          </span>
+        </div>
         <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
           <input
             ref={setFileInput}

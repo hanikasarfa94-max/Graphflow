@@ -51,6 +51,12 @@ class MessageRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     body: str = Field(min_length=1, max_length=4000)
+    # Per-stream context-source toggles set by the user via
+    # StreamContextPanel on the web. Keys: graph / kb / dms / audit.
+    # Absent → server-side defaults apply (graph + kb on, dms + audit
+    # off). The field is explicitly typed instead of widening to
+    # extra="ignore" so a client typo still gets a 422.
+    scope: dict[str, bool] | None = None
 
 
 class CounterRequest(BaseModel):
@@ -247,7 +253,10 @@ async def post_message(
         raise HTTPException(status_code=403, detail="not a project member")
     service: IMService = request.app.state.im_service
     result = await service.post_message(
-        project_id=project_id, author_id=user.id, body=body.body
+        project_id=project_id,
+        author_id=user.id,
+        body=body.body,
+        scope=body.scope,
     )
     if not result.get("ok"):
         err = result.get("error", "post_failed")
