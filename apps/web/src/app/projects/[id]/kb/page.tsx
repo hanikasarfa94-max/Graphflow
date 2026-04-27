@@ -8,7 +8,6 @@
 
 import { PageHeader } from "@/components/ui";
 import { KbTreeBrowser } from "@/components/kb/KbTreeBrowser";
-import { NotesSection } from "@/components/kb/NotesSection";
 import {
   ApiError,
   getKbTree,
@@ -75,15 +74,11 @@ export default async function KbPage({
         title={t("kb.title")}
         subtitle={t("kb.subtitle")}
       />
-      {/* Phase V — user-authored notes section. Project members can
-          write personal notes (only they see), promote to group when
-          ready. Lives above the membrane tree so the "I just wrote a
-          doc; where is it?" gap is gone. */}
-      <NotesSection
-        projectId={id}
-        currentUserId={user.id}
-        isProjectOwner={role === "owner"}
-      />
+      {/* Notes are KB items now. The tree returns scope='personal' and
+          scope='group' rows in one payload (kb_hierarchy.get_tree
+          §F4 single-table read), and the right-pane "+ New note"
+          composer creates personal-scope items inline. The standalone
+          NotesSection is gone — one surface, one mental model. */}
       {backendMissing || tree === null ? (
         <div
           style={{
@@ -99,45 +94,12 @@ export default async function KbPage({
           {errorMessage ?? t("kb.notAvailable")}
         </div>
       ) : (
-        <>
-          <header
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              gap: 4,
-              padding: "8px 0 12px",
-              marginTop: 4,
-            }}
-          >
-            <h3
-              style={{
-                margin: 0,
-                fontSize: 12,
-                fontFamily: "var(--wg-font-mono)",
-                color: "var(--wg-ink-soft)",
-                letterSpacing: "0.08em",
-                textTransform: "uppercase",
-              }}
-            >
-              {t("kb.sharedHeading")}
-            </h3>
-            <span
-              style={{
-                fontSize: 11,
-                color: "var(--wg-ink-faint)",
-                lineHeight: 1.4,
-              }}
-            >
-              {t("kb.sharedSubtitle")}
-            </span>
-          </header>
-          <KbTreeBrowser
-            projectId={id}
-            initialTree={tree}
-            role={role}
-            tier={tier}
-          />
-        </>
+        <KbTreeBrowser
+          projectId={id}
+          initialTree={tree}
+          role={role}
+          tier={tier}
+        />
       )}
     </main>
   );

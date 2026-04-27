@@ -554,7 +554,7 @@
   },
   "kb": {
     "kicker": "Knowledge base",
-    "subtitle": "Memory layer of the graph — sources, licenses, inheritance and citation chains. Notes are personal-scope KB items; the tree is the team-shared scope. Same type, different visibility.",
+    "subtitle": "Memory layer of the graph — sources, licenses, inheritance and citation chains. Personal notes (only you see) and shared items (whole team) live as rows in the same tree, distinguished by their KB-PERSONAL vs KB-NOTE / WIKI / GIT badges.",
     "title": "Knowledge base",
     "search": "Search KB…",
     "empty": "No items match your query.",
@@ -583,6 +583,7 @@
       "new": "+ New folder",
       "newItem": "Ingest sources…",
       "newItemHelp": "Opens project settings → External signal subscriptions. KB entries are created by the ingest pipeline, not by hand.",
+      "newNoteHelp": "Write a personal-scope KB note in the selected folder. Only you see it; promote later to share with the team.",
       "newPlaceholder": "Folder name",
       "selectPrompt": "Select a folder",
       "delete": "Delete folder",

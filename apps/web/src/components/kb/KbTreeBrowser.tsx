@@ -38,6 +38,7 @@ import { Button, Card, EmptyState, Heading, Text } from "@/components/ui";
 import {
   ApiError,
   createKbFolder,
+  createKbNote,
   deleteKbFolder,
   getKbTree,
   type KbFolderNode,
@@ -86,6 +87,16 @@ export function KbTreeBrowser({
   const [search, setSearch] = useState("");
   const [sourceFilter, setSourceFilter] = useState<SourceFilter>("all");
   const [toast, setToast] = useState<string | null>(null);
+
+  // Personal-note composer (F.14 deep fix). Notes are KB items with
+  // scope='personal'; the backend already returns them inline in
+  // /kb/tree, so we just need a way to create one. Open the composer,
+  // fill title + body, save → tree refresh and the new row drops into
+  // whatever folder was selected.
+  const [composerOpen, setComposerOpen] = useState(false);
+  const [composerTitle, setComposerTitle] = useState("");
+  const [composerBody, setComposerBody] = useState("");
+  const [composerSaving, setComposerSaving] = useState(false);
 
   const isOwner = role === "owner";
   const canCreateFolder = tier === "full";
@@ -237,6 +248,37 @@ export function KbTreeBrowser({
     }
   };
 
+  const handleCreateNote = async () => {
+    const title = composerTitle.trim();
+    if (!title) {
+      flashToast(t("kbNotes.titleRequired"));
+      return;
+    }
+    if (composerSaving) return;
+    setComposerSaving(true);
+    try {
+      const folderId = selectedFolderId ?? tree.root_id ?? undefined;
+      await createKbNote(projectId, {
+        title,
+        content_md: composerBody,
+        scope: "personal",
+        folder_id: folderId ?? undefined,
+      });
+      setComposerTitle("");
+      setComposerBody("");
+      setComposerOpen(false);
+      await refresh();
+    } catch (err) {
+      flashToast(
+        err instanceof ApiError && err.status === 403
+          ? t("kb.folder.requireFullTier")
+          : t("kbNotes.titleRequired"),
+      );
+    } finally {
+      setComposerSaving(false);
+    }
+  };
+
   const handleMoveItem = async (
     itemId: string,
     folderId: string,
@@ -342,6 +384,15 @@ export function KbTreeBrowser({
             <Button
               variant="ghost"
               size="sm"
+              onClick={() => setComposerOpen((v) => !v)}
+              disabled={!selectedFolderId}
+              title={t("kb.folder.newNoteHelp")}
+            >
+              {t("kbNotes.newNote")}
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
               onClick={handleCreateFolder}
               disabled={!canCreateFolder || !selectedFolderId}
               title={
@@ -419,6 +470,89 @@ export function KbTreeBrowser({
             );
           })}
         </div>
+
+        {composerOpen ? (
+          <div
+            data-testid="kb-tree-note-composer"
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: 8,
+              padding: 12,
+              border: "1px dashed var(--wg-accent-ring)",
+              borderRadius: "var(--wg-radius)",
+              background: "var(--wg-accent-soft)",
+            }}
+          >
+            <div
+              style={{
+                fontSize: 11,
+                fontFamily: "var(--wg-font-mono)",
+                color: "var(--wg-accent)",
+                letterSpacing: "0.08em",
+                textTransform: "uppercase",
+              }}
+            >
+              {t("kbNotes.scopePersonal")} · {selectedFolder?.name ?? "/"}
+            </div>
+            <input
+              type="text"
+              value={composerTitle}
+              onChange={(e) => setComposerTitle(e.target.value)}
+              placeholder={t("kbNotes.titlePlaceholder")}
+              disabled={composerSaving}
+              style={{
+                padding: "8px 12px",
+                border: "1px solid var(--wg-line)",
+                borderRadius: "var(--wg-radius)",
+                fontSize: 14,
+                fontFamily: "inherit",
+                background: "#fff",
+                color: "var(--wg-ink)",
+              }}
+            />
+            <textarea
+              value={composerBody}
+              onChange={(e) => setComposerBody(e.target.value)}
+              placeholder={t("kbNotes.contentPlaceholder")}
+              disabled={composerSaving}
+              rows={4}
+              style={{
+                padding: "8px 12px",
+                border: "1px solid var(--wg-line)",
+                borderRadius: "var(--wg-radius)",
+                fontSize: 13,
+                fontFamily: "inherit",
+                background: "#fff",
+                color: "var(--wg-ink)",
+                resize: "vertical",
+                minHeight: 72,
+              }}
+            />
+            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setComposerOpen(false);
+                  setComposerTitle("");
+                  setComposerBody("");
+                }}
+                disabled={composerSaving}
+              >
+                {t("kbNotes.cancelNew")}
+              </Button>
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={() => void handleCreateNote()}
+                disabled={composerSaving || !composerTitle.trim()}
+              >
+                {composerSaving ? t("kbNotes.saving") : t("kbNotes.save")}
+              </Button>
+            </div>
+          </div>
+        ) : null}
 
         {items.length === 0 ? (
           <EmptyState>{t("kb.empty")}</EmptyState>
