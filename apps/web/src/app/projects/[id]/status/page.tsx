@@ -9,7 +9,7 @@ import { Panel } from "@/components/status/Panel";
 import { RenderTriggers } from "@/components/status/RenderTriggers";
 import { RisksPanel } from "@/components/status/RisksPanel";
 import { TasksPanel } from "@/components/status/TasksPanel";
-import { PageHeader, Text } from "@/components/ui";
+import { Metric, PageHeader, Text } from "@/components/ui";
 import type {
   MembraneNotesResponse,
   PersonalTask,
@@ -86,6 +86,47 @@ export default async function ProjectStatusPage({
         }
       />
 
+      {/* Batch F.3 — 4-metric strip per html2 spec. Counts are derived
+          straight from the ProjectState payload we already fetched, so
+          they always agree with the panels below. Open-only filter on
+          risks matches the legacy panel's display rule. */}
+      <section
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+          gap: 12,
+          marginBottom: 18,
+        }}
+      >
+        <Metric
+          value={state?.plan?.tasks?.length ?? 0}
+          label={t("status.metrics.tasks")}
+        />
+        <Metric
+          value={state?.graph?.deliverables?.length ?? 0}
+          label={t("status.metrics.deliverables")}
+        />
+        <Metric
+          value={
+            (state?.graph?.risks ?? []).filter((r) => r.status === "open").length
+          }
+          label={t("status.metrics.risks")}
+          tone={
+            (state?.graph?.risks ?? []).some(
+              (r) => r.status === "open" && (r.severity === "critical" || r.severity === "high"),
+            )
+              ? "danger"
+              : (state?.graph?.risks ?? []).some((r) => r.status === "open")
+                ? "amber"
+                : "neutral"
+          }
+        />
+        <Metric
+          value={state?.decisions?.length ?? 0}
+          label={t("status.metrics.decisions")}
+          tone="accent"
+        />
+      </section>
 
       {state?.requirement_id &&
       (state?.members ?? []).find((m) => m.user_id === user.id)?.role ===

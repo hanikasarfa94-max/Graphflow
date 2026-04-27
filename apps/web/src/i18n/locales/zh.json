@@ -372,6 +372,12 @@
   "status": {
     "kicker": "项目健康度",
     "subtitle": "关键路径、风险、决策、外部产物与下一步。",
+    "metrics": {
+      "tasks": "任务",
+      "deliverables": "交付物",
+      "risks": "开放风险",
+      "decisions": "决策"
+    },
     "title": "项目状态",
     "lastRefreshed": "最后刷新 {time}",
     "members": {
