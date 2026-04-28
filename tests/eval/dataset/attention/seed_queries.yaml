@@ -1,0 +1,52 @@
+# Seed labeled queries for the attention engine eval.
+# Phase N.1.5 of PLAN-Next.md. Initial set is small (3 queries) — the
+# real bench expands this to 30-50 alongside a real corpus generator
+# in a follow-up commit. The shapes are locked here so the runner can
+# exercise end-to-end now.
+#
+# Schema: see tests/eval/attention/runner.py::load_seed_queries.
+
+- id: q01
+  viewer_id: u_alice
+  text: "What's the latest decision on the boss-1 difficulty curve?"
+  scope_anchor:
+    cell_id: c_demo
+  must_appear:
+    - n00007   # the most recent decision node
+    - n00012   # the playtest data it cites
+  must_not_appear:
+    - n00099   # superseded prior decision (suppressed=True in stub)
+  notes: |
+    Tests recency + lineage retrieval. Config A may pull n00099
+    "for completeness" (leak); C should drop it via membrane filter.
+
+- id: q02
+  viewer_id: u_bob
+  text: "Who owns the save-state migration risk?"
+  scope_anchor:
+    cell_id: c_demo
+  must_appear:
+    - n00045   # risk node
+    - n00046   # owner person node
+  must_not_appear:
+    - n00150   # private personal note from another user (suppressed)
+  notes: |
+    Tests authority/owner edge traversal + scope-tier suppression.
+    Bob is in the cell; the suppressed node is u_alice's personal
+    draft, never visible to Bob regardless of config.
+
+- id: q03
+  viewer_id: u_alice
+  text: "Summarize what's blocking the alpha freeze."
+  scope_anchor:
+    cell_id: c_demo
+  must_appear:
+    - n00045   # risk
+    - n00078   # blocking task
+    - n00081   # dependent milestone
+  must_not_appear:
+    - n00099   # superseded decision (same as q01)
+  notes: |
+    Tests global/cell-level synthesis. F1 floor for Config A is high
+    here; the test discriminates B and C on whether they catch the
+    cross-entity dependency chain.
