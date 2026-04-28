@@ -339,3 +339,62 @@ async def test_decisions_history_endpoints(api_env):
     assert r.status_code == 200
     body = r.json()
     assert "decisions" in body and len(body["decisions"]) == 1
+
+
+# ---------- N-Next B3: DecisionRow.scope_stream_id ---------------------
+
+
+@pytest.mark.asyncio
+async def test_decision_create_with_scope_stream_id_persists(api_env):
+    """B3 (migration 0027) — DecisionRepository.create accepts an
+    optional scope_stream_id; it's stamped on the row when passed,
+    NULL otherwise. NULL falls back to cell-wide vote (current
+    behavior); a stamped value defines the smallest-relevant-vote
+    quorum per new_concepts.md §6.11.
+
+    This unit test covers the repo contract; per-call-site stamping
+    (IM, silent_consensus, scrimmage, etc.) lands as those flows
+    grow stream lineage in N.4.
+    """
+    from workgraph_persistence import StreamRepository
+
+    client, maker, _, _, _, _ = api_env
+    await _register(client, "scope_stamper")
+    project_id = await _intake(client, "decisions-scope-evt")
+
+    async with session_scope(maker) as session:
+        members = await ProjectMemberRepository(session).list_for_project(
+            project_id
+        )
+        assert members, "intake should yield at least one project member"
+        resolver_id = members[0].user_id
+
+        # Create a 'room' stream to point at — the smallest-relevant
+        # quorum target for a hypothetical decision born inside it.
+        room = await StreamRepository(session).create(
+            type="room", project_id=project_id
+        )
+
+        scoped = await DecisionRepository(session).create(
+            conflict_id=None,
+            project_id=project_id,
+            resolver_id=resolver_id,
+            option_index=None,
+            custom_text="bound to room quorum",
+            rationale="vote scoped to this room",
+            apply_actions=[],
+            scope_stream_id=room.id,
+        )
+
+        unscoped = await DecisionRepository(session).create(
+            conflict_id=None,
+            project_id=project_id,
+            resolver_id=resolver_id,
+            option_index=None,
+            custom_text="cell-wide vote",
+            rationale="legacy / no stream lineage",
+            apply_actions=[],
+        )
+
+    assert scoped.scope_stream_id == room.id
+    assert unscoped.scope_stream_id is None

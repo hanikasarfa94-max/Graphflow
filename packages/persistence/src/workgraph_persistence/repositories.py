@@ -1424,6 +1424,7 @@ class DecisionRepository:
         apply_detail: dict | None = None,
         decision_class: str | None = None,
         gated_via_proposal_id: str | None = None,
+        scope_stream_id: str | None = None,
     ) -> DecisionRow:
         """Persist a decision.
 
@@ -1437,6 +1438,14 @@ class DecisionRepository:
         `GatedProposalService.approve` path sets both on approve. v0 does not
         enforce "gated-class decisions must have a proposal id" at this layer —
         that hardening is Option 2 (see GatedProposalService docstring).
+
+        `scope_stream_id` (N-Next, migration 0027) is the smallest-relevant
+        vote scope per new_concepts.md §6.11 + north-star Correction R.2.
+        Caller passes the stream id whose membership defines the vote
+        quorum (DM = 2 voters, 4-person room = 4, etc.). NULL leaves the
+        decision cell-wide — current behavior for callers that haven't
+        wired stream lineage yet (IM / silent-consensus / scrimmage / etc.
+        will populate as N.4 lands).
         """
         row = DecisionRow(
             id=_new_id(),
@@ -1453,6 +1462,7 @@ class DecisionRepository:
             source_suggestion_id=source_suggestion_id,
             decision_class=decision_class,
             gated_via_proposal_id=gated_via_proposal_id,
+            scope_stream_id=scope_stream_id,
         )
         self._session.add(row)
         await self._session.flush()
