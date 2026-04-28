@@ -99,12 +99,21 @@ ReviewAction = Literal[
 
 # Candidate kinds the membrane review() understands. Each promote
 # path picks one; the review function uses it to choose which checks
-# to run.
+# to run. Unknown kinds fall through to auto_merge (review() default).
+#
+# N-Next additions (manual_*): per new_concepts.md §6.11 + north-star
+# Correction R.4, manual-typed creates do not become canonical state
+# directly — they enter as candidates and ascend through Membrane like
+# any other promotion. The actual creation routes (POST /api/projects,
+# POST /api/streams for rooms) wire to these kinds in N.4; the enum
+# values are added now so call sites and tests can reference them.
 CandidateKind = Literal[
     "kb_item_group",         # group-scope KbItemRow about to be created
     "task_promote",          # personal TaskRow being promoted to plan
     "decision_crystallize",  # DecisionRow about to crystallize
     "graph_edge",            # graph node/edge promotion
+    "manual_project",        # N-Next: user-typed cell (project) candidate
+    "manual_room",           # N-Next: user-typed team-room within a cell
 ]
 
 

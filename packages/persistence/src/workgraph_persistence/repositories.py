@@ -2072,6 +2072,27 @@ class StreamRepository:
         )
         return (await self._session.execute(stmt)).scalar_one_or_none()
 
+    async def list_rooms_for_project(
+        self, project_id: str
+    ) -> list[StreamRow]:
+        """N-Next: every 'room' stream nested in this cell.
+
+        Per new_concepts.md §6.11, a cell hosts multiple team-room
+        streams (sub-team / topical / ad-hoc). The main 'project'
+        stream is excluded — `get_for_project` returns that one.
+        Sorted by created_at so newest rooms surface last; UI can
+        re-sort by activity if it wants to.
+        """
+        stmt = (
+            select(StreamRow)
+            .where(
+                StreamRow.project_id == project_id,
+                StreamRow.type == "room",
+            )
+            .order_by(StreamRow.created_at)
+        )
+        return list((await self._session.execute(stmt)).scalars().all())
+
     async def get_personal_for_user_in_project(
         self, *, user_id: str, project_id: str
     ) -> StreamRow | None:
@@ -3870,6 +3891,16 @@ class OrganizationMemberRepository:
 
     async def is_member(self, organization_id: str, user_id: str) -> bool:
         return (await self.get_member(organization_id, user_id)) is not None
+
+    async def is_lead(self, organization_id: str, user_id: str) -> bool:
+        """N-Next leader-bypass (north-star Correction R, new_concepts.md
+        §6.11): owner / admin of an organization can READ into any cell
+        owned by that org without being a direct project member. Writes
+        still require explicit cell membership — preserves the single-
+        membrane invariant.
+        """
+        row = await self.get_member(organization_id, user_id)
+        return row is not None and row.role in ("owner", "admin")
 
     async def list_for_organization(
         self, organization_id: str

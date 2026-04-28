@@ -838,6 +838,18 @@ class DecisionRow(Base):
         nullable=True,
         index=True,
     )
+    # Migration 0027 — smallest-relevant-vote routing (new_concepts.md
+    # §6.11 + north-star Correction R.2). Crystallization Agent stamps
+    # the smallest stream that contained the discussion (DM / room /
+    # cell-wide stream); vote quorum derives from that stream's member
+    # list. NULL means fall back to cell-wide (project-level) vote.
+    # SET NULL on stream delete so a deleted room doesn't cascade-
+    # destroy its decisions.
+    scope_stream_id: Mapped[str | None] = mapped_column(
+        ForeignKey("streams.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
 
 
 class GatedProposalRow(Base):
@@ -1037,23 +1049,33 @@ class StreamRow(Base):
     """Unifying conversation container.
 
     Types in v1 (post-Phase L):
-      * 'project'  — team room, one per project, all project members
+      * 'project'  — main team room, exactly one per project, all
+                     project members. Created at project boot.
       * 'personal' — private (user ↔ their edge-agent), project-anchored,
                      owner_user_id set; primary surface per north-star
                      §"Sub-agent and routing architecture"
       * 'dm'       — 1:1 between two users, no project anchor
 
+    Types added in N-Next (per new_concepts.md §6.11 + north-star
+    Correction R.2):
+      * 'room'     — sub-team / topical / ad-hoc room INSIDE a cell
+                     (project_id set; member subset of cell members).
+                     Multiple rooms per project allowed. Decision votes
+                     crystallized inside a room default to that room's
+                     member quorum (smallest-relevant-vote rule).
+
     `last_activity_at` is bumped on every new message so GET /api/streams
     can order by recency without scanning messages.
 
     `owner_user_id` is populated only for personal streams (the human who
-    owns the sub-agent conversation). Null for project / dm.
+    owns the sub-agent conversation). Null for project / dm / room.
     """
 
     __tablename__ = "streams"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    # 'project' | 'personal' | 'dm' in v1. 'group' + 'rehearsal' come in v2.
+    # v1: 'project' | 'personal' | 'dm'. N-Next adds 'room'.
+    # v2 reserves 'group' (3-10 ad-hoc) + 'rehearsal'.
     type: Mapped[str] = mapped_column(String(16))
     project_id: Mapped[str | None] = mapped_column(
         ForeignKey("projects.id", ondelete="CASCADE"), nullable=True, index=True
@@ -1822,14 +1844,27 @@ class KbItemRow(Base):
         and owner_user_id may be NULL (org-level ingests, webhook
         payloads); signal-shaped columns populated.
 
-    Scope semantics (user-authored only — ingests don't have scope):
-      * 'personal' — visible only to owner_user_id. The edge LLM uses
+    Scope semantics (user-authored only — ingests don't have scope).
+    Four-tier ladder per new_concepts.md §6.11; legacy `'group'`
+    is kept as the Cell-scope value (north-star Correction R locks
+    "no schema rename"):
+      * 'personal'   — visible only to owner_user_id. Edge LLM uses
         these as private pretext for that user's sub-agent ONLY. Never
         bleeds into other members' contexts. Default scope on create.
-      * 'group'    — shared with all project members. LLM uses for
-        everyone. Promoted from personal via an explicit owner action
-        (Phase V.1) or LLM-mediated route (Phase V.2). Group items
-        affect everyone's pretext, so the promotion flow gates carefully.
+      * 'group'      — Cell scope: shared with all project members.
+        LLM uses for everyone. Promoted from personal via an explicit
+        owner action (Phase V.1) or LLM-mediated route (Phase V.2).
+        Group items affect everyone's pretext, so the promotion flow
+        gates carefully.
+      * 'department' — N-Next: functional subset (Eng / Design /
+        Marketing KB). Membership tables land in B1.2; today this
+        value is accepted on writes but read access falls back to
+        OrganizationMemberRow visibility.
+      * 'enterprise' — N-Next: org-wide (HR, brand, compliance).
+        Read access gated by OrganizationMemberRow.
+
+    The scope tier is orthogonal to ProjectMemberRow.license_tier
+    (full / task_scoped / observer).
 
     The folder_id link is optional: items without a folder live at root.
     Folder = the existing KbFolderRow; we don't add a second hierarchy.
