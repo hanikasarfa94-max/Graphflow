@@ -67,6 +67,21 @@ data/*.db-journal
 docs/report.md
 docs/feishu_competation.md
 docs/product_flowcharts.md
+docs/ux-resource-requirements.md
+docs/design-references/
+
+# Session handoff + ad-hoc agent docs (local-only; PR descriptions
+# carry the durable narrative)
+HANDOFF.md
+AGENTS.md
+
+# v-Next UI prototype — sandbox for product/design discussion, not
+# shipped product code. Source of truth lands in apps/web/ via the
+# N.2 frontend port.
+workgraph-ts-prototype/
+
+# One-off design exploration HTML
+workgraph_home_redesign_html2.html
 
 # Graphify outputs — local-only knowledge graph artifacts. Regenerate
 # per machine with `/graphify --update` (or full re-run). CLAUDE.md
