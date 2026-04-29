@@ -1,0 +1,164 @@
+{
+  "config": "A",
+  "corpus_size": 2500,
+  "n_queries": 12,
+  "f1": 0.7999999999999999,
+  "precision": 0.8888888888888888,
+  "recall": 0.7272727272727273,
+  "leak_rate": 0.0,
+  "n_leaks": 0,
+  "tokens_total": 1195492,
+  "latency_p50_ms": 11734,
+  "latency_p95_ms": 39108,
+  "audit_score": 0.16666666666666666,
+  "per_query": [
+    {
+      "config": "A",
+      "query_id": "q01",
+      "cited_node_ids": [
+        "dec_no_multicurrency",
+        "kb_decision_lineage_new"
+      ],
+      "suppressed_cited": [],
+      "tokens_in": 99508,
+      "tokens_out": 112,
+      "latency_ms": 13687,
+      "explanations": {}
+    },
+    {
+      "config": "A",
+      "query_id": "q02",
+      "cited_node_ids": [
+        "kb_pg_pool"
+      ],
+      "suppressed_cited": [],
+      "tokens_in": 99423,
+      "tokens_out": 105,
+      "latency_ms": 39108,
+      "explanations": {}
+    },
+    {
+      "config": "A",
+      "query_id": "q03",
+      "cited_node_ids": [
+        "kb_rate_limiter_perip",
+        "stream_bob_ratelimit_a"
+      ],
+      "suppressed_cited": [],
+      "tokens_in": 99622,
+      "tokens_out": 92,
+      "latency_ms": 43000,
+      "explanations": {}
+    },
+    {
+      "config": "A",
+      "query_id": "q04",
+      "cited_node_ids": [
+        "stream_dave_design_q"
+      ],
+      "suppressed_cited": [],
+      "tokens_in": 99624,
+      "tokens_out": 112,
+      "latency_ms": 20343,
+      "explanations": {}
+    },
+    {
+      "config": "A",
+      "query_id": "q05",
+      "cited_node_ids": [
+        "dec_no_multicurrency",
+        "kb_decision_lineage_new"
+      ],
+      "suppressed_cited": [],
+      "tokens_in": 99506,
+      "tokens_out": 116,
+      "latency_ms": 15483,
+      "explanations": {}
+    },
+    {
+      "config": "A",
+      "query_id": "q06",
+      "cited_node_ids": [
+        "dec_v1_scope_freeze"
+      ],
+      "suppressed_cited": [],
+      "tokens_in": 99423,
+      "tokens_out": 96,
+      "latency_ms": 7360,
+      "explanations": {}
+    },
+    {
+      "config": "A",
+      "query_id": "q07",
+      "cited_node_ids": [
+        "task_sla_wire"
+      ],
+      "suppressed_cited": [],
+      "tokens_in": 99505,
+      "tokens_out": 82,
+      "latency_ms": 7421,
+      "explanations": {}
+    },
+    {
+      "config": "A",
+      "query_id": "q08",
+      "cited_node_ids": [],
+      "suppressed_cited": [],
+      "tokens_in": 99424,
+      "tokens_out": 86,
+      "latency_ms": 15389,
+      "explanations": {}
+    },
+    {
+      "config": "A",
+      "query_id": "q09",
+      "cited_node_ids": [],
+      "suppressed_cited": [],
+      "tokens_in": 99424,
+      "tokens_out": 114,
+      "latency_ms": 8953,
+      "explanations": {}
+    },
+    {
+      "config": "A",
+      "query_id": "q10",
+      "cited_node_ids": [
+        "kb_decision_lineage_new",
+        "dec_no_multicurrency",
+        "dec_v1_scope_freeze"
+      ],
+      "suppressed_cited": [],
+      "tokens_in": 99506,
+      "tokens_out": 155,
+      "latency_ms": 9781,
+      "explanations": {}
+    },
+    {
+      "config": "A",
+      "query_id": "q11",
+      "cited_node_ids": [
+        "kb_pg_pool",
+        "dec_pg_pool_bump",
+        "risk_pg_pool_burst"
+      ],
+      "suppressed_cited": [],
+      "tokens_in": 99617,
+      "tokens_out": 120,
+      "latency_ms": 7125,
+      "explanations": {}
+    },
+    {
+      "config": "A",
+      "query_id": "q12",
+      "cited_node_ids": [
+        "kb_corp_ai_use",
+        "dec_dept_llm_provider"
+      ],
+      "suppressed_cited": [],
+      "tokens_in": 99623,
+      "tokens_out": 97,
+      "latency_ms": 9453,
+      "explanations": {}
+    }
+  ]
+}
