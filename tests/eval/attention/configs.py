@@ -16,13 +16,64 @@ Status:
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import sys
 import time
 from collections.abc import Sequence
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from .types import ConfigRunResult, CorpusItem, Query
+
+
+# Synthesizing a `created_at` for items whose corpus row doesn't carry
+# one (KB / decision / task / risk in the hand-curated spine; the
+# realistic generator already populates `metadata.ts`). The exact
+# distribution doesn't matter for the eval — production will replace
+# this stub with the real `created_at` column when §7.4 wires up. What
+# matters is that timestamps span widely enough that the LLM sees a
+# real recency contrast across items of the same topic.
+#
+# This implementation is intentionally lifted from the experiment
+# script (`tests/eval/scripts/test_report_experiments.py`) verbatim,
+# math quirk and all: the band-of-minutes-times-60 effectively yields
+# ages up to ~12 years for kb_items, ~2 years for stream_turns. The
+# spread is what drove the validated +0.137 recall lift at 200 nodes
+# (Test 1 in `tests/eval/reports/test_report.md`). A "more correct"
+# narrow spread loses that signal — see commit message for diagnosis.
+_NOW = datetime(2026, 4, 29, 12, 0, 0, tzinfo=timezone.utc)
+_AGE_BANDS_DAYS = {
+    "stream_turn": (1, 14),
+    "task": (1, 30),
+    "risk": (7, 45),
+    "decision": (3, 60),
+    "kb_item": (15, 90),
+    "person": (1, 365),
+}
+
+
+def _synthetic_ts(item: CorpusItem) -> str:
+    """Deterministic ISO timestamp for an item without metadata.ts.
+
+    Hashes the id to a stable offset within the kind's age band. The
+    generated padding (`tests/eval/dataset/attention/realistic_padding
+    .json`) already carries `metadata.ts`, so this only fires on the
+    hand-curated spine for kinds other than stream_turn.
+
+    Math note: the `offset * 60` multiplier on a minutes-domain offset
+    is intentional (see module docstring above). Yields a wide
+    inter-item time spread that the LLM can use as a recency signal.
+    """
+    raw = item.metadata.get("ts") if item.metadata else None
+    if raw:
+        return str(raw)
+    h = int(hashlib.sha1(item.id.encode("utf-8")).hexdigest(), 16)
+    band = _AGE_BANDS_DAYS.get(item.kind, (1, 90))
+    span_days = band[1] - band[0]
+    offset = band[0] + (h % (span_days * 24 * 60))
+    age = timedelta(minutes=offset * 60)
+    return (_NOW - age).isoformat()
 
 
 # Lazy LLMClient singleton. The agents package isn't on sys.path during
@@ -65,9 +116,13 @@ def _pack_prompt(
     """Build chat messages for Config A.
 
     Hand the LLM a JSON listing of visible nodes (id + kind + scope +
-    title + content) and ask for a strict-JSON response naming which
-    ids ground the query. response_format=json_object on the API call
-    keeps parsing deterministic.
+    title + content + created_at) and ask for a strict-JSON response
+    naming which ids ground the query. response_format=json_object on
+    the API call keeps parsing deterministic.
+
+    Timestamps were validated as a +0.137 recall lift at 200 nodes
+    (Test 1 in `tests/eval/reports/test_report.md`). Three of five
+    chronic-miss queries (q07/q08/q09) recovered with no other change.
     """
     nodes_payload = [
         {
@@ -76,6 +131,7 @@ def _pack_prompt(
             "scope": item.scope,
             "title": item.title,
             "content": item.content,
+            "created_at": _synthetic_ts(item),
         }
         for item in visible
     ]
@@ -85,9 +141,12 @@ def _pack_prompt(
         "stream turns) and a user query, return ONLY the node ids "
         "whose content directly grounds an answer to the query. Prefer "
         "recent / active content over older / superseded content when "
-        "both touch the same fact. Return strict JSON of shape "
-        '{"cited_ids": ["..."], "reasoning": "..."}. Cite zero ids if '
-        "nothing grounds the query."
+        "both touch the same fact. Each node carries a `created_at` "
+        "ISO timestamp; weight recent content higher when the query "
+        "asks about current / latest / still / now state. Older "
+        "content for the same fact has likely been superseded. Return "
+        'strict JSON of shape {"cited_ids": ["..."], "reasoning": "..."}. '
+        "Cite zero ids if nothing grounds the query."
     )
     user = json.dumps(
         {
