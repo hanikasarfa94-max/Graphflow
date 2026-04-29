@@ -24,6 +24,7 @@ from workgraph_api.main import app
 from workgraph_persistence import (
     DecisionRow,
     IMSuggestionRow,
+    StreamRepository,
     session_scope,
 )
 
@@ -404,5 +405,59 @@ async def test_accept_tag_kind_does_not_create_decision_row(api_env):
             .all()
         )
     assert decisions == []
+
+    im_agent._suggestion = None
+
+
+# ---------- B3: scope_stream_id stamping --------------------------------
+
+
+@pytest.mark.asyncio
+async def test_accept_decision_stamps_scope_stream_id_from_source_message(api_env):
+    """N-Next §6.11 + Correction R.2: a crystallized DecisionRow inherits
+    `scope_stream_id` from the source message's stream. IM messages today
+    land in the project's team-room stream, so the stamp equals that
+    stream's id — proving the smallest-relevant-vote rule has its scope
+    column populated end-to-end (column → repo → service call site).
+    """
+    client, maker, _, _, _, _ = api_env
+    im_agent = app.state.im_agent
+    im_agent._suggestion = IMSuggestion(
+        kind="decision",
+        confidence=0.8,
+        targets=[],
+        proposal=IMProposal(
+            action="drop_deliverable",
+            summary="Stamp the scope stream",
+            detail={"deliverable_id": None},  # filled after fetch below
+        ),
+        reasoning="B3 wiring regression",
+    )
+
+    await _register(client, "sc_owner_b3")
+    project_id = await _intake_canonical(client, "sc-accept-b3-stamp")
+    state = (await client.get(f"/api/projects/{project_id}/state")).json()
+    deliverable_id = state["graph"]["deliverables"][0]["id"]
+    im_agent._suggestion.proposal.detail = {"deliverable_id": deliverable_id}
+
+    msg = await _post_message_awaited(
+        client, project_id, "we should drop this deliverable for the v1 launch"
+    )
+    suggestion_id = msg["suggestion"]["id"]
+
+    accept = await client.post(f"/api/im_suggestions/{suggestion_id}/accept")
+    assert accept.status_code == 200, accept.text
+
+    async with session_scope(maker) as session:
+        team_stream = await StreamRepository(session).get_for_project(project_id)
+        decision = (
+            await session.execute(
+                select(DecisionRow).where(
+                    DecisionRow.source_suggestion_id == suggestion_id
+                )
+            )
+        ).scalar_one()
+    assert team_stream is not None
+    assert decision.scope_stream_id == team_stream.id
 
     im_agent._suggestion = None

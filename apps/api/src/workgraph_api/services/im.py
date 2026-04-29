@@ -435,6 +435,13 @@ class IMService:
                 crystallize_outcome = (
                     "ok" if applied.get("graph_touched") else "advisory"
                 )
+                # B3 (N-Next §6.11 + Correction R.2): stamp the smallest-relevant
+                # vote scope. The source message's stream is the room/team-room
+                # where the suggestion was raised; that membership defines the
+                # quorum the decision applies to. None when the source message
+                # predates stream_id backfill.
+                source_msg = await MessageRepository(session).get(row.message_id)
+                source_stream_id = source_msg.stream_id if source_msg else None
                 decision_row = await DecisionRepository(session).create(
                     conflict_id=None,
                     project_id=project_id,
@@ -446,6 +453,7 @@ class IMService:
                     source_suggestion_id=suggestion_id,
                     apply_outcome=crystallize_outcome,
                     apply_detail={"applied": applied},
+                    scope_stream_id=source_stream_id,
                 )
                 # applied_at mirrors create_at since crystallization is synchronous.
                 decision_row.applied_at = datetime.now(timezone.utc)
