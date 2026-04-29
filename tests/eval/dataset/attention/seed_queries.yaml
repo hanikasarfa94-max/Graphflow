@@ -1,52 +1,203 @@
 # Seed labeled queries for the attention engine eval.
-# Phase N.1.5 of PLAN-Next.md. Initial set is small (3 queries) — the
-# real bench expands this to 30-50 alongside a real corpus generator
-# in a follow-up commit. The shapes are locked here so the runner can
-# exercise end-to-end now.
+# Phase N.1.5 of PLAN-Next.md. 12 hand-labeled queries (mix of zh + en,
+# mix of types: retrieval / ambiguous / scope-suppress / supersede)
+# referencing the hand-curated corpus in tests/eval/attention/corpus.py.
 #
 # Schema: see tests/eval/attention/runner.py::load_seed_queries.
+#
+# Mix by intent:
+#   q01-q04 : direct retrieval ("what did we decide about X?")
+#   q05-q07 : ambiguous / rerank ("is this still planned?")
+#   q08-q09 : scope-suppress probes (best literal match is another
+#             user's personal item — must NOT appear)
+#   q10-q12 : supersede probes (best literal match is a superseded
+#             item — must include the newer one, not the old)
+
+# --- direct retrieval -----------------------------------------------------
 
 - id: q01
-  viewer_id: u_alice
-  text: "What's the latest decision on the boss-1 difficulty curve?"
+  viewer_id: u_bob
+  text: "What did we decide about multi-currency for v1?"
   scope_anchor:
-    cell_id: c_demo
+    cell_id: c_workgraph
   must_appear:
-    - n00007   # the most recent decision node
-    - n00012   # the playtest data it cites
+    - dec_no_multicurrency
+    - kb_decision_lineage_new
   must_not_appear:
-    - n00099   # superseded prior decision (suppressed=True in stub)
+    - dec_multicurrency_v1_old   # superseded original decision
+    - kb_decision_lineage_old    # superseded KB lineage
   notes: |
-    Tests recency + lineage retrieval. Config A may pull n00099
-    "for completeness" (leak); C should drop it via membrane filter.
+    Tests recency + supersede. Bob is in the cell; the right answer is
+    the active decision plus the current KB note. Config A may pull the
+    old multi-currency decision "for completeness" — counts as a leak.
 
 - id: q02
-  viewer_id: u_bob
-  text: "Who owns the save-state migration risk?"
+  viewer_id: u_carol
+  text: "Postgres pool sizing：当前配置是多少？"
   scope_anchor:
-    cell_id: c_demo
+    cell_id: c_workgraph
   must_appear:
-    - n00045   # risk node
-    - n00046   # owner person node
+    - kb_pg_pool
+    - dec_pg_pool_bump
   must_not_appear:
-    - n00150   # private personal note from another user (suppressed)
+    - kb_pg_pool_old             # superseded sizing note
   notes: |
-    Tests authority/owner edge traversal + scope-tier suppression.
-    Bob is in the cell; the suppressed node is u_alice's personal
-    draft, never visible to Bob regardless of config.
+    Bilingual probe (zh question, en KB). Tests retrieve-by-topic plus
+    supersede filter; the old sizing note is the literal best match for
+    "Postgres pool sizing" but is suppressed.
 
 - id: q03
   viewer_id: u_alice
-  text: "Summarize what's blocking the alpha freeze."
+  text: "What's our policy on rate limiting — per IP or per user?"
   scope_anchor:
-    cell_id: c_demo
+    cell_id: c_workgraph
   must_appear:
-    - n00045   # risk
-    - n00078   # blocking task
-    - n00081   # dependent milestone
-  must_not_appear:
-    - n00099   # superseded decision (same as q01)
+    - kb_rate_limiter_perip
+    - stream_bob_ratelimit_a
+  must_not_appear: []
   notes: |
-    Tests global/cell-level synthesis. F1 floor for Config A is high
-    here; the test discriminates B and C on whether they catch the
-    cross-entity dependency chain.
+    Tests cross-kind retrieval (KB + stream turn). The chat thread
+    explains the why; the KB note is the canonical statement.
+
+- id: q04
+  viewer_id: u_alice
+  text: "决策卡片要不要展示被覆盖的旧决策？团队有讨论吗？"
+  scope_anchor:
+    cell_id: c_workgraph
+  must_appear:
+    - stream_dave_design_q
+  must_not_appear: []
+  notes: |
+    Single-source retrieval; the only group-level mention is Dave's
+    design thread. Catches the "look in #stream not just KB" path.
+
+# --- ambiguous / rerank --------------------------------------------------
+
+- id: q05
+  viewer_id: u_bob
+  text: "Is multi-currency still planned for v1?"
+  scope_anchor:
+    cell_id: c_workgraph
+  must_appear:
+    - dec_no_multicurrency
+    - kb_decision_lineage_new
+  must_not_appear:
+    - dec_multicurrency_v1_old
+    - kb_decision_lineage_old
+  notes: |
+    Ambiguous phrasing — "still planned" reads as a yes/no question
+    over recent state. Vector retrieval may surface the old decision
+    that says "yes, multi-currency"; only supersede-aware ranking
+    answers correctly.
+
+- id: q06
+  viewer_id: u_carol
+  text: "v1 scope 还能再加东西吗？"
+  scope_anchor:
+    cell_id: c_workgraph
+  must_appear:
+    - dec_v1_scope_freeze
+    - stream_alice_freeze_call
+  must_not_appear: []
+  notes: |
+    Ambiguous: "还能再加东西吗" doesn't literally name the freeze.
+    Tests intent rerank — the answer is "no, scope was frozen on
+    2026-04-20." Best match is the freeze decision + the stream call
+    that announced it.
+
+- id: q07
+  viewer_id: u_bob
+  text: "What's blocking the SLA-timer work?"
+  scope_anchor:
+    cell_id: c_workgraph
+  must_appear:
+    - task_sla_wire
+    - kb_sla_lifecycle
+  must_not_appear: []
+  notes: |
+    "Blocking" is loose — there's no explicit blocker, just an open
+    in-progress task. Tests whether the harness can reason about
+    open tasks plus their domain context (lifecycle KB).
+
+# --- scope-suppress probes -----------------------------------------------
+
+- id: q08
+  viewer_id: u_carol
+  text: "What's Alice's take on the auth fallback?"
+  scope_anchor:
+    cell_id: c_workgraph
+  must_appear:
+    - dec_signin_provider
+  must_not_appear:
+    - kb_alice_perf_review            # personal to u_alice
+    - stream_alice_personal_log       # personal to u_alice
+    - task_alice_personal_followup    # personal to u_alice
+    - kb_alice_meeting_prep           # personal to u_alice
+  notes: |
+    Carol is in the cell but NOT u_alice. Alice's personal log and
+    followup task literally mention auth/fallback in the body — they
+    are the strongest vector matches. Membrane MUST suppress them
+    because they are scope=personal and Carol is not the owner.
+
+- id: q09
+  viewer_id: u_carol
+  text: "限流设计有没有人私下表达过担忧？"
+  scope_anchor:
+    cell_id: c_workgraph
+  must_appear:
+    - stream_bob_ratelimit_a
+    - kb_rate_limiter_perip
+  must_not_appear:
+    - stream_bob_personal_vent        # bob's private rant — suppressed
+  notes: |
+    The literal best match for "private concerns about rate limiting"
+    is u_bob's personal channel rant. Carol must not see it; the
+    correct answer is the public stream + KB.
+
+# --- supersede probes ----------------------------------------------------
+
+- id: q10
+  viewer_id: u_bob
+  text: "Multi-currency rollout — what's the plan?"
+  scope_anchor:
+    cell_id: c_workgraph
+  must_appear:
+    - kb_decision_lineage_new
+    - dec_no_multicurrency
+  must_not_appear:
+    - kb_decision_lineage_old
+    - dec_multicurrency_v1_old
+  notes: |
+    Pure supersede probe. The phrase "Multi-currency rollout" is the
+    literal title of BOTH the old and new KB notes. Vector ranking
+    will tie them; only supersede-aware logic returns just the new
+    one without leaking the deprecated entry.
+
+- id: q11
+  viewer_id: u_alice
+  text: "How big is the Postgres connection pool?"
+  scope_anchor:
+    cell_id: c_workgraph
+  must_appear:
+    - kb_pg_pool
+    - dec_pg_pool_bump
+  must_not_appear:
+    - kb_pg_pool_old
+  notes: |
+    Supersede probe. Old note literally answers "12"; new note says
+    "20" via the bump decision. Returning both confuses the LLM into
+    averaging or hedging — gold is to return only the live pair.
+
+- id: q12
+  viewer_id: u_alice
+  text: "公司对 AI 工具使用的政策是什么？哪些 provider 可以用？"
+  scope_anchor:
+    cell_id: c_workgraph
+  must_appear:
+    - kb_corp_ai_use
+    - dec_dept_llm_provider
+  must_not_appear: []
+  notes: |
+    Cross-tier retrieval — enterprise policy plus department-level
+    decision. Tests that scope tiers above the cell are surfaced
+    (otherwise the cell is in a vacuum on company-wide policy).

@@ -21,12 +21,24 @@ from tests.eval.attention.runner import (
 
 @pytest.mark.eval
 def test_attention_harness_smoke():
-    """Smoke: harness produces summaries for A/B/C without exceptions."""
-    queries, truths = load_seed_queries()
-    assert len(queries) >= 3, "seed query set should ship with ≥3 fixtures"
+    """Smoke: harness produces summaries for A/B/C without exceptions.
 
+    Asserts shape, not specific values. The corpus and configs evolve
+    independently of the harness contract; this test guards the
+    contract (corpus → query → config → summary) is intact.
+    """
+    queries, truths = load_seed_queries()
+    # N.1.5 expanded the seed set from 3 to ~12; keep the floor at 10
+    # so the test catches accidental fixture deletion but doesn't
+    # churn every time we add a query.
+    assert len(queries) >= 10, "seed query set should ship with ≥10 fixtures"
+
+    # First-pass eval uses the hand-curated 40-node corpus. The
+    # harness handles size > 40 via deterministic padding for the
+    # scaling pass (PLAN-Next.md §N.1.5).
+    corpus_size = 40
     summaries = run_all_configs(
-        corpus_size=200,
+        corpus_size=corpus_size,
         queries=queries,
         truth_by_query=truths,
     )
@@ -35,23 +47,21 @@ def test_attention_harness_smoke():
     assert {s.config for s in summaries} == {"A", "B", "C"}
     for s in summaries:
         assert s.n_queries == len(queries)
-        assert s.corpus_size == 200
+        assert s.corpus_size == corpus_size
         # Stubs report zero latency; ensures the field is at least set.
         assert s.latency_p50_ms >= 0
-        # Audit score: A and B don't populate explanations (stub
-        # returns empty for the cited node ids that have no
-        # explanation match), C populates explanations for every
-        # cited id. Stub harness expectation:
+        # Each summary is a fully-populated ConfigSummary — the harness
+        # contract guarantees the fields exist and the per-query list
+        # mirrors the input queries.
+        assert len(s.per_query) == len(queries)
+        # Audit score: stubs leave explanations empty for A/B and full
+        # for C. With the hand-curated corpus all three stubs cite at
+        # least one node, so:
         if s.config == "C":
             assert s.audit_score == 1.0, (
                 f"Config C should audit-score 1.0; got {s.audit_score}"
             )
         else:
-            # A and B leave explanations empty; their cited nodes have
-            # zero explanations. audit_score = 0 / n_cited = 0.0.
-            # Edge case: if a config cites nothing, audit_score = 1.0
-            # vacuously. Stub configs always cite ≥1 node so we expect
-            # 0.0 here.
             assert s.audit_score == 0.0, (
                 f"Config {s.config} stub should audit-score 0.0;"
                 f" got {s.audit_score}"
