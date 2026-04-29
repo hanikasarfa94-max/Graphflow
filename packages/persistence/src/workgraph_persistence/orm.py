@@ -12,6 +12,34 @@ def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
+class _FrecencyColumnsMixin:
+    """N-Next §7.4 frecency primitives.
+
+    `last_accessed_at` + `access_count` drive the frecency ranker —
+    `score = log(1 + access_count) × time_decay(now - last_accessed_at)`.
+    Bump-on-touch writers update both on: search hits (kb_search /
+    skill atlas), citation resolution (decision crystallize, edge-LLM
+    cited claims), and explicit user navigation (detail-page reads).
+
+    Defaults at INSERT time: `last_accessed_at = _utcnow` (a freshly-
+    created row is freshly-accessed by definition); `access_count = 0`.
+    Migration 0028 backfills `last_accessed_at` from `created_at` for
+    pre-migration rows.
+
+    Applied to the five node-bearing row types: KbItemRow, MessageRow,
+    DecisionRow, TaskRow, RiskRow. Not applied to graph entities
+    (Goal/Deliverable/Constraint) because those aren't retrieval
+    targets — they're structure, not content.
+    """
+
+    last_accessed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow
+    )
+    access_count: Mapped[int] = mapped_column(
+        Integer, default=0, server_default="0"
+    )
+
+
 class ProjectRow(Base):
     __tablename__ = "projects"
 
@@ -242,7 +270,7 @@ class ConstraintRow(_GraphEntityBase, Base):
     severity: Mapped[str] = mapped_column(String(16), default="medium")
 
 
-class RiskRow(_GraphEntityBase, Base):
+class RiskRow(_GraphEntityBase, _FrecencyColumnsMixin, Base):
     __tablename__ = "graph_risks"
     __table_args__ = (
         UniqueConstraint("requirement_id", "sort_order", name="uq_risk_order"),
@@ -259,7 +287,7 @@ class RiskRow(_GraphEntityBase, Base):
     severity: Mapped[str] = mapped_column(String(16), default="medium")
 
 
-class TaskRow(_GraphEntityBase, Base):
+class TaskRow(_GraphEntityBase, _FrecencyColumnsMixin, Base):
     """Planning-produced task on the latest requirement version.
 
     Shares _GraphEntityBase with Phase-5 entities so status/sort_order/created_at
@@ -593,7 +621,7 @@ class CommentRow(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 
 
-class MessageRow(Base):
+class MessageRow(_FrecencyColumnsMixin, Base):
     """Per-stream IM message. Plain text or markdown, no attachments.
 
     Phase B (v2): messages attach to a `stream_id`; `project_id` stays populated
@@ -774,7 +802,7 @@ class ConflictRow(Base):
     )
 
 
-class DecisionRow(Base):
+class DecisionRow(_FrecencyColumnsMixin, Base):
     """Phase 9 — audit row for a human decision on a conflict.
 
     A conflict can have multiple decisions over time (currently we don't
@@ -1831,7 +1859,7 @@ class KbFolderRow(Base):
     )
 
 
-class KbItemRow(Base):
+class KbItemRow(_FrecencyColumnsMixin, Base):
     """Migration 0019 — Phase V: first-class user-authored KB note.
     Migration 0022 — absorbs MembraneSignalRow's shape so externally-
     ingested signals can live in the same table (source='ingest').
