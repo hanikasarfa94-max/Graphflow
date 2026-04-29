@@ -7,8 +7,10 @@ Status:
   * Config A — LIVE: DeepSeek call with full visible corpus in context.
                 Reads DEEPSEEK_API_KEY from .env via workgraph_agents.llm.
                 One async LLM call per query, sync-bridged with asyncio.run.
-  * Config B — STUB: returns deterministic top-3 by id. Real impl will
-                use a sentence-transformer (chromadb in-memory) + DeepSeek.
+  * Config B — LIVE (slice 1): BM25 top-50 → DeepSeek over the survivors.
+                Pure-lexical retrieval baseline; vector layer lands in
+                slice 2 and the rank-list interface composes via RRF in
+                slice 4. See `tests/eval/attention/retrievers.py`.
   * Config C — STUB: returns deterministic top-3 by id with mock audit
                 explanations. Real impl wires hybrid retrieval + RRF +
                 rule membrane + rank + DeepSeek (§7 stack).
@@ -24,6 +26,7 @@ from collections.abc import Sequence
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+from .retrievers import BM25Retriever
 from .types import ConfigRunResult, CorpusItem, Query
 
 
@@ -236,30 +239,76 @@ def config_a_llm_only(
     )
 
 
-def config_b_vector_only(
+def config_b_bm25(
     corpus: Sequence[CorpusItem],
     query: Query,
+    *,
+    k: int = 50,
 ) -> ConfigRunResult:
-    """Top-K vector retrieval, then LLM.
+    """BM25 top-k → DeepSeek over the survivors (LIVE — slice 1).
 
-    STUB: returns a deterministic 'top-3 by id' from the viewer-visible
-    pool. Real impl will use a sentence-transformer via the existing
-    workgraph_agents embedding hook (or chromadb).
+    Pure lexical baseline: builds a fresh BM25 index over the visible
+    pool, retrieves the top-k items, then hands them (and only them)
+    to the LLM with the same prompt frame Config A uses. The §7.7
+    membrane gate runs *before* retrieval (visibility filter); BM25
+    ranks within what the viewer is allowed to see.
+
+    Slice 1 of the §7.2 hybrid stack. Vector / graph-neighbor /
+    recency / pinned land in subsequent slices and compose via RRF
+    (slice 4). At that point Config B can keep its lexical-baseline
+    role while Config C carries the full hybrid.
+
+    Index-per-query is wasted work in production — the index would
+    be built once per project and incrementally maintained — but at
+    eval scale (538 nodes × ~12 queries) it's microseconds and keeps
+    the call site dependency-free.
     """
     started = time.monotonic()
     visible = [
-        item
-        for item in corpus
-        if _viewer_can_see(item, query.viewer_id) and not item.suppressed
-    ][:3]
+        item for item in corpus if _viewer_can_see(item, query.viewer_id)
+    ]
+    visible_ids = {item.id for item in visible}
+    suppressed_ids = {item.id for item in corpus if item.suppressed}
+
+    retriever = BM25Retriever(visible)
+    ranked = retriever.top_k(query.text, k=k)
+    candidates = [item for item, _score in ranked]
+
+    if not candidates:
+        # No lexical signal at all — return early with a recall miss
+        # rather than burn an LLM call on an empty prompt.
+        elapsed_ms = int((time.monotonic() - started) * 1000)
+        return ConfigRunResult(
+            config="B",
+            query_id=query.id,
+            cited_node_ids=(),
+            suppressed_cited=(),
+            tokens_in=0,
+            tokens_out=0,
+            latency_ms=elapsed_ms,
+        )
+
+    client = _get_llm_client()
+    messages = _pack_prompt(candidates, query)
+    result = asyncio.run(
+        client.complete(
+            messages,
+            temperature=0.1,
+            response_format={"type": "json_object"},
+        )
+    )
     elapsed_ms = int((time.monotonic() - started) * 1000)
+
+    cited = _parse_cited_ids(result.content, visible_ids)
+    suppressed_cited = tuple(sorted(set(cited) & suppressed_ids))
+
     return ConfigRunResult(
         config="B",
         query_id=query.id,
-        cited_node_ids=tuple(item.id for item in visible),
-        suppressed_cited=(),
-        tokens_in=0,
-        tokens_out=0,
+        cited_node_ids=cited,
+        suppressed_cited=suppressed_cited,
+        tokens_in=result.prompt_tokens,
+        tokens_out=result.completion_tokens,
         latency_ms=elapsed_ms,
     )
 
@@ -304,6 +353,6 @@ def config_c_full_stack(
 
 CONFIGS = {
     "A": config_a_llm_only,
-    "B": config_b_vector_only,
+    "B": config_b_bm25,
     "C": config_c_full_stack,
 }
