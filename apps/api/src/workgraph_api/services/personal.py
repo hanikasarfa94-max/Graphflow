@@ -46,6 +46,7 @@ from workgraph_persistence import (
     ProjectMemberRepository,
     ProjectRow,
     UserRepository,
+    bump_citations,
     session_scope,
 )
 from sqlalchemy import select
@@ -120,6 +121,31 @@ def _encode_claims_body(body: str, claims: list[dict[str, Any]]) -> str:
     if not claims:
         return body
     return f"{body}\n\n<claims>{json.dumps(claims, ensure_ascii=False)}</claims>"
+
+
+async def _bump_cited_claims(
+    sessionmaker: async_sessionmaker,
+    claims: list[CitedClaim],
+) -> None:
+    """§7.4 frecency: when an edge-LLM reply ships with structured
+    citations, bump every cited node so the §7.4 ranker can later score
+    "recently-cited" higher than "fresh-but-untouched."
+
+    Best-effort — the reply has already been persisted by the caller, so
+    a bump failure must not raise. We open a separate session so we don't
+    extend the lifetime of the surrounding transaction.
+    """
+    citations = [c for claim in claims for c in claim.citations]
+    if not citations:
+        return
+    try:
+        async with session_scope(sessionmaker) as session:
+            await bump_citations(session, citations)
+    except Exception:
+        _log.exception(
+            "personal._bump_cited_claims failed",
+            extra={"n_citations": len(citations)},
+        )
 
 
 def _parse_claims(body: str) -> tuple[str, list[dict[str, Any]]]:
@@ -671,6 +697,7 @@ class PersonalStreamService:
                 kind=reply_kind,
                 linked_id=None,
             )
+            await _bump_cited_claims(self._sessionmaker, claims)
             return {
                 "ok": True,
                 "message_id": message_id,
@@ -794,6 +821,7 @@ class PersonalStreamService:
                 kind="edge-route-proposal",
                 linked_id=message_id,
             )
+            await _bump_cited_claims(self._sessionmaker, claims)
             proposal_id = reply_msg.get("id")
             return {
                 "ok": True,
@@ -1028,6 +1056,7 @@ class PersonalStreamService:
             kind="edge-reply-frame",
             linked_id=signal["id"],
         )
+        await _bump_cited_claims(self._sessionmaker, framed_claims)
         return {
             "ok": True,
             "signal": signal,

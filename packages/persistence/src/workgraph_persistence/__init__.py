@@ -99,6 +99,7 @@ from .repositories import (
     UserRepository,
     VoteRepository,
 )
+from .frecency import bump_citations, bump_frecency
 from .stage import Stage, StageInfo, project_stage
 from .streams_backfill import (
     EDGE_AGENT_SYSTEM_USER_ID,
@@ -206,6 +207,8 @@ __all__ = [
     "Stage",
     "StageInfo",
     "project_stage",
+    "bump_citations",
+    "bump_frecency",
     "backfill_streams_from_projects",
     "ensure_edge_agent_system_user",
     "EDGE_AGENT_SYSTEM_USER_ID",

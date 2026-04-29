@@ -41,6 +41,7 @@ from workgraph_persistence import (
     StreamRepository,
     TaskRow,
     UserRepository,
+    bump_frecency,
     session_scope,
 )
 
@@ -455,6 +456,13 @@ class IMService:
                 # predates stream_id backfill.
                 source_msg = await MessageRepository(session).get(row.message_id)
                 source_stream_id = source_msg.stream_id if source_msg else None
+                # §7.4 frecency bump-on-touch: the source message is the
+                # citation that triggered this decision. Bump it inside
+                # the same session so the access lands atomically with
+                # the crystallization write — if the surrounding txn
+                # rolls back, the bump rolls back with it.
+                if source_msg is not None:
+                    await bump_frecency(session, message_ids=[source_msg.id])
                 decision_row = await DecisionRepository(session).create(
                     conflict_id=None,
                     project_id=project_id,

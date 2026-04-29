@@ -58,6 +58,7 @@ from workgraph_persistence import (
     RequirementRepository,
     RiskRow,
     UserRepository,
+    bump_frecency,
     session_scope,
 )
 
@@ -278,6 +279,15 @@ class SkillsService:
                 )
             if len(matched) >= limit_val:
                 break
+
+        # §7.4 frecency bump-on-touch: every kb item we surfaced to the
+        # caller counts as a "search hit" access event. Best-effort —
+        # failure must not turn a successful search into an error.
+        hit_ids = [m["id"] for m in matched]
+        if hit_ids:
+            async with session_scope(self._sessionmaker) as session:
+                await bump_frecency(session, kbitem_ids=hit_ids)
+
         return matched
 
     async def _recent_decisions(
