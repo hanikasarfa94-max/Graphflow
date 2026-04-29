@@ -8,6 +8,7 @@
 
 import { PageHeader } from "@/components/ui";
 import { KbTreeBrowser } from "@/components/kb/KbTreeBrowser";
+import { ScopeTierPills } from "@/components/stream/ScopeTierPills";
 import {
   ApiError,
   getKbTree,
@@ -72,7 +73,20 @@ export default async function KbPage({
       {/* F.16 prod-density: kicker dropped — was a literal duplicate of
           title (both rendered "Knowledge base" / "知识库"). The sidebar
           nav already labels this page; one heading is enough. */}
-      <PageHeader title={t("kb.title")} subtitle={t("kb.subtitle")} />
+      <div
+        style={{
+          display: "flex",
+          alignItems: "flex-start",
+          justifyContent: "space-between",
+          gap: 16,
+          flexWrap: "wrap",
+        }}
+      >
+        <PageHeader title={t("kb.title")} subtitle={t("kb.subtitle")} />
+        <div style={{ paddingTop: 8 }}>
+          <ScopeTierPills projectKey={`project:${id}`} />
+        </div>
+      </div>
       {/* Notes are KB items now. The tree returns scope='personal' and
           scope='group' rows in one payload (kb_hierarchy.get_tree
           §F4 single-table read), and the right-pane "+ New note"

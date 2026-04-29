@@ -525,6 +525,10 @@ def _kb_item_payload(row: Any) -> dict[str, Any]:
             "source_identifier": row.source_identifier,
             "status": row.status,
             "tags": list(classification.get("tags") or []),
+            # N.2: expose scope on the wire so ScopeTierPills can filter
+            # the tree client-side. Backend access guards (KbItemService.
+            # _assert_can_read) already gate what gets returned at all.
+            "scope": row.scope,
             "created_at": row.created_at.isoformat() if row.created_at else None,
             "updated_at": row.updated_at.isoformat() if row.updated_at else None,
             # license_tier_override is filled in by the caller via the
@@ -541,6 +545,7 @@ def _kb_item_payload(row: Any) -> dict[str, Any]:
         "source_identifier": None,
         "status": row.status,
         "tags": [],
+        "scope": row.scope,
         "created_at": row.created_at.isoformat() if row.created_at else None,
         "updated_at": row.updated_at.isoformat() if row.updated_at else None,
         "license_tier_override": None,

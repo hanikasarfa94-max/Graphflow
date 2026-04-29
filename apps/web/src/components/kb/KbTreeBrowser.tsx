@@ -48,6 +48,12 @@ import {
   promoteKbNote,
   reparentKbFolder,
 } from "@/lib/api";
+import {
+  getScopeTiers,
+  SCOPE_TIER_EVENT,
+  type ScopeTier,
+  type ScopeTierState,
+} from "@/components/stream/ScopeTierPills";
 
 type Role = "owner" | "member" | "observer";
 type Tier = "full" | "task_scoped" | "observer";
@@ -88,6 +94,23 @@ export function KbTreeBrowser({
   const [search, setSearch] = useState("");
   const [sourceFilter, setSourceFilter] = useState<SourceFilter>("all");
   const [toast, setToast] = useState<string | null>(null);
+  // N.2: ScopeTierPills broadcast their state via window event keyed by
+  // projectKey. We mirror the pills' storage key (per-project, not
+  // per-stream) so toggles flow from the chat surface to here.
+  const projectKey = `project:${projectId}`;
+  const [activeTiers, setActiveTiers] = useState<ScopeTierState>(() =>
+    getScopeTiers(projectKey),
+  );
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent<{ projectKey: string; tiers: ScopeTierState }>).detail;
+      if (detail?.projectKey === projectKey) {
+        setActiveTiers(detail.tiers);
+      }
+    };
+    window.addEventListener(SCOPE_TIER_EVENT, handler);
+    return () => window.removeEventListener(SCOPE_TIER_EVENT, handler);
+  }, [projectKey]);
 
   // Personal-note composer (F.14 deep fix). Notes are KB items with
   // scope='personal'; the backend already returns them inline in
@@ -336,6 +359,13 @@ export function KbTreeBrowser({
       ) {
         return false;
       }
+      // N.2: scope-tier filter from ScopeTierPills. Items missing a
+      // recognized scope (legacy rows without the field) fall through
+      // unfiltered so we don't accidentally hide content.
+      const scope = item.scope as ScopeTier | undefined;
+      if (scope && activeTiers[scope] === false) {
+        return false;
+      }
       if (q) {
         const hay =
           `${item.title} ${item.summary} ${item.tags.join(" ")} ${
@@ -351,6 +381,7 @@ export function KbTreeBrowser({
     search,
     sourceFilter,
     locale,
+    activeTiers,
   ]);
 
   return (

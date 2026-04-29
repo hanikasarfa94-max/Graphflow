@@ -1728,6 +1728,10 @@ export interface KbTreeItem {
   source_identifier: string | null;
   status: KbItemStatus;
   tags: string[];
+  // KbItemRow.scope wire value — one of "personal" / "group" / "department"
+  // / "enterprise". Used by ScopeTierPills to filter the tree client-side
+  // (the backend access guard still enforces what the user can read at all).
+  scope: string;
   created_at: string | null;
   updated_at: string | null;
   license_tier_override: LicenseTier | null;
