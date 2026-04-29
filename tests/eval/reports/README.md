@@ -1,7 +1,9 @@
 # Attention engine eval — first-pass results
 
-PLAN-Next.md §N.1.5. Eval-driven decision on whether to ship the full §7
-retrieval stack or defer in favor of pure-LLM-everything-visible.
+PLAN-Next.md §N.1.5. Eval-driven decision on whether the full §7
+retrieval stack is load-bearing for v-Next's target scale, or whether
+membrane-suppressed eligible context fed to a long-context LLM is
+sufficient.
 
 ## Run conditions
 
@@ -11,7 +13,14 @@ retrieval stack or defer in favor of pure-LLM-everything-visible.
 - Reproduction: `pytest -m eval tests/eval/test_attention_eval.py` runs at 40 nodes;
   larger scales are explicit ad-hoc runs via `runner.run_config(corpus_size=…)`.
 
-## Results — Config A (pure LLM, everything visible)
+## Results — Config A (membrane-suppressed eligible context + long-context LLM activation)
+
+Config A passes the corpus through `_viewer_can_see` (drops other
+users' personal items) and existing access guards before handing what
+remains to DeepSeek-Chat. The membrane is still doing its job; what
+the eval measures is whether the LLM, given properly-shaped context,
+can pick the right ids without an explicit retrieval/rerank stack on
+top.
 
 | Scale | F1 | Precision | Recall | Leak rate | Tokens/q | Latency p50 |
 |------:|---:|----------:|-------:|----------:|---------:|------------:|
@@ -37,13 +46,24 @@ Per PLAN-Next.md §N.1.5:
 | If A's F1 drops at 1k+ → ship §7.2 hybrid retrieval | NO (F1 actually rose) |
 | §7.14 LTR | deferred regardless |
 
-**Decision: defer the §7 stack for v-Next. Ship pure-LLM-everything-visible.**
+**Decision: §7 is not load-bearing at v-Next's target scale. Ship Config A
+(membrane-suppressed eligible context + long-context LLM activation).**
 
-This is bounded by scale: Config A's context window (~64K tokens on
-DeepSeek-Chat) breaks somewhere between 1000 and 5000 nodes. v-Next
-target users (10-30 person teams) are not expected to cross that
-threshold inside the v-Next ship window. If a customer cell does, §7.2
-hybrid retrieval becomes a real ship gate at that point — not before.
+§7 is not obsolete — it remains the documented scale-triggered fallback.
+The decision boundary is explicit:
+
+- Ship Config A for v-Next.
+- §7.2 hybrid retrieval is the scale-triggered path; it becomes a ship
+  gate on **any** of:
+  - Cell size approaches the 1K-5K node band (Config A's context window
+    breaks somewhere between, depending on node verbosity and DeepSeek's
+    deployed context cap).
+  - Leak rate regresses above 0 in any scale or query slice.
+  - F1 drops below the v-Next acceptance bar in production telemetry.
+  - Token cost per turn exceeds budget at customer scale.
+
+v-Next target users (10-30 person teams) are not expected to cross
+those thresholds inside the v-Next ship window.
 
 ## Files
 
