@@ -97,11 +97,21 @@ export function KbTreeBrowser({
   // N.2: ScopeTierPills broadcast their state via window event keyed by
   // projectKey. We mirror the pills' storage key (per-project, not
   // per-stream) so toggles flow from the chat surface to here.
+  //
+  // Hydration safety: initial state mirrors the server-side render
+  // (all-tiers-on default) — calling `getScopeTiers` in the useState
+  // initializer would read localStorage during hydration and cause a
+  // mismatch if the user has any tier disabled. We hydrate persisted
+  // state in the effect below, mirroring ScopeTierPills itself.
   const projectKey = `project:${projectId}`;
-  const [activeTiers, setActiveTiers] = useState<ScopeTierState>(() =>
-    getScopeTiers(projectKey),
-  );
+  const [activeTiers, setActiveTiers] = useState<ScopeTierState>(() => ({
+    personal: true,
+    group: true,
+    department: true,
+    enterprise: true,
+  }));
   useEffect(() => {
+    setActiveTiers(getScopeTiers(projectKey));
     const handler = (e: Event) => {
       const detail = (e as CustomEvent<{ projectKey: string; tiers: ScopeTierState }>).detail;
       if (detail?.projectKey === projectKey) {

@@ -54,15 +54,15 @@ def test_attention_harness_smoke():
         # contract guarantees the fields exist and the per-query list
         # mirrors the input queries.
         assert len(s.per_query) == len(queries)
-        # Audit score: stubs leave explanations empty for A/B and full
-        # for C. With the hand-curated corpus all three stubs cite at
-        # least one node, so:
+        # Audit score is in [0, 1] for any config. Config B is still a
+        # stub (no explanations) so it scores 0.0 unless a query empty-
+        # cites (vacuous 1.0). Config C is still a stub with mocked
+        # explanations on every cite so it scores 1.0. Config A is now
+        # LIVE (DeepSeek): each query's audit fraction is 0.0 if cites
+        # exist without explanations, 1.0 if no cites — the mean depends
+        # on the LLM's cite distribution this run, so just assert bounds.
+        assert 0.0 <= s.audit_score <= 1.0
         if s.config == "C":
             assert s.audit_score == 1.0, (
                 f"Config C should audit-score 1.0; got {s.audit_score}"
-            )
-        else:
-            assert s.audit_score == 0.0, (
-                f"Config {s.config} stub should audit-score 0.0;"
-                f" got {s.audit_score}"
             )
