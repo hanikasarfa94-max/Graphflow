@@ -12,6 +12,7 @@
 import Link from "next/link";
 import { getTranslations } from "next-intl/server";
 
+import { ScopeTierPills } from "@/components/stream/ScopeTierPills";
 import { StreamCompactToolbar } from "@/components/stream/StreamCompactToolbar";
 import { StreamContextPanel } from "@/components/stream/StreamContextPanel";
 import { StreamView } from "@/components/stream/StreamView";
@@ -78,6 +79,7 @@ export default async function ProjectTeamPage({
         meta={state?.project?.title}
         actions={
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <ScopeTierPills projectKey={`project:${id}`} />
             <StreamContextPanel streamKey={`project:${id}:team`} />
             {isAdmin ? (
               <Link

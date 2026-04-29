@@ -328,6 +328,27 @@
         }
       }
     },
+    "scopeTiers": {
+      "groupLabel": "Visible scope tiers",
+      "tier": {
+        "personal": {
+          "label": "Personal",
+          "hint": "Only your notes and personal stream"
+        },
+        "group": {
+          "label": "Cell",
+          "hint": "Content shared inside this project cell"
+        },
+        "department": {
+          "label": "Department",
+          "hint": "Department-level decisions and knowledge"
+        },
+        "enterprise": {
+          "label": "Enterprise",
+          "hint": "Organization-wide public content"
+        }
+      }
+    },
     "loading": "Loading stream…",
     "empty": "No messages yet — kick things off below.",
     "messageCount": "messages",

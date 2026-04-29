@@ -328,6 +328,27 @@
         }
       }
     },
+    "scopeTiers": {
+      "groupLabel": "可见范围层级",
+      "tier": {
+        "personal": {
+          "label": "个人",
+          "hint": "只看你的笔记与个人流"
+        },
+        "group": {
+          "label": "格子",
+          "hint": "项目格子内共享的内容"
+        },
+        "department": {
+          "label": "部门",
+          "hint": "部门级的决策与知识沉淀"
+        },
+        "enterprise": {
+          "label": "企业",
+          "hint": "组织级公开内容"
+        }
+      }
+    },
     "loading": "正在加载会话…",
     "empty": "还没有消息 —— 在下方开始吧。",
     "messageCount": "条消息",

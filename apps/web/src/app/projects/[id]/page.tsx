@@ -11,6 +11,7 @@ import { getTranslations } from "next-intl/server";
 
 import { OnboardingOverlay } from "@/components/onboarding/OnboardingOverlay";
 import { PersonalStream } from "@/components/stream/PersonalStream";
+import { ScopeTierPills } from "@/components/stream/ScopeTierPills";
 import { StreamCompactToolbar } from "@/components/stream/StreamCompactToolbar";
 import { StreamContextPanel } from "@/components/stream/StreamContextPanel";
 import type { StreamMember } from "@/components/stream/types";
@@ -75,7 +76,12 @@ export default async function ProjectPersonalPage({
             ? `Edge · ${state.project.title}`
             : t("personal.subtitle")
         }
-        actions={<StreamContextPanel streamKey={`project:${id}:personal`} />}
+        actions={
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <ScopeTierPills projectKey={`project:${id}`} />
+            <StreamContextPanel streamKey={`project:${id}:personal`} />
+          </div>
+        }
       />
       <PersonalStream
         projectId={id}
