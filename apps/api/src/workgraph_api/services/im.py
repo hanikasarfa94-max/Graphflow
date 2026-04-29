@@ -94,7 +94,20 @@ class IMService:
         author_id: str,
         body: str,
         scope: dict[str, bool] | None = None,
+        scope_tiers: dict[str, bool] | None = None,
     ) -> dict[str, Any]:
+        # `scope_tiers` (N.2) carries the four-tier ScopeTierPills selection
+        # from the client (personal / group / department / enterprise, where
+        # group = Cell). Today it is accepted-and-logged plumbing; consumer
+        # wiring (LicenseContextService.allowed_scopes intersect) lands in
+        # N.4 — see PLAN-Next.md §"Top bar".
+        if scope_tiers is not None:
+            _log.debug(
+                "im.post_message scope_tiers=%s author=%s project=%s",
+                scope_tiers,
+                author_id,
+                project_id,
+            )
         post_result = await self._messages.post(
             project_id=project_id, author_id=author_id, body=body
         )

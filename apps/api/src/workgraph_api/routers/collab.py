@@ -57,6 +57,12 @@ class MessageRequest(BaseModel):
     # off). The field is explicitly typed instead of widening to
     # extra="ignore" so a client typo still gets a 422.
     scope: dict[str, bool] | None = None
+    # Per-project scope-tier toggles from ScopeTierPills (N.2).
+    # Keys: personal / group / department / enterprise (group = Cell).
+    # Absent → server treats as all-tiers-on. Today the field is
+    # accepted-and-logged plumbing; LicenseContextService.allowed_scopes
+    # intersection lands in N.4.
+    scope_tiers: dict[str, bool] | None = None
 
 
 class CounterRequest(BaseModel):
@@ -257,6 +263,7 @@ async def post_message(
         author_id=user.id,
         body=body.body,
         scope=body.scope,
+        scope_tiers=body.scope_tiers,
     )
     if not result.get("ok"):
         err = result.get("error", "post_failed")

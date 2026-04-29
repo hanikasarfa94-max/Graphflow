@@ -334,9 +334,16 @@ class PersonalStreamService:
         project_id: str,
         body: str,
         scope: dict[str, bool] | None = None,
+        scope_tiers: dict[str, bool] | None = None,
     ) -> dict[str, Any]:
         """User posts into their personal project stream. Edge sub-agent
         metabolizes and may post a follow-up system message.
+
+        `scope_tiers` (N.2) carries the four-tier ScopeTierPills selection
+        from the client (personal / group / department / enterprise, where
+        group = Cell). Today it is accepted-and-logged plumbing; consumer
+        wiring (LicenseContextService.allowed_scopes intersect) lands in
+        N.4 — see PLAN-Next.md §"Top bar".
 
         Error codes:
           * 'project_not_found'
@@ -344,6 +351,13 @@ class PersonalStreamService:
           * 'stream_post_failed' — shouldn't happen once the personal stream
             exists but we pass through the StreamService error.
         """
+        if scope_tiers is not None:
+            _log.debug(
+                "personal.post scope_tiers=%s user=%s project=%s",
+                scope_tiers,
+                user_id,
+                project_id,
+            )
         # Membership + project sanity check first so we don't spin up a
         # personal stream for a project the user cannot see.
         async with session_scope(self._sessionmaker) as session:

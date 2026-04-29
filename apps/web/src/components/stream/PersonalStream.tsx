@@ -62,6 +62,7 @@ import {
 import { SkillDeclarationBanner } from "@/components/onboarding/SkillDeclarationBanner";
 
 import { DriftCard } from "./DriftCard";
+import { getScopeTiers } from "./ScopeTierPills";
 import { getStreamScope } from "./StreamContextPanel";
 import { SlaCard } from "./SlaCard";
 import { EdgeReplyCard } from "./EdgeReplyCard";
@@ -503,7 +504,10 @@ export function PersonalStream({
 
     try {
       const scope = streamKey ? getStreamScope(streamKey) : null;
-      const res = await postPersonalMessage(projectId, body, scope);
+      // Pills are per-project (storage key matches /projects/[id] and /team).
+      // streamKey here is per-stream, so derive the project key independently.
+      const scopeTiers = getScopeTiers(`project:${projectId}`);
+      const res = await postPersonalMessage(projectId, body, scope, scopeTiers);
       // Replace optimistic row with the real id from the server. Also
       // drop any row that already has the real id — the WS frame may
       // have landed during the POST round-trip, in which case mapping

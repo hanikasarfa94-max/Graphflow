@@ -31,6 +31,12 @@ class PostRequest(BaseModel):
     # Per-stream context-source toggles from StreamContextPanel.
     # Keys: graph / kb / dms / audit. Absent → server defaults.
     scope: dict[str, bool] | None = None
+    # Per-project scope-tier toggles from ScopeTierPills (N.2).
+    # Keys: personal / group / department / enterprise (group = Cell).
+    # Absent → server treats as all-tiers-on. Today the field is
+    # accepted-and-logged plumbing; LicenseContextService.allowed_scopes
+    # intersection lands in N.4.
+    scope_tiers: dict[str, bool] | None = None
 
 
 class PreviewRequest(BaseModel):
@@ -71,6 +77,7 @@ async def post_personal_turn(
         project_id=project_id,
         body=body.body,
         scope=body.scope,
+        scope_tiers=body.scope_tiers,
     )
     if not result.get("ok"):
         err = result.get("error", "post_failed")

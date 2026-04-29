@@ -36,6 +36,7 @@ import { useTranslations } from "next-intl";
 
 import { ApiError, api, type IMMessage } from "@/lib/api";
 
+import { getScopeTiers } from "./ScopeTierPills";
 import { getStreamScope } from "./StreamContextPanel";
 
 // 500ms matches north-star §pre-commit rehearsal: long enough that typing
@@ -214,9 +215,15 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
 
     try {
       const scope = streamKey ? getStreamScope(streamKey) : null;
+      const scopeTiers = getScopeTiers(`project:${projectId}`);
+      const payload = {
+        body,
+        ...(scope ? { scope } : {}),
+        ...(scopeTiers ? { scope_tiers: scopeTiers } : {}),
+      };
       await api(`/api/projects/${projectId}/messages`, {
         method: "POST",
-        body: scope ? { body, scope } : { body },
+        body: payload,
       });
       // The WS frame will carry the real message — remove the optimistic
       // row so the real one can take its place. (The reducer dedups by id,

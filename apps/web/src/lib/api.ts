@@ -1220,10 +1220,21 @@ export function postPersonalMessage(
   projectId: string,
   body: string,
   scope?: Record<string, boolean> | null,
+  scopeTiers?: Record<string, boolean> | null,
 ): Promise<PersonalPostResponse> {
+  // Two orthogonal narrowings ride on this POST:
+  //   * scope        — StreamContextPanel: which kinds of source (graph/kb/dms/audit)
+  //   * scope_tiers  — ScopeTierPills:    which license tiers (personal/group/department/enterprise)
+  // Both are forward-compat fields the server logs for debug; consumer
+  // wiring (LicenseContextService.allowed_scopes intersect) lands in N.4.
+  const payload = {
+    body,
+    ...(scope ? { scope } : {}),
+    ...(scopeTiers ? { scope_tiers: scopeTiers } : {}),
+  };
   return api<PersonalPostResponse>(`/api/personal/${projectId}/post`, {
     method: "POST",
-    body: scope ? { body, scope } : { body },
+    body: payload,
   });
 }
 
