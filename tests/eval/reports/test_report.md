@@ -9,21 +9,25 @@ than the original analysis, plus a free win that ships independently.**
 ## TL;DR
 
 1. **Variance is zero at temp=0.1.** Three identical runs give identical
-   numbers to four decimal places. So the F1 swings between scales
-   (0.821→0.800→0.850→0.800→0.850) are *real signal*, not noise — but
-   they're small enough that scale-sensitivity is mild within the
-   tested range.
+   numbers to four decimal places. So all F1 differences across scales
+   are *real signal*, not noise — but they're small enough that
+   scale-sensitivity is mild within the tested range.
 2. **Adding `created_at` to the prompt lifts recall +0.137** (0.727 →
    0.864) at 200 nodes. Three of five chronic-miss queries recover.
    The LLM was time-blind, not too literal. **This is a 30-minute
    change with v-Next-baseline-quality impact** — should ship
    independently of any §7 work.
-3. **Quality (F1, leak rate) holds across 125× corpus growth.** Config
-   A's qualitative scaling is real, not a measurement artifact.
-4. **The economic wall is the load-bearing reason for Path B.** At
-   5000 nodes, Config A burns ~64% of $50/seat SaaS revenue on
-   inference. §7.2 cuts that 18×. That's the case for shipping
-   §7.2 + §7.4, not retrieval quality.
+3. **Quality (F1, leak rate) holds across 125× corpus growth and on
+   realistic prose padding.** Config A's qualitative scaling is real,
+   not a measurement artifact. The §7-defer call on quality grounds
+   survives.
+4. **The economic wall is closer than the synthetic-padded projection
+   suggested.** Realistic content runs 3-4× more tokens per node than
+   RNG synthetic padding, and DeepSeek-Chat is meaningfully slower on
+   substantive prose (18s p50 / 72s p95 at 73K-token realistic prompts
+   vs 6s p50 at synthetic). **§7.2 + §7.4 frecency need to ship in
+   v-Next baseline, not as scale-triggered fallback** — the latency /
+   cost wall arrives at ~1500-2000 realistic nodes, not 5000.
 
 ## Test 1 — timestamp-aware prompt
 
@@ -195,7 +199,68 @@ recall edge (q09's missing item).
 - **Test 3's economic projections** assume 20 queries/person/day and
   ~5000 nodes after 1.5 years. Heavier-usage orgs scale costs
   proportionally; Config A's wall arrives sooner.
-- **Realistic-corpus addendum** (separate run, also today): replaces
-  RNG synthetic padding with DeepSeek-generated prose-quality content
-  to verify Config A's numbers hold against realistic noise. See
-  `realistic_corpus_addendum.md` once that experiment lands.
+- **Realistic-corpus addendum** below.
+
+## Test 5 — realistic corpus (DeepSeek-generated padding)
+
+**Hypothesis:** the RNG synthetic `pad_NNNNN` plain-text padding may be
+"easier" noise than realistic team content. Replace it with
+DeepSeek-generated prose (498 items following the WorkGraph team
+narrative, multi-type/multi-scope/multi-language) and re-run Config A
+to see whether F1/leak numbers hold against realistic noise.
+
+**Method:** generated 498 padding items via DeepSeek-Chat at
+temp=0.7 (varied prose), kept the hand-curated 40-node spine
+unchanged. Total corpus = 538 nodes. Ran bare Config A (no
+timestamp prompt) so the comparison is apples-to-apples against
+the synthetic-padded scaling pass. Circularity caveat: same model
+generated and evaluated — multi-type retrieval (decision vs KB vs
+stream-turn vs task vs risk) is the orthogonal challenge that resists
+same-author bias.
+
+**Results:**
+
+| Metric | Synthetic 200 | **Realistic 538** | Synthetic 1000 |
+|--------|--------------:|------------------:|---------------:|
+| F1 | 0.800 | **0.821** | 0.850 |
+| Precision | 0.889 | **0.941** | 0.944 |
+| Recall | 0.727 | **0.727** | 0.773 |
+| Leak rate | 0.000 | **0.000** | 0.000 |
+| Tokens / query | ~9K | **~73K** | ~40K |
+| Latency p50 | 5.7s | **18.1s** | 5.8s |
+| Latency p95 | — | **72.2s** | 8.9s |
+
+**Verdict:** quality story holds — F1 stays in the 0.80-0.85 band,
+leak rate stays at 0.000. But two findings shift the economic case
+significantly:
+
+1. **Realistic content is ~3-4× more expensive per node than RNG
+   synthetic.** RNG padding averaged ~50 tokens/node; realistic prose
+   averaged ~150 tokens/node. So token cost at any given node count
+   is 3× the earlier synthetic-based projection.
+
+2. **Latency degrades disproportionately on realistic content.**
+   DeepSeek-Chat handled 73K tokens of synthetic prose at ~6s p50;
+   the same token count of realistic prose runs at 18s p50, 72s p95.
+   The model is meaningfully slower on substantive content than
+   filler. Three transient errors during the 12-query run dragged
+   p95 further (the retries are visible in the 72s outlier).
+
+**Implication for Test 3's economics:** the synthetic-padded
+projections were underestimates. With realistic content:
+
+| Scale (realistic) | Tokens / query | Cost / query | Cost / month / 100p cell |
+|-------------------|---------------:|-------------:|--------------------------:|
+| 500 | ~73K | ~$0.020 | ~$1,200 |
+| 1500 | ~220K | ~$0.060 | ~$3,600 |
+| 5000 | ~730K (exceeds context) | breaks | breaks |
+
+**The §7.2 ship-gate on realistic content arrives at ~1500-2000 nodes,
+not 5000.** This makes Path B's argument stronger, not weaker — the
+latency/cost wall is closer than the original analysis suggested.
+
+The §7-defer call (on **quality** grounds) survives unchanged. Config
+A still produces clean leak rate and stable F1 across realistic
+content. What's now clearer is that **§7.2 + §7.4 frecency must ship
+in v-Next baseline**, not as scale-triggered fallback — they're
+required by month one of a 100-person org's usage.
