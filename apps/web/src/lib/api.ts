@@ -714,6 +714,12 @@ export interface Decision {
   // IM-suggestion-originated or conflict-originated decisions.
   gated_via_proposal_id?: string | null;
   decision_class?: string | null;
+  // Smallest-relevant-vote scope — set when the decision crystallized
+  // from a message inside a specific room (B3 + pickup #6). Null for
+  // legacy decisions and decisions from team-room messages. The room
+  // view reads this to render the "Voting with <room>'s <N> members"
+  // explainer on DecisionCard.
+  scope_stream_id?: string | null;
   created_at: string | null;
   applied_at: string | null;
 }
@@ -814,8 +820,12 @@ export interface StreamMemberSummary {
 
 export interface StreamSummary {
   id: string;
-  type: "project" | "dm";
+  // Room and personal added in N-Next; persisted name only meaningful
+  // for type='room'.
+  type: "project" | "dm" | "room" | "personal";
   project_id: string | null;
+  // Persisted display name (alembic 0029) — null for non-room types.
+  name?: string | null;
   members: StreamMemberSummary[];
   last_activity_at: string | null;
   created_at: string | null;
@@ -828,6 +838,155 @@ export function listStreams(baseUrl?: string): Promise<{ streams: StreamSummary[
 
 export function markStreamRead(streamId: string): Promise<unknown> {
   return api(`/api/streams/${streamId}/read`, { method: "POST" });
+}
+
+// ---------- Room timeline (room-stream slice) ----------
+
+// Discriminated union of timeline rows the room view renders.
+// Mirrors RoomTimelineService.get_timeline output exactly. The
+// frontend dispatcher (RoomStreamTimeline) switches on `kind`. Future
+// kinds (`task`, `kb_item`) are reserved by the backend but only
+// schema-typed here so adding their renderers later is a frontend-
+// only change.
+export type TimelineMessageItem = {
+  kind: "message";
+  id: string;
+  stream_id: string;
+  project_id: string;
+  author_id: string;
+  author_username: string | null;
+  body: string;
+  // Renamed away from `kind` to avoid clashing with the discriminator.
+  kind_message: string;
+  linked_id: string | null;
+  created_at: string | null;
+};
+
+export type TimelineSuggestionItem = {
+  kind: "im_suggestion";
+  id: string;
+  project_id: string;
+  message_id: string;
+  status: "pending" | "accepted" | "dismissed" | "countered" | "escalated";
+  kind_suggestion: string;
+  confidence: number | null;
+  targets: unknown[];
+  proposal: Record<string, unknown> | null;
+  reasoning: string;
+  decision_id: string | null;
+  counter_of_id: string | null;
+  created_at: string | null;
+  resolved_at: string | null;
+};
+
+export type TimelineDecisionItem = {
+  kind: "decision";
+  id: string;
+  project_id: string;
+  conflict_id: string | null;
+  source_suggestion_id: string | null;
+  resolver_id: string | null;
+  rationale: string;
+  custom_text: string | null;
+  scope_stream_id: string | null;
+  apply_outcome:
+    | "pending"
+    | "ok"
+    | "partial"
+    | "failed"
+    | "advisory"
+    | null;
+  created_at: string | null;
+  applied_at: string | null;
+};
+
+export type TimelineItem =
+  | TimelineMessageItem
+  | TimelineSuggestionItem
+  | TimelineDecisionItem;
+
+// Canonical WS event shape for room broadcasts. The reducer applies
+// these via one switch over `event.type` — same wire shape backs both
+// the inline timeline and the workbench `Requests` projection. The
+// `kind` discriminator on the item identifies which entity type the
+// event refers to, so `update` and `delete` events can patch any
+// projection without specialized handlers.
+export type RoomTimelineEvent =
+  | { type: "timeline.upsert"; item: TimelineItem }
+  | {
+      type: "timeline.update";
+      kind: TimelineItem["kind"];
+      id: string;
+      patch: Record<string, unknown>;
+    }
+  | {
+      type: "timeline.delete";
+      kind: TimelineItem["kind"];
+      id: string;
+    };
+
+export interface RoomTimelineSnapshot {
+  stream_id: string;
+  project_id: string;
+  items: TimelineItem[];
+}
+
+// GET /api/projects/{projectId}/rooms/{roomId}/timeline
+// Snapshot for the room view; the WS channel reconciles incremental
+// updates over /ws/streams/{roomId}.
+export function getRoomTimeline(
+  projectId: string,
+  roomId: string,
+  options: { limit?: number; baseUrl?: string } = {},
+): Promise<RoomTimelineSnapshot> {
+  const { limit, baseUrl } = options;
+  const qs = limit ? `?limit=${limit}` : "";
+  return api<RoomTimelineSnapshot>(
+    `/api/projects/${projectId}/rooms/${roomId}/timeline${qs}`,
+    { baseUrl },
+  );
+}
+
+// GET /api/projects/{projectId}/rooms — list all rooms in a cell.
+// Returns the rooms array shape the new RoomTimelineSnapshot pulls
+// stream_id from for navigation / scope-name resolution.
+export interface RoomSummary extends StreamSummary {
+  type: "room";
+  name: string | null;
+}
+
+export function listProjectRooms(
+  projectId: string,
+  baseUrl?: string,
+): Promise<{ rooms: RoomSummary[] }> {
+  return api<{ rooms: RoomSummary[] }>(
+    `/api/projects/${projectId}/rooms`,
+    { baseUrl },
+  );
+}
+
+// GET /api/projects/{projectId}/im_suggestions?stream_id=...
+// Used by the workbench `Requests` panel as a fallback / refresh path
+// when the WS reducer state needs reconciliation. Day-to-day the panel
+// derives from useRoomTimeline.items.filter(kind === 'im_suggestion'
+// && status === 'pending').
+export interface IMSuggestionListResponse {
+  suggestions: Array<Record<string, unknown>>;
+}
+
+export function listIMSuggestions(
+  projectId: string,
+  options: { streamId?: string; limit?: number; baseUrl?: string } = {},
+): Promise<IMSuggestionListResponse> {
+  const { streamId, limit, baseUrl } = options;
+  const params = new URLSearchParams();
+  if (streamId) params.set("stream_id", streamId);
+  if (limit) params.set("limit", String(limit));
+  const qs = params.toString();
+  return api<IMSuggestionListResponse>(
+    `/api/projects/${projectId}/im_suggestions${qs ? `?${qs}` : ""}`,
+    { baseUrl },
+  );
 }
 
 // Create-or-get the canonical 1:1 DM stream between the authed user and

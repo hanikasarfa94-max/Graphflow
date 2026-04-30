@@ -75,6 +75,12 @@ type Props = {
   // is forward-compat scaffolding so the UI lever doesn't drift out
   // of sync with the wire.
   streamKey?: string;
+  // Pickup #6 — when supplied, the message lands in this specific
+  // stream (a room) instead of the project's team-room. Backend
+  // validates membership; B3 chain auto-stamps room id on any
+  // resulting decision crystallization. Existing personal-stream
+  // composers omit this prop and keep posting to the team-room.
+  streamId?: string;
 };
 
 const MAX_ROWS = 8;
@@ -100,6 +106,7 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
     onPreview,
     onPreviewClear,
     streamKey,
+    streamId,
   },
   ref,
 ) {
@@ -220,6 +227,11 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
         body,
         ...(scope ? { scope } : {}),
         ...(scopeTiers ? { scope_tiers: scopeTiers } : {}),
+        // Pickup #6: when the composer is mounted in a room view, send
+        // the room's stream_id so the message lands there (not the
+        // team-room) and any decision crystallization stamps the room
+        // as scope_stream_id.
+        ...(streamId ? { stream_id: streamId } : {}),
       };
       await api(`/api/projects/${projectId}/messages`, {
         method: "POST",
