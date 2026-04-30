@@ -29,6 +29,10 @@ tests/eval/dataset/attention/qwen3_embeddings.json
 # content-hash → vector map, regenerated lazily on retrieve calls).
 data/embeddings/
 
+# codex skill session state — local only, used for resume between
+# /codex consult invocations.
+.context/
+
 # IDE / OS
 .vscode/
 .idea/

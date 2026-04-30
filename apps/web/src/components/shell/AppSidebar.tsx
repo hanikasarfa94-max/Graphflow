@@ -29,10 +29,20 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useState, type CSSProperties } from "react";
 
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
-import type { User } from "@/lib/api";
+import {
+  api,
+  listProjectRooms,
+  type ProjectState,
+  type RoomSummary,
+  type User,
+} from "@/lib/api";
+import {
+  NewRoomModal,
+  type ProjectMemberLite,
+} from "@/components/rooms/NewRoomModal";
 
 import { NewDMPicker } from "./NewDMPicker";
 import { RoutedInboxBadge } from "./RoutedInboxBadge";
@@ -108,10 +118,12 @@ function ProjectNode({
   project,
   pathname,
   t,
+  currentUserId,
 }: {
   project: ShellProject;
   pathname: string | null;
   t: ReturnType<typeof useTranslations>;
+  currentUserId: string;
 }) {
   // Default-expand every project so the Team room + KB + Status are
   // visible without requiring an extra click. Small teams typically have
@@ -279,9 +291,225 @@ function ProjectNode({
               <span aria-hidden>⌕</span> {t("shell.project.audit")}
             </Link>
           </li>
+          <ProjectRoomsSection
+            projectId={project.id}
+            currentUserId={currentUserId}
+            pathname={pathname}
+            subItem={subItem}
+            subItemActive={subItemActive}
+          />
         </ul>
       )}
     </li>
+  );
+}
+
+// ProjectRoomsSection — collapsible "Rooms" entry inside each project
+// in the sidebar. Lazy-fetches the rooms list on first expand, lists
+// each room as a sub-link, and offers a "+ New room" affordance that
+// opens NewRoomModal with project members pre-loaded.
+function ProjectRoomsSection({
+  projectId,
+  currentUserId,
+  pathname,
+  subItem,
+  subItemActive,
+}: {
+  projectId: string;
+  currentUserId: string;
+  pathname: string | null;
+  subItem: CSSProperties;
+  subItemActive: CSSProperties;
+}) {
+  const t = useTranslations("shell.project");
+  const tRooms = useTranslations("stream.rooms");
+  // Auto-open this section when the URL is already at a room route so
+  // the active room is visible without clicking.
+  const isRoomActive = pathname?.startsWith(`/projects/${projectId}/rooms/`);
+  const [open, setOpen] = useState<boolean>(Boolean(isRoomActive));
+  const [rooms, setRooms] = useState<RoomSummary[] | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [members, setMembers] = useState<ProjectMemberLite[] | null>(null);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [membersLoading, setMembersLoading] = useState(false);
+
+  const refreshRooms = useCallback(async () => {
+    setLoading(true);
+    try {
+      const r = await listProjectRooms(projectId);
+      setRooms(r.rooms);
+    } catch {
+      setRooms([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [projectId]);
+
+  // First open or active-room-on-mount → fetch.
+  useEffect(() => {
+    if (open && rooms === null && !loading) {
+      void refreshRooms();
+    }
+  }, [open, rooms, loading, refreshRooms]);
+
+  async function ensureMembersLoaded() {
+    if (members !== null || membersLoading) return;
+    setMembersLoading(true);
+    try {
+      const state = await api<ProjectState>(`/api/projects/${projectId}/state`);
+      const lite: ProjectMemberLite[] = (state.members ?? []).map((m) => ({
+        user_id: m.user_id,
+        username: m.username,
+        display_name: m.display_name,
+      }));
+      setMembers(lite);
+    } catch {
+      setMembers([]);
+    } finally {
+      setMembersLoading(false);
+    }
+  }
+
+  async function openNewRoom() {
+    await ensureMembersLoaded();
+    setModalOpen(true);
+  }
+
+  return (
+    <>
+      <li>
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          aria-expanded={open}
+          style={{
+            ...subItem,
+            background: "transparent",
+            border: "none",
+            cursor: "pointer",
+            width: "100%",
+            textAlign: "left",
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
+            ...(isRoomActive ? subItemActive : null),
+          }}
+        >
+          <span aria-hidden style={{ fontSize: 9, width: 10, opacity: 0.6 }}>
+            {open ? "▾" : "▸"}
+          </span>
+          <span aria-hidden>♛</span>
+          <span style={{ flex: 1 }}>{t("rooms")}</span>
+          {rooms && rooms.length > 0 && (
+            <span
+              style={{
+                fontSize: 10,
+                color: "var(--wg-ink-soft)",
+                fontFamily: "var(--wg-font-mono)",
+              }}
+            >
+              {rooms.length}
+            </span>
+          )}
+        </button>
+      </li>
+      {open && (
+        <>
+          <li>
+            <button
+              type="button"
+              onClick={() => void openNewRoom()}
+              disabled={membersLoading}
+              style={{
+                ...subItem,
+                paddingLeft: 44,
+                background: "transparent",
+                border: "none",
+                cursor: membersLoading ? "wait" : "pointer",
+                width: "100%",
+                textAlign: "left",
+                color: "var(--wg-accent)",
+                fontWeight: 600,
+              }}
+            >
+              ＋ {tRooms("newRoom.openButton")}
+            </button>
+          </li>
+          {loading && rooms === null && (
+            <li
+              style={{
+                ...subItem,
+                paddingLeft: 44,
+                fontSize: 11,
+                color: "var(--wg-ink-soft)",
+                cursor: "default",
+              }}
+            >
+              {tRooms("loading")}
+            </li>
+          )}
+          {rooms !== null && rooms.length === 0 && !loading && (
+            <li
+              style={{
+                ...subItem,
+                paddingLeft: 44,
+                fontSize: 11,
+                color: "var(--wg-ink-soft)",
+                cursor: "default",
+                fontStyle: "italic",
+              }}
+            >
+              {tRooms("emptyList")}
+            </li>
+          )}
+          {rooms?.map((r) => {
+            const href = `/projects/${projectId}/rooms/${r.id}`;
+            const active = pathname === href;
+            return (
+              <li key={r.id}>
+                <Link
+                  href={href}
+                  style={{
+                    ...subItem,
+                    paddingLeft: 44,
+                    ...(active ? subItemActive : null),
+                  }}
+                >
+                  <span style={{ flex: 1 }}>
+                    {r.name ?? r.id.slice(0, 8)}
+                  </span>
+                  <span
+                    style={{
+                      fontSize: 10,
+                      color: "var(--wg-ink-soft)",
+                      fontFamily: "var(--wg-font-mono)",
+                    }}
+                  >
+                    {r.members?.length ?? 0}p
+                  </span>
+                </Link>
+              </li>
+            );
+          })}
+        </>
+      )}
+      {members !== null && (
+        <NewRoomModal
+          projectId={projectId}
+          members={members}
+          currentUserId={currentUserId}
+          open={modalOpen}
+          onClose={() => setModalOpen(false)}
+          onCreated={() => {
+            // Refresh the list so the new room appears immediately
+            // (the user navigates into it via NewRoomModal's
+            // router.push, but the sidebar still re-renders with
+            // the fresh list).
+            void refreshRooms();
+          }}
+        />
+      )}
+    </>
   );
 }
 
@@ -498,6 +726,7 @@ export function AppSidebar({
                 project={p}
                 pathname={pathname}
                 t={t}
+                currentUserId={user.id}
               />
             ))}
           </ul>

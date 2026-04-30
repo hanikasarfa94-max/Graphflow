@@ -394,6 +394,23 @@
         "dismissed": "dismissed",
         "countered": "countered",
         "escalated": "escalated"
+      },
+      "emptyList": "No rooms yet — create one.",
+      "newRoom": {
+        "openButton": "New room",
+        "title": "Create a room",
+        "subtitle": "Sub-team, topical, or ad-hoc",
+        "nameLabel": "Room name",
+        "namePlaceholder": "e.g. design-sync",
+        "membersLabel": "Members ({count})",
+        "youLabel": "You",
+        "creatorBadge": "creator (always added)",
+        "youAlwaysIncluded": "You're always added as the room creator.",
+        "noOtherMembers": "No other project members yet.",
+        "create": "Create room",
+        "creating": "Creating…",
+        "cancel": "Cancel",
+        "genericError": "Could not create room. Try again."
       }
     },
     "workbench": {
@@ -826,6 +843,7 @@
     "project": {
       "myThread": "My thread",
       "teamRoom": "Team room",
+      "rooms": "Rooms",
       "status": "Status",
       "composition": "Composition",
       "kb": "KB",

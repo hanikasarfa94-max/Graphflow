@@ -965,6 +965,25 @@ export function listProjectRooms(
   );
 }
 
+export interface CreateRoomResponse {
+  ok: true;
+  stream: RoomSummary;
+}
+
+// POST /api/projects/{projectId}/rooms — create a new room.
+// Backend validates the creator is a project member and that every
+// listed member is also a project member. Returns the new RoomSummary
+// (with persisted name, members list, etc.).
+export function createRoom(
+  projectId: string,
+  body: { name: string; member_user_ids: string[] },
+): Promise<CreateRoomResponse> {
+  return api<CreateRoomResponse>(`/api/projects/${projectId}/rooms`, {
+    method: "POST",
+    body,
+  });
+}
+
 // GET /api/projects/{projectId}/im_suggestions?stream_id=...
 // Used by the workbench `Requests` panel as a fallback / refresh path
 // when the WS reducer state needs reconciliation. Day-to-day the panel
