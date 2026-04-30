@@ -349,6 +349,13 @@ class IMService:
             "apply_actions": row.apply_actions or [],
             "apply_outcome": row.apply_outcome,
             "apply_detail": row.apply_detail or {},
+            # Smallest-relevant-vote scope. Set when this decision
+            # crystallized from a message inside a specific room
+            # (B3 + pickup #6); null for legacy decisions and decisions
+            # crystallized from team-room messages. Frontend
+            # DecisionCard reads this to render the vote-scope explainer
+            # ("Voting with <room>'s <N> members.").
+            "scope_stream_id": row.scope_stream_id,
             "created_at": row.created_at.isoformat() if row.created_at else None,
             "applied_at": row.applied_at.isoformat() if row.applied_at else None,
         }
@@ -382,6 +389,31 @@ class IMService:
                 if row is not None:
                     suggestions.append(row)
             return [self._suggestion_payload(s) for s in suggestions]
+
+    async def list_suggestions_for_room(
+        self,
+        *,
+        project_id: str,
+        stream_id: str,
+        limit: int = 100,
+    ) -> list[dict]:
+        """Room-scoped suggestion list for the workbench `Requests` panel.
+
+        Joins through the source MessageRow to filter suggestions whose
+        originating message landed in `stream_id`. Backed by the
+        `IMSuggestionRepository.list_for_project(stream_id=...)` query
+        added alongside this method (single SQL JOIN instead of the
+        per-message walk in `list_for_project`).
+
+        Returns the same `_suggestion_payload` shape every other surface
+        consumes — frontend dispatcher handles all suggestions
+        identically regardless of which list endpoint produced them.
+        """
+        async with session_scope(self._sessionmaker) as session:
+            rows = await IMSuggestionRepository(session).list_for_project(
+                project_id=project_id, stream_id=stream_id, limit=limit
+            )
+            return [self._suggestion_payload(r) for r in rows]
 
     async def accept(
         self,

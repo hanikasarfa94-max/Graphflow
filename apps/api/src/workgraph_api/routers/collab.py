@@ -353,6 +353,39 @@ async def list_messages(
     return {"messages": messages}
 
 
+@router.get("/projects/{project_id}/im_suggestions")
+async def list_im_suggestions(
+    project_id: str,
+    request: Request,
+    stream_id: str | None = None,
+    limit: int = 100,
+    user: AuthenticatedUser = Depends(require_user),
+):
+    """List IM suggestions for a project, optionally narrowed to a room.
+
+    Powers the workbench `Requests` panel projection of pending
+    membrane candidates. When `stream_id` is provided, only suggestions
+    whose source message landed in that room are returned (joined via
+    MessageRow.stream_id). When omitted, behaves as the team-room
+    backwards-compatible list — same shape as IMService.list_for_project.
+
+    Membership-gated: caller must be a project member of `project_id`.
+    """
+    project_service: ProjectService = request.app.state.project_service
+    if not await project_service.is_member(
+        project_id=project_id, user_id=user.id
+    ):
+        raise HTTPException(status_code=403, detail="not_a_project_member")
+    service: IMService = request.app.state.im_service
+    if stream_id is not None:
+        suggestions = await service.list_suggestions_for_room(
+            project_id=project_id, stream_id=stream_id, limit=limit
+        )
+    else:
+        suggestions = await service.list_for_project(project_id, limit=limit)
+    return {"suggestions": suggestions}
+
+
 @router.post("/im_suggestions/{suggestion_id}/accept")
 async def accept_suggestion(
     suggestion_id: str,

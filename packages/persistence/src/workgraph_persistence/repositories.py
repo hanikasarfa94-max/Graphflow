@@ -1136,6 +1136,35 @@ class IMSuggestionRepository:
             )
         ).scalar_one_or_none()
 
+    async def list_for_project(
+        self,
+        *,
+        project_id: str,
+        stream_id: str | None = None,
+        limit: int = 100,
+    ) -> list[IMSuggestionRow]:
+        """List suggestions for a project, optionally narrowed to a room.
+
+        `stream_id` filter joins through the source MessageRow so a
+        room-scoped workbench panel only sees suggestions whose
+        originating message landed in that room (pickup #6 + the
+        room-stream slice).
+
+        Newest first so the workbench `Requests` panel surfaces fresh
+        candidates at the top.
+        """
+        stmt = (
+            select(IMSuggestionRow)
+            .where(IMSuggestionRow.project_id == project_id)
+            .order_by(IMSuggestionRow.created_at.desc())
+            .limit(limit)
+        )
+        if stream_id is not None:
+            stmt = stmt.join(
+                MessageRow, IMSuggestionRow.message_id == MessageRow.id
+            ).where(MessageRow.stream_id == stream_id)
+        return list((await self._session.execute(stmt)).scalars().all())
+
     async def resolve(self, suggestion_id: str, status: str) -> IMSuggestionRow | None:
         row = await self.get(suggestion_id)
         if row is None:
