@@ -530,3 +530,164 @@ def test_extract_node_ids_honors_explicit_citations():
     body = "ignored D#99"
     ids = extract_node_ids(body, explicit_citations=["only-this"])
     assert ids == ["only-this"]
+
+
+# ---------------------------------------------------------------------------
+# Pickup #7 — allowed_scopes (ScopeTierPills consumer).
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_allowed_scopes_full_tier_intersects_with_pills(api_env):
+    """A full-tier member sees whatever pills they toggle on."""
+    _, maker, *_ = api_env
+    pid = await _mk_project(maker)
+    user = await _mk_user(maker, "as_full")
+    await _add_member(maker, project_id=pid, user_id=user, license_tier="full")
+
+    svc = LicenseContextService(maker)
+    out = await svc.allowed_scopes(
+        project_id=pid,
+        user_id=user,
+        requested_tiers={
+            "personal": True,
+            "group": True,
+            "department": False,
+            "enterprise": False,
+        },
+    )
+    assert out == frozenset({"personal", "group"})
+
+
+@pytest.mark.asyncio
+async def test_allowed_scopes_observer_tier_caps_at_group(api_env):
+    """Observer-tier member can only request group, even if all pills on."""
+    _, maker, *_ = api_env
+    pid = await _mk_project(maker)
+    user = await _mk_user(maker, "as_obs")
+    await _add_member(
+        maker, project_id=pid, user_id=user, license_tier="observer"
+    )
+
+    svc = LicenseContextService(maker)
+    out = await svc.allowed_scopes(
+        project_id=pid,
+        user_id=user,
+        requested_tiers={
+            "personal": True,
+            "group": True,
+            "department": True,
+            "enterprise": True,
+        },
+    )
+    assert out == frozenset({"group"})
+
+
+@pytest.mark.asyncio
+async def test_allowed_scopes_task_scoped_caps_at_personal_group(api_env):
+    """task_scoped tier can request personal + group only."""
+    _, maker, *_ = api_env
+    pid = await _mk_project(maker)
+    user = await _mk_user(maker, "as_ts")
+    await _add_member(
+        maker, project_id=pid, user_id=user, license_tier="task_scoped"
+    )
+
+    svc = LicenseContextService(maker)
+    out = await svc.allowed_scopes(
+        project_id=pid,
+        user_id=user,
+        requested_tiers={
+            "personal": True,
+            "group": True,
+            "department": True,
+            "enterprise": True,
+        },
+    )
+    assert out == frozenset({"personal", "group"})
+
+
+@pytest.mark.asyncio
+async def test_allowed_scopes_non_member_returns_empty(api_env):
+    """A user who isn't a project member sees nothing — fail closed."""
+    _, maker, *_ = api_env
+    pid = await _mk_project(maker)
+    other = await _mk_user(maker, "as_other")
+    # Note: NOT added as project member.
+
+    svc = LicenseContextService(maker)
+    out = await svc.allowed_scopes(
+        project_id=pid,
+        user_id=other,
+        requested_tiers={
+            "personal": True,
+            "group": True,
+            "department": True,
+            "enterprise": True,
+        },
+    )
+    assert out == frozenset()
+
+
+@pytest.mark.asyncio
+async def test_allowed_scopes_no_pill_state_returns_full_licensed_set(
+    api_env,
+):
+    """`requested_tiers=None` (legacy callers) preserves slice-5c behavior:
+    no pill filter, returns everything the user is licensed for.
+    """
+    _, maker, *_ = api_env
+    pid = await _mk_project(maker)
+    user = await _mk_user(maker, "as_legacy")
+    await _add_member(maker, project_id=pid, user_id=user, license_tier="full")
+
+    svc = LicenseContextService(maker)
+    out = await svc.allowed_scopes(
+        project_id=pid, user_id=user, requested_tiers=None
+    )
+    assert out == frozenset(
+        {"personal", "group", "department", "enterprise"}
+    )
+
+
+@pytest.mark.asyncio
+async def test_allowed_scopes_all_pills_off_returns_empty(api_env):
+    """Every pill toggled off → empty set, even for full-tier."""
+    _, maker, *_ = api_env
+    pid = await _mk_project(maker)
+    user = await _mk_user(maker, "as_silent")
+    await _add_member(maker, project_id=pid, user_id=user, license_tier="full")
+
+    svc = LicenseContextService(maker)
+    out = await svc.allowed_scopes(
+        project_id=pid,
+        user_id=user,
+        requested_tiers={
+            "personal": False,
+            "group": False,
+            "department": False,
+            "enterprise": False,
+        },
+    )
+    assert out == frozenset()
+
+
+@pytest.mark.asyncio
+async def test_allowed_scopes_unknown_pill_keys_ignored(api_env):
+    """Garbage pill keys (frontend bug, schema drift) are dropped."""
+    _, maker, *_ = api_env
+    pid = await _mk_project(maker)
+    user = await _mk_user(maker, "as_unknown")
+    await _add_member(maker, project_id=pid, user_id=user, license_tier="full")
+
+    svc = LicenseContextService(maker)
+    out = await svc.allowed_scopes(
+        project_id=pid,
+        user_id=user,
+        requested_tiers={
+            "group": True,
+            "bogus_tier": True,  # ignored
+            "DROP TABLE": True,  # ignored — not a registered tier name
+        },
+    )
+    assert out == frozenset({"group"})

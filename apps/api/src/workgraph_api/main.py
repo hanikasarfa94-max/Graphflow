@@ -505,6 +505,7 @@ async def lifespan(app: FastAPI):
         event_bus,
         skills_service=skills_service,
         retrieval_service=retrieval_service,
+        license_context_service=license_context_service,
     )
     # Late-bind: a personal-stream post that's a reply to a recent
     # `kind='membrane-clarify'` system message gets routed through

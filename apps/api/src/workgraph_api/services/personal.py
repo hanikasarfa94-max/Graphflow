@@ -217,6 +217,7 @@ class PersonalStreamService:
         event_bus: EventBus,
         skills_service: SkillsService | None = None,
         retrieval_service: Any | None = None,
+        license_context_service: Any | None = None,
     ) -> None:
         self._sessionmaker = sessionmaker
         self._stream_service = stream_service
@@ -234,6 +235,12 @@ class PersonalStreamService:
         # Absent: kb_slice ships empty, agent falls back to issuing
         # kb_search if recall is what's wanted (existing behavior).
         self._retrieval_service = retrieval_service
+        # Pickup #7 — when wired, ScopeTierPills selection is intersected
+        # with the viewer's licensed tiers via
+        # LicenseContextService.allowed_scopes() and the result narrows
+        # retrieval candidates. Absent: pills are accepted-and-logged
+        # only (slice-5c behavior).
+        self._license_context_service = license_context_service
         # Per (user_id, project_id) -> last-preview monotonic timestamp.
         # In-memory is fine for v1: worst case on process restart one
         # keystroke-triggered preview slips through. Keyed by tuple so a
@@ -456,6 +463,7 @@ class PersonalStreamService:
             project_title=project_title,
             stream_id=stream_id,
             scope=scope,
+            scope_tiers=scope_tiers,
             user_message=body,
         )
 
@@ -1164,6 +1172,7 @@ class PersonalStreamService:
         project_title: str,
         stream_id: str,
         scope: dict[str, bool] | None = None,
+        scope_tiers: dict[str, bool] | None = None,
         user_message: str = "",
     ) -> dict[str, Any]:
         """Shape the EdgeAgent.respond context. See edge.py prompt contract.
@@ -1314,6 +1323,33 @@ class PersonalStreamService:
         # Group-scope only (viewer_user_id=None) — same conservative
         # rule as kb_search to avoid leaking personal items into
         # cross-viewer LLM context.
+        #
+        # Pickup #7 — if the caller supplied scope_tiers (the
+        # ScopeTierPills selection from the frontend) AND we have a
+        # LicenseContextService wired, intersect with the viewer's
+        # licensed tiers and pass to candidate_set so retrieval
+        # honors the pills. Absence of either input means "all tiers
+        # the user is licensed for" (slice-5c behavior).
+        allowed_scopes_filter: "frozenset[str] | None" = None
+        if (
+            scope_tiers is not None
+            and self._license_context_service is not None
+        ):
+            try:
+                allowed_scopes_filter = (
+                    await self._license_context_service.allowed_scopes(
+                        project_id=project_id,
+                        user_id=user_id,
+                        requested_tiers=scope_tiers,
+                    )
+                )
+            except Exception:
+                _log.exception(
+                    "personal._build_respond_context: allowed_scopes failed; "
+                    "shipping kb_slice with no scope filter"
+                )
+                allowed_scopes_filter = None
+
         kb_slice: list[dict[str, Any]] = []
         if self._retrieval_service is not None and (user_message or "").strip():
             try:
@@ -1321,6 +1357,7 @@ class PersonalStreamService:
                     project_id=project_id,
                     query=user_message,
                     viewer_user_id=None,
+                    allowed_scopes=allowed_scopes_filter,
                     k=5,
                 )
             except Exception:

@@ -882,6 +882,185 @@ async def test_personal_post_pre_fills_kb_slice_in_context(api_env):
 
 
 @pytest.mark.asyncio
+async def test_retrieve_kb_items_allowed_scopes_filter(api_env):
+    """`allowed_scopes` drops rows whose scope isn't in the set."""
+    _, maker, *_ = api_env
+    pid = await _mk_project(maker)
+    alice = await _mk_user(maker, "as_alice_filter")
+    await _add_member(maker, pid, alice)
+
+    group_id = await _mk_user_kb(
+        maker, pid, owner_user_id=alice,
+        title="alpha bravo", content_md="group note",
+        scope="group",
+    )
+    personal_id = await _mk_user_kb(
+        maker, pid, owner_user_id=alice,
+        title="alpha bravo", content_md="alice's personal note",
+        scope="personal",
+    )
+
+    svc = RetrievalService(maker)
+    # Pull both via viewer mode so personal is in the candidate pool.
+    no_filter = await svc.retrieve_kb_items(
+        project_id=pid, query="alpha", viewer_user_id=alice, k=5
+    )
+    assert {c.row.id for c in no_filter} == {group_id, personal_id}
+
+    # group-only filter drops the personal item.
+    group_only = await svc.retrieve_kb_items(
+        project_id=pid, query="alpha", viewer_user_id=alice,
+        allowed_scopes=frozenset({"group"}), k=5,
+    )
+    assert {c.row.id for c in group_only} == {group_id}
+
+    # personal-only filter drops the group item.
+    personal_only = await svc.retrieve_kb_items(
+        project_id=pid, query="alpha", viewer_user_id=alice,
+        allowed_scopes=frozenset({"personal"}), k=5,
+    )
+    assert {c.row.id for c in personal_only} == {personal_id}
+
+
+@pytest.mark.asyncio
+async def test_retrieve_kb_items_empty_allowed_scopes_returns_empty(api_env):
+    """Empty allowed_scopes set is meaningful: drop everything."""
+    _, maker, *_ = api_env
+    pid = await _mk_project(maker)
+    owner = await _mk_user(maker, "as_empty_set")
+    await _add_member(maker, pid, owner)
+    await _mk_user_kb(
+        maker, pid, owner_user_id=owner,
+        title="alpha", content_md="bravo",
+    )
+    svc = RetrievalService(maker)
+    out = await svc.retrieve_kb_items(
+        project_id=pid, query="alpha",
+        allowed_scopes=frozenset(),  # explicitly empty
+        k=5,
+    )
+    assert out == []
+
+
+@pytest.mark.asyncio
+async def test_personal_post_kb_slice_respects_scope_tiers(api_env):
+    """End-to-end: ScopeTierPills selection narrows kb_slice.
+
+    Wires a scriptable EdgeAgent stub and asserts kb_slice contains
+    only items whose scope intersects the toggled-on pills (taking
+    the viewer's licensed tiers into account).
+    """
+    from workgraph_agents import EdgeResponse, EdgeResponseOutcome
+    from workgraph_agents.llm import LLMResult
+    from workgraph_api.main import app
+    from workgraph_api.services import (
+        LicenseContextService,
+        PersonalStreamService,
+    )
+    from workgraph_persistence import (
+        ProjectMemberRepository,
+        backfill_streams_from_projects,
+    )
+
+    client, maker, bus, *_ = api_env
+
+    captured: list[dict] = []
+
+    class _CapturingEdgeAgent:
+        async def respond(self, *, user_message, context):
+            captured.append({"context": context})
+            return EdgeResponseOutcome(
+                response=EdgeResponse(
+                    kind="silence", body=None, route_targets=[]
+                ),
+                result=LLMResult(
+                    content="", model="stub",
+                    prompt_tokens=0, completion_tokens=0, latency_ms=0,
+                ),
+                outcome="ok",
+                attempts=1,
+            )
+
+    stub = _CapturingEdgeAgent()
+    retrieval = RetrievalService(maker)
+    license_ctx = LicenseContextService(maker)
+    app.state.personal_service = PersonalStreamService(
+        maker,
+        app.state.stream_service,
+        app.state.routing_service,
+        stub,
+        bus,
+        retrieval_service=retrieval,
+        license_context_service=license_ctx,
+    )
+
+    # Register the caller AFTER the personal_service swap so they're
+    # the one whose scope_tiers we'll exercise.
+    r = await client.post(
+        "/api/auth/register",
+        json={"username": "pills_user", "password": "hunter22"},
+    )
+    assert r.status_code == 200, r.text
+    me = (await client.get("/api/auth/me")).json()["id"]
+    r = await client.post(
+        "/api/intake/message",
+        json={
+            "text": (
+                "We need to launch an event registration page next week. "
+                "It needs invitation code validation, phone number "
+                "validation, admin export, and conversion tracking."
+            ),
+            "source_event_id": "pills-1",
+        },
+    )
+    assert r.status_code == 200, r.text
+    pid = r.json()["project"]["id"]
+    await backfill_streams_from_projects(maker)
+
+    # Pin the caller to full-tier so the pill intersection is the
+    # only constraint that matters.
+    async with session_scope(maker) as session:
+        rows = await ProjectMemberRepository(session).list_for_project(pid)
+        for m in rows:
+            if m.user_id == me:
+                m.license_tier = "full"
+        await session.flush()
+
+    group_id = await _mk_user_kb(
+        maker, pid, owner_user_id=me,
+        title="alpha bravo", content_md="group canon",
+        scope="group",
+    )
+    department_id = await _mk_user_kb(
+        maker, pid, owner_user_id=me,
+        title="alpha bravo", content_md="dept-wide note",
+        scope="department",
+    )
+
+    # Pills: group ON, all others OFF. Expected kb_slice = group only.
+    r = await client.post(
+        f"/api/personal/{pid}/post",
+        json={
+            "body": "what about alpha bravo?",
+            "scope_tiers": {
+                "personal": False,
+                "group": True,
+                "department": False,
+                "enterprise": False,
+            },
+        },
+    )
+    assert r.status_code == 200, r.text
+    assert captured, "edge agent should have been called"
+    kb_slice = captured[-1]["context"]["kb_slice"]
+    ids = [c["id"] for c in kb_slice]
+    assert group_id in ids, f"group item should pass; got {ids}"
+    assert department_id not in ids, (
+        f"department item should be filtered out by pills; got {ids}"
+    )
+
+
+@pytest.mark.asyncio
 async def test_personal_post_kb_slice_empty_when_no_retrieval_service(
     api_env,
 ):

@@ -45,7 +45,11 @@ from .kb_hierarchy import (
     ROOT_NAME as KB_ROOT_NAME,
 )
 from .leader_escalation import LEADER_DRAFT_OPTION_ID, LeaderEscalationService
-from .license_context import LicenseContextService, tighter_tier
+from .license_context import (
+    VALID_SCOPE_TIERS,
+    LicenseContextService,
+    tighter_tier,
+)
 from .license_lint import extract_node_ids, lint_reply
 from .meeting_ingest import (
     LLMBackedMetabolizer,
@@ -158,6 +162,7 @@ __all__ = [
     "LEADER_DRAFT_OPTION_ID",
     "LeaderEscalationService",
     "LicenseContextService",
+    "VALID_SCOPE_TIERS",
     "tighter_tier",
     "extract_node_ids",
     "lint_reply",

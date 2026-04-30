@@ -183,6 +183,7 @@ class RetrievalService:
         project_id: str,
         query: str,
         viewer_user_id: str | None = None,
+        allowed_scopes: "frozenset[str] | None" = None,
         k: int = 10,
     ) -> list[RetrievalCandidate]:
         """BM25 + frecency over kb items in the project.
@@ -192,17 +193,28 @@ class RetrievalService:
         queries return an empty list rather than an arbitrary recency
         slice (caller can fall back if needed).
 
-        `viewer_user_id` controls visibility:
+        `viewer_user_id` controls REPO-LEVEL visibility:
           * None (default) → GROUP-SCOPE ONLY. Matches the legacy
             `_kb_search` contract where results may persist into shared
             streams; including a user's personal items would leak them
             cross-viewer.
           * non-None → group items + that user's personal items.
 
+        `allowed_scopes` (pickup #7) is the post-fetch ScopeTierPills
+        filter — set of scope-tier strings the viewer toggled on AND
+        is licensed to see. Resolved upstream by
+        `LicenseContextService.allowed_scopes`. Behavior:
+          * None (default) → no pill filter applied (legacy behavior).
+          * empty set → drops every row (intentional — user toggled
+            every pill off, or has no license for any tier).
+          * non-empty → keeps only rows whose `KbItemRow.scope` is in
+            the set.
+
         Filters applied BEFORE BM25 (matching the existing
         `_kb_search` semantics in services/skills.py):
           * scope: per `viewer_user_id` rule above
           * status not in {archived, draft, rejected}
+          * `allowed_scopes` membership if provided
 
         Filters applied AFTER BM25:
           * zero-score candidates dropped (no signal)
@@ -236,6 +248,8 @@ class RetrievalService:
             r for r in rows
             if r.status not in ("archived", "draft", "rejected")
         ]
+        if allowed_scopes is not None:
+            live_rows = [r for r in live_rows if r.scope in allowed_scopes]
         if not live_rows:
             return []
 
@@ -369,6 +383,7 @@ class RetrievalService:
         project_id: str,
         query: str,
         viewer_user_id: str | None = None,
+        allowed_scopes: "frozenset[str] | None" = None,
         k: int = 5,
     ) -> list[dict[str, Any]]:
         """Slice 5c — pre-formatted retrieval slice for agent prompts.
@@ -387,11 +402,18 @@ class RetrievalService:
         personal-scope rows, `kb-note` for group-scope user-authored.
         `excerpt` is the title + first 200 chars of body — small
         enough that ~5 candidates fit in a few hundred tokens.
+
+        `allowed_scopes` (pickup #7) — if provided, only rows whose
+        scope is in the set are returned. Lets PersonalStreamService
+        thread the ScopeTierPills selection through to the agent's
+        kb_slice. See LicenseContextService.allowed_scopes for the
+        intersection rule.
         """
         candidates = await self.retrieve_kb_items(
             project_id=project_id,
             query=query,
             viewer_user_id=viewer_user_id,
+            allowed_scopes=allowed_scopes,
             k=k,
         )
         out: list[dict[str, Any]] = []
