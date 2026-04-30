@@ -29,6 +29,54 @@ than the original analysis, plus a free win that ships independently.**
    v-Next baseline, not as scale-triggered fallback** — the latency /
    cost wall arrives at ~1500-2000 realistic nodes, not 5000.
 
+## Architectural framing (added 2026-04-30)
+
+Earlier drafts of this report framed §7.2 as "graph-hop candidates
+vs vector candidates, may the best score win." That was a misread of
+the layer assignment, corrected after a user review of the full report.
+The five-layer model the eval is actually measuring against:
+
+1. **Cell** — canonical information (KbItem, Decision, Task, Message, Risk).
+2. **Membrane** — boundary + governance (what crosses, crystallizes,
+   stays local). §7.7 lives here.
+3. **Graph** — structural memory + relation routing (records how cells
+   relate: `overrides`, `depends-on`, `crystallized-from`, `blocks`,
+   `source-of`, `mentioned-by`). The graph **does not compete with
+   vector / BM25 for candidate slots.** It explains how cells relate
+   and which paths can be traversed.
+4. **LLM** — neural interpretation (reads cells + relationship evidence;
+   produces explanation, classification, decision support, action).
+5. **Projection / Attention** — active work surface (decides how the
+   same canonical entities are projected into timeline, workbench,
+   tasks, decisions, status pages, notifications, agent context).
+
+Implications for how to read Tests 5–7 below:
+
+- **Config A vs hybrid is an economic and systems baseline comparison**,
+  not a "graph beats / loses to vector" contest. We are measuring
+  whether trimming the candidate pool (BM25 + vector) before LLM read
+  preserves quality at lower token / latency cost.
+- **§7.2 retrieval is BM25 + vector finding plausible cells**; graph
+  belongs at the *evidence* and *routing* layer, not in the candidate
+  pool. The slice-4 finding that "graph-neighbor as a default RRF
+  layer adds distractors" is correct empirically — and architecturally
+  it confirms the layer assignment (graph-as-RRF-layer was the wrong
+  projection of graph into retrieval).
+- **Frecency is a traversal / projection prior**, not a relevance
+  verdict. It prioritizes which already-relevant paths or entities
+  get expanded, surfaced, or kept in active context. It must not let
+  unrelated recent content compete with topically relevant content.
+  The current implementation honors this (multiplier capped at 2.0×,
+  applied after BM25/vector ranking, zero-score BM25 hits dropped).
+- **The missing capability is relation-evidence in the payload** —
+  the LLM today consumes `[{source, excerpt}]` per cell. It does not
+  see "this cell was reached via `overrides` from `decision_X`." A
+  new axis (relationship interpretation accuracy) measures whether
+  the LLM produces correct answers when given cells **plus** their
+  edges — design doc tracked separately.
+
+Numbers below are unchanged. The framing is what gets corrected.
+
 ## Test 1 — timestamp-aware prompt
 
 **Hypothesis:** chronic-miss queries (q02 "currently…", q06 "still…",
