@@ -178,6 +178,7 @@ export function RoomShell({
         />
         {workbenchOpen && isWide && (
           <RoomWorkbench
+            projectId={projectId}
             timeline={timeline}
             open={workbenchOpen}
             onClose={() => setWorkbenchOpen(false)}
@@ -207,6 +208,7 @@ export function RoomShell({
             onClick={(e) => e.stopPropagation()}
           >
             <RoomWorkbench
+              projectId={projectId}
               timeline={timeline}
               open
               onClose={() => setWorkbenchOpen(false)}

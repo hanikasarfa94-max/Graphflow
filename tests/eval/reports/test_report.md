@@ -427,3 +427,163 @@ Specifically:
   * `tests/eval/scripts/run_scaling_comparison_eval.py`
   * `tests/eval/scripts/generate_realistic_corpus.py --id-prefix gen_xl_
     --seed 1337 --count 2000` (regenerates the 2K padding)
+
+## Test 7 — Room-stream slice + N.4 vote affordance (room slice +
+14 commits this session)
+
+Compiled 2026-04-30. Builds on the §7.2 retrieval (Test 6) + pickup
+#6 (IM accepts stream_id) + pickup #7 (scope_tiers consumer)
+foundations. Captures the architectural reasoning behind the room
+surface so future sessions can find it without trawling commits.
+
+### The thesis
+
+> **Team conversation visibly transforms into decisions, tasks,
+> knowledge, and structured memory through membrane review.**
+
+The room view is where this transformation happens. The first plan
+revision was UI-heavy and would have shipped a Slack-like surface
+that lied about backend contracts. Codex review (`/codex consult`,
+two passes) surfaced 10 problems and the user added the load-bearing
+correction:
+
+> One canonical entity, multiple projections.
+
+That correction is the spine of every architectural choice in this
+slice. Inline = causality (source message → suggestion → accept/
+reject → decision/task/knowledge). Workbench = current work
+surface (queue of pending candidates / accepted decisions). **Same
+entity_id, different projections, single reducer.**
+
+### Architecture in 12 facts
+
+1. **`StreamRow.name` persisted** — alembic 0029. Until this
+   shipped, `create_room()` accepted a name parameter but threw it
+   away on read. Frontend would render unnamed streams.
+
+2. **`_decision_payload.scope_stream_id` exposed** — pickup #6 wrote
+   the field on every room-scoped crystallization, but the wire
+   serializer didn't surface it. Vote-scope explainer was impossible
+   to render before this commit.
+
+3. **GET /api/projects/{pid}/rooms/{rid}/timeline** — joins
+   messages + im_suggestions + decisions chronologically with a
+   discriminated `kind` per item. Membership-gated (project +
+   stream). One round trip seeds the entire room view.
+
+4. **`RoomTimelineEvent` discriminated union over WS** — every
+   state change publishes via `/ws/streams/{room_id}` as one of:
+   ```ts
+   | { type: "timeline.upsert"; item: TimelineItem }
+   | { type: "timeline.update"; kind: string; id: string; patch: ... }
+   | { type: "timeline.delete"; kind: string; id: string }
+   ```
+   Frontend reducer is one switch. Adding a new entity kind requires
+   a renderer, not new reducer logic.
+
+5. **WS fan-out at every state-changing service call** —
+   `MessageService.post`, `IMService._classify_and_persist`,
+   `IMService.accept/dismiss`, `DecisionVoteService.cast_vote`. All
+   emit `RoomTimelineEvent` to the room stream when the source
+   touches a room. Best-effort: failure logs but never breaks the
+   primary write path.
+
+6. **Single `useRoomTimeline` hook on the FE** — owns ALL projection
+   state. `pendingSuggestions` and `decisions` are MEMOIZED DERIVED
+   slices of `items`, NOT separate hooks. A workbench panel reading
+   `timeline.pendingSuggestions` projects the same canonical entity
+   the inline `RoomStreamTimeline` renders. Click a workbench
+   PanelItem → `scrollToEntity({kind, id})` → smooth-scrolls the
+   inline `data-entity-id={id}` card into view + flashes it.
+
+7. **Vote tally enriched at TWO surfaces** — `enrich_decision_with_
+   tally(payload, sessionmaker)` is called by both
+   `RoomTimelineService.get_timeline` (REST snapshot) AND
+   `IMService.accept` (crystallize WS upsert). Every decision wire
+   carries the tally without forcing a follow-up GET.
+
+8. **Vote affordance = polymorphic over existing VoteRow** —
+   `subject_kind="decision"` joins the existing
+   `subject_kind="gated_proposal"` use without a schema change.
+   Voter-pool gate: `scope_stream_id` set → room membership;
+   null → project membership. Two distinct queries (we don't widen
+   project membership to grant room votes).
+
+9. **Tally → `timeline.update.patch.tally`** — when a vote lands,
+   one WS frame updates the decision row in place across all
+   projections. No bespoke "vote-cast" event type; the frontend
+   reducer applies the patch via shallow-merge.
+
+10. **Workbench is the prototype's `工具栏`** — direct port of
+    `workgraph-ts-prototype/src/App.tsx` ToolPanelCard (lines
+    350-475) and PanelItem (lines 530-538). Three layout modes
+    (grid / vertical / focus), additive `+chip` shelf, drag-
+    rearrange, focus/close per panel. Same DOM class names so the
+    prototype's CSS patterns transplant cleanly. Inert chips
+    (`+任务中心 / +知识记忆 / +技能图谱 / +工作流`) establish the
+    projection vocabulary now; renderers slot in incrementally
+    (Knowledge panel landed alongside this report; Tasks panel is
+    next).
+
+11. **What we deliberately did NOT do**:
+    - Hover menus (codex flagged: fail on touch + create fake manual
+      workflow alongside the auto-classifier).
+    - Toast vote stubs (codex was firm: "toast vote is worse than
+      no vote button" — we shipped a real backend instead).
+    - Reuse PersonalStream for rooms (couples to user→agent
+      semantics + EdgeAgent rehearsal).
+    - Reuse MembraneCard for IM suggestions (different shape:
+      MembraneCard renders MembraneSignal/KB-ingest review, not
+      LLM-classifier interpretation of chat).
+    - Persistent workbench drag-reorder (in-memory only this slice).
+    - `build_slice` scope filtering (research confirmed structural
+      rows lack `.scope` — would be a near-no-op).
+
+12. **Codex's two consults locked into the plan** — see
+    `~/.claude/plans/ok-so-go-to-shimmying-puppy.md` GSTACK REVIEW
+    REPORT. First pass found 10 problems including WS-broadcast
+    mismatch, thin `/api/streams/{id}/messages` payload, room name
+    not persisted. Second pass with the user's projection-model
+    correction + prototype context endorsed the reshape.
+
+### Tests + verification
+
+- 9 new BE tests for vote affordance: cast / re-vote (UPDATE in
+  place) / non-room-member rejected / invalid verdict / unknown
+  decision / tally enrichment in timeline / 3 route-level cases.
+- 8 BE tests for room timeline + scope_stream_id + preview
+  scope_tiers (committed earlier in `test_room_timeline.py`).
+- 6 BE tests for IM-room-post + B3 sequel (committed in pickup #6).
+- Full backend sweep: **538/538 green** (was 521 + 17 new across
+  rooms + votes).
+- FE `tsc --noEmit` clean across all touched files (~17 modified +
+  new TypeScript).
+- One Playwright e2e smoke (`tests/e2e/room_timeline.spec.ts`) for
+  the projection wire contract.
+
+### What's next from this slice's deferred list
+
+- **Knowledge workbench panel** — landed alongside this report; surfaces
+  group-scope KbItems via `KbItemRepository.list_visible_for_user`.
+- **Tasks workbench panel** — needs a manual_task creation path
+  beyond the existing PlanRepository.task surface; deferred until we
+  scope whether the existing `personal-task → plan promote` flow can
+  be reused.
+- **Project-wide vote** — DecisionVoteService already supports
+  `scope_stream_id=null` (project membership pool); the FE
+  affordance currently only mounts inside the room view because
+  that's where the user instruction was clearest. Extending to the
+  team-room and personal-stream decision cards is a single prop
+  flip + a member-check in the card's parent.
+- **EdgeAgent prompt rewrite** to explicitly cite from `kb_slice`
+  (today the LLM uses it organically) — would lift cite consistency
+  per the Test 1 timestamp finding.
+
+### Reports
+
+  * Backend sweep: 538/538 green at commit `9d8fb9c`.
+  * Plan + GSTACK review report:
+    `~/.claude/plans/ok-so-go-to-shimmying-puppy.md`.
+  * Room-slice commit chain (chronological): `e0794c7` → `852cf73`
+    → `72d7c6b` → `ff73f8b` → `4790ca6` → `75efa77` → `f5c1637` →
+    `644b66d` → `722398b` → `6b1d0ca` → `f0d2987` → `9d8fb9c`.

@@ -450,7 +450,10 @@
       "requestsEmpty": "No pending reviews — everything's settled.",
       "untitledSuggestion": "Untitled suggestion",
       "accept": "Accept",
-      "dismiss": "Dismiss"
+      "dismiss": "Dismiss",
+      "knowledgeLoading": "Loading knowledge…",
+      "knowledgeEmpty": "No knowledge items yet — promote a message to start.",
+      "knowledgeUntitled": "Untitled knowledge item"
     },
     "attribution": {
       "edge": "edge",

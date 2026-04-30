@@ -12,8 +12,10 @@
 // projection vocabulary without faking content.
 
 import { useCallback, useMemo, useState, type CSSProperties } from "react";
+import Link from "next/link";
 import { useTranslations } from "next-intl";
 
+import { useRoomKnowledge } from "@/hooks/useRoomKnowledge";
 import type { UseRoomTimelineResult } from "@/hooks/useRoomTimeline";
 
 import { PanelItem } from "./PanelItem";
@@ -26,6 +28,7 @@ import {
 type Mode = "grid" | "vertical" | "focus";
 
 interface Props {
+  projectId: string;
   timeline: UseRoomTimelineResult;
   // Caller controls the open/close state of the workbench (the
   // RoomShell owns it so the rail toggle and the layout dance live
@@ -73,9 +76,12 @@ const chipDisabledStyle: CSSProperties = {
   opacity: 0.6,
 };
 
-const FUNCTIONAL_KINDS: ReadonlySet<PanelKind> = new Set(["requests"]);
+const FUNCTIONAL_KINDS: ReadonlySet<PanelKind> = new Set([
+  "requests",
+  "knowledge",
+]);
 
-export function RoomWorkbench({ timeline, open, onClose }: Props) {
+export function RoomWorkbench({ projectId, timeline, open, onClose }: Props) {
   const t = useTranslations("stream.workbench");
 
   const initialPanels: PanelDef[] = useMemo(
@@ -225,10 +231,15 @@ export function RoomWorkbench({ timeline, open, onClose }: Props) {
           >
             ＋{t("chipRequests")}
           </button>
+          <button
+            style={chipStyle}
+            onClick={() => addPanel("knowledge", t("chipKnowledge"))}
+          >
+            ＋{t("chipKnowledge")}
+          </button>
           {(
             [
               ["tasks", t("chipTasks")],
-              ["knowledge", t("chipKnowledge")],
               ["skills", t("chipSkills")],
               ["workflow", t("chipWorkflow")],
             ] as Array<[PanelKind, string]>
@@ -255,7 +266,7 @@ export function RoomWorkbench({ timeline, open, onClose }: Props) {
               onDragEnd={() => setDraggingId(null)}
               onDrop={() => movePanel(panel.id)}
             >
-              {renderPanelBody(panel.kind, timeline, t)}
+              {renderPanelBody(panel.kind, projectId, timeline, t)}
             </WorkbenchPanel>
           ))}
         </div>
@@ -270,11 +281,15 @@ export function RoomWorkbench({ timeline, open, onClose }: Props) {
 // the renderers slot in incrementally.
 function renderPanelBody(
   kind: PanelKind,
+  projectId: string,
   timeline: UseRoomTimelineResult,
   t: ReturnType<typeof useTranslations>,
 ): React.ReactNode {
   if (kind === "requests") {
     return <RequestsPanelBody timeline={timeline} t={t} />;
+  }
+  if (kind === "knowledge") {
+    return <KnowledgePanelBody projectId={projectId} t={t} />;
   }
   // Inert panels — empty-state for vocabulary establishment.
   return (
@@ -358,6 +373,75 @@ function RequestsPanelBody({
               </>
             }
           />
+        );
+      })}
+    </>
+  );
+}
+
+// KnowledgePanelBody — projects the project's KB items into the
+// workbench. Cell-scoped, not room-scoped (per the projection
+// thesis: cell is the memory boundary). Each PanelItem links to
+// the existing /projects/{id}/kb/{itemId} detail page so the user
+// can drop into the canonical KB surface.
+function KnowledgePanelBody({
+  projectId,
+  t,
+}: {
+  projectId: string;
+  t: ReturnType<typeof useTranslations>;
+}) {
+  const knowledge = useRoomKnowledge({ projectId });
+
+  if (knowledge.loading && knowledge.items.length === 0) {
+    return (
+      <p style={{ fontSize: 12, color: "var(--wg-ink-soft)", margin: 0 }}>
+        {t("knowledgeLoading")}
+      </p>
+    );
+  }
+  if (knowledge.error) {
+    return (
+      <p
+        style={{
+          fontSize: 12,
+          color: "var(--wg-warn, #b94a48)",
+          margin: 0,
+        }}
+      >
+        {knowledge.error}
+      </p>
+    );
+  }
+  if (knowledge.items.length === 0) {
+    return (
+      <p style={{ fontSize: 12, color: "var(--wg-ink-soft)", margin: 0 }}>
+        {t("knowledgeEmpty")}
+      </p>
+    );
+  }
+  return (
+    <>
+      {knowledge.items.map((item) => {
+        const status = item.status ?? "";
+        const meta = `${item.source_kind}${
+          status ? ` · ${status}` : ""
+        }`;
+        // KB items don't render inline in the room timeline today
+        // (they're cell-scoped, not room-scoped) so the PanelItem
+        // wraps a link to the canonical KB detail page rather than
+        // a scrollToEntity. Click → drop into /kb/<id>.
+        return (
+          <Link
+            key={item.id}
+            href={`/projects/${projectId}/kb/${item.id}`}
+            style={{ textDecoration: "none" }}
+          >
+            <PanelItem
+              title={item.summary || t("knowledgeUntitled")}
+              meta={meta}
+            />
+          </Link>
         );
       })}
     </>

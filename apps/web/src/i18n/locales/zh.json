@@ -450,7 +450,10 @@
       "requestsEmpty": "暂无待评审项 — 一切处理就绪。",
       "untitledSuggestion": "未命名建议",
       "accept": "接受",
-      "dismiss": "忽略"
+      "dismiss": "忽略",
+      "knowledgeLoading": "加载知识库…",
+      "knowledgeEmpty": "还没有知识条目 — 从消息中提升一条吧。",
+      "knowledgeUntitled": "未命名知识条目"
     },
     "attribution": {
       "edge": "边缘",
