@@ -181,7 +181,7 @@ export function NewDMPicker({
                       opacity: busyId === m.user_id ? 0.5 : 1,
                     }}
                   >
-                    <span aria-hidden>💬</span>
+                    <span aria-hidden>☁</span>
                     <span
                       style={{
                         overflow: "hidden",

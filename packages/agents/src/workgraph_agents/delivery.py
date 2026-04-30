@@ -19,7 +19,7 @@ from .llm import LLMClient, LLMResult, ParseFailure
 
 _log = logging.getLogger("workgraph.agents.delivery")
 
-PROMPT_VERSION = "2026-04-17.phase10.v1"
+PROMPT_VERSION = "2026-04-26.phase10.v2"
 
 _PROMPT_DIR = Path(__file__).parent / "prompts" / "delivery"
 
@@ -138,7 +138,15 @@ def _build_user_payload(
     assignments: list[dict[str, Any]],
     decisions: list[dict[str, Any]],
     conflicts: list[dict[str, Any]],
+    covered_refs: dict[str, list[str]],
 ) -> str:
+    # `covered_refs` is the service-side authoritative scope→task mapping
+    # (computed by _build_coverage_map in the delivery service). The
+    # prompt v2 instructs the LLM to treat it as the source of truth for
+    # the completed/deferred split — the LLM only writes the narrative
+    # and decision rationale. v1 had the LLM re-derive coverage from the
+    # graph, which occasionally returned semantically-empty output that
+    # passed Pydantic but violated the prompt contract.
     return json.dumps(
         {
             "requirement": requirement,
@@ -147,6 +155,7 @@ def _build_user_payload(
             "assignments": assignments,
             "decisions": decisions,
             "conflicts": conflicts,
+            "covered_refs": covered_refs,
         },
         ensure_ascii=False,
     )
@@ -161,7 +170,7 @@ class DeliveryAgent:
         prompt: str | None = None,
     ) -> None:
         self._llm = llm or LLMClient()
-        self._prompt = prompt or _load_prompt("v1")
+        self._prompt = prompt or _load_prompt("v2")
 
     async def generate(
         self,
@@ -174,6 +183,7 @@ class DeliveryAgent:
         conflicts: list[dict[str, Any]],
         covered_refs: dict[str, list[str]] | None = None,
     ) -> DeliveryOutcome:
+        coverage = covered_refs or {}
         messages = [
             {"role": "system", "content": self._prompt},
             {
@@ -185,6 +195,7 @@ class DeliveryAgent:
                     assignments=assignments,
                     decisions=decisions,
                     conflicts=conflicts,
+                    covered_refs=coverage,
                 ),
             },
         ]
@@ -224,6 +235,63 @@ class DeliveryAgent:
             )
 
         assert isinstance(parsed, DeliverySummaryDoc)
+
+        # Semantic contract enforcement (the prompt's "Hard rules" §2):
+        # the union of completed_scope + deferred_scope MUST equal the
+        # requirement's scope_items. Pydantic only validates structure;
+        # this rule is semantic, so we check it post-parse.
+        #
+        # Why this matters in practice: the LLM was being asked to do
+        # two jobs in one call — (a) deterministic mapping of scope
+        # items to tasks (which the service layer already does via
+        # _build_coverage_map), and (b) write the narrative. We
+        # observed the LLM occasionally dropping all scope items into
+        # neither bucket on early-stage projects (no tasks marked
+        # done yet), producing semantically-empty output that passed
+        # Pydantic but violated the prompt contract. Reproducer:
+        # call POST /api/demo/seed twice on the same source_event_id
+        # — the FIRST call's project state hasn't been re-summarized
+        # yet, and the LLM occasionally returns both arrays empty.
+        # The SECOND call (same project, more history in the prompt)
+        # gets it right.
+        #
+        # Fix: when the LLM violates the contract, fall back to the
+        # deterministic _manual_review_fallback which uses the
+        # service-computed `covered_refs` map as the source of truth.
+        # This anchors the agent on the same scope→task matching the
+        # service already trusts for QA, so we can't drift into
+        # silent-empty-output failures. Log + return outcome=
+        # 'manual_review' so the QA pipeline downstream (and the
+        # delivery_summaries.parse_outcome column) flag the row as
+        # needing a human pass.
+        scope_items = list(requirement.get("scope_items") or [])
+        if scope_items:
+            doc_items = {c.scope_item for c in parsed.completed_scope} | {
+                d.scope_item for d in parsed.deferred_scope
+            }
+            expected = set(scope_items)
+            if doc_items != expected:
+                _log.warning(
+                    "delivery: scope contract violation — falling back to coverage map",
+                    extra={
+                        "prompt_version": self.prompt_version,
+                        "expected_scope": sorted(expected),
+                        "got_scope": sorted(doc_items),
+                        "missing": sorted(expected - doc_items),
+                        "extra": sorted(doc_items - expected),
+                    },
+                )
+                return DeliveryOutcome(
+                    doc=_manual_review_fallback(
+                        scope_items=scope_items,
+                        covered_refs=covered_refs or {},
+                    ),
+                    result=result,
+                    outcome="manual_review",
+                    attempts=attempts,
+                    error="scope_contract_violation",
+                )
+
         outcome: Outcome = "ok" if attempts == 1 else "retry"
         _log.info(
             "delivery ok",

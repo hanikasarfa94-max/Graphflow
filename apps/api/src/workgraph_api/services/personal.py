@@ -46,6 +46,7 @@ from workgraph_persistence import (
     ProjectMemberRepository,
     ProjectRow,
     UserRepository,
+    bump_citations,
     session_scope,
 )
 from sqlalchemy import select
@@ -122,6 +123,31 @@ def _encode_claims_body(body: str, claims: list[dict[str, Any]]) -> str:
     return f"{body}\n\n<claims>{json.dumps(claims, ensure_ascii=False)}</claims>"
 
 
+async def _bump_cited_claims(
+    sessionmaker: async_sessionmaker,
+    claims: list[CitedClaim],
+) -> None:
+    """§7.4 frecency: when an edge-LLM reply ships with structured
+    citations, bump every cited node so the §7.4 ranker can later score
+    "recently-cited" higher than "fresh-but-untouched."
+
+    Best-effort — the reply has already been persisted by the caller, so
+    a bump failure must not raise. We open a separate session so we don't
+    extend the lifetime of the surrounding transaction.
+    """
+    citations = [c for claim in claims for c in claim.citations]
+    if not citations:
+        return
+    try:
+        async with session_scope(sessionmaker) as session:
+            await bump_citations(session, citations)
+    except Exception:
+        _log.exception(
+            "personal._bump_cited_claims failed",
+            extra={"n_citations": len(citations)},
+        )
+
+
 def _parse_claims(body: str) -> tuple[str, list[dict[str, Any]]]:
     """Split body into (human text, claims list). Returns (body, []) when
     the marker is absent or malformed.
@@ -190,6 +216,8 @@ class PersonalStreamService:
         edge_agent: EdgeAgent,
         event_bus: EventBus,
         skills_service: SkillsService | None = None,
+        retrieval_service: Any | None = None,
+        license_context_service: Any | None = None,
     ) -> None:
         self._sessionmaker = sessionmaker
         self._stream_service = stream_service
@@ -201,17 +229,44 @@ class PersonalStreamService:
         # If None, tool_call responses degrade to the preamble body so the
         # stream still gets a sensible answer instead of a dead card.
         self._skills_service = skills_service or SkillsService(sessionmaker)
+        # Slice 5c — when wired, fills the EdgeAgent prompt's kb_slice
+        # field with retrieval candidates for the user's message. Saves
+        # a tool-call round trip when retrieval already has the answer.
+        # Absent: kb_slice ships empty, agent falls back to issuing
+        # kb_search if recall is what's wanted (existing behavior).
+        self._retrieval_service = retrieval_service
+        # Pickup #7 — when wired, ScopeTierPills selection is intersected
+        # with the viewer's licensed tiers via
+        # LicenseContextService.allowed_scopes() and the result narrows
+        # retrieval candidates. Absent: pills are accepted-and-logged
+        # only (slice-5c behavior).
+        self._license_context_service = license_context_service
         # Per (user_id, project_id) -> last-preview monotonic timestamp.
         # In-memory is fine for v1: worst case on process restart one
         # keystroke-triggered preview slips through. Keyed by tuple so a
         # user rehearsing in parallel across two projects doesn't throttle
         # either.
         self._preview_last_seen: dict[tuple[str, str], float] = {}
+        # Late-bound MembraneService — set via attach_membrane() once
+        # both services are constructed (membrane needs StreamService
+        # and is built after PersonalStreamService). When None, the
+        # clarification-reply intercept degrades to a no-op and the
+        # post follows the standard EdgeAgent path.
+        self._membrane_service: Any = None
+
+    def attach_membrane(self, membrane_service: Any) -> None:
+        self._membrane_service = membrane_service
 
     # --------------------------------------------------------------- preview
 
     async def preview(
-        self, *, user_id: str, project_id: str, body: str
+        self,
+        *,
+        user_id: str,
+        project_id: str,
+        body: str,
+        scope: dict[str, bool] | None = None,
+        scope_tiers: dict[str, bool] | None = None,
     ) -> dict[str, Any]:
         """Pre-commit rehearsal (vision.md §5.3).
 
@@ -219,6 +274,12 @@ class PersonalStreamService:
         and return the shaped EdgeResponse — but persist nothing. The
         frontend debounces this call on keystroke pause so the user sees
         how their draft would be classified before committing.
+
+        `scope` / `scope_tiers` mirror `post()` so the rehearsal context
+        honors StreamContextPanel + ScopeTierPills selection — the
+        previewed kb_slice matches what `post()` would actually send.
+        Pickup #7 leftover (the post() path was wired in commit 0332031;
+        preview() was deferred and lands here).
 
         Error codes:
           * 'project_not_found'
@@ -279,6 +340,9 @@ class PersonalStreamService:
             project_id=project_id,
             project_title=project_title,
             stream_id=stream_id,
+            scope=scope,
+            scope_tiers=scope_tiers,
+            user_message=body,
         )
 
         try:
@@ -319,10 +383,22 @@ class PersonalStreamService:
     # ------------------------------------------------------------------ post
 
     async def post(
-        self, *, user_id: str, project_id: str, body: str
+        self,
+        *,
+        user_id: str,
+        project_id: str,
+        body: str,
+        scope: dict[str, bool] | None = None,
+        scope_tiers: dict[str, bool] | None = None,
     ) -> dict[str, Any]:
         """User posts into their personal project stream. Edge sub-agent
         metabolizes and may post a follow-up system message.
+
+        `scope_tiers` (N.2) carries the four-tier ScopeTierPills selection
+        from the client (personal / group / department / enterprise, where
+        group = Cell). Today it is accepted-and-logged plumbing; consumer
+        wiring (LicenseContextService.allowed_scopes intersect) lands in
+        N.4 — see PLAN-Next.md §"Top bar".
 
         Error codes:
           * 'project_not_found'
@@ -330,6 +406,13 @@ class PersonalStreamService:
           * 'stream_post_failed' — shouldn't happen once the personal stream
             exists but we pass through the StreamService error.
         """
+        if scope_tiers is not None:
+            _log.debug(
+                "personal.post scope_tiers=%s user=%s project=%s",
+                scope_tiers,
+                user_id,
+                project_id,
+            )
         # Membership + project sanity check first so we don't spin up a
         # personal stream for a project the user cannot see.
         async with session_scope(self._sessionmaker) as session:
@@ -361,6 +444,31 @@ class PersonalStreamService:
             return {"ok": False, "error": post_result.get("error", "stream_post_failed")}
         message_id = post_result["id"]
 
+        # Stage 5 — clarification reply intercept. If this post is the
+        # answer to a recent membrane-clarify question, route it back
+        # through review() and skip the normal EdgeAgent loop. The
+        # intercept already posts an ack message in the stream so the
+        # user sees what happened.
+        if self._membrane_service is not None:
+            try:
+                intercepted = (
+                    await self._membrane_service.handle_clarification_reply(
+                        stream_id=stream_id,
+                        project_id=project_id,
+                        proposer_user_id=user_id,
+                        reply_body=body,
+                    )
+                )
+            except Exception:
+                _log.exception(
+                    "personal.post: clarification-reply handler raised — "
+                    "falling through to EdgeAgent",
+                    extra={"stream_id": stream_id, "user_id": user_id},
+                )
+                intercepted = False
+            if intercepted:
+                return {"ok": True, "message_id": message_id, "intercepted": True}
+
         # Build the EdgeAgent context.
         context = await self._build_respond_context(
             user_id=user_id,
@@ -368,6 +476,9 @@ class PersonalStreamService:
             project_id=project_id,
             project_title=project_title,
             stream_id=stream_id,
+            scope=scope,
+            scope_tiers=scope_tiers,
+            user_message=body,
         )
 
         # Agent loop — the EdgeAgent may request up to
@@ -617,6 +728,7 @@ class PersonalStreamService:
                 kind=reply_kind,
                 linked_id=None,
             )
+            await _bump_cited_claims(self._sessionmaker, claims)
             return {
                 "ok": True,
                 "message_id": message_id,
@@ -740,6 +852,7 @@ class PersonalStreamService:
                 kind="edge-route-proposal",
                 linked_id=message_id,
             )
+            await _bump_cited_claims(self._sessionmaker, claims)
             proposal_id = reply_msg.get("id")
             return {
                 "ok": True,
@@ -974,6 +1087,7 @@ class PersonalStreamService:
             kind="edge-reply-frame",
             linked_id=signal["id"],
         )
+        await _bump_cited_claims(self._sessionmaker, framed_claims)
         return {
             "ok": True,
             "signal": signal,
@@ -1071,6 +1185,9 @@ class PersonalStreamService:
         project_id: str,
         project_title: str,
         stream_id: str,
+        scope: dict[str, bool] | None = None,
+        scope_tiers: dict[str, bool] | None = None,
+        user_message: str = "",
     ) -> dict[str, Any]:
         """Shape the EdgeAgent.respond context. See edge.py prompt contract.
 
@@ -1184,6 +1301,86 @@ class PersonalStreamService:
         user_profile = (
             dict(user_row.profile) if user_row and user_row.profile else {}
         )
+        # Apply StreamContextPanel scope. Default = graph + kb on, dms +
+        # audit off (matches the panel defaults). When graph is off, the
+        # agent still gets the user, recent messages, and the project
+        # title — but no member abilities, no gate-keeper map, no
+        # authority pool sizes. KB / DMs / audit are accepted but no-op
+        # for now (those sources aren't loaded in this builder yet).
+        graph_on = scope.get("graph", True) if scope else True
+        if graph_on:
+            project_block: dict[str, Any] = {
+                "id": project_id,
+                "title": project_title,
+                "member_summaries": member_summaries,
+                "gate_keeper_map": gate_keeper_map,
+                "valid_decision_classes": sorted(EDGE_VALID_DECISION_CLASSES),
+                "authority_pool_sizes": authority_pool_sizes,
+            }
+            teammates = member_summaries
+        else:
+            project_block = {
+                "id": project_id,
+                "title": project_title,
+                "member_summaries": [],
+                "gate_keeper_map": {},
+                "valid_decision_classes": sorted(EDGE_VALID_DECISION_CLASSES),
+                "authority_pool_sizes": {},
+            }
+            teammates = []
+        # Slice 5c — pre-fill kb_slice with retrieval candidates for
+        # the current user_message. The EdgeAgent prompt (edge/v1.md)
+        # documents kb_slice as `[{"source": ..., "excerpt": ...}]`
+        # and says "if kb_slice is empty, run kb_search if recall is
+        # what's wanted." Pre-filling shortcuts that tool-call round
+        # trip on common queries.
+        # Group-scope only (viewer_user_id=None) — same conservative
+        # rule as kb_search to avoid leaking personal items into
+        # cross-viewer LLM context.
+        #
+        # Pickup #7 — if the caller supplied scope_tiers (the
+        # ScopeTierPills selection from the frontend) AND we have a
+        # LicenseContextService wired, intersect with the viewer's
+        # licensed tiers and pass to candidate_set so retrieval
+        # honors the pills. Absence of either input means "all tiers
+        # the user is licensed for" (slice-5c behavior).
+        allowed_scopes_filter: "frozenset[str] | None" = None
+        if (
+            scope_tiers is not None
+            and self._license_context_service is not None
+        ):
+            try:
+                allowed_scopes_filter = (
+                    await self._license_context_service.allowed_scopes(
+                        project_id=project_id,
+                        user_id=user_id,
+                        requested_tiers=scope_tiers,
+                    )
+                )
+            except Exception:
+                _log.exception(
+                    "personal._build_respond_context: allowed_scopes failed; "
+                    "shipping kb_slice with no scope filter"
+                )
+                allowed_scopes_filter = None
+
+        kb_slice: list[dict[str, Any]] = []
+        if self._retrieval_service is not None and (user_message or "").strip():
+            try:
+                kb_slice = await self._retrieval_service.candidate_set(
+                    project_id=project_id,
+                    query=user_message,
+                    viewer_user_id=None,
+                    allowed_scopes=allowed_scopes_filter,
+                    k=5,
+                )
+            except Exception:
+                _log.exception(
+                    "personal._build_respond_context: candidate_set failed; "
+                    "shipping empty kb_slice"
+                )
+                kb_slice = []
+
         return {
             "user": {
                 "id": user_id,
@@ -1198,19 +1395,11 @@ class PersonalStreamService:
                 ),
                 "profile": user_profile,
             },
-            "project": {
-                "id": project_id,
-                "title": project_title,
-                "member_summaries": member_summaries,
-                "gate_keeper_map": gate_keeper_map,
-                "valid_decision_classes": sorted(
-                    EDGE_VALID_DECISION_CLASSES
-                ),
-                "authority_pool_sizes": authority_pool_sizes,
-            },
-            "teammates": member_summaries,  # legacy alias; keep until tests migrate
+            "project": project_block,
+            "teammates": teammates,  # legacy alias; keep until tests migrate
             "recent_messages": recent_messages,
             "background": [],
+            "kb_slice": kb_slice,
         }
 
     async def _load_proposal(

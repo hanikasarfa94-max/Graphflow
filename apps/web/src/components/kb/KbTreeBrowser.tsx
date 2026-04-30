@@ -38,14 +38,22 @@ import { Button, Card, EmptyState, Heading, Text } from "@/components/ui";
 import {
   ApiError,
   createKbFolder,
+  createKbNote,
   deleteKbFolder,
   getKbTree,
   type KbFolderNode,
   type KbTreeItem,
   type KbTreeResponse,
   moveKbItem,
+  promoteKbNote,
   reparentKbFolder,
 } from "@/lib/api";
+import {
+  getScopeTiers,
+  SCOPE_TIER_EVENT,
+  type ScopeTier,
+  type ScopeTierState,
+} from "@/components/stream/ScopeTierPills";
 
 type Role = "owner" | "member" | "observer";
 type Tier = "full" | "task_scoped" | "observer";
@@ -86,6 +94,43 @@ export function KbTreeBrowser({
   const [search, setSearch] = useState("");
   const [sourceFilter, setSourceFilter] = useState<SourceFilter>("all");
   const [toast, setToast] = useState<string | null>(null);
+  // N.2: ScopeTierPills broadcast their state via window event keyed by
+  // projectKey. We mirror the pills' storage key (per-project, not
+  // per-stream) so toggles flow from the chat surface to here.
+  //
+  // Hydration safety: initial state mirrors the server-side render
+  // (all-tiers-on default) — calling `getScopeTiers` in the useState
+  // initializer would read localStorage during hydration and cause a
+  // mismatch if the user has any tier disabled. We hydrate persisted
+  // state in the effect below, mirroring ScopeTierPills itself.
+  const projectKey = `project:${projectId}`;
+  const [activeTiers, setActiveTiers] = useState<ScopeTierState>(() => ({
+    personal: true,
+    group: true,
+    department: true,
+    enterprise: true,
+  }));
+  useEffect(() => {
+    setActiveTiers(getScopeTiers(projectKey));
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent<{ projectKey: string; tiers: ScopeTierState }>).detail;
+      if (detail?.projectKey === projectKey) {
+        setActiveTiers(detail.tiers);
+      }
+    };
+    window.addEventListener(SCOPE_TIER_EVENT, handler);
+    return () => window.removeEventListener(SCOPE_TIER_EVENT, handler);
+  }, [projectKey]);
+
+  // Personal-note composer (F.14 deep fix). Notes are KB items with
+  // scope='personal'; the backend already returns them inline in
+  // /kb/tree, so we just need a way to create one. Open the composer,
+  // fill title + body, save → tree refresh and the new row drops into
+  // whatever folder was selected.
+  const [composerOpen, setComposerOpen] = useState(false);
+  const [composerTitle, setComposerTitle] = useState("");
+  const [composerBody, setComposerBody] = useState("");
+  const [composerSaving, setComposerSaving] = useState(false);
 
   const isOwner = role === "owner";
   const canCreateFolder = tier === "full";
@@ -237,6 +282,37 @@ export function KbTreeBrowser({
     }
   };
 
+  const handleCreateNote = async () => {
+    const title = composerTitle.trim();
+    if (!title) {
+      flashToast(t("kbNotes.titleRequired"));
+      return;
+    }
+    if (composerSaving) return;
+    setComposerSaving(true);
+    try {
+      const folderId = selectedFolderId ?? tree.root_id ?? undefined;
+      await createKbNote(projectId, {
+        title,
+        content_md: composerBody,
+        scope: "personal",
+        folder_id: folderId ?? undefined,
+      });
+      setComposerTitle("");
+      setComposerBody("");
+      setComposerOpen(false);
+      await refresh();
+    } catch (err) {
+      flashToast(
+        err instanceof ApiError && err.status === 403
+          ? t("kb.folder.requireFullTier")
+          : t("kbNotes.titleRequired"),
+      );
+    } finally {
+      setComposerSaving(false);
+    }
+  };
+
   const handleMoveItem = async (
     itemId: string,
     folderId: string,
@@ -250,6 +326,27 @@ export function KbTreeBrowser({
           ? t("kb.folder.moveFailed")
           : t("kb.folder.moveFailed"),
       );
+    }
+  };
+
+  // Inline promote (F.16). Personal-scope rows are forks of the
+  // shared knowledge center; the membrane decides whether the
+  // promote is auto-merged or staged for owner review (the row
+  // status flips to 'draft' in the staged case). We just call the
+  // endpoint, refresh, and toast the right thing based on the
+  // returned status.
+  const handlePromoteItem = async (itemId: string) => {
+    if (!window.confirm(t("kbNotes.promoteConfirm"))) return;
+    try {
+      const result = await promoteKbNote(itemId);
+      flashToast(
+        result.status === "draft"
+          ? t("kbNotes.promoteDeferred")
+          : t("kbNotes.promoted"),
+      );
+      await refresh();
+    } catch {
+      flashToast(t("kbNotes.promoteFailed"));
     }
   };
 
@@ -272,6 +369,13 @@ export function KbTreeBrowser({
       ) {
         return false;
       }
+      // N.2: scope-tier filter from ScopeTierPills. Items missing a
+      // recognized scope (legacy rows without the field) fall through
+      // unfiltered so we don't accidentally hide content.
+      const scope = item.scope as ScopeTier | undefined;
+      if (scope && activeTiers[scope] === false) {
+        return false;
+      }
       if (q) {
         const hay =
           `${item.title} ${item.summary} ${item.tags.join(" ")} ${
@@ -287,6 +391,7 @@ export function KbTreeBrowser({
     search,
     sourceFilter,
     locale,
+    activeTiers,
   ]);
 
   return (
@@ -339,6 +444,15 @@ export function KbTreeBrowser({
               : t("kb.folder.selectPrompt")}
           </Heading>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setComposerOpen((v) => !v)}
+              disabled={!selectedFolderId}
+              title={t("kb.folder.newNoteHelp")}
+            >
+              {t("kbNotes.newNote")}
+            </Button>
             <Button
               variant="ghost"
               size="sm"
@@ -420,12 +534,96 @@ export function KbTreeBrowser({
           })}
         </div>
 
+        {composerOpen ? (
+          <div
+            data-testid="kb-tree-note-composer"
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: 8,
+              padding: 12,
+              border: "1px dashed var(--wg-accent-ring)",
+              borderRadius: "var(--wg-radius)",
+              background: "var(--wg-accent-soft)",
+            }}
+          >
+            <div
+              style={{
+                fontSize: 11,
+                fontFamily: "var(--wg-font-mono)",
+                color: "var(--wg-accent)",
+                letterSpacing: "0.08em",
+                textTransform: "uppercase",
+              }}
+            >
+              {t("kbNotes.scopePersonal")} · {selectedFolder?.name ?? "/"}
+            </div>
+            <input
+              type="text"
+              value={composerTitle}
+              onChange={(e) => setComposerTitle(e.target.value)}
+              placeholder={t("kbNotes.titlePlaceholder")}
+              disabled={composerSaving}
+              style={{
+                padding: "8px 12px",
+                border: "1px solid var(--wg-line)",
+                borderRadius: "var(--wg-radius)",
+                fontSize: 14,
+                fontFamily: "inherit",
+                background: "#fff",
+                color: "var(--wg-ink)",
+              }}
+            />
+            <textarea
+              value={composerBody}
+              onChange={(e) => setComposerBody(e.target.value)}
+              placeholder={t("kbNotes.contentPlaceholder")}
+              disabled={composerSaving}
+              rows={4}
+              style={{
+                padding: "8px 12px",
+                border: "1px solid var(--wg-line)",
+                borderRadius: "var(--wg-radius)",
+                fontSize: 13,
+                fontFamily: "inherit",
+                background: "#fff",
+                color: "var(--wg-ink)",
+                resize: "vertical",
+                minHeight: 72,
+              }}
+            />
+            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setComposerOpen(false);
+                  setComposerTitle("");
+                  setComposerBody("");
+                }}
+                disabled={composerSaving}
+              >
+                {t("kbNotes.cancelNew")}
+              </Button>
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={() => void handleCreateNote()}
+                disabled={composerSaving || !composerTitle.trim()}
+              >
+                {composerSaving ? t("kbNotes.saving") : t("kbNotes.save")}
+              </Button>
+            </div>
+          </div>
+        ) : null}
+
         {items.length === 0 ? (
           <EmptyState>{t("kb.empty")}</EmptyState>
         ) : (
           <ItemsTable
             projectId={projectId}
             items={items}
+            onPromote={handlePromoteItem}
             t={t}
           />
         )}
@@ -714,10 +912,12 @@ function FolderNode({
 function ItemsTable({
   projectId,
   items,
+  onPromote,
   t,
 }: {
   projectId: string;
   items: KbTreeItem[];
+  onPromote: (itemId: string) => void;
   t: ReturnType<typeof useTranslations>;
 }) {
   return (
@@ -738,6 +938,7 @@ function ItemsTable({
             key={item.id}
             projectId={projectId}
             item={item}
+            onPromote={onPromote}
             t={t}
           />
         ))}
@@ -782,10 +983,12 @@ function TableHeader({
 function ItemRow({
   projectId,
   item,
+  onPromote,
   t,
 }: {
   projectId: string;
   item: KbTreeItem;
+  onPromote: (itemId: string) => void;
   t: ReturnType<typeof useTranslations>;
 }) {
   const cellStyle: React.CSSProperties = {
@@ -801,11 +1004,22 @@ function ItemRow({
     e.dataTransfer.effectAllowed = "move";
   };
 
+  // source_kind='kb-personal' is the FE-visible signal that the row
+  // is scope='personal' and the viewer owns it (the API only returns
+  // the viewer's own personal rows). Owner of the row can always
+  // promote, so we render the inline action whenever this is true.
+  const canPromote = item.source_kind === "kb-personal";
+
   return (
     <>
       <div
         role="cell"
-        style={cellStyle}
+        style={{
+          ...cellStyle,
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+        }}
         draggable
         onDragStart={onDragStart}
       >
@@ -815,10 +1029,42 @@ function ItemRow({
             color: "var(--wg-ink)",
             textDecoration: "none",
             fontWeight: 500,
+            flex: 1,
+            minWidth: 0,
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
           }}
         >
           {item.title || item.summary || item.source_identifier}
         </Link>
+        {item.status === "draft" || item.status === "pending-review" ? (
+          // Membrane staging signal — the row is in the cell's
+          // membrane, not the cell proper. Lets readers see "this
+          // is queued for owner review" without opening the detail.
+          <DraftChip status={item.status} t={t} />
+        ) : null}
+        {canPromote ? (
+          <button
+            type="button"
+            data-testid="kb-row-promote"
+            onClick={() => onPromote(item.id)}
+            style={{
+              flexShrink: 0,
+              padding: "2px 8px",
+              fontSize: 11,
+              fontFamily: "var(--wg-font-mono)",
+              border: "1px solid var(--wg-line)",
+              borderRadius: 999,
+              background: "#fff",
+              color: "var(--wg-ink-soft)",
+              cursor: "pointer",
+              whiteSpace: "nowrap",
+            }}
+          >
+            {t("kbNotes.promote")}
+          </button>
+        ) : null}
       </div>
       <div role="cell" style={cellStyle}>
         <SourceBadge kind={item.source_kind} />
@@ -838,6 +1084,41 @@ function ItemRow({
         <LicenseBadge tier={item.license_tier_override} t={t} />
       </div>
     </>
+  );
+}
+
+function DraftChip({
+  status,
+  t,
+}: {
+  status: string;
+  t: ReturnType<typeof useTranslations>;
+}) {
+  // pending-review (signals) and draft (group KB writes deferred by
+  // membrane) both surface as the same "not yet canonical" chip —
+  // user-facing intent is identical. Different colors keep the
+  // ingest path distinguishable from the user-write path.
+  const isPending = status === "pending-review";
+  return (
+    <span
+      data-testid="kb-draft-chip"
+      style={{
+        marginLeft: 8,
+        fontSize: 9,
+        fontFamily: "var(--wg-font-mono)",
+        padding: "1px 6px",
+        borderRadius: 10,
+        border: `1px solid ${isPending ? "var(--wg-amber)" : "var(--wg-ink-soft)"}`,
+        color: isPending ? "var(--wg-amber)" : "var(--wg-ink-soft)",
+        letterSpacing: "0.04em",
+        textTransform: "uppercase",
+        verticalAlign: "middle",
+      }}
+    >
+      {isPending
+        ? t("kb.statusChip.pendingReview")
+        : t("kb.statusChip.draft")}
+    </span>
   );
 }
 

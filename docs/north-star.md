@@ -430,6 +430,60 @@ Rendered artifacts (postmortem, handoff) exist at `/projects/[id]/renders/[slug]
 
 **v2 DM polish:** priority/alarm flag (phone ring), group streams, cross-project topical channels (maybe; probably never).
 
+## Architectural correction R (2026-04-28, WorkGraph Next)
+
+After review of the `workgraph-ts-prototype/` and a product-design pass, the following Correction-Q decisions need updating, and several new structural primitives are added. The full doctrine lives in `new_concepts.md` (§6.11 Cell Model + Scope Tiers, §9.1 General-Agent Stream, §9.4 Team Rooms, §10.1 Flow First). This subsection is the diff against earlier corrections.
+
+### R.1 No separate `/` Home page
+
+The v1 page inventory's `/` (personal home) is dropped. The user lands directly in the **general-agent stream** — their conversation with their own sub-agent, with no cell anchor. Cross-cell pending, gated approvals, active-task context, project list, DM list become **left-sidebar entries surfaced alongside** the stream, not a destination page. "Switch project" is a soft scope hint inside the conversation via ProjectBar pills, not a forced navigation step.
+
+Rationale: dogfooding showed `/` was a friction step before the user could "talk to AI." Cross-cell aggregation jobs survive — they move from a destination page to sidebar surfaces and inline turns ("you have 3 pending across 2 projects").
+
+### R.2 Multiple team rooms per cell, smallest-relevant-vote default
+
+Q.5's nav assumed one team room per project. **Relaxed:** a cell may host multiple team-room streams (sub-team, topical, ad-hoc). To prevent Slack-style channel sprawl from causing vote spam, decisions use a Schelling-point quorum rule:
+
+> **A decision's vote scope defaults to the smallest relevant group.**
+
+A 1:1 DM decision votes between two; a 4-person room decision votes among four; a cell-level decision votes across all members. "Relevant" is determined by Membrane / Edge Agent from discussion context. Backend implication: `DecisionRow.scope_stream_id` (nullable; null = cell-wide).
+
+### R.3 Cell terminology + four scope tiers
+
+Adopt the cell metaphor: **project = cell, enterprise = many cells.** The membrane is what sits between cells. Context, knowledge, and memory are scoped on a four-tier ladder:
+
+```text
+Personal       me + my sub-agent
+Cell           project members + relevant cross-cutting leaders   (legacy KbItemRow.scope='group')
+Department     functional subset (Eng KB, Design KB, Marketing KB) (NEW scope value)
+Enterprise     org-wide (HR, brand, compliance)                   (NEW scope value)
+```
+
+These tiers are orthogonal to the v1 license tiers (full-member / task-scoped / observer). The schema's existing `scope='group'` value is **not renamed** — readers continue to interpret it as Cell scope; new scope values are added for Department + Enterprise without disturbing legacy. Doc word for the functional tier is "Department" (because "Group" is taken at the schema level).
+
+ProjectBar pills become the user-visible projection of the four-tier scope: clicking adjusts which tiers `LicenseContextService` admits per turn.
+
+### R.4 Manual creates flow through Membrane as candidates
+
+Q-era assumed projects are born from a sentence in the home stream. **Refined:** manual `+ new project` / `+ new task` / `+ new room` are allowed by direct typing, but they enter as **candidates** (extending `CandidateKind`) and ascend through Membrane review — not as direct canonical creates. This preserves the "creation does not imply memory" principle (§6.2) and keeps the single-membrane invariant intact for both AI-generated and human-typed proposals.
+
+### R.5 Workbench OK as opt-in side composer
+
+Earlier corrections (Q + the chat-centered feedback memory) rejected sidebars-of-panels. **Refined:** "stream-centered" ≠ "stream-only." A user-composable side **workbench** is acceptable — opt-in panels that are shortcut-views into underlying detail pages (tasks, knowledge, skills, routing inbox), with drag/grid/vertical/focus modes. Constraint: panels must link back to a real `/detail/*` page, must be user-toggleable, and must not be the only place a piece of state lives. Multi-pane *console as destination* remains rejected; user-composed *shortcut tray* on the side is fine.
+
+### R.6 No specialist-agent picker
+
+The prototype tested specialist agents (研究分析师 / 方案生成器 / 技术顾问) as switchable IM contacts. **Rejected.** "One sub-agent per user globally" stays — specialists appear as **attributed sub-turns inside the user's own stream** (`🧠 edge` / `❓ clarifier` / `⚖ conflict`), not as separate inboxes the user picks between. The picker pattern is the GPTs / agent-marketplace shape, which positioning ("group, not individual-copilot") explicitly avoids.
+
+### Implications for v1 page inventory
+
+- `/` route still exists but redirects to the general-agent stream.
+- `/projects/[id]` URL **not** renamed to `/cells/[id]`. Cell terminology stays internal; URLs preserve external bookmarks.
+- New route: `/projects/[id]/rooms/[roomId]` for room streams.
+- `/projects/[id]/detail/*` audit routes survive unchanged from v1, accessed via leftmost rail icons (already aligned with prototype).
+
+Build sequence and concrete tasks live in `PLAN-Next.md` at repo root.
+
 ## What we replace vs. coexist with
 
 **Replace (center of gravity moves to us):**

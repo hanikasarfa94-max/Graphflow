@@ -45,7 +45,11 @@ from .kb_hierarchy import (
     ROOT_NAME as KB_ROOT_NAME,
 )
 from .leader_escalation import LEADER_DRAFT_OPTION_ID, LeaderEscalationService
-from .license_context import LicenseContextService, tighter_tier
+from .license_context import (
+    VALID_SCOPE_TIERS,
+    LicenseContextService,
+    tighter_tier,
+)
 from .license_lint import extract_node_ids, lint_reply
 from .meeting_ingest import (
     LLMBackedMetabolizer,
@@ -86,6 +90,8 @@ from .silent_consensus import (
 )
 from .kb_items import KbItemError, KbItemService
 from .render import RenderError, RenderService
+from .retrieval import RetrievalCandidate, RetrievalService
+from .room_timeline import RoomTimelineService
 from .routing import RoutingService
 from .signal_tally import SIGNAL_KINDS, SignalTallyService
 from .simulation import SimulationError, SimulationService
@@ -157,6 +163,7 @@ __all__ = [
     "LEADER_DRAFT_OPTION_ID",
     "LeaderEscalationService",
     "LicenseContextService",
+    "VALID_SCOPE_TIERS",
     "tighter_tier",
     "extract_node_ids",
     "lint_reply",
@@ -193,6 +200,9 @@ __all__ = [
     "SILENT_CONSENSUS_WINDOW_DAYS",
     "RenderService",
     "RenderError",
+    "RetrievalCandidate",
+    "RetrievalService",
+    "RoomTimelineService",
     "RoutingService",
     "SIGNAL_KINDS",
     "SignalTallyService",

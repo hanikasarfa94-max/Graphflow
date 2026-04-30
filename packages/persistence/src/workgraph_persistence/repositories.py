@@ -30,7 +30,6 @@ from .orm import (
     KbItemRow,
     LicenseAuditRow,
     MeetingTranscriptRow,
-    MembraneSignalRow,
     MembraneSubscriptionRow,
     MessageRow,
     MilestoneRow,
@@ -145,6 +144,13 @@ class RequirementRepository:
             .limit(1)
         )
         return (await self._session.execute(stmt)).scalar_one_or_none()
+
+    async def get(self, requirement_id: str) -> RequirementRow | None:
+        return (
+            await self._session.execute(
+                select(RequirementRow).where(RequirementRow.id == requirement_id)
+            )
+        ).scalar_one_or_none()
 
     async def append_version(
         self,
@@ -456,11 +462,20 @@ class PlanRepository:
         title: str,
         description: str = "",
         source_message_id: str | None = None,
+        estimate_hours: int | None = None,
+        assignee_role: str = "unknown",
     ) -> TaskRow:
         """Self-set personal task. requirement_id stays NULL until
         promoted; sort_order is timestamp-based (ms since epoch
         modulo a day's worth) so it stays roughly chronological
         without coordinating with the plan's sort_order space.
+
+        `estimate_hours` and `assignee_role` are optional at create
+        time. Passing them lets the membrane's task_promote review
+        run a meaningful estimate-overflow check at promote time;
+        omitting them keeps the legacy behavior (NULL estimate, role
+        defaults to 'unknown' so the missing_owner advisory doesn't
+        fire on the candidate itself).
         """
         sort_seed = int(datetime.now(timezone.utc).timestamp() * 1000) % (
             24 * 60 * 60 * 1000
@@ -473,8 +488,8 @@ class PlanRepository:
             deliverable_id=None,
             title=title,
             description=description or "",
-            assignee_role="unknown",
-            estimate_hours=None,
+            assignee_role=assignee_role or "unknown",
+            estimate_hours=estimate_hours,
             acceptance_criteria=None,
             scope="personal",
             owner_user_id=owner_user_id,
@@ -880,6 +895,29 @@ class ProjectMemberRepository:
         ).scalar_one_or_none()
         return row.role if row is not None else None
 
+    async def set_skill_tags(
+        self,
+        *,
+        project_id: str,
+        user_id: str,
+        skill_tags: list[str],
+    ) -> ProjectMemberRow | None:
+        """Replace the member's skill tag list. Caller normalizes input
+        (lowercase, dedup, drops empties); we only persist."""
+        row = (
+            await self._session.execute(
+                select(ProjectMemberRow).where(
+                    ProjectMemberRow.project_id == project_id,
+                    ProjectMemberRow.user_id == user_id,
+                )
+            )
+        ).scalar_one_or_none()
+        if row is None:
+            return None
+        row.skill_tags = list(skill_tags)
+        await self._session.flush()
+        return row
+
 
 class AssignmentRepository:
     def __init__(self, session: AsyncSession) -> None:
@@ -1097,6 +1135,35 @@ class IMSuggestionRepository:
                 )
             )
         ).scalar_one_or_none()
+
+    async def list_for_project(
+        self,
+        *,
+        project_id: str,
+        stream_id: str | None = None,
+        limit: int = 100,
+    ) -> list[IMSuggestionRow]:
+        """List suggestions for a project, optionally narrowed to a room.
+
+        `stream_id` filter joins through the source MessageRow so a
+        room-scoped workbench panel only sees suggestions whose
+        originating message landed in that room (pickup #6 + the
+        room-stream slice).
+
+        Newest first so the workbench `Requests` panel surfaces fresh
+        candidates at the top.
+        """
+        stmt = (
+            select(IMSuggestionRow)
+            .where(IMSuggestionRow.project_id == project_id)
+            .order_by(IMSuggestionRow.created_at.desc())
+            .limit(limit)
+        )
+        if stream_id is not None:
+            stmt = stmt.join(
+                MessageRow, IMSuggestionRow.message_id == MessageRow.id
+            ).where(MessageRow.stream_id == stream_id)
+        return list((await self._session.execute(stmt)).scalars().all())
 
     async def resolve(self, suggestion_id: str, status: str) -> IMSuggestionRow | None:
         row = await self.get(suggestion_id)
@@ -1386,6 +1453,7 @@ class DecisionRepository:
         apply_detail: dict | None = None,
         decision_class: str | None = None,
         gated_via_proposal_id: str | None = None,
+        scope_stream_id: str | None = None,
     ) -> DecisionRow:
         """Persist a decision.
 
@@ -1399,6 +1467,14 @@ class DecisionRepository:
         `GatedProposalService.approve` path sets both on approve. v0 does not
         enforce "gated-class decisions must have a proposal id" at this layer —
         that hardening is Option 2 (see GatedProposalService docstring).
+
+        `scope_stream_id` (N-Next, migration 0027) is the smallest-relevant
+        vote scope per new_concepts.md §6.11 + north-star Correction R.2.
+        Caller passes the stream id whose membership defines the vote
+        quorum (DM = 2 voters, 4-person room = 4, etc.). NULL leaves the
+        decision cell-wide — current behavior for callers that haven't
+        wired stream lineage yet (IM / silent-consensus / scrimmage / etc.
+        will populate as N.4 lands).
         """
         row = DecisionRow(
             id=_new_id(),
@@ -1415,6 +1491,7 @@ class DecisionRepository:
             source_suggestion_id=source_suggestion_id,
             decision_class=decision_class,
             gated_via_proposal_id=gated_via_proposal_id,
+            scope_stream_id=scope_stream_id,
         )
         self._session.add(row)
         await self._session.flush()
@@ -2009,12 +2086,20 @@ class StreamRepository:
         type: str,
         project_id: str | None = None,
         owner_user_id: str | None = None,
+        name: str | None = None,
     ) -> StreamRow:
+        """Create a new stream row.
+
+        `name` is optional and only meaningful for type='room' (display
+        name shown in the room nav + header). Other stream types derive
+        their display from the project / owner / DM partner.
+        """
         row = StreamRow(
             id=_new_id(),
             type=type,
             project_id=project_id,
             owner_user_id=owner_user_id,
+            name=name,
         )
         self._session.add(row)
         await self._session.flush()
@@ -2033,6 +2118,27 @@ class StreamRepository:
             StreamRow.type == "project",
         )
         return (await self._session.execute(stmt)).scalar_one_or_none()
+
+    async def list_rooms_for_project(
+        self, project_id: str
+    ) -> list[StreamRow]:
+        """N-Next: every 'room' stream nested in this cell.
+
+        Per new_concepts.md §6.11, a cell hosts multiple team-room
+        streams (sub-team / topical / ad-hoc). The main 'project'
+        stream is excluded — `get_for_project` returns that one.
+        Sorted by created_at so newest rooms surface last; UI can
+        re-sort by activity if it wants to.
+        """
+        stmt = (
+            select(StreamRow)
+            .where(
+                StreamRow.project_id == project_id,
+                StreamRow.type == "room",
+            )
+            .order_by(StreamRow.created_at)
+        )
+        return list((await self._session.execute(stmt)).scalars().all())
 
     async def get_personal_for_user_in_project(
         self, *, user_id: str, project_id: str
@@ -2356,8 +2462,20 @@ class RoutedSignalRepository:
 # ---- Phase D — membrane signal repository -------------------------------
 
 
-class MembraneSignalRepository:
-    """Phase D — persistence for membrane-ingested external signals.
+class KbIngestRepository:
+    """Externally-ingested KB items (membrane source).
+
+    Operates on `kb_items` rows with `source='ingest'`. The class
+    encapsulates the dedup-by-source-identifier and review-lifecycle
+    semantics that external ingests need (URLs, RSS, webhooks,
+    git commits) — separate from the manual / upload / llm write paths
+    that go through `KbItemRepository.create` directly.
+
+    Renamed from `MembraneSignalRepository` after the fold completed
+    (docs/membrane-reorg.md F1-F5, 2026-04-26). Pre-fold the class
+    operated on a separate `membrane_signals` table; post-fold it
+    operates on a discriminated subset of `kb_items`. The old name
+    survives as a deprecated alias in `__init__.py`.
 
     Vision §5.12 (Membranes). Dedup key is (project_id, source_identifier).
     Re-ingesting the same URL / commit hash / forum post returns the
@@ -2372,16 +2490,18 @@ class MembraneSignalRepository:
 
     async def find_by_source(
         self, *, project_id: str | None, source_identifier: str
-    ) -> MembraneSignalRow | None:
-        stmt = select(MembraneSignalRow).where(
-            MembraneSignalRow.source_identifier == source_identifier,
+    ) -> KbItemRow | None:
+        stmt = (
+            select(KbItemRow)
+            .where(KbItemRow.source == "ingest")
+            .where(KbItemRow.source_identifier == source_identifier)
         )
         # NULL-safe project scope match — project-scoped dedup only collides
         # with rows from the same project_id value (including null↔null).
         if project_id is None:
-            stmt = stmt.where(MembraneSignalRow.project_id.is_(None))
+            stmt = stmt.where(KbItemRow.project_id.is_(None))
         else:
-            stmt = stmt.where(MembraneSignalRow.project_id == project_id)
+            stmt = stmt.where(KbItemRow.project_id == project_id)
         return (await self._session.execute(stmt)).scalar_one_or_none()
 
     async def create(
@@ -2393,16 +2513,30 @@ class MembraneSignalRepository:
         raw_content: str,
         ingested_by_user_id: str | None = None,
         trace_id: str | None = None,
-    ) -> MembraneSignalRow:
-        row = MembraneSignalRow(
+    ) -> KbItemRow:
+        # Title fallback chain mirrors the F2 backfill exactly so old
+        # backfilled rows and new ingest writes pick the same title.
+        # Caps at 500 (KbItemRow.title column limit).
+        title = (
+            (raw_content or "")[:80]
+            or (source_identifier or "")[:500]
+            or "Untitled signal"
+        )
+        row = KbItemRow(
             id=_new_id(),
             project_id=project_id,
+            owner_user_id=ingested_by_user_id,
+            folder_id=None,
+            scope="group",
+            title=title,
+            content_md="",
+            source="ingest",
             source_kind=source_kind,
             source_identifier=source_identifier,
             raw_content=raw_content,
-            ingested_by_user_id=ingested_by_user_id,
             classification_json={},
             status="pending-review",
+            ingested_by_user_id=ingested_by_user_id,
             trace_id=trace_id,
         )
         self._session.add(row)
@@ -2411,6 +2545,12 @@ class MembraneSignalRepository:
         except IntegrityError:
             # Race: another request wrote the same (project_id, source_identifier)
             # between find + flush. Return the existing row instead of exploding.
+            # NOTE: F1 didn't add a UNIQUE constraint on (project_id,
+            # source_identifier) at the DB level (SQLite portability); the
+            # find+create pattern + this rollback path is the dedup mechanism.
+            # Concurrent writes can still produce duplicates briefly until the
+            # next find_by_source coalesces them; acceptable for the ingest
+            # cadence (cron polls + occasional user pastes).
             await self._session.rollback()
             fresh = await self.find_by_source(
                 project_id=project_id, source_identifier=source_identifier
@@ -2420,10 +2560,15 @@ class MembraneSignalRepository:
             raise
         return row
 
-    async def get(self, signal_id: str) -> MembraneSignalRow | None:
+    async def get(self, signal_id: str) -> KbItemRow | None:
+        # No source='ingest' filter: callers may pass an id that was
+        # written before the fold (back when membrane_signals was the
+        # only store). Post-F2 backfill, every such id has a kb_items
+        # mirror, so plain id lookup is correct. After F5 the legacy
+        # table is gone and this is the only path.
         return (
             await self._session.execute(
-                select(MembraneSignalRow).where(MembraneSignalRow.id == signal_id)
+                select(KbItemRow).where(KbItemRow.id == signal_id)
             )
         ).scalar_one_or_none()
 
@@ -2433,12 +2578,13 @@ class MembraneSignalRepository:
         *,
         classification: dict,
         status: str,
-    ) -> MembraneSignalRow | None:
+    ) -> KbItemRow | None:
         row = await self.get(signal_id)
         if row is None:
             return None
         row.classification_json = dict(classification)
         row.status = status
+        row.updated_at = datetime.now(timezone.utc)
         await self._session.flush()
         return row
 
@@ -2448,7 +2594,7 @@ class MembraneSignalRepository:
         *,
         status: str,
         approved_by_user_id: str | None = None,
-    ) -> MembraneSignalRow | None:
+    ) -> KbItemRow | None:
         row = await self.get(signal_id)
         if row is None:
             return None
@@ -2456,6 +2602,7 @@ class MembraneSignalRepository:
         if approved_by_user_id is not None:
             row.approved_by_user_id = approved_by_user_id
             row.approved_at = datetime.now(timezone.utc)
+        row.updated_at = datetime.now(timezone.utc)
         await self._session.flush()
         return row
 
@@ -2465,13 +2612,15 @@ class MembraneSignalRepository:
         *,
         status: str | None = None,
         limit: int = 100,
-    ) -> list[MembraneSignalRow]:
-        stmt = select(MembraneSignalRow).where(
-            MembraneSignalRow.project_id == project_id
+    ) -> list[KbItemRow]:
+        stmt = (
+            select(KbItemRow)
+            .where(KbItemRow.source == "ingest")
+            .where(KbItemRow.project_id == project_id)
         )
         if status is not None:
-            stmt = stmt.where(MembraneSignalRow.status == status)
-        stmt = stmt.order_by(MembraneSignalRow.created_at.desc()).limit(limit)
+            stmt = stmt.where(KbItemRow.status == status)
+        stmt = stmt.order_by(KbItemRow.created_at.desc()).limit(limit)
         return list((await self._session.execute(stmt)).scalars().all())
 
 
@@ -3567,26 +3716,30 @@ class KbFolderRepository:
         return len(list(rows))
 
     async def count_items(self, folder_id: str) -> int:
-        stmt = select(MembraneSignalRow).where(
-            MembraneSignalRow.folder_id == folder_id
-        )
+        # Post-fold (F3): all KB items — user-authored AND ingested —
+        # live in kb_items. Counting both kinds ensures the "is this
+        # folder empty?" gate stays correct regardless of source.
+        stmt = select(KbItemRow).where(KbItemRow.folder_id == folder_id)
         rows = (await self._session.execute(stmt)).scalars().all()
         return len(list(rows))
 
     async def set_item_folder(
         self, item_id: str, *, folder_id: str | None
-    ) -> MembraneSignalRow | None:
-        """Move an existing KB item (MembraneSignalRow) to a new folder.
+    ) -> KbItemRow | None:
+        """Move an existing KB item to a new folder.
 
-        Lives on the folder repo rather than MembraneSignalRepository
-        because moving items is tree-management; keeping the call
-        co-located with the rest of the hierarchy API is less confusing.
+        Operates on `kb_items` rows (any source). Pre-fold this mutated
+        MembraneSignalRow; post-fold all KB items — user-authored AND
+        ingested — live in kb_items, so the move is uniform regardless
+        of the row's source.
+
+        Lives on the folder repo rather than KbItemRepository because
+        moving items is tree-management; keeping the call co-located
+        with the rest of the hierarchy API is less confusing.
         """
         row = (
             await self._session.execute(
-                select(MembraneSignalRow).where(
-                    MembraneSignalRow.id == item_id
-                )
+                select(KbItemRow).where(KbItemRow.id == item_id)
             )
         ).scalar_one_or_none()
         if row is None:
@@ -3786,6 +3939,16 @@ class OrganizationMemberRepository:
     async def is_member(self, organization_id: str, user_id: str) -> bool:
         return (await self.get_member(organization_id, user_id)) is not None
 
+    async def is_lead(self, organization_id: str, user_id: str) -> bool:
+        """N-Next leader-bypass (north-star Correction R, new_concepts.md
+        §6.11): owner / admin of an organization can READ into any cell
+        owned by that org without being a direct project member. Writes
+        still require explicit cell membership — preserves the single-
+        membrane invariant.
+        """
+        row = await self.get_member(organization_id, user_id)
+        return row is not None and row.role in ("owner", "admin")
+
     async def list_for_organization(
         self, organization_id: str
     ) -> list[OrganizationMemberRow]:
@@ -3834,3 +3997,4 @@ class OrganizationMemberRepository:
         await self._session.delete(row)
         await self._session.flush()
         return True
+

@@ -1,14 +1,20 @@
 import { getTranslations } from "next-intl/server";
 
 import { ArtifactsPanel } from "@/components/status/ArtifactsPanel";
+import { BudgetControl } from "@/components/status/BudgetControl";
 import { DecisionsPanel } from "@/components/status/DecisionsPanel";
 import { MembersPanel } from "@/components/status/MembersPanel";
+import { MembraneNotesPanel } from "@/components/status/MembraneNotesPanel";
 import { Panel } from "@/components/status/Panel";
 import { RenderTriggers } from "@/components/status/RenderTriggers";
 import { RisksPanel } from "@/components/status/RisksPanel";
 import { TasksPanel } from "@/components/status/TasksPanel";
-import { Heading, Text } from "@/components/ui";
-import type { ProjectState } from "@/lib/api";
+import { Metric, PageHeader, Text } from "@/components/ui";
+import type {
+  MembraneNotesResponse,
+  PersonalTask,
+  ProjectState,
+} from "@/lib/api";
 import { requireUser, serverFetch } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
@@ -34,32 +40,104 @@ export default async function ProjectStatusPage({
   const user = await requireUser(`/projects/${id}/status`);
 
   let state: ProjectState | null = null;
+  let personalTasks: PersonalTask[] = [];
   let errorMessage: string | null = null;
   try {
     state = await serverFetch<ProjectState>(`/api/projects/${id}/state`);
   } catch (e) {
     errorMessage = e instanceof Error ? e.message : "failed to load project";
   }
+  // Personal tasks live in a separate fetch — they're per-viewer and
+  // not part of /state (which is project-wide). Failure here is non-
+  // fatal: the panel still renders the plan-scope tasks.
+  try {
+    const r = await serverFetch<{ ok: true; tasks: PersonalTask[] }>(
+      `/api/projects/${id}/personal-tasks`,
+    );
+    personalTasks = r.tasks ?? [];
+  } catch {
+    /* non-fatal — drafts surface stays empty */
+  }
+
+  // Batch C — membrane notes (pending reviews + clarifications).
+  // Surfaces the membrane's outstanding work so it's not invisible.
+  // Empty state is the calm default; loud only when there's work.
+  let membraneNotes: MembraneNotesResponse | null = null;
+  try {
+    membraneNotes = await serverFetch<MembraneNotesResponse>(
+      `/api/projects/${id}/membrane/notes`,
+    );
+  } catch {
+    /* non-fatal */
+  }
 
   const refreshedAt = new Date().toLocaleString();
 
   return (
     <main>
-      <header
+      <PageHeader
+        title={t("status.title")}
+        subtitle={t("status.subtitle")}
+        right={
+          <Text variant="caption" muted>
+            {t("status.lastRefreshed", { time: refreshedAt })}
+          </Text>
+        }
+      />
+
+      {/* Batch F.3 — 4-metric strip per html2 spec. Counts are derived
+          straight from the ProjectState payload we already fetched, so
+          they always agree with the panels below. Open-only filter on
+          risks matches the legacy panel's display rule. */}
+      <section
         style={{
-          display: "flex",
-          alignItems: "baseline",
-          justifyContent: "space-between",
+          display: "grid",
+          gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
           gap: 12,
-          marginBottom: 20,
-          flexWrap: "wrap",
+          marginBottom: 18,
         }}
       >
-        <Heading level={2}>{t("status.title")}</Heading>
-        <Text variant="caption" muted>
-          {t("status.lastRefreshed", { time: refreshedAt })}
-        </Text>
-      </header>
+        <Metric
+          value={state?.plan?.tasks?.length ?? 0}
+          label={t("status.metrics.tasks")}
+        />
+        <Metric
+          value={state?.graph?.deliverables?.length ?? 0}
+          label={t("status.metrics.deliverables")}
+        />
+        <Metric
+          value={
+            (state?.graph?.risks ?? []).filter((r) => r.status === "open").length
+          }
+          label={t("status.metrics.risks")}
+          tone={
+            (state?.graph?.risks ?? []).some(
+              (r) => r.status === "open" && (r.severity === "critical" || r.severity === "high"),
+            )
+              ? "danger"
+              : (state?.graph?.risks ?? []).some((r) => r.status === "open")
+                ? "amber"
+                : "neutral"
+          }
+        />
+        <Metric
+          value={state?.decisions?.length ?? 0}
+          label={t("status.metrics.decisions")}
+          tone="accent"
+        />
+      </section>
+
+      {state?.requirement_id &&
+      (state?.members ?? []).find((m) => m.user_id === user.id)?.role ===
+        "owner" ? (
+        <div style={{ marginBottom: 16 }}>
+          <BudgetControl
+            projectId={id}
+            requirementId={state.requirement_id}
+            initialBudgetHours={state.budget_hours ?? null}
+          />
+        </div>
+      ) : null}
 
       {errorMessage ? (
         <Panel title={t("status.title")}>
@@ -86,8 +164,12 @@ export default async function ProjectStatusPage({
             currentUserId={user.id}
           />
         </div>
+        <div style={{ gridColumn: "1 / -1" }}>
+          <MembraneNotesPanel projectId={id} notes={membraneNotes} />
+        </div>
         <TasksPanel
           tasks={state?.plan.tasks ?? []}
+          personalTasks={personalTasks}
           assignments={state?.assignments ?? []}
           members={state?.members ?? []}
           currentUserId={user.id}

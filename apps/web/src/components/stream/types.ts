@@ -97,6 +97,42 @@ export function relativeTime(iso: string, now: number = Date.now()): string {
   return new Date(iso).toLocaleDateString();
 }
 
+// Message-row timestamp — absolute clock time always inline, with the
+// shortest date prefix that disambiguates. F.17 clock-system pass:
+// chat messages need to show actual time (Slack/Lark rhythm), not
+// relative buckets like "5 min ago" that vanish into "2d ago"
+// quickly. The relative-time tooltip on hover is preserved by the
+// caller via `title={...}` so callers retain access to the full
+// absolute string for screen-reader / power users.
+//
+// Output by message age:
+//   < today       → "14:30"
+//   yesterday     → "Yesterday 14:30"
+//   < 7 days      → "Mon 14:30"
+//   older         → "Apr 22 14:30"
+export function formatMessageTime(
+  iso: string,
+  now: number = Date.now(),
+): string {
+  const t = new Date(iso);
+  if (!Number.isFinite(t.getTime())) return "";
+  const hh = String(t.getHours()).padStart(2, "0");
+  const mm = String(t.getMinutes()).padStart(2, "0");
+  const time = `${hh}:${mm}`;
+  const today = new Date(now);
+  const sameDay = t.toDateString() === today.toDateString();
+  if (sameDay) return time;
+  const yesterday = new Date(today.getTime() - 86_400_000);
+  if (t.toDateString() === yesterday.toDateString()) {
+    return `Yesterday ${time}`;
+  }
+  const daysDiff = (now - t.getTime()) / 86_400_000;
+  if (daysDiff < 7) {
+    return `${t.toLocaleDateString(undefined, { weekday: "short" })} ${time}`;
+  }
+  return `${t.toLocaleDateString(undefined, { month: "short", day: "numeric" })} ${time}`;
+}
+
 export function presenceDotColor(p?: StreamMember["presence"]): string {
   if (p === "away") return "var(--wg-amber)";
   if (p === "offline") return "var(--wg-ink-faint)";

@@ -75,6 +75,17 @@ from .llm import (
     ParseFailure,
     load_llm_settings,
 )
+from .meeting_ingest import (
+    LLMBackedMetabolizer,
+    METABOLIZE_PROMPT_VERSION,
+    MeetingMetabolizer,
+    MetabolizedDecision,
+    MetabolizedRisk,
+    MetabolizedSignals,
+    MetabolizedStance,
+    MetabolizedTask,
+    MetabolizeOutcome,
+)
 from .membrane import (
     MembraneAction,
     MembraneAgent,
@@ -158,6 +169,15 @@ __all__ = [
     "DriftCheckOutcome",
     "DriftCheckResult",
     "DriftItem",
+    "LLMBackedMetabolizer",
+    "METABOLIZE_PROMPT_VERSION",
+    "MeetingMetabolizer",
+    "MetabolizedDecision",
+    "MetabolizedRisk",
+    "MetabolizedSignals",
+    "MetabolizedStance",
+    "MetabolizedTask",
+    "MetabolizeOutcome",
     "MembraneAgent",
     "MembraneAction",
     "MembraneClassification",

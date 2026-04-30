@@ -23,7 +23,7 @@ from workgraph_agents.membrane import MembraneClassification
 from workgraph_api.main import app
 from workgraph_persistence import (
     EDGE_AGENT_SYSTEM_USER_ID,
-    MembraneSignalRow,
+    KbItemRow,
     MessageRow,
     session_scope,
 )
@@ -119,12 +119,13 @@ async def test_ingest_creates_row_and_dedups_on_same_source(api_env):
     assert body2["created"] is False
     assert body2["signal"]["id"] == first_id
 
+    # Post-fold (F3): membrane ingests land in kb_items with source='ingest'.
     async with session_scope(maker) as session:
         rows = (
             await session.execute(
-                select(MembraneSignalRow).where(
-                    MembraneSignalRow.project_id == project_id
-                )
+                select(KbItemRow)
+                .where(KbItemRow.source == "ingest")
+                .where(KbItemRow.project_id == project_id)
             )
         ).scalars().all()
     assert len(list(rows)) == 1
@@ -321,13 +322,12 @@ async def test_approve_flagged_signal_routes_to_validated_targets(api_env):
     assert abody["status"] == "routed"
     assert abody["routed_count"] == 1
 
-    # Signal row reflects the approver + timestamp + routed status.
+    # Signal row (now a kb_items row, source='ingest') reflects the
+    # approver + timestamp + routed status.
     async with session_scope(maker) as session:
         row = (
             await session.execute(
-                select(MembraneSignalRow).where(
-                    MembraneSignalRow.id == signal["id"]
-                )
+                select(KbItemRow).where(KbItemRow.id == signal["id"])
             )
         ).scalar_one()
     assert row.status == "routed"

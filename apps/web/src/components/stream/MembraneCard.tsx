@@ -22,7 +22,8 @@ import type { CSSProperties } from "react";
 
 import type { PersonalMessage } from "@/lib/api";
 
-import { relativeTime } from "./types";
+import { relativeTime,
+  formatMessageTime } from "./types";
 
 type Props = {
   message: PersonalMessage;
@@ -139,7 +140,7 @@ export function MembraneCard({ message }: Props) {
           <span>{sourceBadge(sourceKind)}</span>
         </span>
         <span title={new Date(message.created_at).toLocaleString()}>
-          {relativeTime(message.created_at)}
+          {formatMessageTime(message.created_at)}
         </span>
       </div>
       {tags.length > 0 && (

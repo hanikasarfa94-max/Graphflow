@@ -8,13 +8,33 @@ incrementally.
 
 ## The model
 
-The **cell** = the project's canonical knowledge center. Concretely:
+The **cell** = the project's canonical knowledge center — the protected
+core that every member shares context from. "Cell" is an internal
+model term; in user-facing copy use **"knowledge center"** or
+**"shared knowledge"**. Never expose "cell" to users — biology
+metaphor, doesn't help.
+
+Concretely the cell is composed of:
 
 - `ProjectGraphRepository` nodes (deliverables, goals, risks, milestones)
 - `PlanRepository` tasks
 - `DecisionRow`s (crystallized decisions)
-- `KbItemRow scope='group', status='published'` (group KB / wiki)
-- `MembraneSignalRow status='approved'` (legacy wiki + ingested signals)
+- `KbItemRow` where `scope='group'` AND `status='published'`
+
+That last bullet is the **whole** KB side of the cell. There is no
+separate "wiki" storage. The `source` field (`manual` / `upload` /
+`llm` / `ingest`) and the derived `source_kind` badge (`kb-note`,
+`wiki`, `git-commit`, `rss`, `kb-personal`, …) are display attribution
+— they tell a reader who authored a row, not what kind of thing it
+is. A wiki entry written by the IM-assist agent is the same row shape
+as a personal note that got promoted; only `source` differs. The
+write boundary is one call (`KbItemService.create` for new rows,
+`promote_to_group` for personal → group), and the membrane gates that
+boundary regardless of who is proposing.
+
+Pre-migration 0022/0024 the cell also pulled from `MembraneSignalRow`
+for the ingest path. That table is gone — ingested signals are now
+just `KbItemRow source='ingest'`. The cell is one table.
 
 The **membrane** = the boundary that decides what enters the cell.
 Inputs to the membrane:

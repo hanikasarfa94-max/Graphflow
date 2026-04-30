@@ -6,9 +6,9 @@
 // the loop) we gracefully fall back to the "coming soon" empty state
 // instead of crashing.
 
-import { Heading } from "@/components/ui";
+import { PageHeader } from "@/components/ui";
 import { KbTreeBrowser } from "@/components/kb/KbTreeBrowser";
-import { NotesSection } from "@/components/kb/NotesSection";
+import { ScopeTierPills } from "@/components/stream/ScopeTierPills";
 import {
   ApiError,
   getKbTree,
@@ -70,18 +70,28 @@ export default async function KbPage({
 
   return (
     <main>
-      <header style={{ marginBottom: 16 }}>
-        <Heading level={1}>{t("kb.title")}</Heading>
-      </header>
-      {/* Phase V — user-authored notes section. Project members can
-          write personal notes (only they see), promote to group when
-          ready. Lives above the membrane tree so the "I just wrote a
-          doc; where is it?" gap is gone. */}
-      <NotesSection
-        projectId={id}
-        currentUserId={user.id}
-        isProjectOwner={role === "owner"}
-      />
+      {/* F.16 prod-density: kicker dropped — was a literal duplicate of
+          title (both rendered "Knowledge base" / "知识库"). The sidebar
+          nav already labels this page; one heading is enough. */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "flex-start",
+          justifyContent: "space-between",
+          gap: 16,
+          flexWrap: "wrap",
+        }}
+      >
+        <PageHeader title={t("kb.title")} subtitle={t("kb.subtitle")} />
+        <div style={{ paddingTop: 8 }}>
+          <ScopeTierPills projectKey={`project:${id}`} />
+        </div>
+      </div>
+      {/* Notes are KB items now. The tree returns scope='personal' and
+          scope='group' rows in one payload (kb_hierarchy.get_tree
+          §F4 single-table read), and the right-pane "+ New note"
+          composer creates personal-scope items inline. The standalone
+          NotesSection is gone — one surface, one mental model. */}
       {backendMissing || tree === null ? (
         <div
           style={{

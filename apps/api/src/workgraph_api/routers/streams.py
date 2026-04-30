@@ -1,12 +1,21 @@
-"""Phase B (v2) — stream endpoints.
+"""Stream endpoints — project + DM (Phase B/v2) and room (N-Next).
 
-North-star §"Streams as the unifying primitive": one renderer, two types in
-v1 (project + dm). Project streams are auto-backfilled from existing
-projects on boot, so v1 surface focuses on:
+North-star §"Streams as the unifying primitive": one renderer, four types
+in N-Next:
+  * 'project' — main team room, auto-backfilled per cell at boot.
+  * 'personal' — per-user sub-agent stream, project-anchored.
+  * 'dm' — 1:1 between two users, no project anchor.
+  * 'room' — sub-team / topical / ad-hoc rooms within a cell. N-Next
+    addition per new_concepts.md §6.11 + Correction R.2.
 
-  * POST /api/streams/dm      — create (or return existing) 1:1 DM
-  * GET  /api/streams         — list streams the caller belongs to
-  * POST /api/streams/{id}/read  — mark stream read (updates last_read_at)
+Endpoints:
+  * POST /api/streams/dm                      — create or get 1:1 DM
+  * GET  /api/streams                         — list streams I belong to
+  * POST /api/streams/{id}/read               — mark stream read
+  * POST /api/streams/{id}/messages           — post message
+  * GET  /api/streams/{id}/messages           — list messages
+  * POST /api/projects/{id}/rooms             — N-Next: create room
+  * GET  /api/projects/{id}/rooms             — N-Next: list rooms
 
 All routes require a signed-in user.
 """
@@ -31,6 +40,13 @@ class StreamMessageRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     body: str = Field(min_length=1, max_length=4000)
+
+
+class CreateRoomRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=1, max_length=200)
+    member_user_ids: list[str] = Field(default_factory=list, max_length=200)
 
 
 def _get_service(request: Request) -> StreamService:
@@ -120,3 +136,98 @@ async def get_stream_messages(
             raise HTTPException(status_code=403, detail=err)
         raise HTTPException(status_code=400, detail=err)
     return {"messages": result["messages"]}
+
+
+# ---- N-Next: multi-room (new_concepts.md §6.11, Correction R.2) -------
+
+
+@router.post("/projects/{project_id}/rooms")
+async def post_create_room(
+    project_id: str,
+    body: CreateRoomRequest,
+    request: Request,
+    user: AuthenticatedUser = Depends(require_user),
+):
+    """Create a room (sub-team / topical / ad-hoc stream) inside a cell.
+
+    Members must be a subset of the cell's project members. Creator is
+    auto-added. TODO (N.4): route through MembraneService.review() with
+    CandidateKind='manual_room' for cell-governance gating.
+    """
+    service = _get_service(request)
+    result = await service.create_room(
+        project_id=project_id,
+        creator_user_id=user.id,
+        name=body.name,
+        member_user_ids=body.member_user_ids,
+    )
+    if not result.get("ok"):
+        err = result.get("error", "create_room_failed")
+        if err == "name_required" or err == "name_too_long":
+            raise HTTPException(status_code=400, detail=err)
+        if err == "not_a_member":
+            raise HTTPException(status_code=403, detail=err)
+        if err == "non_cell_member":
+            raise HTTPException(status_code=400, detail=err)
+        raise HTTPException(status_code=400, detail=err)
+    return result
+
+
+@router.get("/projects/{project_id}/rooms")
+async def get_list_rooms(
+    project_id: str,
+    request: Request,
+    user: AuthenticatedUser = Depends(require_user),
+):
+    """List every room stream in a cell. Project members + organization-
+    leads (read-only bypass per B4) can list."""
+    service = _get_service(request)
+    result = await service.list_rooms_for_project(
+        project_id=project_id, viewer_user_id=user.id
+    )
+    if not result.get("ok"):
+        err = result.get("error", "list_rooms_failed")
+        if err == "not_a_member":
+            raise HTTPException(status_code=403, detail=err)
+        raise HTTPException(status_code=400, detail=err)
+    return {"rooms": result["rooms"]}
+
+
+@router.get("/projects/{project_id}/rooms/{room_id}/timeline")
+async def get_room_timeline(
+    project_id: str,
+    room_id: str,
+    request: Request,
+    limit: int = Query(default=200, ge=1, le=500),
+    user: AuthenticatedUser = Depends(require_user),
+):
+    """Snapshot of a room's chronological timeline.
+
+    One canonical entity, multiple projections — same wire shape WS
+    upserts use. Returns a `TimelineItem[]` joining messages,
+    pending/resolved IM suggestions, and decisions whose
+    `scope_stream_id` matches this room. The frontend
+    `useRoomTimeline` hook seeds its reducer from this then applies
+    live `RoomTimelineEvent` frames over the WS.
+
+    Membership-gated by both project and stream.
+    """
+    timeline_service = request.app.state.room_timeline_service
+    result = await timeline_service.get_timeline(
+        project_id=project_id,
+        stream_id=room_id,
+        viewer_user_id=user.id,
+        limit=limit,
+    )
+    if not result.get("ok"):
+        err = result.get("error", "timeline_failed")
+        if err == "stream_not_found":
+            raise HTTPException(status_code=404, detail=err)
+        if err in ("wrong_project", "not_a_member"):
+            raise HTTPException(status_code=403, detail=err)
+        raise HTTPException(status_code=400, detail=err)
+    return {
+        "stream_id": result["stream_id"],
+        "project_id": result["project_id"],
+        "items": result["items"],
+    }

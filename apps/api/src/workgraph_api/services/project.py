@@ -198,6 +198,7 @@ class ProjectService:
                     ),
                     "role": m.role,
                     "license_tier": m.license_tier,
+                    "skill_tags": list(m.skill_tags or []),
                 }
                 for m in memberships
                 if m.user_id in users

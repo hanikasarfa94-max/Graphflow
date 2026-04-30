@@ -2,6 +2,9 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEffect, useState } from "react";
+
+import { listProjectRooms, type RoomSummary } from "@/lib/api";
 
 const PRIMARY_TABS = [
   { slug: "", label: "Stream" },
@@ -29,6 +32,26 @@ export function ProjectNav({
   const pathname = usePathname();
 
   const isAuditActive = pathname?.includes(`/projects/${projectId}/detail/`);
+  const isRoomActive = pathname?.includes(`/projects/${projectId}/rooms/`);
+
+  // Lazy-load rooms only after the user opens the flyout. Keeps the
+  // primary stream view cheap; the rooms list is small and uncached.
+  const [rooms, setRooms] = useState<RoomSummary[] | null>(null);
+  const [roomsLoading, setRoomsLoading] = useState(false);
+  function ensureRoomsLoaded() {
+    if (rooms !== null || roomsLoading) return;
+    setRoomsLoading(true);
+    listProjectRooms(projectId)
+      .then((r) => setRooms(r.rooms))
+      .catch(() => setRooms([]))
+      .finally(() => setRoomsLoading(false));
+  }
+  useEffect(() => {
+    // If the URL already points at a room, prefetch the list so the
+    // flyout opens immediately.
+    if (isRoomActive) ensureRoomsLoaded();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isRoomActive, projectId]);
 
   return (
     <nav
@@ -73,8 +96,112 @@ export function ProjectNav({
       })}
 
       <details
+        onToggle={(e) => {
+          if ((e.currentTarget as HTMLDetailsElement).open) ensureRoomsLoaded();
+        }}
         style={{
           marginLeft: "auto",
+          position: "relative",
+          marginBottom: -1,
+        }}
+      >
+        <summary
+          style={{
+            padding: "10px 14px",
+            fontSize: 13,
+            cursor: "pointer",
+            listStyle: "none",
+            color: isRoomActive ? "var(--wg-ink)" : "var(--wg-ink-soft)",
+            fontFamily: "var(--wg-font-mono)",
+            borderBottom: isRoomActive
+              ? "2px solid var(--wg-accent)"
+              : "2px solid transparent",
+            fontWeight: isRoomActive ? 600 : 400,
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 6,
+          }}
+        >
+          Rooms
+        </summary>
+        <div
+          style={{
+            position: "absolute",
+            top: "calc(100% + 4px)",
+            right: 0,
+            background: "#fff",
+            border: "1px solid var(--wg-line)",
+            borderRadius: "var(--wg-radius)",
+            boxShadow: "0 4px 16px rgba(0,0,0,0.06)",
+            minWidth: 220,
+            maxWidth: 320,
+            padding: 4,
+            zIndex: 20,
+            display: "grid",
+          }}
+        >
+          {rooms === null && roomsLoading && (
+            <span
+              style={{
+                padding: "8px 12px",
+                fontSize: 12,
+                color: "var(--wg-ink-soft)",
+              }}
+            >
+              Loading…
+            </span>
+          )}
+          {rooms !== null && rooms.length === 0 && (
+            <span
+              style={{
+                padding: "8px 12px",
+                fontSize: 12,
+                color: "var(--wg-ink-soft)",
+              }}
+            >
+              No rooms yet
+            </span>
+          )}
+          {rooms?.map((r) => {
+            const href = `/projects/${projectId}/rooms/${r.id}`;
+            const active = pathname === href;
+            const memberCount = r.members?.length ?? 0;
+            return (
+              <Link
+                key={r.id}
+                href={href}
+                aria-current={active ? "page" : undefined}
+                style={{
+                  padding: "8px 12px",
+                  fontSize: 13,
+                  textDecoration: "none",
+                  color: active ? "var(--wg-ink)" : "var(--wg-ink-soft)",
+                  fontWeight: active ? 600 : 400,
+                  borderRadius: "var(--wg-radius)",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: 6,
+                }}
+              >
+                <span>{r.name ?? r.id.slice(0, 8)}</span>
+                <span
+                  style={{
+                    fontSize: 11,
+                    color: "var(--wg-ink-soft)",
+                    fontFamily: "var(--wg-font-mono)",
+                  }}
+                >
+                  {memberCount}p
+                </span>
+              </Link>
+            );
+          })}
+        </div>
+      </details>
+
+      <details
+        style={{
           position: "relative",
           marginBottom: -1,
         }}

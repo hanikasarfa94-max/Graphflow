@@ -35,7 +35,6 @@ from workgraph_persistence import (
     KbFolderRepository,
     KbItemLicenseRepository,
     KbItemRepository,
-    MembraneSignalRepository,
     ProjectMemberRepository,
     UserRepository,
     session_scope,
@@ -120,17 +119,22 @@ class KbHierarchyService:
                     parent_folder_id=None,
                     created_by_user_id=None,
                 )
-            # Sweep any orphan items into the root. Cheap — the query
-            # is indexed on project_id, and folder_id IS NULL is the
-            # common case exactly once per project.
-            signal_repo = MembraneSignalRepository(session)
+            # Sweep any orphan items into the root. F4: kb_items is the
+            # single store; one query, both ingest + user-authored.
+            kb_item_repo = KbItemRepository(session)
             orphans = [
                 r
-                for r in await signal_repo.list_for_project(
-                    project_id, limit=10_000
+                for r in await kb_item_repo.list_visible_for_user(
+                    project_id=project_id,
+                    viewer_user_id="",
+                    limit=10_000,
                 )
-                if r.folder_id is None
+                if r.folder_id is None and r.scope == "group"
             ]
+            # We pass an empty viewer_user_id to avoid pulling personal
+            # rows — orphan sweep is project-wide cleanup, scoped to the
+            # group store so a user's personal draft never gets moved
+            # without their consent.
             for r in orphans:
                 r.folder_id = root.id
             if orphans:
@@ -305,9 +309,8 @@ class KbHierarchyService:
         item_id: str,
         folder_id: str,
     ) -> dict[str, Any]:
-        """Move a KB item (MembraneSignalRow) to a new folder. Any
-        project member may move items; this is collaborative curation,
-        not governance.
+        """Move a KB item to a new folder. Any project member may move
+        items; this is collaborative curation, not governance.
         """
         if not await self._is_member(
             project_id=project_id, user_id=user_id
@@ -315,11 +318,11 @@ class KbHierarchyService:
             return {"ok": False, "error": "not_a_member"}
         async with session_scope(self._sessionmaker) as session:
             folder_repo = KbFolderRepository(session)
-            signal_repo = MembraneSignalRepository(session)
+            kb_item_repo = KbItemRepository(session)
             folder = await folder_repo.get(folder_id)
             if folder is None or folder.project_id != project_id:
                 return {"ok": False, "error": "folder_not_found"}
-            item = await signal_repo.get(item_id)
+            item = await kb_item_repo.get(item_id)
             if item is None or item.project_id != project_id:
                 return {"ok": False, "error": "item_not_found"}
             updated = await folder_repo.set_item_folder(
@@ -351,8 +354,8 @@ class KbHierarchyService:
         if license_tier is not None and license_tier not in ALLOWED_TIERS:
             return {"ok": False, "error": "invalid_tier"}
         async with session_scope(self._sessionmaker) as session:
-            signal_repo = MembraneSignalRepository(session)
-            item = await signal_repo.get(item_id)
+            kb_item_repo = KbItemRepository(session)
+            item = await kb_item_repo.get(item_id)
             if item is None or item.project_id != project_id:
                 return {"ok": False, "error": "item_not_found"}
             license_repo = KbItemLicenseRepository(session)
@@ -413,43 +416,28 @@ class KbHierarchyService:
         await self.ensure_project_root(project_id)
         async with session_scope(self._sessionmaker) as session:
             folder_repo = KbFolderRepository(session)
-            signal_repo = MembraneSignalRepository(session)
             license_repo = KbItemLicenseRepository(session)
             user_repo = UserRepository(session)
 
             folders = await folder_repo.list_for_project(project_id)
-            # Exclude 'rejected' items from the tree surface — mirrors
-            # the kb.py list endpoint behavior. Rejected rows stay in
-            # the audit log but never in the browseable KB.
+            # F4: single-table read. All KB items (user-authored AND
+            # ingested) live in kb_items now. Visibility:
+            #   * scope='group'    — every project member
+            #   * scope='personal' — owner_user_id only (filtered in repo)
+            # Excludes 'rejected' (signals) and 'archived' (kb notes) so
+            # the surface mirrors pre-fold behavior. Drafts surface so
+            # the membrane-stage queue stays visible.
+            kb_item_repo = KbItemRepository(session)
             items = [
                 r
-                for r in await signal_repo.list_for_project(
-                    project_id, limit=1000
+                for r in await kb_item_repo.list_visible_for_user(
+                    project_id=project_id, viewer_user_id=user_id, limit=1000
                 )
-                if r.status != "rejected"
+                if r.status not in ("rejected", "archived")
             ]
             license_map = await license_repo.get_map_for_items(
                 [i.id for i in items]
             )
-            # Phase V — KbItemRow rows (manual notes, file uploads,
-            # LLM-proposed wiki entries, membrane-staged drafts) live
-            # in a separate table from MembraneSignalRow. Until now
-            # the tree only read membrane signals, so KbItemRow writes
-            # were invisible in the wiki view (the QA "agent saved to
-            # KB but UI shows nothing" report). Merge both kinds into
-            # the same tree. Visibility:
-            #   * scope='group'  — visible to every project member
-            #   * scope='personal' — visible only to its owner_user_id
-            # Status: include all but 'archived' (drafts surface with
-            # a chip so the membrane-stage queue is visible too).
-            kb_item_repo = KbItemRepository(session)
-            kb_item_rows = [
-                r
-                for r in await kb_item_repo.list_visible_for_user(
-                    project_id=project_id, viewer_user_id=user_id, limit=500
-                )
-                if r.status != "archived"
-            ]
             username_cache: dict[str, str | None] = {}
 
             async def _username(uid: str | None) -> str | None:
@@ -465,16 +453,16 @@ class KbHierarchyService:
             folder_payloads = [_folder_payload(f) for f in folders]
             item_payloads = []
             for r in items:
-                payload = _item_payload(r)
-                payload["license_tier_override"] = license_map.get(r.id)
-                payload["ingested_by_username"] = await _username(
-                    r.ingested_by_user_id
-                )
-                item_payloads.append(payload)
-            for r in kb_item_rows:
                 payload = _kb_item_payload(r)
+                # license override applies to both ingest + user-authored
+                # rows; the renderer left it absent so the caller fills it
+                # uniformly here.
+                payload["license_tier_override"] = license_map.get(r.id)
+                # `ingested_by_user_id` is set on ingest rows; for user-
+                # authored items we surface owner_user_id under the same
+                # key so the FE doesn't need to switch on source.
                 payload["ingested_by_username"] = await _username(
-                    r.owner_user_id
+                    r.ingested_by_user_id or r.owner_user_id
                 )
                 item_payloads.append(payload)
 
@@ -501,37 +489,52 @@ def _folder_payload(row: Any) -> dict[str, Any]:
     }
 
 
-def _item_payload(row: Any) -> dict[str, Any]:
-    classification = dict(row.classification_json or {})
-    summary = classification.get("summary") or (row.raw_content or "")
-    title = summary[:120] if summary else row.source_identifier or row.id
-    return {
-        "id": row.id,
-        "folder_id": row.folder_id,
-        "title": title,
-        "summary": (summary or "")[:300],
-        "source_kind": row.source_kind,
-        "source_identifier": row.source_identifier,
-        "status": row.status,
-        "tags": list(classification.get("tags") or []),
-        "created_at": row.created_at.isoformat() if row.created_at else None,
-        # updated_at isn't on MembraneSignalRow; proxy via created_at
-        # so the tree can sort by recency without a second table.
-        "updated_at": row.created_at.isoformat() if row.created_at else None,
-    }
-
-
 def _kb_item_payload(row: Any) -> dict[str, Any]:
-    """Render a KbItemRow into the same shape the kb tree uses for
-    MembraneSignalRow items. `source_kind` distinguishes the table:
+    """Render a KbItemRow into the kb tree shape, polymorphic on `source`.
 
-      * `kb-note`     — manual or LLM-created KbItemRow, scope=group
-      * `kb-personal` — same shape, scope=personal (only the owner sees it)
+    Three families share the same row shape post-fold (F4):
+      * `source='ingest'`   — externally-ingested signal. `source_kind`
+        carries the ingest sub-type (`user-drop` / `rss` / `webhook` /
+        `git-commit` / etc.); summary + tags pulled from
+        `classification_json`; raw text in `raw_content`.
+      * `source='manual'|'upload'|'llm'`, `scope='group'`  — group KB note,
+        rendered with `source_kind='kb-note'` so the FE treats it as
+        a wiki entry.
+      * `source='manual'|'upload'|'llm'`, `scope='personal'` — owner-only
+        draft, rendered with `source_kind='kb-personal'` so the FE
+        scopes visibility on the client side too.
 
-    The frontend can still render both alongside the existing
-    `wiki` / `url` / `meeting` membrane source kinds — the tree
-    is polymorphic by source_kind already.
+    Frontend already polymorphs on `source_kind`, so adding the ingest
+    variants here doesn't require any client change.
     """
+    if row.source == "ingest":
+        classification = dict(row.classification_json or {})
+        summary = classification.get("summary") or (row.raw_content or "")
+        title = (
+            row.title
+            or summary[:120]
+            or row.source_identifier
+            or row.id
+        )
+        return {
+            "id": row.id,
+            "folder_id": row.folder_id,
+            "title": title,
+            "summary": (summary or "")[:300],
+            "source_kind": row.source_kind,
+            "source_identifier": row.source_identifier,
+            "status": row.status,
+            "tags": list(classification.get("tags") or []),
+            # N.2: expose scope on the wire so ScopeTierPills can filter
+            # the tree client-side. Backend access guards (KbItemService.
+            # _assert_can_read) already gate what gets returned at all.
+            "scope": row.scope,
+            "created_at": row.created_at.isoformat() if row.created_at else None,
+            "updated_at": row.updated_at.isoformat() if row.updated_at else None,
+            # license_tier_override is filled in by the caller via the
+            # KbItemLicenseRepository.get_map_for_items bulk lookup —
+            # same path that pre-fold MembraneSignalRow rows used.
+        }
     src_kind = "kb-personal" if row.scope == "personal" else "kb-note"
     return {
         "id": row.id,
@@ -542,12 +545,10 @@ def _kb_item_payload(row: Any) -> dict[str, Any]:
         "source_identifier": None,
         "status": row.status,
         "tags": [],
+        "scope": row.scope,
         "created_at": row.created_at.isoformat() if row.created_at else None,
         "updated_at": row.updated_at.isoformat() if row.updated_at else None,
         "license_tier_override": None,
-        # Owner is the proposer; the tree caller fills
-        # ingested_by_username via the same _username cache used for
-        # MembraneSignalRow.ingested_by_user_id.
     }
 
 

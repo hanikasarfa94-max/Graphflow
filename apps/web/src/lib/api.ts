@@ -80,6 +80,11 @@ export interface GraphNode {
 export interface ProjectState {
   project: { id: string; title: string };
   requirement_version: number;
+  // Phase membrane-reorg follow-up — surfaces requirement.budget_hours
+  // so owners can edit it inline; the membrane's task_promote review
+  // uses the value for the estimate-overflow check.
+  requirement_id: string | null;
+  budget_hours: number | null;
   parsed: Record<string, unknown>;
   parse_outcome: string | null;
   graph: {
@@ -133,6 +138,10 @@ export interface ProjectState {
     display_name: string;
     role: string;
     license_tier?: "full" | "task_scoped" | "observer";
+    // Per-project functional skill tags (frontend/backend/qa/etc).
+    // Drives the membrane's task_promote assignee-coverage check.
+    // Members can self-edit; owners can edit anyone.
+    skill_tags?: string[];
   }[];
   conflicts: Conflict[];
   conflict_summary: ConflictSummary;
@@ -705,6 +714,12 @@ export interface Decision {
   // IM-suggestion-originated or conflict-originated decisions.
   gated_via_proposal_id?: string | null;
   decision_class?: string | null;
+  // Smallest-relevant-vote scope — set when the decision crystallized
+  // from a message inside a specific room (B3 + pickup #6). Null for
+  // legacy decisions and decisions from team-room messages. The room
+  // view reads this to render the "Voting with <room>'s <N> members"
+  // explainer on DecisionCard.
+  scope_stream_id?: string | null;
   created_at: string | null;
   applied_at: string | null;
 }
@@ -721,7 +736,17 @@ export interface IMSuggestion {
   id: string;
   message_id: string;
   project_id: string;
-  kind: "none" | "tag" | "decision" | "blocker";
+  // Phase L: 'wiki_entry' (IM-assist proposes saving the message to
+  // the project wiki). Phase membrane-reorg.S4: 'membrane_review' (the
+  // membrane staged a kb_item_group or task_promote candidate; the
+  // owner accepts here to flip draft → published / personal → plan).
+  kind:
+    | "none"
+    | "tag"
+    | "decision"
+    | "blocker"
+    | "wiki_entry"
+    | "membrane_review";
   confidence: number;
   targets: string[];
   proposal: IMSuggestionProposal | null;
@@ -795,8 +820,12 @@ export interface StreamMemberSummary {
 
 export interface StreamSummary {
   id: string;
-  type: "project" | "dm";
+  // Room and personal added in N-Next; persisted name only meaningful
+  // for type='room'.
+  type: "project" | "dm" | "room" | "personal";
   project_id: string | null;
+  // Persisted display name (alembic 0029) — null for non-room types.
+  name?: string | null;
   members: StreamMemberSummary[];
   last_activity_at: string | null;
   created_at: string | null;
@@ -809,6 +838,155 @@ export function listStreams(baseUrl?: string): Promise<{ streams: StreamSummary[
 
 export function markStreamRead(streamId: string): Promise<unknown> {
   return api(`/api/streams/${streamId}/read`, { method: "POST" });
+}
+
+// ---------- Room timeline (room-stream slice) ----------
+
+// Discriminated union of timeline rows the room view renders.
+// Mirrors RoomTimelineService.get_timeline output exactly. The
+// frontend dispatcher (RoomStreamTimeline) switches on `kind`. Future
+// kinds (`task`, `kb_item`) are reserved by the backend but only
+// schema-typed here so adding their renderers later is a frontend-
+// only change.
+export type TimelineMessageItem = {
+  kind: "message";
+  id: string;
+  stream_id: string;
+  project_id: string;
+  author_id: string;
+  author_username: string | null;
+  body: string;
+  // Renamed away from `kind` to avoid clashing with the discriminator.
+  kind_message: string;
+  linked_id: string | null;
+  created_at: string | null;
+};
+
+export type TimelineSuggestionItem = {
+  kind: "im_suggestion";
+  id: string;
+  project_id: string;
+  message_id: string;
+  status: "pending" | "accepted" | "dismissed" | "countered" | "escalated";
+  kind_suggestion: string;
+  confidence: number | null;
+  targets: unknown[];
+  proposal: Record<string, unknown> | null;
+  reasoning: string;
+  decision_id: string | null;
+  counter_of_id: string | null;
+  created_at: string | null;
+  resolved_at: string | null;
+};
+
+export type TimelineDecisionItem = {
+  kind: "decision";
+  id: string;
+  project_id: string;
+  conflict_id: string | null;
+  source_suggestion_id: string | null;
+  resolver_id: string | null;
+  rationale: string;
+  custom_text: string | null;
+  scope_stream_id: string | null;
+  apply_outcome:
+    | "pending"
+    | "ok"
+    | "partial"
+    | "failed"
+    | "advisory"
+    | null;
+  created_at: string | null;
+  applied_at: string | null;
+};
+
+export type TimelineItem =
+  | TimelineMessageItem
+  | TimelineSuggestionItem
+  | TimelineDecisionItem;
+
+// Canonical WS event shape for room broadcasts. The reducer applies
+// these via one switch over `event.type` — same wire shape backs both
+// the inline timeline and the workbench `Requests` projection. The
+// `kind` discriminator on the item identifies which entity type the
+// event refers to, so `update` and `delete` events can patch any
+// projection without specialized handlers.
+export type RoomTimelineEvent =
+  | { type: "timeline.upsert"; item: TimelineItem }
+  | {
+      type: "timeline.update";
+      kind: TimelineItem["kind"];
+      id: string;
+      patch: Record<string, unknown>;
+    }
+  | {
+      type: "timeline.delete";
+      kind: TimelineItem["kind"];
+      id: string;
+    };
+
+export interface RoomTimelineSnapshot {
+  stream_id: string;
+  project_id: string;
+  items: TimelineItem[];
+}
+
+// GET /api/projects/{projectId}/rooms/{roomId}/timeline
+// Snapshot for the room view; the WS channel reconciles incremental
+// updates over /ws/streams/{roomId}.
+export function getRoomTimeline(
+  projectId: string,
+  roomId: string,
+  options: { limit?: number; baseUrl?: string } = {},
+): Promise<RoomTimelineSnapshot> {
+  const { limit, baseUrl } = options;
+  const qs = limit ? `?limit=${limit}` : "";
+  return api<RoomTimelineSnapshot>(
+    `/api/projects/${projectId}/rooms/${roomId}/timeline${qs}`,
+    { baseUrl },
+  );
+}
+
+// GET /api/projects/{projectId}/rooms — list all rooms in a cell.
+// Returns the rooms array shape the new RoomTimelineSnapshot pulls
+// stream_id from for navigation / scope-name resolution.
+export interface RoomSummary extends StreamSummary {
+  type: "room";
+  name: string | null;
+}
+
+export function listProjectRooms(
+  projectId: string,
+  baseUrl?: string,
+): Promise<{ rooms: RoomSummary[] }> {
+  return api<{ rooms: RoomSummary[] }>(
+    `/api/projects/${projectId}/rooms`,
+    { baseUrl },
+  );
+}
+
+// GET /api/projects/{projectId}/im_suggestions?stream_id=...
+// Used by the workbench `Requests` panel as a fallback / refresh path
+// when the WS reducer state needs reconciliation. Day-to-day the panel
+// derives from useRoomTimeline.items.filter(kind === 'im_suggestion'
+// && status === 'pending').
+export interface IMSuggestionListResponse {
+  suggestions: Array<Record<string, unknown>>;
+}
+
+export function listIMSuggestions(
+  projectId: string,
+  options: { streamId?: string; limit?: number; baseUrl?: string } = {},
+): Promise<IMSuggestionListResponse> {
+  const { streamId, limit, baseUrl } = options;
+  const params = new URLSearchParams();
+  if (streamId) params.set("stream_id", streamId);
+  if (limit) params.set("limit", String(limit));
+  const qs = params.toString();
+  return api<IMSuggestionListResponse>(
+    `/api/projects/${projectId}/im_suggestions${qs ? `?${qs}` : ""}`,
+    { baseUrl },
+  );
 }
 
 // Create-or-get the canonical 1:1 DM stream between the authed user and
@@ -855,7 +1033,11 @@ export interface PendingSignal {
   project_id: string;
   project_title: string;
   summary: string;
-  kind: IMSuggestion["kind"];
+  /** IMSuggestion kind for AI-generated signals, or `"routing"` for an
+   *  unanswered peer routing inbox item. The home renders both in the
+   *  same "needs your response" list so the count aligns with the
+   *  sidebar inbox badge. */
+  kind: IMSuggestion["kind"] | "routing";
   created_at: string;
   jump_href: string;
 }
@@ -1196,10 +1378,22 @@ export function edgeKindToMessageKind(
 export function postPersonalMessage(
   projectId: string,
   body: string,
+  scope?: Record<string, boolean> | null,
+  scopeTiers?: Record<string, boolean> | null,
 ): Promise<PersonalPostResponse> {
+  // Two orthogonal narrowings ride on this POST:
+  //   * scope        — StreamContextPanel: which kinds of source (graph/kb/dms/audit)
+  //   * scope_tiers  — ScopeTierPills:    which license tiers (personal/group/department/enterprise)
+  // Both are forward-compat fields the server logs for debug; consumer
+  // wiring (LicenseContextService.allowed_scopes intersect) lands in N.4.
+  const payload = {
+    body,
+    ...(scope ? { scope } : {}),
+    ...(scopeTiers ? { scope_tiers: scopeTiers } : {}),
+  };
   return api<PersonalPostResponse>(`/api/personal/${projectId}/post`, {
     method: "POST",
-    body: { body },
+    body: payload,
   });
 }
 
@@ -1593,7 +1787,20 @@ export function regenerateHandoffRender(
 // catch `ApiError` with `status === 404` and render a "coming soon" state
 // rather than propagating the failure.
 
-export type KbItemStatus = "pending-review" | "approved" | "rejected" | "routed";
+// Two status vocabularies share the kb_items table post-fold:
+//   * ingest rows (source='ingest')      — pending-review|approved|rejected|routed
+//   * user-authored (manual/upload/llm)  — draft|published|archived
+// Both are valid wherever a KB item appears. Renderer code switches on
+// status to show the right chip; the backend doesn't enforce per-source
+// transitions at the type system level.
+export type KbItemStatus =
+  | "pending-review"
+  | "approved"
+  | "rejected"
+  | "routed"
+  | "draft"
+  | "published"
+  | "archived";
 
 export interface KbItem {
   id: string;
@@ -1680,6 +1887,10 @@ export interface KbTreeItem {
   source_identifier: string | null;
   status: KbItemStatus;
   tags: string[];
+  // KbItemRow.scope wire value — one of "personal" / "group" / "department"
+  // / "enterprise". Used by ScopeTierPills to filter the tree client-side
+  // (the backend access guard still enforces what the user can read at all).
+  scope: string;
   created_at: string | null;
   updated_at: string | null;
   license_tier_override: LicenseTier | null;
@@ -2312,6 +2523,110 @@ export function fetchTaskHistory(
   baseUrl?: string,
 ): Promise<TaskHistoryPayload> {
   return api(`/api/tasks/${taskId}/history`, { baseUrl });
+}
+
+// Phase T — personal-task surface. The owner of a personal task can
+// list their own + promote individually to the group plan via the
+// membrane review pathway.
+
+export type TaskScope = "plan" | "personal";
+
+export interface PersonalTask {
+  id: string;
+  project_id: string;
+  title: string;
+  description: string | null;
+  scope: TaskScope;
+  status: string;
+  owner_user_id: string | null;
+  requirement_id: string | null;
+  source_message_id: string | null;
+  assignee_role: string | null;
+  created_at: string | null;
+}
+
+export function fetchPersonalTasks(
+  projectId: string,
+  baseUrl?: string,
+): Promise<{ ok: true; tasks: PersonalTask[] }> {
+  return api(`/api/projects/${projectId}/personal-tasks`, { baseUrl });
+}
+
+export interface PromoteTaskResponse {
+  ok: true;
+  task: PersonalTask | null;
+  deferred?: boolean;
+  reason?: string;
+  diff_summary?: string | null;
+}
+
+export function promoteTask(taskId: string): Promise<PromoteTaskResponse> {
+  return api(`/api/tasks/${taskId}/promote`, { method: "POST" });
+}
+
+export function setRequirementBudget(
+  projectId: string,
+  requirementId: string,
+  budgetHours: number | null,
+): Promise<{ ok: true; requirement_id: string; budget_hours: number | null }> {
+  return api(
+    `/api/projects/${projectId}/requirements/${requirementId}/budget`,
+    {
+      method: "PATCH",
+      body: { budget_hours: budgetHours },
+    },
+  );
+}
+
+export function setMemberSkills(
+  projectId: string,
+  userId: string,
+  skillTags: string[],
+): Promise<{ ok: true; user_id: string; skill_tags: string[] }> {
+  return api(`/api/projects/${projectId}/members/${userId}/skills`, {
+    method: "PATCH",
+    body: { skill_tags: skillTags },
+  });
+}
+
+// Batch C — membrane notes panel surface. Lists the project's
+// outstanding membrane work: drafts waiting for owner review, and
+// recent clarification questions waiting for proposer answers.
+export interface MembraneReviewNote {
+  id: string;
+  message_id: string;
+  kind: string;
+  proposal: {
+    action?: string;
+    summary?: string;
+    detail?: {
+      candidate_kind?: string;
+      kb_item_id?: string;
+      task_id?: string;
+      diff_summary?: string | null;
+      conflict_with?: string[];
+    };
+  } | null;
+  reasoning: string | null;
+  created_at: string | null;
+}
+export interface MembraneClarifyNote {
+  id: string;
+  linked_id: string | null;
+  body: string;
+  stream_id: string | null;
+  created_at: string | null;
+}
+export interface MembraneNotesResponse {
+  ok: true;
+  pending_reviews: MembraneReviewNote[];
+  pending_clarifications: MembraneClarifyNote[];
+}
+export function fetchMembraneNotes(
+  projectId: string,
+  baseUrl?: string,
+): Promise<MembraneNotesResponse> {
+  return api(`/api/projects/${projectId}/membrane/notes`, { baseUrl });
 }
 
 // ---------- KB items (Phase V — manual-write notes) -------------------

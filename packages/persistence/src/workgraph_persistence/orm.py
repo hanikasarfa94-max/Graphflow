@@ -12,6 +12,34 @@ def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
+class _FrecencyColumnsMixin:
+    """N-Next §7.4 frecency primitives.
+
+    `last_accessed_at` + `access_count` drive the frecency ranker —
+    `score = log(1 + access_count) × time_decay(now - last_accessed_at)`.
+    Bump-on-touch writers update both on: search hits (kb_search /
+    skill atlas), citation resolution (decision crystallize, edge-LLM
+    cited claims), and explicit user navigation (detail-page reads).
+
+    Defaults at INSERT time: `last_accessed_at = _utcnow` (a freshly-
+    created row is freshly-accessed by definition); `access_count = 0`.
+    Migration 0028 backfills `last_accessed_at` from `created_at` for
+    pre-migration rows.
+
+    Applied to the five node-bearing row types: KbItemRow, MessageRow,
+    DecisionRow, TaskRow, RiskRow. Not applied to graph entities
+    (Goal/Deliverable/Constraint) because those aren't retrieval
+    targets — they're structure, not content.
+    """
+
+    last_accessed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow
+    )
+    access_count: Mapped[int] = mapped_column(
+        Integer, default=0, server_default="0"
+    )
+
+
 class ProjectRow(Base):
     __tablename__ = "projects"
 
@@ -71,6 +99,13 @@ class RequirementRow(Base):
     raw_text: Mapped[str] = mapped_column(String)
     parsed_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     parse_outcome: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    # Migration 0025 — declared budget for the requirement, in hours.
+    # Nullable because most v1 intakes don't carry an explicit budget;
+    # when set, MembraneService._review_task_promote uses it for the
+    # estimate-overflow advisory check during personal→plan promotion.
+    # Surfaced via the requirement-edit UI; LLM intake never writes it
+    # (intake parses scope, not capacity — that's a separate decision).
+    budget_hours: Mapped[int | None] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
     parsed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
@@ -235,7 +270,7 @@ class ConstraintRow(_GraphEntityBase, Base):
     severity: Mapped[str] = mapped_column(String(16), default="medium")
 
 
-class RiskRow(_GraphEntityBase, Base):
+class RiskRow(_GraphEntityBase, _FrecencyColumnsMixin, Base):
     __tablename__ = "graph_risks"
     __table_args__ = (
         UniqueConstraint("requirement_id", "sort_order", name="uq_risk_order"),
@@ -252,7 +287,7 @@ class RiskRow(_GraphEntityBase, Base):
     severity: Mapped[str] = mapped_column(String(16), default="medium")
 
 
-class TaskRow(_GraphEntityBase, Base):
+class TaskRow(_GraphEntityBase, _FrecencyColumnsMixin, Base):
     """Planning-produced task on the latest requirement version.
 
     Shares _GraphEntityBase with Phase-5 entities so status/sort_order/created_at
@@ -456,6 +491,14 @@ class ProjectMemberRow(Base):
     role: Mapped[str] = mapped_column(String(32), default="member")
     # 'full' | 'task_scoped' | 'observer'. v1 enforces 'observer' only.
     license_tier: Mapped[str] = mapped_column(String(16), default="full")
+    # Migration 0026 — per-project functional skill tags. Free-form
+    # strings drawn from the same vocabulary as TaskRow.assignee_role
+    # (pm/frontend/backend/qa/design/business/approver). Used by the
+    # membrane's task_promote review for assignee-coverage checks: a
+    # task tagged role='backend' with no project member carrying that
+    # tag emits an advisory warning. Self-editable per member; owners
+    # can also edit any member's tags.
+    skill_tags: Mapped[list[str]] = mapped_column(JSON, default=list)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 
 
@@ -578,7 +621,7 @@ class CommentRow(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 
 
-class MessageRow(Base):
+class MessageRow(_FrecencyColumnsMixin, Base):
     """Per-stream IM message. Plain text or markdown, no attachments.
 
     Phase B (v2): messages attach to a `stream_id`; `project_id` stays populated
@@ -759,7 +802,7 @@ class ConflictRow(Base):
     )
 
 
-class DecisionRow(Base):
+class DecisionRow(_FrecencyColumnsMixin, Base):
     """Phase 9 — audit row for a human decision on a conflict.
 
     A conflict can have multiple decisions over time (currently we don't
@@ -820,6 +863,18 @@ class DecisionRow(Base):
     )
     gated_via_proposal_id: Mapped[str | None] = mapped_column(
         ForeignKey("gated_proposals.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    # Migration 0027 — smallest-relevant-vote routing (new_concepts.md
+    # §6.11 + north-star Correction R.2). Crystallization Agent stamps
+    # the smallest stream that contained the discussion (DM / room /
+    # cell-wide stream); vote quorum derives from that stream's member
+    # list. NULL means fall back to cell-wide (project-level) vote.
+    # SET NULL on stream delete so a deleted room doesn't cascade-
+    # destroy its decisions.
+    scope_stream_id: Mapped[str | None] = mapped_column(
+        ForeignKey("streams.id", ondelete="SET NULL"),
         nullable=True,
         index=True,
     )
@@ -1022,23 +1077,33 @@ class StreamRow(Base):
     """Unifying conversation container.
 
     Types in v1 (post-Phase L):
-      * 'project'  — team room, one per project, all project members
+      * 'project'  — main team room, exactly one per project, all
+                     project members. Created at project boot.
       * 'personal' — private (user ↔ their edge-agent), project-anchored,
                      owner_user_id set; primary surface per north-star
                      §"Sub-agent and routing architecture"
       * 'dm'       — 1:1 between two users, no project anchor
 
+    Types added in N-Next (per new_concepts.md §6.11 + north-star
+    Correction R.2):
+      * 'room'     — sub-team / topical / ad-hoc room INSIDE a cell
+                     (project_id set; member subset of cell members).
+                     Multiple rooms per project allowed. Decision votes
+                     crystallized inside a room default to that room's
+                     member quorum (smallest-relevant-vote rule).
+
     `last_activity_at` is bumped on every new message so GET /api/streams
     can order by recency without scanning messages.
 
     `owner_user_id` is populated only for personal streams (the human who
-    owns the sub-agent conversation). Null for project / dm.
+    owns the sub-agent conversation). Null for project / dm / room.
     """
 
     __tablename__ = "streams"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    # 'project' | 'personal' | 'dm' in v1. 'group' + 'rehearsal' come in v2.
+    # v1: 'project' | 'personal' | 'dm'. N-Next adds 'room'.
+    # v2 reserves 'group' (3-10 ad-hoc) + 'rehearsal'.
     type: Mapped[str] = mapped_column(String(16))
     project_id: Mapped[str | None] = mapped_column(
         ForeignKey("projects.id", ondelete="CASCADE"), nullable=True, index=True
@@ -1048,6 +1113,13 @@ class StreamRow(Base):
     owner_user_id: Mapped[str | None] = mapped_column(
         ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True
     )
+    # Room-stream slice: persisted display name for type='room' streams
+    # (e.g. "design-sync", "auth-redesign"). Nullable because
+    # project/personal/dm streams don't carry a name — they derive their
+    # display from the project / owner / DM partner. Surfaced via
+    # GET /api/projects/{id}/rooms so the room nav and DecisionCard
+    # vote-scope explainer can render real names.
+    name: Mapped[str | None] = mapped_column(String(200), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_utcnow
     )
@@ -1099,96 +1171,11 @@ class StreamMemberRow(Base):
 # replied → (accepted | declined | expired).
 
 
-class MembraneSignalRow(Base):
-    """Phase D — external signal ingested through a project's membrane.
-
-    Vision §5.12 (Membranes): external content (git commits/PRs, steam
-    reviews, rss posts, webhooks, user-dropped links) flows through a
-    security-gated classification pipeline before it can influence routing
-    or trigger any graph activity.
-
-    `status` lifecycle:
-      * `pending-review` — default on ingest; MembraneAgent hasn't written
-        its classification yet, or the classifier flagged the content for
-        human review.
-      * `approved` — human approver cleared a flagged signal.
-      * `rejected` — human approver rejected the signal. It stays on the
-        audit log but is never routed.
-      * `routed` — auto-approved (confidence ≥ 0.7, no injection flag) and
-        the service has posted membrane-signal messages into each proposed
-        target's personal stream.
-
-    Dedup key is (project_id, source_identifier). Re-ingesting the same
-    URL / commit hash / forum post returns the existing row. `raw_content`
-    is trimmed at ingest to the first 4000 chars — the LLM prompt never
-    sees unbounded external text, which is the first injection guardrail.
-    """
-
-    __tablename__ = "membrane_signals"
-    __table_args__ = (
-        UniqueConstraint(
-            "project_id", "source_identifier", name="uq_membrane_signal_source"
-        ),
-    )
-
-    id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    # Nullable because vision §5.12 allows org-level signals that don't
-    # attach to a single project. v1 always sets project_id; the nullable
-    # schema keeps v2 org-level ingestion non-breaking.
-    project_id: Mapped[str | None] = mapped_column(
-        ForeignKey("projects.id", ondelete="CASCADE"), nullable=True, index=True
-    )
-    # 'git-commit' | 'git-pr' | 'steam-review' | 'steam-forum' | 'rss'
-    # | 'user-drop' | 'webhook'
-    source_kind: Mapped[str] = mapped_column(String(32), index=True)
-    # URL, commit hash, forum post id — whatever the source uses to
-    # uniquely identify the artifact. Paired with project_id for dedup.
-    source_identifier: Mapped[str] = mapped_column(String(512))
-    # Trimmed to first 4000 chars at ingest — keeps prompt cost bounded
-    # AND limits the surface area for prompt-injection. See vision §5.12.
-    raw_content: Mapped[str] = mapped_column(String)
-    # Set when a project member drops a link; null for agent pulls /
-    # webhook payloads. v1 only ingests via user-drop or simulated
-    # webhook, so this is usually populated.
-    ingested_by_user_id: Mapped[str | None] = mapped_column(
-        ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
-    )
-    # MembraneAgent output shape (Pydantic dumps into here). Keys:
-    #   is_relevant: bool
-    #   tags: list[str]
-    #   summary: str  (<=200 chars)
-    #   proposed_target_user_ids: list[str]
-    #   proposed_action: "route-to-members" | "ambient-log" | "flag-for-review"
-    #   confidence: float (0-1)
-    #   safety_notes: str
-    classification_json: Mapped[dict] = mapped_column(JSON, default=dict)
-    # See class docstring for allowed values. Defaults to 'pending-review'
-    # per vision §5.12 security boundary — NOTHING is routed until either
-    # auto-approval (confidence threshold + no injection flag) or a human
-    # admin approves it explicitly.
-    status: Mapped[str] = mapped_column(
-        String(16), default="pending-review", index=True
-    )
-    approved_by_user_id: Mapped[str | None] = mapped_column(
-        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
-    )
-    approved_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
-    trace_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=_utcnow
-    )
-    # Phase 3.A — hierarchical KB. Nullable because every pre-3.A row
-    # lived flat; migration 0013 backfills each into its project's root
-    # folder. Post-backfill, new rows always carry a folder_id, but the
-    # column stays nullable so cross-project membrane ingests (project_id
-    # null) don't need a fictional folder target.
-    folder_id: Mapped[str | None] = mapped_column(
-        ForeignKey("kb_folders.id", ondelete="SET NULL"),
-        nullable=True,
-        index=True,
-    )
+# MembraneSignalRow was deleted in migration 0024 (Stage F5 of the
+# fold). External-signal ingests now live in `kb_items` with
+# source='ingest'; KbItemRow carries every field MembraneSignalRow
+# used to carry. See docs/membrane-reorg.md follow-up for the
+# rationale and the full F1–F5 migration trail.
 
 
 class StatusTransitionRow(Base):
@@ -1879,22 +1866,40 @@ class KbFolderRow(Base):
     )
 
 
-class KbItemRow(Base):
+class KbItemRow(_FrecencyColumnsMixin, Base):
     """Migration 0019 — Phase V: first-class user-authored KB note.
+    Migration 0022 — absorbs MembraneSignalRow's shape so externally-
+    ingested signals can live in the same table (source='ingest').
 
-    Distinct from MembraneSignalRow (which is for URL/RSS/web-search
-    ingests through the membrane pipeline). KbItemRow is what the user
-    wrote (or uploaded) directly. The two coexist; the wiki UI lists
-    both.
+    Two row families share this table:
+      * user-authored: source in {'manual','upload','llm'}; project_id
+        and owner_user_id always set; signal-shaped columns NULL.
+      * ingested:      source='ingest'; source_kind discriminates the
+        ingest sub-type (git-commit/rss/user-drop/webhook); project_id
+        and owner_user_id may be NULL (org-level ingests, webhook
+        payloads); signal-shaped columns populated.
 
-    Scope semantics:
-      * 'personal' — visible only to owner_user_id. The edge LLM uses
+    Scope semantics (user-authored only — ingests don't have scope).
+    Four-tier ladder per new_concepts.md §6.11; legacy `'group'`
+    is kept as the Cell-scope value (north-star Correction R locks
+    "no schema rename"):
+      * 'personal'   — visible only to owner_user_id. Edge LLM uses
         these as private pretext for that user's sub-agent ONLY. Never
         bleeds into other members' contexts. Default scope on create.
-      * 'group'    — shared with all project members. LLM uses for
-        everyone. Promoted from personal via an explicit owner action
-        (Phase V.1) or LLM-mediated route (Phase V.2). Group items
-        affect everyone's pretext, so the promotion flow gates carefully.
+      * 'group'      — Cell scope: shared with all project members.
+        LLM uses for everyone. Promoted from personal via an explicit
+        owner action (Phase V.1) or LLM-mediated route (Phase V.2).
+        Group items affect everyone's pretext, so the promotion flow
+        gates carefully.
+      * 'department' — N-Next: functional subset (Eng / Design /
+        Marketing KB). Membership tables land in B1.2; today this
+        value is accepted on writes but read access falls back to
+        OrganizationMemberRow visibility.
+      * 'enterprise' — N-Next: org-wide (HR, brand, compliance).
+        Read access gated by OrganizationMemberRow.
+
+    The scope tier is orthogonal to ProjectMemberRow.license_tier
+    (full / task_scoped / observer).
 
     The folder_id link is optional: items without a folder live at root.
     Folder = the existing KbFolderRow; we don't add a second hierarchy.
@@ -1902,37 +1907,75 @@ class KbItemRow(Base):
     `content_md` stores markdown. v1 caps at 64KB (DB column limit) —
     larger uploads get a placeholder body + an external blob ref later.
 
-    `status` lifecycle: draft (just created) → published (owner ready
-    for others to read) → archived (kept but hidden from default lists).
-    Personal items skip the gate; group items can use draft/published
-    as a "WIP, don't trust this yet" signal.
+    `status` lifecycle, user-authored:
+      draft → published → archived
+    `status` lifecycle, ingested:
+      pending-review → approved | routed | rejected
+    No DB-level enum; app layer (services/kb_items.py) holds the
+    VALID_STATUSES set and the legal transitions.
     """
 
     __tablename__ = "kb_items"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    project_id: Mapped[str] = mapped_column(
-        ForeignKey("projects.id", ondelete="CASCADE"), index=True
+    # Nullable since 0022 — org-level ingests have no project (mirrors
+    # the old MembraneSignalRow.project_id semantics).
+    project_id: Mapped[str | None] = mapped_column(
+        ForeignKey("projects.id", ondelete="CASCADE"), nullable=True, index=True
     )
     folder_id: Mapped[str | None] = mapped_column(
         ForeignKey("kb_folders.id", ondelete="SET NULL"),
         nullable=True,
         index=True,
     )
-    owner_user_id: Mapped[str] = mapped_column(
-        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    # Nullable since 0022 — webhook/cron ingests have no human owner.
+    owner_user_id: Mapped[str | None] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True
     )
     scope: Mapped[str] = mapped_column(String(16), default="personal", index=True)
     title: Mapped[str] = mapped_column(String(500))
     content_md: Mapped[str] = mapped_column(String, default="")
     status: Mapped[str] = mapped_column(String(16), default="published")
     # Source tag — 'manual' (typed in the UI), 'upload' (file ingest),
-    # 'llm' (created by the user's edge sub-agent on their request).
-    # Lets the wiki UI surface a small "Source: …" chip.
+    # 'llm' (created by the user's edge sub-agent on their request),
+    # 'ingest' (external content via membrane pipeline; see source_kind
+    # for the sub-type).
     source: Mapped[str] = mapped_column(String(16), default="manual")
-    # Phase B (migration 0020) — file attachment metadata. All four
-    # are populated together when source='upload'; null for manual /
-    # llm-authored items. The actual bytes live on disk at
+    # ---- ingest-only columns (added in 0022) ---------------------------
+    # Discriminates ingest sub-type when source='ingest'. NULL otherwise.
+    # Values: 'git-commit' | 'git-pr' | 'steam-review' | 'steam-forum' |
+    # 'rss' | 'user-drop' | 'webhook'.
+    source_kind: Mapped[str | None] = mapped_column(
+        String(32), nullable=True, index=True
+    )
+    # URL / commit hash / forum post id — paired with project_id for
+    # dedup at the app layer (KbItemRepository.upsert_ingest).
+    source_identifier: Mapped[str | None] = mapped_column(
+        String(512), nullable=True
+    )
+    # Pre-classification text, trimmed at ingest to the first 4000
+    # chars. NULL for non-ingests; their authored content lives in
+    # content_md only.
+    raw_content: Mapped[str | None] = mapped_column(String, nullable=True)
+    # MembraneAgent output (is_relevant, tags, summary, proposed_target_
+    # user_ids, proposed_action, confidence, safety_notes). Defaults to
+    # an empty dict so non-ingest reads don't need a None-check.
+    classification_json: Mapped[dict] = mapped_column(JSON, default=dict)
+    # Who dropped the link (user-drop) — null for cron/webhook pulls
+    # and for non-ingests.
+    ingested_by_user_id: Mapped[str | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    approved_by_user_id: Mapped[str | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    approved_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    trace_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    # ---- Phase B (migration 0020) — file attachment metadata ---------
+    # All four populated together when source='upload'; null for
+    # manual / llm-authored items. Bytes live on disk at
     # `<KB_UPLOADS_ROOT>/<item_id>/<attachment_filename>` — we don't
     # store the absolute path so the root can move (volume mount,
     # different host) without rewriting rows.
@@ -1974,12 +2017,11 @@ class KbItemLicenseRow(Base):
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    # item_id mirrors membrane_signals.id. We use SET NULL on FK cascade
-    # so a deleted signal leaves the override row as dangling audit
-    # history rather than silently vanishing — consistent with how the
-    # rest of the codebase treats user-authored records.
+    # item_id points at kb_items.id (post-fold; F5 / migration 0024).
+    # Pre-fold this referenced membrane_signals.id; ids are preserved
+    # across the F2 backfill so existing override rows still resolve.
     item_id: Mapped[str] = mapped_column(
-        ForeignKey("membrane_signals.id", ondelete="CASCADE"), index=True
+        ForeignKey("kb_items.id", ondelete="CASCADE"), index=True
     )
     license_tier: Mapped[str] = mapped_column(String(16))
     set_by_user_id: Mapped[str | None] = mapped_column(

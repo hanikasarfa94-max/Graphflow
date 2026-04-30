@@ -93,29 +93,37 @@ const NODE_WIDTH: Record<NodeKind, number> = {
   risk: 240,
 };
 
-// Severity palette — reused for risks.
+// Severity palette — reused for risks. v2 (blue/white): critical/high
+// flip to danger-red because in v1 the brand-accent doubled as a danger
+// signal (terracotta has danger vibes); v2 separates them — blue is
+// brand, red is danger. Medium amber stays amber-class. Low neutral
+// stays neutral.
 const SEVERITY_TINT: Record<string, string> = {
-  critical: "#fbd5cb",
-  high: "#fbd5cb",
-  medium: "#fce7c2",
-  low: "#f4f0e6",
+  critical: "#fee2e2",
+  high: "#fee2e2",
+  medium: "#fef3c7",
+  low: "#eef3fb",
 };
 const SEVERITY_BORDER: Record<string, string> = {
-  critical: "#c0471e",
-  high: "#c0471e",
-  medium: "#c68a00",
-  low: "#9a9a95",
+  critical: "#dc2626",
+  high: "#dc2626",
+  medium: "#d97706",
+  low: "#9aa8bd",
 };
 
 // Left-side bar color per kind. Bar is the primary differentiator at
 // a glance — eye reads the stripe before reading the label.
+// v2 note: risk uses --wg-danger (not --wg-accent) because in v1
+// terracotta-as-accent had a danger-tint built in; v2 brand blue
+// doesn't, so we explicitly route risks to the danger color. Goal/
+// decision keep --wg-accent because they ARE the primary affordance.
 const KIND_BAR: Record<NodeKind, string> = {
   goal: "var(--wg-accent)",
-  commitment: "#b5802b",
-  deliverable: "#4d7a4a",
+  commitment: "#d97706",
+  deliverable: "#16a34a",
   decision: "var(--wg-accent)",
   task: "var(--wg-ink-faint)",
-  risk: "var(--wg-accent)",
+  risk: "var(--wg-danger)",
 };
 const KIND_ICON: Record<NodeKind, string> = {
   goal: "◆",
@@ -310,7 +318,7 @@ function WgNode({ data, selected }: NodeProps<NodeData>) {
         boxShadow: simStyle
           ? `0 0 0 2px ${simStyle.ring}`
           : pulsing
-            ? "0 0 0 3px var(--wg-accent-ring), 0 0 16px rgba(192, 71, 30, 0.28)"
+            ? "0 0 0 3px var(--wg-accent-ring), 0 0 16px rgba(37, 99, 235, 0.28)"
             : selected
               ? "0 0 0 2px var(--wg-accent-ring)"
               : undefined,
@@ -913,12 +921,12 @@ export function GraphCanvas({
             source: id,
             target: targetNodeId,
             style: {
-              stroke: "#b5802b",
+              stroke: "#d97706",
               strokeWidth: 1.1,
               strokeDasharray: "3 3",
               opacity: 0.7,
             },
-            markerEnd: { type: MarkerType.ArrowClosed, color: "#b5802b" },
+            markerEnd: { type: MarkerType.ArrowClosed, color: "#d97706" },
           });
         }
       }
@@ -953,7 +961,7 @@ export function GraphCanvas({
           source: `goal-${anchor}`,
           target: id,
           style: { stroke: "var(--wg-accent)", strokeWidth: 1.2 },
-          markerEnd: { type: MarkerType.ArrowClosed, color: "#c0471e" },
+          markerEnd: { type: MarkerType.ArrowClosed, color: "#2563eb" },
         });
       }
     });
@@ -1007,7 +1015,7 @@ export function GraphCanvas({
           },
           markerEnd: {
             type: MarkerType.ArrowClosed,
-            color: "#c0471e",
+            color: "#2563eb",
           },
         });
       }
@@ -1043,7 +1051,7 @@ export function GraphCanvas({
           source: `del-${tk.deliverable_id}`,
           target: id,
           style: { stroke: "var(--wg-accent)", strokeWidth: 1.2 },
-          markerEnd: { type: MarkerType.ArrowClosed, color: "#c0471e" },
+          markerEnd: { type: MarkerType.ArrowClosed, color: "#2563eb" },
         });
       }
     });
@@ -1202,7 +1210,7 @@ export function GraphCanvas({
           data-testid="sim-banner"
           style={{
             padding: "8px 12px",
-            background: "rgba(192,71,30,0.06)",
+            background: "rgba(37, 99, 235,0.06)",
             border: "1px solid var(--wg-accent)",
             borderRadius: "var(--wg-radius-sm, 4px)",
             margin: "4px 8px 0",
@@ -1681,9 +1689,9 @@ function WsBadge({
 }) {
   const color =
     state === "open"
-      ? "#4d7a4a"
+      ? "#16a34a"
       : state === "connecting"
-        ? "#c7a44a"
+        ? "#d97706"
         : "var(--wg-ink-soft)";
   const label =
     state === "open"

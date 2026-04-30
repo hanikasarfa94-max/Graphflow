@@ -123,6 +123,8 @@ from workgraph_api.services import (
     SignalTallyService,
     SimulationService,
     SkillAtlasService,
+    RetrievalService,
+    RoomTimelineService,
     SkillsService,
     SlaService,
     StreamService,
@@ -483,7 +485,19 @@ async def lifespan(app: FastAPI):
     # IMService share one KbItemService (state-free anyway, but one
     # instance keeps the dependency graph readable).
     kb_item_service = kb_item_service_early
-    skills_service = SkillsService(sessionmaker, kb_item_service=kb_item_service)
+    # Slice 5b: lazy-instantiate the SiliconFlow embedding client only
+    # if SILICONFLOW_API_KEY is configured. When absent, RetrievalService
+    # gracefully runs BM25-only — production deploys without the key
+    # still get the slice-5a BM25 ranking improvement over substring scan.
+    embedding_client = _build_embedding_client()
+    retrieval_service = RetrievalService(
+        sessionmaker, embedding_client=embedding_client
+    )
+    skills_service = SkillsService(
+        sessionmaker,
+        kb_item_service=kb_item_service,
+        retrieval_service=retrieval_service,
+    )
     personal_service = PersonalStreamService(
         sessionmaker,
         stream_service,
@@ -491,7 +505,26 @@ async def lifespan(app: FastAPI):
         edge_agent,
         event_bus,
         skills_service=skills_service,
+        retrieval_service=retrieval_service,
+        license_context_service=license_context_service,
     )
+    # Late-bind: a personal-stream post that's a reply to a recent
+    # `kind='membrane-clarify'` system message gets routed through
+    # MembraneService.handle_clarification_reply (Stage 5 reply path).
+    # When None, the intercept degrades to the standard EdgeAgent loop.
+    personal_service.attach_membrane(membrane_service)
+    # Stage A — every Decision crystallization goes through the
+    # membrane for advisory review. v0 is warning-only; flows complete
+    # as before but the response carries any membrane observations
+    # (dup-decision, missing rationale, etc.). When None, decision
+    # creation skips the review.
+    decision_service.attach_membrane(membrane_service)
+    # Stage A — IM-derived decisions also pass through the membrane
+    # for advisory review (the "decision" kind suggestion crystallizes
+    # a DecisionRow on accept; review captures dup-decision warnings).
+    im_service.attach_membrane(membrane_service)
+    # silent_consensus_service is constructed further down (line ~544);
+    # its attach_membrane() call lives down there to satisfy ordering.
 
     pre_answer_agent = PreAnswerAgent()
     pre_answer_service = PreAnswerService(
@@ -526,6 +559,10 @@ async def lifespan(app: FastAPI):
     silent_consensus_service = SilentConsensusService(
         sessionmaker, event_bus
     )
+    # Stage A — silent-consensus ratifications also crystallize via the
+    # membrane (advisory review). Late-bound here because the service
+    # is constructed below the membrane block above.
+    silent_consensus_service.attach_membrane(membrane_service)
     onboarding_service = OnboardingService(
         sessionmaker, license_context_service
     )
@@ -596,6 +633,7 @@ async def lifespan(app: FastAPI):
     app.state.edge_agent = edge_agent
     app.state.personal_service = personal_service
     app.state.skills_service = skills_service
+    app.state.room_timeline_service = RoomTimelineService(sessionmaker)
     app.state.membrane_service = membrane_service
     app.state.membrane_agent = membrane_agent
     app.state.membrane_ingest_service = membrane_ingest_service
@@ -765,6 +803,39 @@ async def lifespan(app: FastAPI):
             _log.exception("collab hub stop failed during shutdown")
         await engine.dispose()
         _log.info("api shutdown ok")
+
+
+def _build_embedding_client():
+    """Slice 5b — instantiate the SiliconFlow client if configured.
+
+    Returns None when SILICONFLOW_API_KEY is absent so RetrievalService
+    falls back to BM25-only without raising. This keeps deployments
+    that haven't wired the embedding provider yet (or want to disable
+    it explicitly) from breaking on startup.
+    """
+    from workgraph_api.services._embeddings import (
+        SiliconFlowEmbeddingClient,
+        load_embeddings_settings,
+    )
+
+    settings = load_embeddings_settings()
+    if settings is None:
+        _log.info(
+            "SILICONFLOW_API_KEY not configured; vector retrieval disabled"
+        )
+        return None
+    try:
+        client = SiliconFlowEmbeddingClient(settings=settings)
+        _log.info(
+            "vector retrieval enabled via SiliconFlow (model=%s)",
+            settings.embedding_model,
+        )
+        return client
+    except Exception:
+        _log.exception(
+            "SiliconFlowEmbeddingClient init failed; vector retrieval disabled"
+        )
+        return None
 
 
 def _ensure_sqlite_parent(url: str) -> None:

@@ -4,13 +4,26 @@ Solves the QA finding "no way to write a doc, only paste URLs."
 KbItemRow is a first-class user-authored note, distinct from the
 membrane-ingested signals. The wiki UI will list both.
 
-Scope contract:
-  * personal — owner_user_id only. LLM never reads for other users.
-  * group    — every project member can read; affects shared pretext.
+Scope contract (four-tier ladder; see new_concepts.md §6.11):
+  * personal   — owner_user_id only. LLM never reads for other users.
+  * group      — every project member can read (= Cell scope; legacy
+                 name kept for migration compatibility — north-star
+                 Correction R locks "no schema rename").
+  * department — N-Next: shared across a functional subset (e.g.,
+                 Eng KB, Design KB, Marketing KB). Membership tables
+                 land in B1.2; today this scope is settable but read
+                 access falls back to organization-member visibility.
+  * enterprise — N-Next: shared org-wide (HR policy, brand, compliance).
+                 Read access is gated by OrganizationMemberRow.
 
-Permission model (v0):
+The four scope tiers are orthogonal to ProjectMemberRow.license_tier
+(full/task_scoped/observer). A user can be a "full" member of a
+project AND have group-scope access to a Department KB they belong to.
+
+Permission model (v0; updated for N-Next):
   * Create:    any project member; default scope=personal.
-  * Read list: project members get personal-they-own + all-group.
+  * Read list: project members get personal-they-own + all-group +
+               department/enterprise that they have org-membership for.
   * Update:    owner of the item OR project owner (for group-scope
                cleanups). Personal stays editable by owner only.
   * Delete:    owner OR project owner.
@@ -19,6 +32,8 @@ Permission model (v0):
     "this will affect everyone's pretext" before the call. Phase V.2
     inserts the membrane review step.
   * Demote (group → personal): project owner only.
+  * Promote (group → department/enterprise): not yet wired; lands in
+    B1.3 once Department membership tables exist.
 
 Phase B file upload:
   * Multipart upload → KbItemRow with source='upload'. Bytes saved to
@@ -47,7 +62,9 @@ from workgraph_persistence import (
     KbItemRepository,
     KbItemRow,
     MessageRepository,
+    OrganizationMemberRepository,
     ProjectMemberRepository,
+    ProjectRow,
     StreamRepository,
     session_scope,
 )
@@ -77,9 +94,32 @@ _INLINE_MAX_BYTES = 32 * 1024  # don't inline beyond 32KB even if text
 
 _log = logging.getLogger("workgraph.api.kb_items")
 
-VALID_SCOPES = frozenset({"personal", "group"})
-VALID_STATUSES = frozenset({"draft", "published", "archived"})
-VALID_SOURCES = frozenset({"manual", "upload", "llm"})
+# Four-tier scope ladder per new_concepts.md §6.11. 'group' is the legacy
+# value for Cell scope (kept un-renamed per north-star Correction R).
+# 'department' and 'enterprise' are added in N-Next; create paths accept
+# them, but full read-side enforcement (Department membership table)
+# lands in B1.2/B1.3.
+VALID_SCOPES = frozenset({"personal", "group", "department", "enterprise"})
+# Two status vocabularies share this column since the fold (migration
+# 0022): user-authored items use draft/published/archived; ingested
+# rows (source='ingest') use the membrane lifecycle. Both are valid;
+# enforcement of "only legal transitions for this row's source" lives
+# in the per-source service path, not here.
+VALID_STATUSES = frozenset(
+    {
+        "draft",
+        "published",
+        "archived",
+        "pending-review",
+        "approved",
+        "rejected",
+        "routed",
+    }
+)
+# 'ingest' (added 0022/F2): externally-pulled signals through the
+# membrane pipeline. source_kind discriminates the sub-type
+# (git-commit / rss / user-drop / webhook / etc.).
+VALID_SOURCES = frozenset({"manual", "upload", "llm", "ingest"})
 
 _MAX_CONTENT_BYTES = 64 * 1024  # 64KB; larger needs blob-store v2.
 
@@ -195,12 +235,15 @@ class KbItemService:
             item_payload = _serialize(row)
             kb_item_id = row.id
 
-            # Stage 4: when membrane staged this as a draft, also
-            # create an IMSuggestion(kind='membrane_review') in the
-            # team-room inbox so an owner can one-click approve. The
-            # suggestion needs a message to anchor; post a system
-            # message authored by the edge agent that names the
-            # candidate + the reason for review.
+            # Stage 4: when membrane staged this as a draft via
+            # request_review, create an IMSuggestion in the team-room
+            # inbox so an owner can one-click approve.
+            #
+            # Stage 5 (request_clarification) takes a different path —
+            # the question goes back to the PROPOSER's personal stream,
+            # not the team room. The team owner doesn't decide; the
+            # proposer answers and re-submits. Handled below the inbox
+            # block via membrane_service.notify_clarification.
             if (
                 review is not None
                 and review.action == "request_review"
@@ -248,7 +291,37 @@ class KbItemService:
                         outcome="ok",
                         attempts=1,
                     )
-            return item_payload
+
+        # Stage 5: post the clarify question to the proposer's personal
+        # stream (outside the session_scope block — notify_clarification
+        # opens its own session). The candidate is reconstructed with
+        # the kb_item_id linked so a future reply-handler can correlate
+        # the answer back to the row.
+        if (
+            review is not None
+            and review.action == "request_clarification"
+            and scope == "group"
+            and self._membrane_service is not None
+        ):
+            from .membrane import MembraneCandidate
+
+            await self._membrane_service.notify_clarification(
+                candidate=MembraneCandidate(
+                    kind="kb_item_group",
+                    project_id=project_id,
+                    proposer_user_id=owner_user_id,
+                    title=title,
+                    content=content_md,
+                    metadata={
+                        "source": source,
+                        "status": status,
+                        "kb_item_id": kb_item_id,
+                    },
+                ),
+                review=review,
+                linked_id=kb_item_id,
+            )
+        return item_payload
 
     async def list_visible(
         self, *, project_id: str, viewer_user_id: str, limit: int = 200
@@ -559,12 +632,49 @@ class KbItemService:
     async def _assert_can_read(
         self, session, row: KbItemRow, viewer_user_id: str
     ) -> None:
-        if not await ProjectMemberRepository(session).is_member(
-            row.project_id, viewer_user_id
-        ):
+        # Four-tier scope gate per new_concepts.md §6.11.
+        # 'group' is the legacy value for Cell scope (no rename per
+        # north-star Correction R). 'department' and 'enterprise' are
+        # gated by OrganizationMemberRow; B1.3 will distinguish the
+        # two when the Department membership table lands.
+        if row.scope == "personal":
+            if row.owner_user_id != viewer_user_id:
+                raise KbItemError("forbidden", status_=403)
+            return
+        if row.scope == "group":
+            if row.project_id is None:
+                raise KbItemError("forbidden", status_=403)
+            if await ProjectMemberRepository(session).is_member(
+                row.project_id, viewer_user_id
+            ):
+                return
+            # N-Next leader-bypass (north-star Correction R): owner/admin
+            # of the project's owning organization can read group-scope
+            # items even without direct project membership. Read-only;
+            # writes still require explicit cell membership.
+            project = await session.get(ProjectRow, row.project_id)
+            if project is not None and project.organization_id is not None:
+                if await OrganizationMemberRepository(session).is_lead(
+                    project.organization_id, viewer_user_id
+                ):
+                    return
             raise KbItemError("not_a_member", status_=403)
-        if row.scope == "personal" and row.owner_user_id != viewer_user_id:
-            raise KbItemError("forbidden", status_=403)
+        if row.scope in ("department", "enterprise"):
+            # Visibility expands to the project's owning organization.
+            # Project membership is NOT required at these tiers — that's
+            # the whole point: cross-cell readability.
+            if row.project_id is None:
+                raise KbItemError("forbidden", status_=403)
+            project = await session.get(ProjectRow, row.project_id)
+            if project is None or project.organization_id is None:
+                raise KbItemError("forbidden", status_=403)
+            if not await OrganizationMemberRepository(session).is_member(
+                project.organization_id, viewer_user_id
+            ):
+                raise KbItemError("forbidden", status_=403)
+            return
+        # Unknown scope — fail CLOSED.
+        raise KbItemError("forbidden", status_=403)
 
     async def _assert_can_edit(
         self, session, row: KbItemRow, actor_user_id: str

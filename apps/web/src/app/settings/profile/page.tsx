@@ -1,8 +1,7 @@
 import { cookies, headers } from "next/headers";
-import Link from "next/link";
 
 import { ReplayButton } from "@/components/onboarding/ReplayButton";
-import { Button, Card, Heading, Text } from "@/components/ui";
+import { Button, Card, Heading, Metric, PageHeader, Text } from "@/components/ui";
 import type { ProjectSummary } from "@/lib/api";
 import { requireUser } from "@/lib/auth";
 import {
@@ -83,70 +82,31 @@ export default async function SettingsProfilePage() {
         padding: "56px 24px",
       }}
     >
-      <header
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "baseline",
-          marginBottom: 24,
-          gap: 16,
-        }}
-      >
-        <div>
-          <Text
-            as="div"
-            variant="label"
-            muted
-            style={{
-              letterSpacing: "0.08em",
-              textTransform: "uppercase",
-            }}
-          >
-            <span
-              style={{
-                display: "inline-block",
-                width: "var(--wg-dot)",
-                height: "var(--wg-dot)",
-                borderRadius: "50%",
-                background: "var(--wg-accent)",
-                marginRight: 8,
-                verticalAlign: "middle",
-              }}
-            />
-            WorkGraph · <Link href="/projects">projects</Link>
-          </Text>
-          <Heading level={1} style={{ margin: "8px 0 0" }}>
-            {t.title}
-          </Heading>
-          <Text
-            as="p"
-            variant="body"
-            muted
-            style={{ margin: "6px 0 0", maxWidth: 520 }}
-          >
-            {t.subtitle}
-          </Text>
-        </div>
-        <div style={{ textAlign: "right" }}>
-          <Text variant="label" muted style={{ fontFamily: "var(--wg-font-mono)" }}>
-            {user.display_name}
-          </Text>
-          <form
-            action="/api/auth/logout?redirect=/"
-            method="POST"
-            style={{ display: "inline" }}
-          >
-            <Button
-              type="submit"
-              variant="link"
-              size="sm"
-              style={{ marginLeft: 10 }}
+      <PageHeader
+        title={t.title}
+        subtitle={t.subtitle}
+        right={
+          <div style={{ textAlign: "right" }}>
+            <Text variant="label" muted style={{ fontFamily: "var(--wg-font-mono)" }}>
+              {user.display_name}
+            </Text>
+            <form
+              action="/api/auth/logout?redirect=/"
+              method="POST"
+              style={{ display: "inline" }}
             >
-              {t.signOut}
-            </Button>
-          </form>
-        </div>
-      </header>
+              <Button
+                type="submit"
+                variant="link"
+                size="sm"
+                style={{ marginLeft: 10 }}
+              >
+                {t.signOut}
+              </Button>
+            </form>
+          </div>
+        }
+      />
 
       {/* Self-declared section lives above — kept as a placeholder until
           the ability catalog ships. The observed block below is the
@@ -161,40 +121,25 @@ export default async function SettingsProfilePage() {
           {t.observedSectionHeading}
         </Heading>
 
-        {/* Stats grid — 2 cols, labels + numbers. */}
-        <dl
+        {/* Stats grid — Batch F.6 swap to Metric tiles per html2 spec.
+            Same data, same labels — but big-number-on-top reads at a
+            glance instead of forcing the eye to scan a key-value list. */}
+        <div
           style={{
             display: "grid",
-            gridTemplateColumns: "1fr 1fr",
-            gap: "12px 24px",
+            gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+            gap: 10,
             margin: "16px 0 12px",
-            padding: 0,
           }}
         >
           {PROFILE_OBSERVED_KEYS.map((key) => (
-            <div
+            <Metric
               key={key}
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "baseline",
-                borderBottom: "1px solid var(--wg-line-soft)",
-                paddingBottom: 8,
-              }}
-            >
-              <Text as="dt" variant="body" muted>
-                {t.observedLabels[key]}
-              </Text>
-              <Text
-                as="dd"
-                variant="mono"
-                style={{ fontSize: 18, fontWeight: 600 }}
-              >
-                {observed[key]}
-              </Text>
-            </div>
+              value={observed[key]}
+              label={t.observedLabels[key]}
+            />
           ))}
-        </dl>
+        </div>
 
         <Text
           as="p"

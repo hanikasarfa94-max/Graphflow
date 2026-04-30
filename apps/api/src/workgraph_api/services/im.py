@@ -41,6 +41,7 @@ from workgraph_persistence import (
     StreamRepository,
     TaskRow,
     UserRepository,
+    bump_frecency,
     session_scope,
 )
 
@@ -76,8 +77,16 @@ class IMService:
         # Optional — only the wiki_entry apply branch needs it. Other
         # apply branches don't touch KB. Tests construct without it.
         self._kb_item_service = kb_item_service
+        # Late-bound MembraneService — set via attach_membrane(). The
+        # accept handler routes IM-suggestion-derived decisions through
+        # the membrane for advisory review (Stage A). When None, the
+        # crystallization proceeds without review (existing behavior).
+        self._membrane_service: Any = None
         # Keep in-flight classification tasks so tests + shutdown can await.
         self._pending: set[asyncio.Task] = set()
+
+    def attach_membrane(self, membrane_service: Any) -> None:
+        self._membrane_service = membrane_service
 
     async def post_message(
         self,
@@ -85,9 +94,34 @@ class IMService:
         project_id: str,
         author_id: str,
         body: str,
+        scope: dict[str, bool] | None = None,
+        scope_tiers: dict[str, bool] | None = None,
+        stream_id: str | None = None,
     ) -> dict[str, Any]:
+        # `scope_tiers` (N.2) carries the four-tier ScopeTierPills selection
+        # from the client (personal / group / department / enterprise, where
+        # group = Cell). Today it is accepted-and-logged plumbing; consumer
+        # wiring (LicenseContextService.allowed_scopes intersect) lands in
+        # N.4 — see PLAN-Next.md §"Top bar".
+        if scope_tiers is not None:
+            _log.debug(
+                "im.post_message scope_tiers=%s author=%s project=%s",
+                scope_tiers,
+                author_id,
+                project_id,
+            )
+        # Pickup #6 — when supplied, the message lands in that specific
+        # stream (typically a room) instead of the project's team-room.
+        # The B3 chain (commit 5266b10) reads source_msg.stream_id to
+        # stamp DecisionRow.scope_stream_id, so a decision crystallized
+        # from a room-scoped message now scopes the vote to that room
+        # instead of the team-room. MessageService.post validates the
+        # stream + author membership.
         post_result = await self._messages.post(
-            project_id=project_id, author_id=author_id, body=body
+            project_id=project_id,
+            author_id=author_id,
+            body=body,
+            stream_id=stream_id,
         )
         if not post_result.get("ok"):
             return post_result
@@ -102,6 +136,7 @@ class IMService:
                 author_id=author_id,
                 message_id=message_id,
                 body=body,
+                scope=scope,
             ),
             name=f"im-classify-{message_id}",
         )
@@ -115,8 +150,19 @@ class IMService:
         await asyncio.gather(*list(self._pending), return_exceptions=True)
 
     async def _project_snapshot(
-        self, project_id: str, *, recent_msgs_limit: int = 5
+        self,
+        project_id: str,
+        *,
+        recent_msgs_limit: int = 5,
+        scope: dict[str, bool] | None = None,
     ) -> tuple[dict, dict, list[dict]]:
+        # Resolve effective scope flags. Defaults match StreamContextPanel:
+        # graph + kb on, dms + audit off. Absent dict → all defaults.
+        # Today only `graph` is gateable here (KB/DMs/audit aren't
+        # wired into IM context yet); the other flags are accepted as
+        # forward-compat scaffolding so a future enrichment doesn't need
+        # a fresh request-model migration.
+        graph_on = scope.get("graph", True) if scope else True
         async with session_scope(self._sessionmaker) as session:
             project = (
                 await session.execute(
@@ -131,7 +177,10 @@ class IMService:
             tasks: list[TaskRow] = []
             risks: list[RiskRow] = []
             goal_text = project.title
-            if req is not None:
+            # Skip the graph fan-out entirely when the user toggled it off
+            # in StreamContextPanel — we still keep title + recent_messages
+            # so the agent can reply, just without the structural context.
+            if req is not None and graph_on:
                 graph_repo = ProjectGraphRepository(session)
                 deliverables = await graph_repo.list_deliverables(req.id)
                 risks = await graph_repo.list_risks(req.id)
@@ -196,9 +245,12 @@ class IMService:
         author_id: str,
         message_id: str,
         body: str,
+        scope: dict[str, bool] | None = None,
     ) -> None:
         try:
-            project_snapshot, _, recent_msgs = await self._project_snapshot(project_id)
+            project_snapshot, _, recent_msgs = await self._project_snapshot(
+                project_id, scope=scope
+            )
             async with session_scope(self._sessionmaker) as session:
                 user = await UserRepository(session).get(author_id)
                 author_payload = (
@@ -254,6 +306,17 @@ class IMService:
             await self._hub.publish(
                 project_id, {"type": "suggestion", "payload": payload}
             )
+            # Room-stream slice: when the source message landed in a
+            # room, also broadcast a RoomTimelineEvent on the stream
+            # WS so the room view picks up the new pending suggestion
+            # in both projections (inline timeline + workbench
+            # `Requests` panel) without a refetch.
+            await self._maybe_publish_room_event(
+                source_message_id=message_id,
+                event=None,  # built lazily below to skip if non-room
+                payload=payload,
+                kind="suggestion",
+            )
         except Exception:
             _log.exception(
                 "im_assist classification failed", extra={"message_id": message_id}
@@ -297,6 +360,13 @@ class IMService:
             "apply_actions": row.apply_actions or [],
             "apply_outcome": row.apply_outcome,
             "apply_detail": row.apply_detail or {},
+            # Smallest-relevant-vote scope. Set when this decision
+            # crystallized from a message inside a specific room
+            # (B3 + pickup #6); null for legacy decisions and decisions
+            # crystallized from team-room messages. Frontend
+            # DecisionCard reads this to render the vote-scope explainer
+            # ("Voting with <room>'s <N> members.").
+            "scope_stream_id": row.scope_stream_id,
             "created_at": row.created_at.isoformat() if row.created_at else None,
             "applied_at": row.applied_at.isoformat() if row.applied_at else None,
         }
@@ -330,6 +400,31 @@ class IMService:
                 if row is not None:
                     suggestions.append(row)
             return [self._suggestion_payload(s) for s in suggestions]
+
+    async def list_suggestions_for_room(
+        self,
+        *,
+        project_id: str,
+        stream_id: str,
+        limit: int = 100,
+    ) -> list[dict]:
+        """Room-scoped suggestion list for the workbench `Requests` panel.
+
+        Joins through the source MessageRow to filter suggestions whose
+        originating message landed in `stream_id`. Backed by the
+        `IMSuggestionRepository.list_for_project(stream_id=...)` query
+        added alongside this method (single SQL JOIN instead of the
+        per-message walk in `list_for_project`).
+
+        Returns the same `_suggestion_payload` shape every other surface
+        consumes — frontend dispatcher handles all suggestions
+        identically regardless of which list endpoint produced them.
+        """
+        async with session_scope(self._sessionmaker) as session:
+            rows = await IMSuggestionRepository(session).list_for_project(
+                project_id=project_id, stream_id=stream_id, limit=limit
+            )
+            return [self._suggestion_payload(r) for r in rows]
 
     async def accept(
         self,
@@ -369,6 +464,7 @@ class IMService:
             # links back to the suggestion. "apply_outcome" mirrors whether
             # the associated graph mutation actually landed.
             decision_payload: dict[str, Any] | None = None
+            membrane_warnings: list[str] = []
             if kind == "decision" and confidence >= 0.6:
                 proposal = row.proposal or {}
                 action = (
@@ -377,9 +473,50 @@ class IMService:
                 detail = (
                     proposal.get("detail", {}) if isinstance(proposal, dict) else {}
                 )
+                # Stage A — membrane review for IM-derived decisions.
+                # Always advisory (auto_merge with warnings) in v0; the
+                # path completes as before, warnings surface in the
+                # response. The review opens its own session for the
+                # recent-decisions scan; aiosqlite serializes reads
+                # cleanly so nesting under our outer session is safe.
+                if self._membrane_service is not None:
+                    from .membrane import MembraneCandidate
+
+                    review_title = (
+                        proposal.get("summary", "") if isinstance(proposal, dict) else ""
+                    )[:200]
+                    review = await self._membrane_service.review(
+                        MembraneCandidate(
+                            kind="decision_crystallize",
+                            project_id=project_id,
+                            proposer_user_id=actor_id,
+                            title=review_title,
+                            content="",
+                            metadata={
+                                "source": "im_apply",
+                                "suggestion_id": suggestion_id,
+                                "rationale": row.reasoning or "",
+                            },
+                        )
+                    )
+                    membrane_warnings = list(review.warnings)
                 crystallize_outcome = (
                     "ok" if applied.get("graph_touched") else "advisory"
                 )
+                # B3 (N-Next §6.11 + Correction R.2): stamp the smallest-relevant
+                # vote scope. The source message's stream is the room/team-room
+                # where the suggestion was raised; that membership defines the
+                # quorum the decision applies to. None when the source message
+                # predates stream_id backfill.
+                source_msg = await MessageRepository(session).get(row.message_id)
+                source_stream_id = source_msg.stream_id if source_msg else None
+                # §7.4 frecency bump-on-touch: the source message is the
+                # citation that triggered this decision. Bump it inside
+                # the same session so the access lands atomically with
+                # the crystallization write — if the surrounding txn
+                # rolls back, the bump rolls back with it.
+                if source_msg is not None:
+                    await bump_frecency(session, message_ids=[source_msg.id])
                 decision_row = await DecisionRepository(session).create(
                     conflict_id=None,
                     project_id=project_id,
@@ -391,6 +528,7 @@ class IMService:
                     source_suggestion_id=suggestion_id,
                     apply_outcome=crystallize_outcome,
                     apply_detail={"applied": applied},
+                    scope_stream_id=source_stream_id,
                 )
                 # applied_at mirrors create_at since crystallization is synchronous.
                 decision_row.applied_at = datetime.now(timezone.utc)
@@ -437,11 +575,29 @@ class IMService:
             await self._hub.publish(
                 project_id, {"type": "graph", "payload": {"reason": "im_accept"}}
             )
+        # Room-stream slice: room view's projection consumers (inline
+        # timeline + workbench Requests panel) need to learn about the
+        # status flip + the freshly-crystallized decision via the
+        # canonical RoomTimelineEvent shape.
+        await self._maybe_publish_room_event(
+            source_message_id=row.message_id,
+            event=None,
+            payload={"id": suggestion_id, "status": "accepted"},
+            kind="suggestion_status",
+        )
+        if decision_payload is not None:
+            await self._maybe_publish_room_event(
+                source_message_id=row.message_id,
+                event=None,
+                payload=decision_payload,
+                kind="decision",
+            )
         return {
             "ok": True,
             "applied": applied,
             "suggestion": payload,
             "decision": decision_payload,
+            "warnings": membrane_warnings,
         }
 
     async def dismiss(self, *, suggestion_id: str, actor_id: str) -> dict:
@@ -452,6 +608,7 @@ class IMService:
             if row.status != "pending":
                 return {"ok": False, "error": "already_resolved"}
             project_id = row.project_id
+            source_message_id = row.message_id
             await IMSuggestionRepository(session).resolve(suggestion_id, "dismissed")
             refreshed = await IMSuggestionRepository(session).get(suggestion_id)
             payload = self._suggestion_payload(refreshed) if refreshed else None
@@ -468,6 +625,14 @@ class IMService:
             await self._hub.publish(
                 project_id, {"type": "suggestion", "payload": payload}
             )
+        # Room-stream slice: room view's `Requests` panel needs to drop
+        # the dismissed suggestion via the canonical update event.
+        await self._maybe_publish_room_event(
+            source_message_id=source_message_id,
+            event=None,
+            payload={"id": suggestion_id, "status": "dismissed"},
+            kind="suggestion_status",
+        )
         return {"ok": True, "suggestion": payload}
 
     async def counter(
@@ -854,30 +1019,150 @@ class IMService:
             or action == "approve_membrane_candidate"
         ):
             # Stage 4 of docs/membrane-reorg.md. The membrane staged a
-            # group-scope KB write as draft + queued this suggestion;
-            # the owner just clicked accept. Flip the linked draft to
-            # published so it joins canonical group context.
-            kb_item_id = (
-                detail.get("kb_item_id") if isinstance(detail, dict) else None
-            )
-            if not kb_item_id:
-                return {"ok": False, "error": "missing_kb_item_id"}
-            from workgraph_persistence import KbItemRepository
+            # candidate + queued this suggestion; the owner just clicked
+            # accept. Branch on candidate_kind because the cell-side
+            # write differs:
+            #   * kb_item_group  → flip the linked draft to published
+            #   * task_promote   → promote the personal task to plan
+            candidate_kind = (
+                detail.get("candidate_kind")
+                if isinstance(detail, dict)
+                else None
+            ) or "kb_item_group"  # legacy: pre-T+1 only kb_item_group
+                                  # ever queued, no field was set.
 
-            updated = await KbItemRepository(session).update(
-                item_id=kb_item_id, status="published"
-            )
-            if updated is None:
-                return {"ok": False, "error": "kb_item_not_found"}
-            return {
-                "ok": True,
-                "graph_touched": True,
-                "kb_item_id": kb_item_id,
-                "action": "approve_membrane_candidate",
-            }
+            if candidate_kind == "kb_item_group":
+                kb_item_id = (
+                    detail.get("kb_item_id")
+                    if isinstance(detail, dict)
+                    else None
+                )
+                if not kb_item_id:
+                    return {"ok": False, "error": "missing_kb_item_id"}
+                from workgraph_persistence import KbItemRepository
+
+                updated = await KbItemRepository(session).update(
+                    item_id=kb_item_id, status="published"
+                )
+                if updated is None:
+                    return {"ok": False, "error": "kb_item_not_found"}
+                return {
+                    "ok": True,
+                    "graph_touched": True,
+                    "kb_item_id": kb_item_id,
+                    "action": "approve_membrane_candidate",
+                }
+
+            if candidate_kind == "task_promote":
+                task_id = (
+                    detail.get("task_id")
+                    if isinstance(detail, dict)
+                    else None
+                )
+                if not task_id:
+                    return {"ok": False, "error": "missing_task_id"}
+                req = await RequirementRepository(session).latest_for_project(
+                    row.project_id
+                )
+                if req is None:
+                    return {"ok": False, "error": "no_requirement_to_attach_to"}
+                existing = await PlanRepository(session).list_tasks(req.id)
+                next_sort = (
+                    max((t.sort_order or 0) for t in existing) + 1
+                    if existing
+                    else 0
+                )
+                promoted = await PlanRepository(session).promote_personal_to_plan(
+                    task_id=task_id,
+                    requirement_id=req.id,
+                    sort_order=next_sort,
+                )
+                if promoted is None:
+                    return {"ok": False, "error": "promote_failed"}
+                return {
+                    "ok": True,
+                    "graph_touched": True,
+                    "task_id": task_id,
+                    "action": "approve_membrane_candidate",
+                }
+
+            return {"ok": False, "error": f"unknown_candidate_kind:{candidate_kind}"}
 
         # tag or `none` kinds have nothing to apply.
         return {"ok": True, "graph_touched": False, "action": action or "noop"}
+
+    # ------------------------------------------------------------------
+    # Room-stream WS fan-out (room-stream slice).
+    # ------------------------------------------------------------------
+
+    async def _maybe_publish_room_event(
+        self,
+        *,
+        source_message_id: str | None,
+        event: dict | None,
+        payload: dict,
+        kind: str,
+    ) -> None:
+        """Emit a RoomTimelineEvent on the source message's stream WS
+        if the source message landed in a 'room' stream.
+
+        `kind` is the event-builder selector:
+          * 'suggestion' → make_suggestion_event(payload)
+          * 'decision'   → make_decision_event(payload)
+          * 'suggestion_status' → make_suggestion_status_update(
+                                     suggestion_id, status)
+            In this case `payload` should be {"id": ..., "status": ...}.
+
+        Best-effort: any DB lookup or publish failure is swallowed
+        with a log — the WS is a real-time enhancement, not a
+        correctness path.
+        """
+        from .room_timeline import (
+            is_room_stream,
+            make_decision_event,
+            make_suggestion_event,
+            make_suggestion_status_update,
+        )
+        if source_message_id is None:
+            return
+        try:
+            async with session_scope(self._sessionmaker) as session:
+                source_msg = await MessageRepository(session).get(
+                    source_message_id
+                )
+                if source_msg is None or source_msg.stream_id is None:
+                    return
+                stream = await StreamRepository(session).get(
+                    source_msg.stream_id
+                )
+                if not is_room_stream(stream):
+                    return
+                stream_id = stream.id
+        except Exception:
+            _log.exception(
+                "_maybe_publish_room_event: source lookup failed",
+                extra={"source_message_id": source_message_id},
+            )
+            return
+
+        if event is None:
+            if kind == "suggestion":
+                event = make_suggestion_event(payload)
+            elif kind == "decision":
+                event = make_decision_event(payload)
+            elif kind == "suggestion_status":
+                event = make_suggestion_status_update(
+                    payload["id"], payload["status"]
+                )
+            else:
+                return
+        try:
+            await self._hub.publish_stream(stream_id, event)
+        except Exception:
+            _log.exception(
+                "_maybe_publish_room_event: publish_stream failed",
+                extra={"stream_id": stream_id, "kind": kind},
+            )
 
 
 def _new_uuid() -> str:

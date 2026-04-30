@@ -20,6 +20,8 @@ import type {
   PendingSignal,
   ProjectState,
   ProjectSummary,
+  RoutingInboxResponse,
+  RoutingSignal,
   StreamSummary,
   User,
 } from "@/lib/api";
@@ -76,6 +78,34 @@ export type ActiveContext =
   | ActiveDecisionFallback
   | ActiveCaughtUp;
 
+export interface HomeMiniGraphNode {
+  id: string;
+  title: string;
+  /** Maps to the legend chip colour: decision/task/risk/deliverable/goal. */
+  kind: "goal" | "deliverable" | "decision" | "task" | "risk";
+}
+
+export interface HomeMiniGraphEdge {
+  from: string;
+  to: string;
+}
+
+export interface HomeTopProjectSnapshot {
+  project_id: string;
+  project_title: string;
+  nodes: HomeMiniGraphNode[];
+  edges: HomeMiniGraphEdge[];
+}
+
+export interface HomePulseAggregates {
+  /** Number of project memberships (one per active project). */
+  active_project_count: number;
+  /** Total graph nodes (goals + deliverables + constraints + risks + tasks) across the viewer's projects. */
+  total_graph_nodes: number;
+  /** Decisions crystallized in the last 7 days across the viewer's projects. */
+  decisions_last_7d: number;
+}
+
 export interface HomeData {
   user: User;
   pending: PendingSignal[];
@@ -85,6 +115,12 @@ export interface HomeData {
   /** True when the viewer holds an admin-tier role on any project. Drives
    *  the gated-approvals placeholder section per Phase F §3. */
   is_admin_anywhere: boolean;
+  /** System pulse aggregates — drives the hero + pulse card on the
+   *  Batch E.3 home rebuild. */
+  pulse: HomePulseAggregates;
+  /** Snapshot of the most-active project for the home mini-graph
+   *  (Batch F.1). Null when the user has no projects. */
+  top_project: HomeTopProjectSnapshot | null;
 }
 
 function matchesViewer(target: string, user: User): boolean {
@@ -132,16 +168,23 @@ async function fetchProjectState(
 }
 
 export async function loadHomeData(user: User): Promise<HomeData> {
-  // --- Projects + streams in parallel ---
-  const [projects, streamsResp] = await Promise.all([
+  // --- Projects + streams + routing-inbox in parallel ---
+  // Routing inbox is fetched here so home can include peer-routed asks
+  // in the "needs your response" list — matches what the sidebar
+  // inbox badge counts, so the two surfaces stay aligned.
+  const [projects, streamsResp, routingResp] = await Promise.all([
     serverFetch<ProjectSummary[]>(`/api/projects`).catch(
       () => [] as ProjectSummary[],
     ),
     serverFetch<{ streams: StreamSummary[] }>(`/api/streams`).catch(
       () => ({ streams: [] as StreamSummary[] }),
     ),
+    serverFetch<RoutingInboxResponse>(
+      `/api/routing/inbox?status=pending&limit=50`,
+    ).catch(() => ({ signals: [] as RoutingSignal[] })),
   ]);
   const streams = streamsResp.streams ?? [];
+  const routingSignals = routingResp.signals ?? [];
 
   // Index project streams by project_id for unread lookup + mark-read.
   const projectStreamByProjectId = new Map<string, StreamSummary>();
@@ -243,6 +286,29 @@ export async function loadHomeData(user: User): Promise<HomeData> {
         jump_href: `/projects/${project.id}#msg-${m.id}`,
       });
     }
+  }
+  // Routing-inbox signals — peer-routed asks that haven't been answered
+  // yet. Mapped into the same PendingSignal shape so the home
+  // "needs your response" list shows IM suggestions and routing asks
+  // in one flow, ordered by created_at. Project title is looked up
+  // from the projects array; falls back to the project id when the
+  // signal references a project the viewer no longer belongs to.
+  const projectTitleById = new Map<string, string>(
+    projects.map((p) => [p.id, p.title]),
+  );
+  for (const s of routingSignals) {
+    if (s.target_user_id !== user.id) continue;
+    if (s.status !== "pending") continue;
+    pending.push({
+      suggestion_id: `routing-${s.id}`,
+      message_id: s.target_stream_id,
+      project_id: s.project_id,
+      project_title: projectTitleById.get(s.project_id) ?? s.project_id,
+      summary: s.framing || "(routed ask)",
+      kind: "routing",
+      created_at: s.created_at ?? new Date(0).toISOString(),
+      jump_href: `/inbox`,
+    });
   }
   // Most recent first.
   pending.sort((a, b) => {
@@ -385,6 +451,86 @@ export async function loadHomeData(user: User): Promise<HomeData> {
     };
   }
 
+  // Pulse aggregates — derive from data already in hand. Cheap.
+  //
+  // Graph nodes counted: goals + deliverables + risks + tasks +
+  // decisions. Constraints are intentionally excluded — they're a
+  // side-channel of risks (severity-coded blockers) and would
+  // double-count what `risks` already captures. Decisions ARE counted
+  // because the audit-graph view treats them as first-class nodes
+  // (see html2 audit panel). Net: matches what the user sees totalled
+  // across the per-project Status page metrics.
+  //
+  // Decisions in the last 7d count: skip apply_outcome="failed" — a
+  // decision whose mechanical follow-through failed isn't a
+  // crystallized one, so it shouldn't pad the weekly cadence number.
+  const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+  let totalGraphNodes = 0;
+  let decisionsLast7d = 0;
+  for (const { state } of perProject) {
+    if (!state) continue;
+    totalGraphNodes +=
+      (state.graph?.goals?.length ?? 0) +
+      (state.graph?.deliverables?.length ?? 0) +
+      (state.graph?.risks?.length ?? 0) +
+      (state.plan?.tasks?.length ?? 0) +
+      (state.decisions?.length ?? 0);
+    for (const d of state.decisions) {
+      if (!d.created_at) continue;
+      if (d.apply_outcome === "failed") continue;
+      if (new Date(d.created_at).getTime() >= sevenDaysAgo) {
+        decisionsLast7d += 1;
+      }
+    }
+  }
+
+  // Top-project snapshot for the home mini-graph (Batch F.1). Pick the
+  // most-recently-active project for which we have a state payload, then
+  // surface up to 5 of its most-relevant nodes (goal, deliverable,
+  // decision, task, risk in roughly that priority) and a few connecting
+  // edges from the dependency list.
+  let topProject: HomeTopProjectSnapshot | null = null;
+  const orderedProjects = perProject.filter((p) => p.state !== null);
+  // Sort by the same activity proxy used for the project cards: stream
+  // last_activity_at if available, else project.updated_at.
+  orderedProjects.sort((a, b) => {
+    const aTime = projectStreamByProjectId.get(a.project.id)?.last_activity_at
+      ?? a.project.updated_at ?? null;
+    const bTime = projectStreamByProjectId.get(b.project.id)?.last_activity_at
+      ?? b.project.updated_at ?? null;
+    const at = aTime ? new Date(aTime).getTime() : 0;
+    const bt = bTime ? new Date(bTime).getTime() : 0;
+    return bt - at;
+  });
+  const top = orderedProjects[0];
+  if (top && top.state) {
+    const nodes: HomeMiniGraphNode[] = [];
+    const pushNode = (id: string, title: string, kind: HomeMiniGraphNode["kind"]) => {
+      if (nodes.length >= 5 || !id || !title) return;
+      nodes.push({ id, title, kind });
+    };
+    for (const g of top.state.graph?.goals ?? []) pushNode(g.id, g.title, "goal");
+    for (const d of top.state.graph?.deliverables ?? []) pushNode(d.id, d.title, "deliverable");
+    for (const dec of top.state.decisions.slice(0, 2))
+      pushNode(dec.id, dec.rationale || dec.custom_text || "decision", "decision");
+    for (const t of top.state.plan.tasks ?? []) pushNode(t.id, t.title, "task");
+    for (const r of top.state.graph?.risks ?? []) pushNode(r.id, r.title, "risk");
+    const knownIds = new Set(nodes.map((n) => n.id));
+    const edges: HomeMiniGraphEdge[] = [];
+    for (const dep of top.state.plan.dependencies ?? []) {
+      if (edges.length >= 4) break;
+      if (knownIds.has(dep.from_task_id) && knownIds.has(dep.to_task_id)) {
+        edges.push({ from: dep.from_task_id, to: dep.to_task_id });
+      }
+    }
+    topProject = {
+      project_id: top.project.id,
+      project_title: top.project.title,
+      nodes,
+      edges,
+    };
+  }
+
   return {
     user,
     pending,
@@ -392,5 +538,11 @@ export async function loadHomeData(user: User): Promise<HomeData> {
     projects: projectCards,
     dms: dmCards,
     is_admin_anywhere: isAdminAnywhere,
+    pulse: {
+      active_project_count: projects.length,
+      total_graph_nodes: totalGraphNodes,
+      decisions_last_7d: decisionsLast7d,
+    },
+    top_project: topProject,
   };
 }

@@ -422,7 +422,7 @@ function SlaBadge({
 }) {
   const color = tone === "ok" ? "var(--wg-ok)" : "var(--wg-amber)";
   const bg =
-    tone === "ok" ? "rgba(77, 122, 74, 0.08)" : "var(--wg-amber-soft)";
+    tone === "ok" ? "rgba(22, 163, 74, 0.08)" : "var(--wg-amber-soft)";
   return (
     <div
       style={{

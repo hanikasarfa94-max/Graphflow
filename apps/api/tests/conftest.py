@@ -441,6 +441,8 @@ from workgraph_api.services import (
     SignalTallyService,
     SimulationService,
     SkillAtlasService,
+    RetrievalService,
+    RoomTimelineService,
     SkillsService,
     SlaService,
     StreamService,
@@ -582,7 +584,8 @@ async def api_env():
     # `tutorial_seed_enabled` fixture (see tests/test_tutorial_seed.py).
     tutorial_seed_service = TutorialSeedService(maker, stream_service)
     edge_agent = _SilenceEdgeAgent()
-    skills_service = SkillsService(maker)
+    retrieval_service = RetrievalService(maker)
+    skills_service = SkillsService(maker, retrieval_service=retrieval_service)
     personal_service = PersonalStreamService(
         maker,
         stream_service,
@@ -590,6 +593,8 @@ async def api_env():
         edge_agent,
         bus,
         skills_service=skills_service,
+        retrieval_service=retrieval_service,
+        license_context_service=license_context_service,
     )
     membrane_agent = _ScriptableMembraneAgent()
     membrane_service = MembraneService(
@@ -604,6 +609,19 @@ async def api_env():
     # membrane needs stream_service which is constructed after
     # KbItemService.
     kb_item_service.attach_membrane(membrane_service)
+    # Stage 5 of docs/membrane-reorg.md: a personal-stream post that's
+    # a reply to a recent membrane-clarify gets routed back through
+    # MembraneService.handle_clarification_reply. Late-bound here so
+    # the test fixture matches main.py's wiring.
+    personal_service.attach_membrane(membrane_service)
+    # Stage A: decisions go through the membrane for advisory review.
+    # v0 returns auto_merge with warnings; existing tests stay green
+    # because the flow is unchanged.
+    decision_service.attach_membrane(membrane_service)
+    # Stage A: IM-derived decisions also pass through membrane.
+    im_service.attach_membrane(membrane_service)
+    # Stage A: silent-consensus ratify also through membrane.
+    silent_consensus_service.attach_membrane(membrane_service)
     render_agent = _StubRenderAgent()
     render_service = RenderService(maker, render_agent)
 
@@ -649,6 +667,7 @@ async def api_env():
     app.state.edge_agent = edge_agent
     app.state.personal_service = personal_service
     app.state.skills_service = skills_service
+    app.state.room_timeline_service = RoomTimelineService(maker)
     app.state.membrane_agent = membrane_agent
     app.state.membrane_service = membrane_service
     app.state.membrane_ingest_service = membrane_ingest_service

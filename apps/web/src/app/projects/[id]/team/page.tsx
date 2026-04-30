@@ -12,7 +12,11 @@
 import Link from "next/link";
 import { getTranslations } from "next-intl/server";
 
+import { ScopeTierPills } from "@/components/stream/ScopeTierPills";
+import { StreamCompactToolbar } from "@/components/stream/StreamCompactToolbar";
+import { StreamContextPanel } from "@/components/stream/StreamContextPanel";
 import { StreamView } from "@/components/stream/StreamView";
+import { TeamRoomRecap } from "@/components/stream/TeamRoomRecap";
 import type { StreamMember } from "@/components/stream/types";
 import type { ProjectState, StreamSummary } from "@/lib/api";
 import { requireUser, serverFetch } from "@/lib/auth";
@@ -66,39 +70,45 @@ export default async function ProjectTeamPage({
     (viewerMembership.license_tier ?? "full") === "full";
 
   const t = await getTranslations("teamPerf");
+  const tShell = await getTranslations();
 
   return (
     <>
-      {isAdmin ? (
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "flex-end",
-            marginBottom: 6,
-          }}
-        >
-          <Link
-            href={`/projects/${id}/team/perf`}
-            style={{
-              fontSize: 12,
-              fontFamily: "var(--wg-font-mono)",
-              color: "var(--wg-accent)",
-              textDecoration: "none",
-              padding: "4px 10px",
-              border: "1px solid var(--wg-accent-ring, var(--wg-accent))",
-              borderRadius: 12,
-            }}
-          >
-            {t("linkToPanel")} →
-          </Link>
-        </div>
-      ) : null}
+      <StreamCompactToolbar
+        title={tShell("personal.tabs.teamRoom")}
+        meta={state?.project?.title}
+        actions={
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <ScopeTierPills projectKey={`project:${id}`} />
+            <StreamContextPanel streamKey={`project:${id}:team`} />
+            {isAdmin ? (
+              <Link
+                href={`/projects/${id}/team/perf`}
+                style={{
+                  fontSize: 12,
+                  fontFamily: "var(--wg-font-mono)",
+                  color: "var(--wg-accent)",
+                  textDecoration: "none",
+                  padding: "4px 10px",
+                  border:
+                    "1px solid var(--wg-accent-ring, var(--wg-accent))",
+                  borderRadius: 12,
+                }}
+              >
+                {t("linkToPanel")} →
+              </Link>
+            ) : null}
+          </div>
+        }
+      />
       <StreamView
         projectId={id}
         currentUserId={user.id}
         members={members}
         streamId={streamId}
+        streamKey={`project:${id}:team`}
       />
+      <TeamRoomRecap state={state} streamKey={`project:${id}:team`} />
     </>
   );
 }

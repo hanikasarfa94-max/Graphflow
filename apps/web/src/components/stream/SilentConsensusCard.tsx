@@ -24,7 +24,8 @@ import {
   type SilentConsensusProposal,
 } from "@/lib/api";
 
-import { relativeTime } from "./types";
+import { relativeTime,
+  formatMessageTime } from "./types";
 
 type Props = {
   message: PersonalMessage;
@@ -170,7 +171,7 @@ export function SilentConsensusCard({ message, projectId, onResolved }: Props) {
             {t("header")}
           </span>
           <span title={new Date(message.created_at).toLocaleString()}>
-            {relativeTime(message.created_at)}
+            {formatMessageTime(message.created_at)}
           </span>
         </div>
         <div

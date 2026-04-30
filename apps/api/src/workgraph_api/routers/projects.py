@@ -18,6 +18,7 @@ from workgraph_persistence import (
     ClarificationQuestionRepository,
     PlanRepository,
     ProjectGraphRepository,
+    ProjectMemberRepository,
     ProjectRow,
     RequirementRepository,
     session_scope,
@@ -33,6 +34,24 @@ class InviteRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     username: str = Field(min_length=3, max_length=32)
+
+
+class RequirementBudgetUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    # None clears the budget. ge=1 because zero would silently disable
+    # the membrane's overflow check while pretending it was set.
+    budget_hours: int | None = Field(default=None, ge=1, le=100000)
+
+
+class MemberSkillsUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    # Free-form strings; we lowercase + dedup at write time. The
+    # vocabulary draws from TaskRow.assignee_role values
+    # (pm/frontend/backend/qa/design/business/approver) but we don't
+    # enforce — projects can introduce niche tags as needed.
+    skill_tags: list[str] = Field(default_factory=list, max_length=32)
 
 
 @router.get("")
@@ -76,6 +95,97 @@ async def list_members(
     return await service.members(project_id)
 
 
+@router.patch("/{project_id}/members/{user_id}/skills")
+async def patch_member_skills(
+    project_id: str,
+    user_id: str,
+    body: MemberSkillsUpdate,
+    request: Request,
+    user: AuthenticatedUser = Depends(require_user),
+) -> dict[str, Any]:
+    """Self-edit OR owner-edit a project member's functional skill tags.
+
+    Used by the membrane's task_promote review for assignee-coverage
+    advisories: a task tagged role='backend' with no project member
+    declaring 'backend' surfaces a warning.
+
+    Vocabulary tracks TaskRow.assignee_role
+    (pm/frontend/backend/qa/design/business/approver/unknown) but we
+    accept any string so projects can introduce niche tags.
+    """
+    service: ProjectService = request.app.state.project_service
+    members = await service.members(project_id)
+    me = next((m for m in members if m["user_id"] == user.id), None)
+    if me is None:
+        raise HTTPException(status_code=403, detail="not a project member")
+    if user.id != user_id and me.get("role") != "owner":
+        # Self-edit is always allowed; cross-edit is owner-only.
+        raise HTTPException(status_code=403, detail="owner_or_self_only")
+
+    target = next((m for m in members if m["user_id"] == user_id), None)
+    if target is None:
+        raise HTTPException(status_code=404, detail="member_not_found")
+
+    # Normalize: lowercase, strip, dedup, drop empties. Cap each tag
+    # length so we don't store essays.
+    seen: set[str] = set()
+    cleaned: list[str] = []
+    for raw in body.skill_tags:
+        tag = (raw or "").strip().lower()[:32]
+        if not tag or tag in seen:
+            continue
+        seen.add(tag)
+        cleaned.append(tag)
+
+    async with session_scope(request.app.state.sessionmaker) as session:
+        updated = await ProjectMemberRepository(session).set_skill_tags(
+            project_id=project_id, user_id=user_id, skill_tags=cleaned
+        )
+        if updated is None:
+            raise HTTPException(status_code=404, detail="member_not_found")
+        return {
+            "ok": True,
+            "user_id": user_id,
+            "skill_tags": list(updated.skill_tags or []),
+        }
+
+
+@router.patch("/{project_id}/requirements/{requirement_id}/budget")
+async def patch_requirement_budget(
+    project_id: str,
+    requirement_id: str,
+    body: RequirementBudgetUpdate,
+    request: Request,
+    user: AuthenticatedUser = Depends(require_user),
+) -> dict[str, Any]:
+    """Owner-only — set/clear the requirement's declared budget in hours.
+
+    Used by the membrane's task_promote review for the
+    estimate-overflow advisory check. LLM intake never writes this
+    field; it lives behind a manual UI control so capacity is an
+    explicit owner decision, not an LLM guess.
+    """
+    service: ProjectService = request.app.state.project_service
+    members = await service.members(project_id)
+    me = next((m for m in members if m["user_id"] == user.id), None)
+    if me is None:
+        raise HTTPException(status_code=403, detail="not a project member")
+    if me.get("role") != "owner":
+        raise HTTPException(status_code=403, detail="owner_only")
+
+    async with session_scope(request.app.state.sessionmaker) as session:
+        req = await RequirementRepository(session).get(requirement_id)
+        if req is None or req.project_id != project_id:
+            raise HTTPException(status_code=404, detail="requirement_not_found")
+        req.budget_hours = body.budget_hours
+        await session.flush()
+        return {
+            "ok": True,
+            "requirement_id": req.id,
+            "budget_hours": req.budget_hours,
+        }
+
+
 @router.get("/{project_id}/state")
 async def get_project_state(
     project_id: str,
@@ -103,9 +213,13 @@ async def get_project_state(
         clarifications: list[dict] = []
         parsed = {}
         requirement_version = 0
+        requirement_id: str | None = None
+        budget_hours: int | None = None
         parse_outcome = None
         if req is not None:
             requirement_version = req.version
+            requirement_id = req.id
+            budget_hours = req.budget_hours
             parsed = req.parsed_json or {}
             parse_outcome = req.parse_outcome
             graph_raw = await ProjectGraphRepository(session).list_all(req.id)
@@ -257,6 +371,8 @@ async def get_project_state(
     return {
         "project": {"id": project.id, "title": project.title},
         "requirement_version": requirement_version,
+        "requirement_id": requirement_id,
+        "budget_hours": budget_hours,
         "parsed": parsed,
         "parse_outcome": parse_outcome,
         "graph": graph,

@@ -62,6 +62,8 @@ import {
 import { SkillDeclarationBanner } from "@/components/onboarding/SkillDeclarationBanner";
 
 import { DriftCard } from "./DriftCard";
+import { getScopeTiers } from "./ScopeTierPills";
+import { getStreamScope } from "./StreamContextPanel";
 import { SlaCard } from "./SlaCard";
 import { EdgeReplyCard } from "./EdgeReplyCard";
 import { MembraneCard } from "./MembraneCard";
@@ -74,7 +76,8 @@ import { SilentConsensusCard } from "./SilentConsensusCard";
 import { ToolCallCard } from "./ToolCallCard";
 import { ToolResultCard } from "./ToolResultCard";
 import type { StreamMember } from "./types";
-import { relativeTime } from "./types";
+import { relativeTime,
+  formatMessageTime } from "./types";
 
 type Props = {
   projectId: string;
@@ -83,6 +86,9 @@ type Props = {
   // QA finding #9b — optional so non-breaking; falls back to the project
   // id prefix when the caller can't supply the human title.
   projectTitle?: string;
+  // StreamContextPanel scope key — when set, postPersonalMessage carries
+  // the user's current toggle selection on the wire.
+  streamKey?: string;
 };
 
 // WS reconnect backoff — 1s, 2s, 4s, 8s, capped at 10s. Matches
@@ -226,6 +232,7 @@ export function PersonalStream({
   currentUserId,
   members,
   projectTitle,
+  streamKey,
 }: Props) {
   const t = useTranslations("personal");
   const tStream = useTranslations("stream");
@@ -359,6 +366,19 @@ export function PersonalStream({
     };
   }, [streamId]);
 
+  // Mark stream as read whenever we're viewing + receive new messages.
+  // Mirrors DMStream/StreamView. F.17 fix — was missing here, so the
+  // sidebar UnreadDot never decremented for the personal stream when
+  // the user actually opened it. Fire-and-forget; the badge re-poll on
+  // next /api/streams refresh picks up the new last_read_at.
+  useEffect(() => {
+    if (!streamId) return;
+    void fetch(`/api/streams/${streamId}/read`, {
+      method: "POST",
+      credentials: "include",
+    }).catch(() => undefined);
+  }, [streamId, messages.length]);
+
   // Pin to bottom on new rows.
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
@@ -483,7 +503,11 @@ export function PersonalStream({
     requestAnimationFrame(autosize);
 
     try {
-      const res = await postPersonalMessage(projectId, body);
+      const scope = streamKey ? getStreamScope(streamKey) : null;
+      // Pills are per-project (storage key matches /projects/[id] and /team).
+      // streamKey here is per-stream, so derive the project key independently.
+      const scopeTiers = getScopeTiers(`project:${projectId}`);
+      const res = await postPersonalMessage(projectId, body, scope, scopeTiers);
       // Replace optimistic row with the real id from the server. Also
       // drop any row that already has the real id — the WS frame may
       // have landed during the POST round-trip, in which case mapping
@@ -674,7 +698,7 @@ export function PersonalStream({
                 padding: mine ? "0 4px 0 0" : "0 0 0 4px",
               }}
             >
-              {relativeTime(m.created_at)}
+              {formatMessageTime(m.created_at)}
             </span>
           </div>
         );
@@ -799,7 +823,7 @@ export function PersonalStream({
           >
             <span>{m.body}</span>
             <span title={new Date(m.created_at).toLocaleString()}>
-              {relativeTime(m.created_at)}
+              {formatMessageTime(m.created_at)}
             </span>
           </div>,
         );
@@ -831,7 +855,7 @@ export function PersonalStream({
               }}
             >
               <span>{m.kind}</span>
-              <span>{relativeTime(m.created_at)}</span>
+              <span>{formatMessageTime(m.created_at)}</span>
             </div>
             <div style={{ whiteSpace: "pre-wrap", color: "var(--wg-ink)" }}>
               {m.body}

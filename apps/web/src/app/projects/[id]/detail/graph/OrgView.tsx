@@ -201,7 +201,7 @@ function PeerNode({ data }: NodeProps<PeerData>) {
           <span
             style={{
               padding: "1px 6px",
-              background: "#fce7c2",
+              background: "#fef3c7",
               color: "#8a5a00",
               border: "1px solid #c68a00",
               borderRadius: 8,

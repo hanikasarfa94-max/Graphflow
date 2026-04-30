@@ -14,8 +14,8 @@ export const dynamic = "force-dynamic";
 
 const STATUS_COLOR: Record<string, { bg: string; fg: string }> = {
   todo: { bg: "#f0eee6", fg: "#5a5a5a" },
-  in_progress: { bg: "#fdf4ec", fg: "#c0471e" },
-  blocked: { bg: "#fbd5cb", fg: "#8a2a10" },
+  in_progress: { bg: "#fdf4ec", fg: "#2563eb" },
+  blocked: { bg: "#fee2e2", fg: "#991b1b" },
   done: { bg: "#e6efe0", fg: "#2f6a37" },
   closed: { bg: "#e6efe0", fg: "#2f6a37" },
 };

@@ -19,7 +19,7 @@ import pytest
 from workgraph_api.services import SkillsService
 from workgraph_persistence import (
     DecisionRepository,
-    MembraneSignalRepository,
+    KbIngestRepository,
     ProjectMemberRepository,
     ProjectRow,
     RequirementRow,
@@ -106,7 +106,7 @@ async def _mk_kb_item(
     source_kind: str = "user-drop",
 ) -> str:
     async with session_scope(maker) as session:
-        repo = MembraneSignalRepository(session)
+        repo = KbIngestRepository(session)
         row = await repo.create(
             project_id=project_id,
             source_kind=source_kind,

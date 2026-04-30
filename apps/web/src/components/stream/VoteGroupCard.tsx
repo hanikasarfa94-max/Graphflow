@@ -17,7 +17,8 @@ import { useTranslations } from "next-intl";
 import type { CSSProperties } from "react";
 
 import type { IMMessage } from "@/lib/api";
-import { relativeTime } from "./types";
+import { relativeTime,
+  formatMessageTime } from "./types";
 
 type Props = {
   message: IMMessage;
@@ -114,7 +115,7 @@ export function VoteGroupCard({ message }: Props) {
               color: "var(--wg-ink-faint)",
             }}
           >
-            {relativeTime(message.created_at)}
+            {formatMessageTime(message.created_at)}
           </span>
         </div>
         <div

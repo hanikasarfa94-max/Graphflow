@@ -35,7 +35,7 @@ from typing import Any
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from workgraph_persistence import (
-    MembraneSignalRepository,
+    KbIngestRepository,
     MembraneSubscriptionRepository,
     ProjectRow,
     session_scope,
@@ -147,7 +147,7 @@ class MembraneIngestService:
             # Dedup pre-check — same (project, URL) returns existing row
             # without a fresh fetch. MembraneService.ingest will dedup
             # again, but skipping the HTTP round-trip saves latency.
-            existing = await MembraneSignalRepository(session).find_by_source(
+            existing = await KbIngestRepository(session).find_by_source(
                 project_id=project_id,
                 source_identifier=normalized,
             )

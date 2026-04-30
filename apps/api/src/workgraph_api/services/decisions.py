@@ -32,6 +32,7 @@ from workgraph_persistence import (
     session_scope,
 )
 
+
 from .collab import AssignmentService
 from .collab_hub import CollabHub
 from .conflicts import ConflictService
@@ -65,6 +66,15 @@ class DecisionService:
         self._conflicts = conflict_service
         self._assignments = assignment_service
         self._signal_tally = signal_tally
+        # Late-bound MembraneService — set via attach_membrane() once
+        # built (membrane construction happens after DecisionService
+        # because the membrane needs StreamService). When None, the
+        # decision-crystallize review degrades to a no-op so existing
+        # boot orders + tests stay working.
+        self._membrane_service: Any = None
+
+    def attach_membrane(self, membrane_service: Any) -> None:
+        self._membrane_service = membrane_service
 
     async def submit(
         self,
@@ -101,6 +111,47 @@ class DecisionService:
                 assignee_user_id=assignee_user_id,
             )
             project_id = conflict.project_id
+            # Title-equivalent for the membrane dup-check: prefer the
+            # conflict's chosen-option text when option_index is set,
+            # else use custom_text. Conflict resolutions otherwise have
+            # no natural "title" since they're identified by conflict_id.
+            chosen_option_text = ""
+            if option_index is not None and conflict.options:
+                opt = conflict.options[option_index]
+                chosen_option_text = (
+                    (opt.get("title") or opt.get("text") or "")
+                    if isinstance(opt, dict)
+                    else ""
+                )
+            review_title = chosen_option_text or (custom_text or "")[:200]
+
+        # Membrane review (Stage A — advisory only). Always returns
+        # auto_merge in v0; warnings carry the membrane's observations
+        # (dup-decision, missing rationale, etc.) and are surfaced in
+        # the response payload so the FE can render them. The review
+        # call lives outside the session_scope so the membrane can open
+        # its own session for the recent-decisions scan.
+        warnings: tuple[str, ...] = ()
+        if self._membrane_service is not None:
+            from .membrane import MembraneCandidate
+
+            review = await self._membrane_service.review(
+                MembraneCandidate(
+                    kind="decision_crystallize",
+                    project_id=project_id,
+                    proposer_user_id=actor_id,
+                    title=review_title,
+                    content="",
+                    metadata={
+                        "source": "conflict_resolution",
+                        "conflict_id": conflict_id,
+                        "rationale": rationale or "",
+                    },
+                )
+            )
+            warnings = review.warnings
+
+        async with session_scope(self._sessionmaker) as session:
             decision = await DecisionRepository(session).create(
                 conflict_id=conflict_id,
                 project_id=project_id,
@@ -191,6 +242,7 @@ class DecisionService:
             "ok": True,
             "decision": decision_payload,
             "conflict": conflict_payload,
+            "warnings": list(warnings),
         }
 
     async def list_for_project(

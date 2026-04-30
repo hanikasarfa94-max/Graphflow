@@ -14,7 +14,8 @@ import { useTranslations } from "next-intl";
 
 import type { PersonalMessage } from "@/lib/api";
 
-import { relativeTime } from "./types";
+import { relativeTime,
+  formatMessageTime } from "./types";
 
 type SlaBand = "due_soon" | "overdue";
 
@@ -79,7 +80,7 @@ export function SlaCard({ message, onOpen }: Props) {
   const isOverdue = payload.band === "overdue";
   const accent = isOverdue ? "var(--wg-accent)" : "var(--wg-amber)";
   const bg = isOverdue
-    ? "rgba(192,71,30,0.05)"
+    ? "rgba(37, 99, 235,0.05)"
     : "var(--wg-amber-soft)";
   const bandLabel = isOverdue
     ? t("sla.overdue", { when: humanize(payload.seconds_remaining) })
@@ -125,7 +126,7 @@ export function SlaCard({ message, onOpen }: Props) {
             color: "var(--wg-ink-faint)",
           }}
         >
-          {relativeTime(message.created_at)}
+          {formatMessageTime(message.created_at)}
         </span>
       </div>
       <div style={{ fontSize: 14, color: "var(--wg-ink)", lineHeight: 1.4 }}>

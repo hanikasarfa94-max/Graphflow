@@ -21,7 +21,8 @@ import { useTranslations } from "next-intl";
 import type { IMMessage } from "@/lib/api";
 
 import type { StreamMember } from "./types";
-import { relativeTime } from "./types";
+import { relativeTime,
+  formatMessageTime } from "./types";
 
 type Props = {
   streamId: string;
@@ -377,7 +378,7 @@ export function DMStream({ streamId, currentUserId, members }: Props) {
                       color: "var(--wg-ink-soft)",
                     }}
                   >
-                    {relativeTime(m.created_at)}
+                    {formatMessageTime(m.created_at)}
                   </span>
                 </div>
               </div>

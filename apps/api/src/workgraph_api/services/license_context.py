@@ -89,6 +89,35 @@ def tighter_tier(a: str, b: str) -> str:
     return a_safe if ra >= rb else b_safe
 
 
+# ScopeTierPills (frontend) wire format. Each pill toggle maps to one
+# of these strings; `group` is the legacy schema value for "Cell" scope
+# (PLAN-Next §"Schema decisions"). Persisted KbItemRow.scope uses the
+# same vocabulary, so the intersection happens in one namespace.
+VALID_SCOPE_TIERS: frozenset[str] = frozenset(
+    {"personal", "group", "department", "enterprise"}
+)
+
+# Which scope tiers each license tier is allowed to request.
+#
+#   * `full`        — sees every scope tier
+#   * `task_scoped` — sees the cell + cross-cell context their task
+#                     anchors require, plus their own personal items;
+#                     no broader department/enterprise sweep
+#   * `observer`    — only the cell-shared canon; no personal items,
+#                     no broader sweep
+#
+# `personal` always means "the viewer's OWN personal items" (other
+# users' personal items never appear in any tier's allowed set —
+# scope filtering at the row level enforces that elsewhere). The
+# pill simply controls whether the viewer wants their own personal
+# notes mixed into the agent's context for this turn.
+_TIER_TO_ALLOWED_SCOPES: dict[str, frozenset[str]] = {
+    "full": frozenset({"personal", "group", "department", "enterprise"}),
+    "task_scoped": frozenset({"personal", "group"}),
+    "observer": frozenset({"group"}),
+}
+
+
 class LicenseContextService:
     def __init__(self, sessionmaker: async_sessionmaker) -> None:
         self._sessionmaker = sessionmaker
@@ -131,6 +160,61 @@ class LicenseContextService:
                         ),
                     )
         return None
+
+    async def allowed_scopes(
+        self,
+        *,
+        project_id: str,
+        user_id: str,
+        requested_tiers: dict[str, bool] | None = None,
+    ) -> frozenset[str]:
+        """Intersect (what the user is licensed to see) ∩ (which pills
+        they have toggled on).
+
+        `requested_tiers` is the ScopeTierPills wire shape from the
+        frontend: `{"personal": bool, "group": bool, "department": bool,
+        "enterprise": bool}`. Unknown keys are ignored; missing keys
+        default to ON (matches the frontend's all-on default).
+
+        Returns the FROZENSET of scope strings the caller should pass
+        to retrieval / context-assembly filters. Empty set is a
+        meaningful signal — the user toggled every pill OFF or has no
+        license for any tier — and downstream consumers should treat
+        it as "show nothing scope-tier-keyed."
+
+        `requested_tiers=None` (legacy callers pre-N.2) skips the pill
+        intersection — equivalent to "all four pills on" so existing
+        behavior is preserved.
+
+        Fails CLOSED on every ambiguity:
+          * Non-member user → no scopes (empty set).
+          * Unknown license tier → coerced to `observer` (group only).
+          * Garbage key in requested_tiers → ignored.
+        """
+        # Resolve viewer's license tier; non-member returns None.
+        viewer_tier = await self._member_tier(
+            project_id=project_id, user_id=user_id
+        )
+        if viewer_tier is None:
+            return frozenset()
+        licensed = _TIER_TO_ALLOWED_SCOPES.get(viewer_tier, frozenset({"group"}))
+
+        # Default behavior when no pill state was sent: equivalent to
+        # all-on. This preserves slice-5c's pre-pickup-7 behavior for
+        # any callsite that hasn't migrated to pass scope_tiers yet.
+        if requested_tiers is None:
+            return licensed
+
+        requested: set[str] = set()
+        for key, on in requested_tiers.items():
+            if not isinstance(key, str):
+                continue
+            if key not in VALID_SCOPE_TIERS:
+                continue
+            if on:
+                requested.add(key)
+
+        return licensed & frozenset(requested)
 
     async def resolve_effective_tier(
         self,

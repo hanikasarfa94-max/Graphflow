@@ -117,7 +117,7 @@ export function MessageProfilePopover({
         data-testid="dm-message-icon"
         style={{ ...iconBtn, opacity: busy ? 0.6 : 1 }}
       >
-        <span aria-hidden>💬</span>
+        <span aria-hidden>☁</span>
       </button>
     );
   }
@@ -132,7 +132,7 @@ export function MessageProfilePopover({
         data-testid="dm-message-btn"
         style={{ ...baseBtn, opacity: busy ? 0.6 : 1 }}
       >
-        <span aria-hidden>💬</span>
+        <span aria-hidden>☁</span>
         <span>{label}</span>
       </button>
       {err && (

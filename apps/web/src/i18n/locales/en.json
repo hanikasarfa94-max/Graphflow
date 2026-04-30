@@ -1,7 +1,28 @@
 {
+  "topbar": {
+    "searchPlaceholder": "Search projects, decisions, tasks or knowledge",
+    "notifications": "Notifications",
+    "newCta": "New"
+  },
+  "inboxPage": {
+    "kicker": "Routing signals",
+    "title": "Routing inbox",
+    "subtitle": "The inbox isn't a message pile — it's the queue of signals the system thinks need a human: who is asking, why, what they will see, and whether sign-off is required.",
+    "totalPending": "{count} pending",
+    "routedHeading": "Routed to you",
+    "routedEmpty": "Nothing routed to you right now.",
+    "routedTag": "EDGE · routed",
+    "routedNoFraming": "(no framing yet)",
+    "gatedHeading": "Gated approvals",
+    "gatedEmpty": "No gated proposals waiting on you.",
+    "gatedTag": "GATED · {cls}",
+    "gatedNoSummary": "(no summary)",
+    "openInTeamRoom": "Answer in team room"
+  },
   "brand": {
     "name": "WorkGraph",
-    "tagline": "Coordination as a graph, not a document."
+    "tagline": "Coordination as a graph, not a document.",
+    "shortTagline": "AI-native team memory"
   },
   "nav": {
     "home": "Home",
@@ -130,10 +151,32 @@
     }
   },
   "projects": {
+    "kicker": "Projects",
+    "subtitle": "Natural-language intake or pick an existing project. Execution, audit, knowledge and organization live in the sidebar.",
     "heading": "Projects",
     "signedInAs": "signed in as {name}",
     "empty": "No projects yet. Post the first intake message above to kick one off.",
-    "roleLabel": "role"
+    "roleLabel": "role",
+    "intake": {
+      "title": "Natural-language intake",
+      "subtitle": "goal → graph seed"
+    },
+    "portfolio": {
+      "title": "Portfolio overview",
+      "subtitle": "across the projects you're on",
+      "projects": "projects",
+      "attention": "needing attention",
+      "singlePoint": "single-point risks",
+      "members": "unique members"
+    },
+    "listHeading": "Your projects",
+    "listSubtitle": "ranked by activity, with the cheapest health chips per row",
+    "row": {
+      "tasks": "{count} tasks",
+      "deliverables": "{count} deliverables",
+      "risks": "{count} open risk",
+      "open": "Open"
+    }
   },
   "language": {
     "switcher": "Language",
@@ -143,12 +186,41 @@
   "home": {
     "welcome": "Welcome, {name}",
     "signedInAs": "signed in as {name}",
+    "hero": {
+      "kicker": "Today's bench",
+      "welcome": "Welcome, {name}",
+      "subtitle": "Compress conversations, decisions, tasks and knowledge into one work graph. The home doesn't just list things — it tells you which signals need attention, which decisions are about to crystallize, and where projects are drifting.",
+      "primaryCta": "Handle routing inbox ({count})",
+      "primaryCtaQuiet": "Open projects",
+      "secondaryCta": "Browse projects",
+      "pulseEyebrow": "System pulse",
+      "pulseHeadline": "{count, plural, =0 {Nothing waiting} one {# item awaiting action} other {# items awaiting action}}",
+      "pulseBodyActive": "Pending signals are routed to you because the system thinks you're best positioned to act.",
+      "pulseBodyQuiet": "All routed signals are answered. Use the bench to review projects, decisions and knowledge changes.",
+      "pulseStat": {
+        "projects": "active projects",
+        "nodes": "graph nodes",
+        "decisions7d": "decisions · 7d"
+      }
+    },
     "pending": {
       "title": "Needs your response",
       "empty": "No pending signals",
       "jumpToTurn": "Jump to turn →",
       "showMore": "Show {count} more",
+      "viewAll": "Show {count} more in inbox",
       "fromProject": "in {project}"
+    },
+    "miniGraph": {
+      "title": "Work graph",
+      "empty": "No graph snapshot yet — start a project to see its shape.",
+      "openGraph": "Open graph",
+      "legend": {
+        "decision": "decision",
+        "deliverable": "deliverable",
+        "risk": "risk",
+        "task": "task"
+      }
     },
     "approvals": {
       "title": "Gated approvals",
@@ -214,6 +286,69 @@
     }
   },
   "stream": {
+    "recap": {
+      "kicker": "Current focus",
+      "title": "What this room should be thinking about",
+      "dismiss": "Dismiss for this session",
+      "chips": {
+        "medRisks": "{n} other open risks",
+        "commitments": "{n} open commitments",
+        "recentDecisions": "{n} recent decisions"
+      },
+      "suggestion": {
+        "ask_or_decide": "Make the next message explicit: are you asking for a fact, or asking for a decision?",
+        "follow_up_risk": "The top open risk is the load-bearing one — surface it directly before drifting to side topics.",
+        "ratify_decision": "Recent decisions are not yet ratified by the room — confirm them or reopen the discussion."
+      }
+    },
+    "contextPanel": {
+      "buttonLabel": "Context scope",
+      "buttonCount": "{n}/{total} on",
+      "buttonLoading": "loading…",
+      "hint": "Choose which sources Edge can read in this stream",
+      "kicker": "Stream context",
+      "title": "What can the agent read here?",
+      "subtitle": "Toggle which sources Edge consults when it answers in this stream. Defaults err on the side of trust without leaking private context across the room.",
+      "source": {
+        "graph": {
+          "label": "Project graph",
+          "hint": "Tasks, deliverables, risks, decisions"
+        },
+        "kb": {
+          "label": "Knowledge base",
+          "hint": "Wiki entries, attachments, decision logs"
+        },
+        "dms": {
+          "label": "Direct messages",
+          "hint": "Off by default to avoid permission contamination"
+        },
+        "audit": {
+          "label": "Audit log",
+          "hint": "Verbose — opt in only when explaining causation"
+        }
+      }
+    },
+    "scopeTiers": {
+      "groupLabel": "Visible scope tiers",
+      "tier": {
+        "personal": {
+          "label": "Personal",
+          "hint": "Only your notes and personal stream"
+        },
+        "group": {
+          "label": "Cell",
+          "hint": "Content shared inside this project cell"
+        },
+        "department": {
+          "label": "Department",
+          "hint": "Department-level decisions and knowledge"
+        },
+        "enterprise": {
+          "label": "Enterprise",
+          "hint": "Organization-wide public content"
+        }
+      }
+    },
     "loading": "Loading stream…",
     "empty": "No messages yet — kick things off below.",
     "messageCount": "messages",
@@ -230,8 +365,58 @@
       "label": "Proposed",
       "references": "References"
     },
+    "preview": {
+      "membraneReview": {
+        "kbItemGroup": "Membrane review · group KB entry",
+        "taskPromote": "Membrane review · personal task → plan",
+        "conflictsWith": "Conflicts with {count} existing item(s)"
+      },
+      "wikiEntry": {
+        "label": "Save to project wiki",
+        "willUseSourceMessage": "Will save the source message body as the entry."
+      }
+    },
     "decision": {
-      "recorded": "⚡ Decision recorded"
+      "recorded": "⚡ Decision recorded",
+      "voteScopeRoom": "Voting with {name}'s {count} members.",
+      "voteScopeProject": "Project-wide vote."
+    },
+    "rooms": {
+      "loading": "Loading timeline…",
+      "emptyTimeline": "No messages yet — start the conversation.",
+      "untitledRoom": "Untitled room",
+      "memberCount": "{count, plural, one {# member} other {# members}}",
+      "workbenchOpen": "Reviews",
+      "suggestionLabel": "Agent suggestion ({kind})",
+      "suggestionFromHint": "From the message above. Accept or dismiss in the Reviews panel.",
+      "suggestionStatus": {
+        "accepted": "accepted",
+        "dismissed": "dismissed",
+        "countered": "countered",
+        "escalated": "escalated"
+      }
+    },
+    "workbench": {
+      "title": "Workbench",
+      "subtitle": "Same entity, multiple projections",
+      "private": "private",
+      "close": "Close workbench",
+      "mode": {
+        "grid": "Grid",
+        "vertical": "Stack",
+        "focus": "Focus"
+      },
+      "chipRequests": "Requests",
+      "chipTasks": "Tasks",
+      "chipKnowledge": "Knowledge",
+      "chipSkills": "Skills",
+      "chipWorkflow": "Workflow",
+      "comingSoon": "Coming in N.4 — vocabulary established now.",
+      "comingSoonBody": "This panel kind is part of the projection vocabulary; its renderer ships next slice.",
+      "requestsEmpty": "No pending reviews — everything's settled.",
+      "untitledSuggestion": "Untitled suggestion",
+      "accept": "Accept",
+      "dismiss": "Dismiss"
     },
     "attribution": {
       "edge": "edge",
@@ -266,9 +451,37 @@
       "offline": "Offline"
     }
   },
+  "org": {
+    "kicker": "Decision authority",
+    "title": "Organization",
+    "subtitle": "Where authority concentrates, where single-point risks live, and how load is distributed. Different intent from Status (project health) and Skills (capability map) — this page is about who decides what.",
+    "gateKeepers": {
+      "heading": "Gate-keeper distribution",
+      "subhead": "by decision class",
+      "empty": "No gated decision classes configured.",
+      "unset": "No gate-keeper assigned",
+      "noGate": "no gate",
+      "singlePoint": "single-point risk"
+    },
+    "load": {
+      "heading": "Member load",
+      "subhead": "decisions resolved + gate classes held",
+      "empty": "No project members yet.",
+      "decisions": "{count} decisions",
+      "gateClasses": "{count} gate classes"
+    }
+  },
   "status": {
+    "kicker": "Project health",
     "title": "Project status",
+    "subtitle": "Critical path, risks, decisions, external artifacts and what's next.",
     "lastRefreshed": "Last refreshed {time}",
+    "metrics": {
+      "tasks": "tasks",
+      "deliverables": "deliverables",
+      "risks": "open risks",
+      "decisions": "decisions"
+    },
     "members": {
       "title": "Team",
       "empty": "No members yet",
@@ -279,6 +492,28 @@
         "member": "member",
         "observer": "observer"
       }
+    },
+    "skills": {
+      "noTags": "No skills declared",
+      "edit": "Edit skills",
+      "addTag": "Add",
+      "removeTag": "Remove",
+      "placeholder": "Type a tag and Enter",
+      "save": "Save",
+      "saving": "Saving…",
+      "cancel": "Cancel",
+      "saveFailed": "Save failed"
+    },
+    "budget": {
+      "label": "Requirement budget",
+      "unset": "not set",
+      "edit": "Edit",
+      "save": "Save",
+      "saving": "Saving…",
+      "cancel": "Cancel",
+      "placeholder": "hours",
+      "invalid": "1–100000",
+      "saveFailed": "Save failed"
     },
     "tasks": {
       "title": "Active tasks",
@@ -295,7 +530,16 @@
       "newTaskSave": "Add task",
       "newTaskSaving": "Adding…",
       "newTaskCancel": "Cancel",
-      "createFailed": "Could not create task"
+      "newTaskEstimateLabel": "Estimate (hrs)",
+      "newTaskEstimatePlaceholder": "e.g. 4",
+      "newTaskRoleLabel": "Role",
+      "createFailed": "Could not create task",
+      "draftsHeading": "Personal drafts",
+      "draftChip": "Draft",
+      "promote": "Promote",
+      "promoting": "Promoting…",
+      "promoteDeferred": "Sent for review",
+      "promoteFailed": "Promote failed"
     },
     "risks": {
       "title": "Open risks",
@@ -332,6 +576,17 @@
       "title": "External artifacts",
       "empty": "No git commits or docs linked yet"
     },
+    "membraneNotes": {
+      "title": "Membrane notes",
+      "empty": "Membrane has nothing waiting on humans.",
+      "pendingReviews": "Pending reviews",
+      "pendingClarifications": "Open clarifications",
+      "kind": {
+        "taskPromote": "task → plan",
+        "kbItemGroup": "personal → group KB",
+        "clarify": "needs answer"
+      }
+    },
     "age": {
       "justNow": "just now",
       "minutes": "{n}m",
@@ -358,10 +613,14 @@
     }
   },
   "kb": {
+    "kicker": "Knowledge base",
+    "subtitle": "Personal notes and shared items live in one tree. Badges show source.",
     "title": "Knowledge base",
     "search": "Search KB…",
     "empty": "No items match your query.",
     "notAvailable": "Knowledge base will be available soon.",
+    "sharedHeading": "Shared knowledge tree",
+    "sharedSubtitle": "Team-scope KB items — promoted from personal notes, ingested from wiki/git/RSS, or saved from stream messages. Everyone in the project sees these.",
     "filters": {
       "all": "All",
       "wiki": "Wiki",
@@ -384,6 +643,7 @@
       "new": "+ New folder",
       "newItem": "Ingest sources…",
       "newItemHelp": "Opens project settings → External signal subscriptions. KB entries are created by the ingest pipeline, not by hand.",
+      "newNoteHelp": "Write a personal-scope KB note in the selected folder. Only you see it; promote later to share with the team.",
       "newPlaceholder": "Folder name",
       "selectPrompt": "Select a folder",
       "delete": "Delete folder",
@@ -415,6 +675,10 @@
         "task_scoped": "Task-scoped",
         "observer": "Observer"
       }
+    },
+    "statusChip": {
+      "draft": "Draft",
+      "pendingReview": "Pending"
     }
   },
   "personal": {
@@ -570,6 +834,11 @@
       "renders": "Renders",
       "renders_postmortem": "Postmortem",
       "renders_handoff": "Handoff",
+      "docs": "Rendered docs",
+      "audit": "Audit view",
+      "audit_kicker": "Audit view",
+      "audit_subtitle": "Graph, plan, tasks, risks and decisions belong to the same audit domain — internal tabs keep them together.",
+      "organization": "Organization",
       "detail": "Detail",
       "detail_graph": "Graph",
       "detail_plan": "Plan",
@@ -763,6 +1032,7 @@
     "noPending": "Nothing waiting on you.",
     "openDrawer": "Open routed inbox",
     "openDrawerN": "Open routed inbox ({n} pending)",
+    "doubleClickHint": "Click for drawer · double-click for full inbox",
     "newRoutedFrom": "New routed question from {name}",
     "pendingLabel": "Pending",
     "repliedLabel": "Replied"
@@ -860,6 +1130,30 @@
     "scanning": "Scanning…",
     "scanDone": "Scan complete — {count} new proposed signals."
   },
+  "renders": {
+    "index": {
+      "kicker": "Generated artifacts",
+      "title": "Rendered docs",
+      "subtitle": "The renders surface only keeps graph-derived documents — postmortems, handoffs, external reports. Plans, tasks and risks live in the audit view.",
+      "postmortem": {
+        "title": "Project postmortem",
+        "subtitle": "last generated",
+        "heading": "{project} — postmortem",
+        "headingNoProject": "Project postmortem",
+        "generatedAt": "Generated {time}",
+        "notGenerated": "not generated yet",
+        "unavailable": "unavailable",
+        "view": "View",
+        "generate": "Generate"
+      },
+      "handoff": {
+        "title": "Handoff docs",
+        "subtitle": "by member",
+        "empty": "No teammates yet — invite someone to enable handoff renders.",
+        "generate": "Generate"
+      }
+    }
+  },
   "render": {
     "loading": "Generating document…",
     "loadFailed": "Couldn't load this render. Try regenerating or check you're a project member.",
@@ -949,6 +1243,7 @@
     "members": "Members"
   },
   "skillAtlas": {
+    "kicker": "Capability graph",
     "title": "Skill atlas",
     "subtitle": "Two skills lock to every member: the role skill (imposed by the role, stays with the role) and the profile skill (declared by the person, validated by what the graph actually saw). Together they are the group's capital, beside the knowledge base.",
     "backToProject": "Back to project",
@@ -1266,7 +1561,8 @@
     "cancel": "Cancel"
   },
   "kbNotes": {
-    "title": "Notes",
+    "title": "Personal KB notes",
+    "scopeExplainer": "These are personal-scope KB items — only you see them. Promote any to share with the team; promoted items appear in the shared knowledge tree below.",
     "newNote": "+ New note",
     "cancelNew": "Cancel",
     "loading": "Loading…",
@@ -1285,6 +1581,10 @@
     "cancel": "Cancel",
     "promote": "Promote → group",
     "promoteConfirm": "Make this note visible to the whole team? It will affect everyone's pretext.",
+    "promoting": "Promoting…",
+    "promoted": "Promoted to shared knowledge.",
+    "promoteDeferred": "Sent for review — owner will accept it from the team room.",
+    "promoteFailed": "Promote failed.",
     "demote": "Demote → personal",
     "delete": "Delete",
     "deleteConfirm": "Delete this note? This cannot be undone.",

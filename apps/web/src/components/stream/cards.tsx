@@ -39,6 +39,7 @@ import {
   attributionFor,
   presenceDotColor,
   relativeTime,
+  formatMessageTime,
   type StreamMember,
 } from "./types";
 
@@ -129,7 +130,7 @@ function AuthorHeader({
             color: "var(--wg-ink-soft)",
           }}
         >
-          {relativeTime(timestamp)}
+          {formatMessageTime(timestamp)}
         </span>
       </div>
     </div>
@@ -430,15 +431,153 @@ export function EdgeLLMTurnCard({
         }}
       >
         <span>
-          <span aria-hidden>🧠</span> {t("attribution.edge")}
+          <span aria-hidden>☁</span> {t("attribution.edge")}
         </span>
         <span title={new Date(message.created_at).toLocaleString()}>
-          {relativeTime(message.created_at)}
+          {formatMessageTime(message.created_at)}
         </span>
       </div>
       <div style={{ color: "var(--wg-ink)" }}>{renderBody(message.body)}</div>
     </div>
   );
+}
+
+// ---------- Kind-specific previews ----------
+
+// Inserted inside SubAgentTurnCard to give richer affordances for the
+// two membrane-driven kinds (B2 / B3 of the full-ship batch). Generic
+// suggestions render the same as before — this only fires when kind +
+// proposal payload match a known shape.
+
+function KindSpecificPreview({
+  suggestion,
+  t,
+}: {
+  suggestion: IMSuggestion;
+  t: ReturnType<typeof useTranslations>;
+}) {
+  const detail =
+    (suggestion.proposal &&
+      typeof (suggestion.proposal as { detail?: unknown }).detail === "object" &&
+      ((suggestion.proposal as { detail: Record<string, unknown> }).detail ??
+        {})) ||
+    {};
+
+  if (suggestion.kind === "membrane_review") {
+    const candidateKind =
+      typeof detail.candidate_kind === "string"
+        ? (detail.candidate_kind as string)
+        : "kb_item_group";
+    const diffSummary =
+      typeof detail.diff_summary === "string"
+        ? (detail.diff_summary as string)
+        : null;
+    const conflictWith = Array.isArray(detail.conflict_with)
+      ? (detail.conflict_with as string[])
+      : [];
+    const candidateLabel =
+      candidateKind === "task_promote"
+        ? t("preview.membraneReview.taskPromote")
+        : t("preview.membraneReview.kbItemGroup");
+    return (
+      <div
+        data-testid="membrane-review-preview"
+        style={{
+          marginTop: 8,
+          padding: "8px 10px",
+          background: "var(--wg-surface-sunk)",
+          border: "1px dashed var(--wg-line)",
+          borderRadius: "var(--wg-radius-sm, 4px)",
+          fontSize: 12,
+        }}
+      >
+        <div
+          style={{
+            fontFamily: "var(--wg-font-mono)",
+            fontSize: 10,
+            letterSpacing: "0.06em",
+            textTransform: "uppercase",
+            color: "var(--wg-ink-faint)",
+            marginBottom: 4,
+          }}
+        >
+          {candidateLabel}
+        </div>
+        {diffSummary ? (
+          <div style={{ color: "var(--wg-ink-soft)", whiteSpace: "pre-wrap" }}>
+            {diffSummary}
+          </div>
+        ) : null}
+        {conflictWith.length > 0 ? (
+          <div
+            style={{
+              marginTop: 6,
+              fontFamily: "var(--wg-font-mono)",
+              fontSize: 11,
+              color: "var(--wg-amber)",
+            }}
+          >
+            ⚠ {t("preview.membraneReview.conflictsWith", {
+              count: conflictWith.length,
+            })}
+          </div>
+        ) : null}
+      </div>
+    );
+  }
+
+  if (suggestion.kind === "wiki_entry") {
+    const contentMd =
+      typeof detail.content_md === "string"
+        ? (detail.content_md as string)
+        : "";
+    return (
+      <div
+        data-testid="wiki-entry-preview"
+        style={{
+          marginTop: 8,
+          padding: "8px 10px",
+          background: "var(--wg-ok-soft)",
+          border: "1px solid var(--wg-line)",
+          borderRadius: "var(--wg-radius-sm, 4px)",
+          fontSize: 12,
+        }}
+      >
+        <div
+          style={{
+            fontFamily: "var(--wg-font-mono)",
+            fontSize: 10,
+            letterSpacing: "0.06em",
+            textTransform: "uppercase",
+            color: "var(--wg-ok)",
+            marginBottom: 4,
+          }}
+        >
+          📚 {t("preview.wikiEntry.label")}
+        </div>
+        {contentMd ? (
+          <div
+            style={{
+              color: "var(--wg-ink)",
+              whiteSpace: "pre-wrap",
+              maxHeight: 120,
+              overflow: "hidden",
+              position: "relative",
+            }}
+          >
+            {contentMd.slice(0, 320)}
+            {contentMd.length > 320 ? "…" : ""}
+          </div>
+        ) : (
+          <div style={{ color: "var(--wg-ink-soft)" }}>
+            {t("preview.wikiEntry.willUseSourceMessage")}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  return null;
 }
 
 // ---------- SubAgentTurnCard ----------
@@ -533,6 +672,7 @@ export function SubAgentTurnCard({
           <div style={{ color: "var(--wg-ink-soft)", marginTop: 2 }}>
             {suggestion.proposal.summary}
           </div>
+          <KindSpecificPreview suggestion={suggestion} t={t} />
         </>
       )}
       {!suggestion.proposal && suggestion.targets.length > 0 && (
@@ -661,14 +801,38 @@ export function SubAgentTurnCard({
 export function DecisionCard({
   projectId,
   decision,
+  roomNameById,
 }: {
   projectId: string;
   decision: Decision;
+  // Room slice: caller resolves the rooms list once and passes the
+  // map so DecisionCard can render "Voting with <room>'s <N> members"
+  // without an N+1 fetch per card. Absent → fallback "project-wide
+  // vote" copy when scope_stream_id is set; no line when it's null.
+  roomNameById?: Record<string, { name: string; memberCount: number }>;
 }) {
   const t = useTranslations("stream");
+  const scopeStreamId = decision.scope_stream_id ?? null;
+  const roomMatch =
+    scopeStreamId && roomNameById ? roomNameById[scopeStreamId] : null;
+
+  let voteScopeLine: React.ReactNode = null;
+  if (scopeStreamId) {
+    if (roomMatch) {
+      voteScopeLine = t("decision.voteScopeRoom", {
+        name: roomMatch.name,
+        count: roomMatch.memberCount,
+      });
+    } else {
+      voteScopeLine = t("decision.voteScopeProject");
+    }
+  }
+
   return (
     <div
       data-testid="stream-decision-card"
+      data-entity-kind="decision"
+      data-entity-id={decision.id}
       className="wg-motion-crystallize"
       style={{
         marginBottom: 10,
@@ -700,6 +864,19 @@ export function DecisionCard({
       {decision.rationale && decision.custom_text && (
         <div style={{ color: "var(--wg-ink-soft)", marginTop: 2 }}>
           {decision.rationale}
+        </div>
+      )}
+      {voteScopeLine && (
+        <div
+          data-testid="decision-vote-scope"
+          style={{
+            marginTop: 6,
+            fontSize: 12,
+            color: "var(--wg-ink-soft)",
+            fontStyle: "italic",
+          }}
+        >
+          {voteScopeLine}
         </div>
       )}
       <div style={{ marginTop: 6 }}>
@@ -749,7 +926,7 @@ export function AmbientSignalCard({
         {detail ? ` — ${detail}` : ""}
       </span>
       <span title={new Date(timestamp).toLocaleString()}>
-        {relativeTime(timestamp)}
+        {formatMessageTime(timestamp)}
       </span>
     </div>
   );

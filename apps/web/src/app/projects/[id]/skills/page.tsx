@@ -2,6 +2,7 @@ import Link from "next/link";
 import { getTranslations } from "next-intl/server";
 
 import { MemberHandoffButton } from "@/components/skills/MemberHandoffButton";
+import { PageHeader } from "@/components/ui";
 import { serverFetch } from "@/lib/auth";
 import type {
   HandoffListPayload,
@@ -213,26 +214,10 @@ function Header({
   scopeLabel: string;
 }) {
   return (
-    <header style={{ marginBottom: 22 }}>
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "baseline",
-          gap: 16,
-          flexWrap: "wrap",
-        }}
-      >
-        <h1
-          style={{
-            margin: 0,
-            fontSize: 28,
-            fontWeight: 600,
-            color: "var(--wg-ink)",
-          }}
-        >
-          {title}
-        </h1>
+    <PageHeader
+      title={title}
+      subtitle={subtitle}
+      right={
         <span
           style={{
             fontSize: 11,
@@ -244,19 +229,8 @@ function Header({
         >
           {scopeLabel}
         </span>
-      </div>
-      <p
-        style={{
-          margin: "8px 0 0",
-          color: "var(--wg-ink-soft)",
-          fontSize: 14,
-          lineHeight: 1.55,
-          maxWidth: 640,
-        }}
-      >
-        {subtitle}
-      </p>
-    </header>
+      }
+    />
   );
 }
 
@@ -838,7 +812,7 @@ function HandoffHistoryBlock({
                   padding: "2px 8px",
                   background:
                     h.status === "finalized"
-                      ? "rgba(77,122,74,0.15)"
+                      ? "rgba(22, 163, 74,0.15)"
                       : "var(--wg-amber-soft)",
                   color:
                     h.status === "finalized"
@@ -964,12 +938,12 @@ function SkillChip({
 }) {
   const styles: Record<string, { bg: string; fg: string; border: string }> = {
     observed: {
-      bg: "rgba(77,122,74,0.1)",
+      bg: "rgba(22, 163, 74,0.1)",
       fg: "var(--wg-ok)",
       border: "var(--wg-ok)",
     },
     validated: {
-      bg: "rgba(77,122,74,0.18)",
+      bg: "rgba(22, 163, 74,0.18)",
       fg: "var(--wg-ok)",
       border: "var(--wg-ok)",
     },

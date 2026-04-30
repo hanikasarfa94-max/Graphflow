@@ -1,7 +1,8 @@
-/* WorkGraph design tokens — per DESIGN.md v1 (warm-industrial + bio).
+/* WorkGraph design tokens — per DESIGN.md v2 (cool-clinical / blueprint).
    Type: Instrument Serif (display), General Sans (UI), JetBrains Mono
-   (graph labels, IDs, code). Surface: warm lab-notebook off-white.
-   Accent: single terracotta. No purple/indigo. */
+   (graph labels, IDs, code). Surface: blueprint paper, near-white with
+   blue-tinted grid texture. Accent: single blue. No purple/indigo, no
+   gratuitous gradients except the system-pulse hero. */
 
 @import url("https://api.fontshare.com/v2/css?f[]=general-sans@400,600&display=swap");
 @import url("https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&display=swap");
@@ -11,45 +12,64 @@
 @import url("https://fonts.bunny.net/css2?family=Instrument+Serif:ital@0;1&display=swap");
 
 :root {
-  /* Surface + ink — warmer than the 2026-04-21 pass; lab notebook, not
-     sterile enterprise chrome. Keys align with DESIGN.md §Color. */
-  --wg-paper: #f7f2e8;
-  --wg-surface: #fbf7ed;
+  /* Surface + ink — blueprint paper. Cool whites with a blue undertone
+     so the graph + the chrome feel of the same instrument family.
+     Keys align with DESIGN.md §Color (v2 = blue/white pass).
+
+     Migration note 2026-04-26: swapped from terracotta/warm-industrial
+     (DESIGN.md v1) to blue/white/clinical per user direction. Token
+     NAMES unchanged so component code stays untouched — only values
+     shift. The original v1 palette is in git history if we ever need
+     to compare. */
+  --wg-paper: #f5f8ff;
+  --wg-surface: #ffffff;
   --wg-surface-raised: #ffffff;
-  --wg-surface-sunk: #ede7d6;
-  --wg-ink: #0f0e0d;
-  --wg-ink-soft: #5a5652;
-  --wg-ink-faint: #9a958c;
+  --wg-surface-sunk: #f3f7ff;
+  --wg-ink: #172033;
+  --wg-ink-soft: #667085;
+  --wg-ink-faint: #9aa8bd;
 
-  /* Single accent — terracotta. No blue-to-purple anything. */
-  --wg-accent: #c0471e;
-  --wg-accent-soft: rgba(192, 71, 30, 0.08);
-  --wg-accent-ring: rgba(192, 71, 30, 0.24);
+  /* Single accent — blue. Brand colour, primary buttons, decision-
+     crystallization moment, accent rings on focus. */
+  --wg-accent: #2563eb;
+  --wg-accent-soft: rgba(37, 99, 235, 0.08);
+  --wg-accent-ring: rgba(37, 99, 235, 0.24);
 
-  /* Checkpoint / manual_review state — calm amber, NOT red. */
-  --wg-amber: #b5802b;
-  --wg-amber-soft: rgba(181, 128, 43, 0.1);
+  /* Checkpoint / manual_review state — clean amber. */
+  --wg-amber: #d97706;
+  --wg-amber-soft: rgba(217, 119, 6, 0.1);
 
-  /* Success — muted sage, used sparingly. */
-  --wg-ok: #4d7a4a;
-  --wg-ok-soft: rgba(77, 122, 74, 0.1);
+  /* Success — clean green. */
+  --wg-ok: #16a34a;
+  --wg-ok-soft: rgba(22, 163, 74, 0.1);
 
   /* Danger — reserved; use sparingly. Irreversible actions only. */
-  --wg-danger: #a33131;
+  --wg-danger: #dc2626;
 
-  /* Hairlines + dividers. */
-  --wg-line: #e6ded0;
-  --wg-line-soft: #efede6;
+  /* Hairlines + dividers — cool blue-gray instead of warm beige. */
+  --wg-line: #d9e3f4;
+  --wg-line-soft: #eef3fb;
 
-  /* Border-radius scale — chip 4px, card 6px, modal 12px, pill full.
-     Variation signals hierarchy (DESIGN.md §Layout). Legacy aliases
-     --wg-radius / --wg-radius-sm stay as-is for existing callers. */
-  --wg-radius-sm: 4px;
-  --wg-radius-md: 6px;
-  --wg-radius-lg: 12px;
+  /* Border-radius scale — chip 12px, card 18px, hero/modal 26px, pill full.
+     Variation signals hierarchy (DESIGN.md §Layout). Bumped 2026-04-27
+     to match html2 prototype (sidebar-first blue/white surface): the
+     softer corner radius is what makes the layout feel like a paper
+     blueprint rather than a Material slab. Legacy aliases --wg-radius
+     / --wg-radius-sm stay as-is for existing callers. */
+  --wg-radius-sm: 12px;
+  --wg-radius-md: 18px;
+  --wg-radius-lg: 26px;
   --wg-radius-full: 9999px;
-  --wg-radius: 6px;
+  --wg-radius: 18px;
   --wg-dot: 4px;
+
+  /* Elevation — blue-tinted shadows that sit on the cool-white surface
+     without muddying it. The tints come from html2; layered so cards
+     can opt into a heavier resting elevation when they need to read as
+     "sheet of paper" rather than "card on grid." */
+  --wg-shadow-sm: 0 4px 12px rgba(30, 64, 175, 0.05);
+  --wg-shadow: 0 8px 22px rgba(30, 64, 175, 0.055);
+  --wg-shadow-lg: 0 18px 45px rgba(30, 64, 175, 0.08);
 
   /* Spacing scale (4px base). */
   --wg-s-1: 4px;
@@ -82,9 +102,13 @@
   --wg-motion-fast: 120ms ease-out;
   --wg-motion-base: 200ms ease-out;
 
-  /* Type scale — single source of truth. Numbers match DESIGN.md. */
-  --wg-fs-hero: 40px;
-  --wg-fs-h1: 28px;
+  /* Type scale — single source of truth. Numbers match DESIGN.md.
+     Hero + h1 bumped 2026-04-27 to match html2's larger-display rhythm
+     (54/38 in the mockup; we land slightly tighter to keep
+     existing layouts intact). Body/label/caption unchanged so dense
+     surfaces (tables, lists) keep their ratios. */
+  --wg-fs-hero: 48px;
+  --wg-fs-h1: 32px;
   --wg-fs-h2: 18px;
   --wg-fs-h3: 14px;
   --wg-fs-body: 13px;
@@ -94,67 +118,73 @@
   --wg-lh-normal: 1.5;
   --wg-lh-display: 1.1;
 
-  /* Paper-grain overlay — 6x6 turbulence noise, baseFrequency=0.9,
-     ~3% opacity. Tiled on body for the lab-notebook mood. Static SVG,
-     no animation — no reduced-motion concern. */
-  --wg-paper-grain: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.06  0 0 0 0 0.055  0 0 0 0 0.051  0 0 0 0.03 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+  /* Background texture — blueprint grid + dot pattern instead of paper
+     noise. The grid signals "structured surface, this is a graph
+     instrument" without going full graph paper. 36px square grid +
+     72px-spaced anchor dots, ~5% opacity blue lines. Static SVG —
+     no animation, no reduced-motion concern. Token name kept from
+     v1 so html/body styles below don't need to change. */
+  --wg-paper-grain: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='72' height='72'><g stroke='rgba(37,99,235,0.045)' stroke-width='1' fill='none'><path d='M0 36H72M36 0V72'/><path d='M0 0H72M0 0V72M72 0V72M0 72H72' opacity='0.6'/></g><circle cx='0' cy='0' r='1.2' fill='rgba(37,99,235,0.08)'/></svg>");
 }
 
-/* Dark mode — authored as a full palette, not an inversion. Values per
-   DESIGN.md §Color dark-mode table. Token skeleton only in this pass;
-   component-level dark-mode polish is a separate phase. Both the media
-   query and the [data-theme="dark"] selector are covered so a future
-   manual toggle has a foundation. */
+/* Dark mode (v2) — deep navy surfaces with brighter blue accents.
+   Designed independently rather than inverted (per DESIGN.md principle).
+   The v1 dark palette was warm-charcoal terracotta; this one is
+   night-blueprint: deep navy paper, off-white ink, brighter blue and
+   green accents that read on dark backgrounds. Both the media query
+   and the [data-theme="dark"] selector are covered so a future manual
+   toggle has a foundation. Component-level dark-mode polish stays a
+   separate phase. */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --wg-paper: #0f0e0d;
-    --wg-surface: #171513;
-    --wg-surface-raised: #1f1c19;
-    --wg-surface-sunk: #0a0907;
+    --wg-paper: #0b1224;
+    --wg-surface: #111a2e;
+    --wg-surface-raised: #16213a;
+    --wg-surface-sunk: #0a1020;
 
-    --wg-ink: #f7f2e8;
-    --wg-ink-soft: #b8b0a3;
-    --wg-ink-faint: #6f6860;
-    --wg-line: #2a2622;
-    --wg-line-soft: #221e1a;
+    --wg-ink: #e6ecf7;
+    --wg-ink-soft: #a3afc4;
+    --wg-ink-faint: #6d7a8f;
+    --wg-line: #1e2a44;
+    --wg-line-soft: #182039;
 
-    --wg-accent: #d85c33;
-    --wg-accent-soft: rgba(216, 92, 51, 0.18);
-    --wg-accent-ring: rgba(216, 92, 51, 0.35);
+    --wg-accent: #3b82f6;
+    --wg-accent-soft: rgba(59, 130, 246, 0.18);
+    --wg-accent-ring: rgba(59, 130, 246, 0.35);
 
-    --wg-amber: #d09a3c;
-    --wg-amber-soft: rgba(208, 154, 60, 0.18);
+    --wg-amber: #f59e0b;
+    --wg-amber-soft: rgba(245, 158, 11, 0.18);
 
-    --wg-ok: #6d9c69;
-    --wg-ok-soft: rgba(109, 156, 105, 0.18);
+    --wg-ok: #22c55e;
+    --wg-ok-soft: rgba(34, 197, 94, 0.18);
 
-    --wg-danger: #c75151;
+    --wg-danger: #ef4444;
   }
 }
 
 [data-theme="dark"] {
-  --wg-paper: #0f0e0d;
-  --wg-surface: #171513;
-  --wg-surface-raised: #1f1c19;
-  --wg-surface-sunk: #0a0907;
+  --wg-paper: #0b1224;
+  --wg-surface: #111a2e;
+  --wg-surface-raised: #16213a;
+  --wg-surface-sunk: #0a1020;
 
-  --wg-ink: #f7f2e8;
-  --wg-ink-soft: #b8b0a3;
-  --wg-ink-faint: #6f6860;
-  --wg-line: #2a2622;
-  --wg-line-soft: #221e1a;
+  --wg-ink: #e6ecf7;
+  --wg-ink-soft: #a3afc4;
+  --wg-ink-faint: #6d7a8f;
+  --wg-line: #1e2a44;
+  --wg-line-soft: #182039;
 
-  --wg-accent: #d85c33;
-  --wg-accent-soft: rgba(216, 92, 51, 0.18);
-  --wg-accent-ring: rgba(216, 92, 51, 0.35);
+  --wg-accent: #3b82f6;
+  --wg-accent-soft: rgba(59, 130, 246, 0.18);
+  --wg-accent-ring: rgba(59, 130, 246, 0.35);
 
-  --wg-amber: #d09a3c;
-  --wg-amber-soft: rgba(208, 154, 60, 0.18);
+  --wg-amber: #f59e0b;
+  --wg-amber-soft: rgba(245, 158, 11, 0.18);
 
-  --wg-ok: #6d9c69;
-  --wg-ok-soft: rgba(109, 156, 105, 0.18);
+  --wg-ok: #22c55e;
+  --wg-ok-soft: rgba(34, 197, 94, 0.18);
 
-  --wg-danger: #c75151;
+  --wg-danger: #ef4444;
 }
 
 * {
@@ -165,16 +195,54 @@ html,
 body {
   margin: 0;
   padding: 0;
-  background-color: var(--wg-surface);
-  /* Paper grain — layered on top of the solid surface color at a low
-     opacity via the SVG data-url. Repeating tile. Static, a11y-neutral. */
-  background-image: var(--wg-paper-grain);
-  background-repeat: repeat;
+  /* Layered surface — radial accents at top corners + horizontal wash
+     to keep the eye moving from sidebar → main without a flat slab.
+     Tokens above keep the colour values centralised; this rule just
+     composes them. */
+  background-color: var(--wg-paper);
+  background-image:
+    radial-gradient(circle at 18% 0, rgba(37, 99, 235, 0.10), transparent 32%),
+    radial-gradient(circle at 82% 8%, rgba(14, 165, 233, 0.08), transparent 30%),
+    linear-gradient(90deg, #ffffff 0%, var(--wg-paper) 48%, #eef5ff 100%);
+  background-attachment: fixed;
   color: var(--wg-ink);
   font-family: var(--wg-font-sans);
   font-weight: 400;
   font-size: 15px;
   line-height: 1.55;
+}
+
+/* Blueprint grid overlay — sits behind everything, fades out in the
+   bottom half so dense content stays legible. Static SVG-equivalent
+   via gradients; no animation, no a11y impact. */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: -1;
+  background-image:
+    linear-gradient(rgba(37, 99, 235, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(37, 99, 235, 0.04) 1px, transparent 1px),
+    radial-gradient(circle at 18px 18px, rgba(37, 99, 235, 0.07) 1.2px, transparent 1.4px);
+  background-size: 36px 36px, 36px 36px, 72px 72px;
+  -webkit-mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 0.85), rgba(0, 0, 0, 0.18));
+  mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 0.85), rgba(0, 0, 0, 0.18));
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) body {
+    background-image:
+      radial-gradient(circle at 18% 0, rgba(59, 130, 246, 0.18), transparent 30%),
+      radial-gradient(circle at 80% 8%, rgba(14, 165, 233, 0.14), transparent 30%),
+      linear-gradient(180deg, #0a1326 0%, var(--wg-paper) 60%);
+  }
+  :root:not([data-theme="light"]) body::before {
+    background-image:
+      linear-gradient(rgba(255, 255, 255, 0.04) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255, 255, 255, 0.04) 1px, transparent 1px),
+      radial-gradient(circle at 18px 18px, rgba(56, 189, 248, 0.10) 1.2px, transparent 1.4px);
+  }
 }
 
 /* Dot motif — 4px filled circle, used at graph nodes, bullets, status. */
@@ -192,10 +260,10 @@ body {
     box-shadow: 0 0 0 0 var(--wg-accent-ring);
   }
   70% {
-    box-shadow: 0 0 0 6px rgba(192, 71, 30, 0);
+    box-shadow: 0 0 0 6px rgba(37, 99, 235, 0);
   }
   100% {
-    box-shadow: 0 0 0 0 rgba(192, 71, 30, 0);
+    box-shadow: 0 0 0 0 rgba(37, 99, 235, 0);
   }
 }
 
@@ -344,11 +412,11 @@ body {
   }
   60% {
     transform: scale(1);
-    box-shadow: 0 0 0 8px rgba(216, 92, 51, 0);
+    box-shadow: 0 0 0 8px rgba(59, 130, 246, 0);
   }
   100% {
     transform: scale(1);
-    box-shadow: 0 0 0 0 rgba(216, 92, 51, 0);
+    box-shadow: 0 0 0 0 rgba(59, 130, 246, 0);
   }
 }
 .wg-motion-crystallize {
@@ -364,12 +432,12 @@ body {
   0% {
     opacity: 0;
     transform: translateY(6px);
-    box-shadow: 0 0 0 0 rgba(216, 92, 51, 0);
+    box-shadow: 0 0 0 0 rgba(59, 130, 246, 0);
   }
   60% {
     opacity: 1;
     transform: translateY(0);
-    box-shadow: 0 6px 18px rgba(216, 92, 51, 0.14);
+    box-shadow: 0 6px 18px rgba(59, 130, 246, 0.14);
   }
   100% {
     opacity: 1;

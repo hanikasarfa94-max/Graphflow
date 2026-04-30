@@ -8,8 +8,8 @@ import { requireUser, serverFetch } from "@/lib/auth";
 export const dynamic = "force-dynamic";
 
 const severityColor: Record<string, string> = {
-  critical: "#c0471e",
-  high: "#c0471e",
+  critical: "#2563eb",
+  high: "#2563eb",
   medium: "#c68a00",
   low: "#5a5a5a",
 };

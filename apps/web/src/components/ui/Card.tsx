@@ -25,11 +25,17 @@
 import type { CSSProperties, ReactNode } from "react";
 
 type Variant = "default" | "raised" | "sunk";
-type Accent = "terracotta" | "amber" | "sage" | null;
+// Renamed 2026-04-26 with the v1→v2 palette shift (terracotta → blue,
+// sage → green). Keeping the prop name `accent` but switching the
+// variant names from colour-words to semantic words so future palette
+// shifts don't strand misleading prop values. Old names accepted as
+// aliases so callers can migrate gradually.
+type Accent = "accent" | "amber" | "ok" | null;
+type AccentInput = Accent | "terracotta" | "sage";
 
 type Props = {
   variant?: Variant;
-  accent?: Accent;
+  accent?: AccentInput;
   title?: ReactNode;
   subtitle?: ReactNode;
   children?: ReactNode;
@@ -58,10 +64,13 @@ function background(variant: Variant): string {
   }
 }
 
-function accentColor(accent: Accent): string | null {
-  if (accent === "terracotta") return "var(--wg-accent)";
+function accentColor(accent: AccentInput): string | null {
+  // Both old (terracotta/sage) and new (accent/ok) names are accepted
+  // so the rename can land without touching every caller in the same
+  // commit. Resolve to the same CSS var either way.
+  if (accent === "accent" || accent === "terracotta") return "var(--wg-accent)";
   if (accent === "amber") return "var(--wg-amber)";
-  if (accent === "sage") return "var(--wg-ok)";
+  if (accent === "ok" || accent === "sage") return "var(--wg-ok)";
   return null;
 }
 
@@ -109,11 +118,15 @@ export function Card({
       {title ? (
         <header
           style={{
-            padding: "12px 16px",
+            padding: "13px 16px",
             borderBottom: "1px solid var(--wg-line)",
-            background: "var(--wg-surface)",
+            // Subtle blue-tinted gradient head per html2 redesign — keeps
+            // the card from reading as one flat slab without competing
+            // with the body content.
+            background:
+              "linear-gradient(135deg, rgba(248,251,255,0.95), rgba(239,246,255,0.78))",
             display: "flex",
-            alignItems: "baseline",
+            alignItems: "center",
             justifyContent: "space-between",
             gap: 8,
           }}
@@ -121,10 +134,9 @@ export function Card({
           <h3
             style={{
               margin: 0,
-              fontSize: "var(--wg-fs-label)",
-              letterSpacing: "0.08em",
-              textTransform: "uppercase",
-              color: "var(--wg-ink-soft)",
+              fontSize: 14,
+              letterSpacing: "-0.005em",
+              color: "var(--wg-ink)",
               fontWeight: 600,
               fontFamily: "var(--wg-font-sans)",
             }}

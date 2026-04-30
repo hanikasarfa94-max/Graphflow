@@ -61,6 +61,10 @@ type Props = {
   currentUserId: string;
   members: StreamMember[];
   streamId?: string; // used for mark-read; optional when caller didn't resolve it
+  // Forwarded to Composer so outgoing messages carry the user's
+  // current StreamContextPanel selection. Optional — if unset the
+  // composer just sends the body without a scope hint.
+  streamKey?: string;
 };
 
 // Small helper — derive presence per member. v1: all online if we have no
@@ -72,7 +76,7 @@ function withDefaultPresence(members: StreamMember[]): StreamMember[] {
   }));
 }
 
-export function StreamView({ projectId, currentUserId, members, streamId }: Props) {
+export function StreamView({ projectId, currentUserId, members, streamId, streamKey }: Props) {
   const t = useTranslations("stream");
 
   const [messages, setMessages] = useState<IMMessage[]>([]);
@@ -676,6 +680,7 @@ export function StreamView({ projectId, currentUserId, members, streamId }: Prop
           onError={setError}
           onPreview={handlePreview}
           onPreviewClear={handlePreviewClear}
+          streamKey={streamKey}
         />
       </div>
     </div>

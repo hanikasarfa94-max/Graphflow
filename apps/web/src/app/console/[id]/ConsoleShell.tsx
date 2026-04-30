@@ -336,7 +336,7 @@ function ConsoleHeader({
             borderRadius: 10,
             background:
               stage === "done"
-                ? "rgba(77, 122, 74, 0.08)"
+                ? "rgba(22, 163, 74, 0.08)"
                 : "var(--wg-accent-soft)",
             flexShrink: 0,
             fontWeight: 600,

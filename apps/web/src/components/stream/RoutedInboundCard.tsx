@@ -36,7 +36,8 @@ import {
 import { useAppShell } from "@/components/shell/AppShellClient";
 
 import type { StreamMember } from "./types";
-import { relativeTime } from "./types";
+import { relativeTime,
+  formatMessageTime } from "./types";
 
 type StreamProps = {
   message: PersonalMessage;
@@ -112,7 +113,7 @@ export function RoutedInboundCard({ message, memberById }: StreamProps) {
       }}
     >
       <span>
-        <span aria-hidden>🔔</span>{" "}
+        <span aria-hidden>✦</span>{" "}
         <span>{t("inbound.inlineLine", { name: sourceName })}</span>
       </span>
       <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
@@ -124,7 +125,7 @@ export function RoutedInboundCard({ message, memberById }: StreamProps) {
           }}
           title={new Date(message.created_at).toLocaleString()}
         >
-          {relativeTime(message.created_at)}
+          {formatMessageTime(message.created_at)}
         </span>
         <button
           type="button"
@@ -761,7 +762,7 @@ export function RoutedInboundFullCard({
           </strong>
         </span>
         <span title={new Date(message.created_at).toLocaleString()}>
-          {relativeTime(message.created_at)}
+          {formatMessageTime(message.created_at)}
         </span>
       </div>
       <RoutedInboundBody

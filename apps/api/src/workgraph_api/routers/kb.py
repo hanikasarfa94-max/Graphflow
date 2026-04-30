@@ -21,8 +21,9 @@ from __future__ import annotations
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request
 
 from workgraph_persistence import (
-    MembraneSignalRepository,
-    MembraneSignalRow,
+    KbIngestRepository,
+    KbItemRepository,
+    KbItemRow,
     session_scope,
 )
 
@@ -65,24 +66,48 @@ def _handle_kb(result: dict) -> dict:
     return result
 
 
-def _kb_list_payload(row: MembraneSignalRow) -> dict:
-    """Compact list-view payload for a KB item."""
-    classification = dict(row.classification_json or {})
-    summary = (classification.get("summary") or "") or (row.raw_content or "")
+def _kb_list_payload(row: KbItemRow) -> dict:
+    """Compact list-view payload for a KB item, polymorphic on `source`.
+
+    Two row families share kb_items post-fold:
+      * source='ingest' — externally-pulled signals; summary lives in
+        classification_json, body in raw_content.
+      * source in {'manual','upload','llm'} — user-authored notes;
+        title is canonical, body in content_md. We synthesize a
+        source_kind ('kb-note' / 'kb-personal') so list filters and
+        the FE renderer treat them as first-class entries.
+    """
+    if row.source == "ingest":
+        classification = dict(row.classification_json or {})
+        summary = (classification.get("summary") or "") or (row.raw_content or "")
+        return {
+            "id": row.id,
+            "project_id": row.project_id,
+            "source_kind": row.source_kind,
+            "source_identifier": row.source_identifier,
+            "summary": summary[:300],
+            "tags": list(classification.get("tags") or []),
+            "status": row.status,
+            "ingested_by_user_id": row.ingested_by_user_id,
+            "created_at": row.created_at.isoformat() if row.created_at else None,
+        }
+    src_kind = "kb-personal" if row.scope == "personal" else "kb-note"
     return {
         "id": row.id,
         "project_id": row.project_id,
-        "source_kind": row.source_kind,
-        "source_identifier": row.source_identifier,
-        "summary": summary[:300],
-        "tags": list(classification.get("tags") or []),
+        "source_kind": src_kind,
+        "source_identifier": None,
+        "summary": (row.title or "") + (
+            ": " + (row.content_md or "")[:160] if row.content_md else ""
+        ),
+        "tags": [],
         "status": row.status,
-        "ingested_by_user_id": row.ingested_by_user_id,
+        "ingested_by_user_id": row.owner_user_id,
         "created_at": row.created_at.isoformat() if row.created_at else None,
     }
 
 
-def _kb_detail_payload(row: MembraneSignalRow) -> dict:
+def _kb_detail_payload(row: KbItemRow) -> dict:
     """Full-detail payload for a single KB item."""
     classification = dict(row.classification_json or {})
     return {
@@ -112,12 +137,19 @@ async def get_kb_list(
     limit: int = Query(default=50, ge=1, le=500),
     user: AuthenticatedUser = Depends(require_user),
 ):
-    """List KB items for a project.
+    """List KB items for a project (post-fold: returns both ingests and
+    user-authored group notes).
 
-    KB items are MembraneSignalRows with `status != 'rejected'` plus any
-    future KB sources (not yet in v1). `query` does case-insensitive
-    substring match on raw_content, summary, and tags. `source_kind`
-    filters on the origin channel (git-commit, rss, user-drop, …).
+    Excludes status='rejected' (signal audit history) and 'archived'
+    (retired notes). Also excludes draft / pending-review by default
+    so the list is the canonical view, not the staging queue. Use
+    `/kb/tree` for the curation surface that shows drafts.
+
+    `query` does case-insensitive substring match across summary,
+    title, content, raw_content, tags, and source_identifier — works
+    uniformly across both row families. `source_kind` filters on
+    origin channel; the synthesized values 'kb-note' / 'kb-personal'
+    let callers distinguish user-authored from ingested.
     """
     project_service: ProjectService = request.app.state.project_service
     if not await project_service.is_member(project_id=project_id, user_id=user.id):
@@ -126,33 +158,52 @@ async def get_kb_list(
     q = (query or "").strip().lower()
 
     async with session_scope(request.app.state.sessionmaker) as session:
-        rows = await MembraneSignalRepository(session).list_for_project(
-            project_id, limit=500
+        # Single-table read post-fold — KbItemRepository returns both
+        # ingest rows and user-authored group notes.
+        rows = await KbItemRepository(session).list_group_for_project(
+            project_id=project_id, limit=500
         )
 
-    # Rejected items stay in the audit table but never surface in the
-    # browseable KB (north-star §"Documents, knowledge, and edits"
-    # treats KB as live reference; rejected rows are audit history).
-    rows = [r for r in rows if r.status != "rejected"]
+    # Hide non-canonical states from the list surface; the tree handles
+    # the staging queue with chips.
+    rows = [r for r in rows if r.status not in ("rejected", "archived", "draft", "pending-review")]
 
+    # source_kind filter operates on either the raw column (ingests) or
+    # the synthesized value ('kb-note'/'kb-personal') we expose in the
+    # payload — match both so the FE filter chip works whether the user
+    # picks 'rss' or 'kb-note'.
     if source_kind:
-        rows = [r for r in rows if r.source_kind == source_kind]
+        def _matches(r: KbItemRow) -> bool:
+            if r.source == "ingest":
+                return r.source_kind == source_kind
+            synth = "kb-personal" if r.scope == "personal" else "kb-note"
+            return synth == source_kind
+
+        rows = [r for r in rows if _matches(r)]
 
     if q:
-        filtered: list[MembraneSignalRow] = []
+        filtered: list[KbItemRow] = []
         for r in rows:
-            classification = dict(r.classification_json or {})
-            haystack = " ".join(
-                [
-                    (r.raw_content or "").lower(),
-                    (classification.get("summary") or "").lower(),
-                    " ".join(
-                        str(t).lower()
-                        for t in (classification.get("tags") or [])
-                    ),
-                    (r.source_identifier or "").lower(),
-                ]
-            )
+            if r.source == "ingest":
+                classification = dict(r.classification_json or {})
+                haystack = " ".join(
+                    [
+                        (r.raw_content or "").lower(),
+                        (classification.get("summary") or "").lower(),
+                        " ".join(
+                            str(t).lower()
+                            for t in (classification.get("tags") or [])
+                        ),
+                        (r.source_identifier or "").lower(),
+                    ]
+                )
+            else:
+                haystack = " ".join(
+                    [
+                        (r.title or "").lower(),
+                        (r.content_md or "").lower(),
+                    ]
+                )
             if q in haystack:
                 filtered.append(r)
         rows = filtered
@@ -345,7 +396,7 @@ async def get_kb_item(
         raise HTTPException(status_code=403, detail="not_a_project_member")
 
     async with session_scope(request.app.state.sessionmaker) as session:
-        row = await MembraneSignalRepository(session).get(item_id)
+        row = await KbIngestRepository(session).get(item_id)
 
     if row is None or row.project_id != project_id:
         raise HTTPException(status_code=404, detail="kb_item_not_found")

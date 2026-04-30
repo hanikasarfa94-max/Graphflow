@@ -1,0 +1,206 @@
+{
+  "config": "C",
+  "corpus_size": 538,
+  "n_queries": 12,
+  "f1": 0.6521739130434783,
+  "precision": 0.625,
+  "recall": 0.6818181818181818,
+  "leak_rate": 0.0,
+  "n_leaks": 0,
+  "tokens_total": 99146,
+  "latency_p50_ms": 3499,
+  "latency_p95_ms": 3984,
+  "audit_score": 1.0,
+  "per_query": [
+    {
+      "config": "C",
+      "query_id": "q01",
+      "cited_node_ids": [
+        "dec_no_multicurrency",
+        "kb_decision_lineage_new"
+      ],
+      "suppressed_cited": [],
+      "tokens_in": 7571,
+      "tokens_out": 101,
+      "latency_ms": 3546,
+      "explanations": {
+        "dec_no_multicurrency": "§7 hybrid: kept by bm25 + vector",
+        "kb_decision_lineage_new": "§7 hybrid: kept by bm25 + vector"
+      }
+    },
+    {
+      "config": "C",
+      "query_id": "q02",
+      "cited_node_ids": [
+        "kb_pg_pool"
+      ],
+      "suppressed_cited": [],
+      "tokens_in": 9216,
+      "tokens_out": 141,
+      "latency_ms": 3717,
+      "explanations": {
+        "kb_pg_pool": "§7 hybrid: kept by bm25 + vector"
+      }
+    },
+    {
+      "config": "C",
+      "query_id": "q03",
+      "cited_node_ids": [
+        "kb_rate_limiter_perip",
+        "stream_bob_ratelimit_a"
+      ],
+      "suppressed_cited": [],
+      "tokens_in": 7884,
+      "tokens_out": 129,
+      "latency_ms": 3312,
+      "explanations": {
+        "kb_rate_limiter_perip": "§7 hybrid: kept by bm25 + vector",
+        "stream_bob_ratelimit_a": "§7 hybrid: kept by bm25 + vector"
+      }
+    },
+    {
+      "config": "C",
+      "query_id": "q04",
+      "cited_node_ids": [
+        "stream_dave_design_q"
+      ],
+      "suppressed_cited": [],
+      "tokens_in": 8809,
+      "tokens_out": 129,
+      "latency_ms": 3984,
+      "explanations": {
+        "stream_dave_design_q": "§7 hybrid: kept by bm25 + vector"
+      }
+    },
+    {
+      "config": "C",
+      "query_id": "q05",
+      "cited_node_ids": [
+        "kb_decision_lineage_new",
+        "dec_no_multicurrency",
+        "dec_v1_scope_freeze"
+      ],
+      "suppressed_cited": [],
+      "tokens_in": 7254,
+      "tokens_out": 172,
+      "latency_ms": 3640,
+      "explanations": {
+        "kb_decision_lineage_new": "§7 hybrid: kept by bm25 + vector",
+        "dec_no_multicurrency": "§7 hybrid: kept by bm25 + vector",
+        "dec_v1_scope_freeze": "§7 hybrid: kept by bm25 + vector"
+      }
+    },
+    {
+      "config": "C",
+      "query_id": "q06",
+      "cited_node_ids": [
+        "dec_v1_scope_freeze",
+        "stream_alice_freeze_call"
+      ],
+      "suppressed_cited": [],
+      "tokens_in": 6799,
+      "tokens_out": 126,
+      "latency_ms": 3125,
+      "explanations": {
+        "dec_v1_scope_freeze": "§7 hybrid: kept by bm25 + vector",
+        "stream_alice_freeze_call": "§7 hybrid: kept by bm25 + vector"
+      }
+    },
+    {
+      "config": "C",
+      "query_id": "q07",
+      "cited_node_ids": [
+        "gen_00156",
+        "gen_00420",
+        "gen_00347",
+        "gen_00455",
+        "gen_00362"
+      ],
+      "suppressed_cited": [],
+      "tokens_in": 7922,
+      "tokens_out": 240,
+      "latency_ms": 4781,
+      "explanations": {
+        "gen_00156": "§7 hybrid: kept by bm25 + vector",
+        "gen_00420": "§7 hybrid: kept by bm25",
+        "gen_00347": "§7 hybrid: kept by vector",
+        "gen_00455": "§7 hybrid: kept by vector",
+        "gen_00362": "§7 hybrid: kept by vector"
+      }
+    },
+    {
+      "config": "C",
+      "query_id": "q08",
+      "cited_node_ids": [],
+      "suppressed_cited": [],
+      "tokens_in": 6685,
+      "tokens_out": 94,
+      "latency_ms": 2843,
+      "explanations": {}
+    },
+    {
+      "config": "C",
+      "query_id": "q09",
+      "cited_node_ids": [
+        "stream_alex_ratelimit_q",
+        "stream_bob_ratelimit_a"
+      ],
+      "suppressed_cited": [],
+      "tokens_in": 9728,
+      "tokens_out": 127,
+      "latency_ms": 3672,
+      "explanations": {
+        "stream_alex_ratelimit_q": "§7 hybrid: kept by vector",
+        "stream_bob_ratelimit_a": "§7 hybrid: kept by vector"
+      }
+    },
+    {
+      "config": "C",
+      "query_id": "q10",
+      "cited_node_ids": [
+        "kb_decision_lineage_new",
+        "dec_no_multicurrency",
+        "dec_v1_scope_freeze"
+      ],
+      "suppressed_cited": [],
+      "tokens_in": 6953,
+      "tokens_out": 143,
+      "latency_ms": 3452,
+      "explanations": {
+        "kb_decision_lineage_new": "§7 hybrid: kept by bm25 + vector",
+        "dec_no_multicurrency": "§7 hybrid: kept by vector",
+        "dec_v1_scope_freeze": "§7 hybrid: kept by vector"
+      }
+    },
+    {
+      "config": "C",
+      "query_id": "q11",
+      "cited_node_ids": [
+        "kb_pg_pool"
+      ],
+      "suppressed_cited": [],
+      "tokens_in": 8837,
+      "tokens_out": 119,
+      "latency_ms": 3234,
+      "explanations": {
+        "kb_pg_pool": "§7 hybrid: kept by bm25 + vector"
+      }
+    },
+    {
+      "config": "C",
+      "query_id": "q12",
+      "cited_node_ids": [
+        "kb_corp_ai_use",
+        "gen_00024"
+      ],
+      "suppressed_cited": [],
+      "tokens_in": 9851,
+      "tokens_out": 116,
+      "latency_ms": 3312,
+      "explanations": {
+        "kb_corp_ai_use": "§7 hybrid: kept by bm25 + vector",
+        "gen_00024": "§7 hybrid: kept by vector"
+      }
+    }
+  ]
+}

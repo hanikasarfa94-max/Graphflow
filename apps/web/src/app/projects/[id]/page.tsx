@@ -7,8 +7,13 @@
 // The team stream lives at `/projects/[id]/team`; nothing else about
 // the project layout / audit navigation changes.
 
+import { getTranslations } from "next-intl/server";
+
 import { OnboardingOverlay } from "@/components/onboarding/OnboardingOverlay";
 import { PersonalStream } from "@/components/stream/PersonalStream";
+import { ScopeTierPills } from "@/components/stream/ScopeTierPills";
+import { StreamCompactToolbar } from "@/components/stream/StreamCompactToolbar";
+import { StreamContextPanel } from "@/components/stream/StreamContextPanel";
 import type { StreamMember } from "@/components/stream/types";
 import type { OnboardingWalkthroughResponse, ProjectState } from "@/lib/api";
 import { requireUser, serverFetch } from "@/lib/auth";
@@ -22,6 +27,7 @@ export default async function ProjectPersonalPage({
 }) {
   const { id } = await params;
   const user = await requireUser(`/projects/${id}`);
+  const t = await getTranslations();
 
   let state: ProjectState | null = null;
   try {
@@ -63,11 +69,26 @@ export default async function ProjectPersonalPage({
           initialState={onboarding.state}
         />
       ) : null}
+      <StreamCompactToolbar
+        title={t("personal.title")}
+        meta={
+          state?.project?.title
+            ? `Edge · ${state.project.title}`
+            : t("personal.subtitle")
+        }
+        actions={
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <ScopeTierPills projectKey={`project:${id}`} />
+            <StreamContextPanel streamKey={`project:${id}:personal`} />
+          </div>
+        }
+      />
       <PersonalStream
         projectId={id}
         currentUserId={user.id}
         members={members}
         projectTitle={state?.project?.title}
+        streamKey={`project:${id}:personal`}
       />
     </>
   );

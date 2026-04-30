@@ -410,22 +410,36 @@ class ConflictService:
     ) -> None:
         """Run the explanation agent for each row and persist results.
 
-        Errors on a single row don't abort the batch — the others get their
-        summaries. A final WS frame publishes the fresh list so the UI
-        re-renders.
+        LLM calls run concurrently — each conflict explanation is a fully
+        independent prompt against the same project snapshot, so there's
+        no reason to serialize them. With N=5 conflicts at ~3-4s each,
+        the wall clock drops from ~20s to ~4s. DB persistence stays
+        serial: SQLite doesn't love concurrent writers, and the writes
+        are short — the only thing worth parallelizing is the LLM I/O.
+        Errors on a single row don't abort the batch.
         """
-        for row in rows:
-            try:
-                outcome = await self._agent.explain(
+        if not rows:
+            return
+
+        explain_results = await asyncio.gather(
+            *(
+                self._agent.explain(
                     rule=row.rule,
                     severity=row.severity,
                     detail=dict(row.detail or {}),
                     project=project_snapshot,
                     targets=list(row.targets or []),
                 )
-            except Exception:
+                for row in rows
+            ),
+            return_exceptions=True,
+        )
+
+        for row, outcome in zip(rows, explain_results, strict=True):
+            if isinstance(outcome, BaseException):
                 _log.exception(
                     "conflict explanation raised",
+                    exc_info=outcome,
                     extra={"conflict_id": row.id, "rule": row.rule},
                 )
                 continue

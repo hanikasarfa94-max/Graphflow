@@ -1,13 +1,23 @@
 import { expect, test } from "@playwright/test";
 
-import { intake, loginViaUi, rando, registerUser } from "./helpers";
+import { apiRequest, intake, loginViaUi, rando, registerUser } from "./helpers";
 
 // Phase 8 + Phase 9 canonical coverage. A fresh plan with no assignments
-// produces at least one `missing_owner` conflict. The user opens the
-// Conflicts tab, submits a decision with rationale (Phase 9), and the
-// decision history entry shows the outcome + rationale.
+// produces at least one conflict; the user opens the Conflicts page,
+// submits a decision with rationale, and the decision history entry
+// shows the outcome + rationale.
+//
+// Navigation note: the project overview page (with conflict-banner +
+// "Conflicts" sidebar link) was removed in the chat-centered surface
+// refactor (commit 1f23cd9, projects/[id]/page.tsx:5). The /detail/
+// conflicts page still exists at a stable URL and is the load-bearing
+// surface. The conflict-banner testid is also gone — that overview
+// surface no longer exists, and there's no UI entry point to conflicts
+// from the sidebar's Detail submenu (which is graph/plan/tasks/risks/
+// decisions only). We navigate by URL and assert on the decide loop,
+// which is the actual product value.
 
-test.describe("conflicts tab + decision loop", () => {
+test.describe("conflicts decision loop", () => {
   test("plan produces a conflict the user can decide with rationale", async ({
     page,
     request,
@@ -20,32 +30,24 @@ test.describe("conflicts tab + decision loop", () => {
       "Launch an event signup page next week. Needs invite-code gate, phone validation, admin export.",
     );
 
-    // Planning is the trigger for conflict detection. Fire it via API so
-    // the test doesn't depend on the clarify UI.
-    const planRes = await request.post(`/api/projects/${projectId}/plan`);
+    // Planning is the trigger for conflict detection. Real LLM takes
+    // ~20s; bypass the dev-server proxy timeout (helpers.ts apiRequest).
+    const api = await apiRequest();
+    const planRes = await api.post(`/api/projects/${projectId}/plan`, {
+      timeout: 60_000,
+    });
     expect(planRes.ok(), `plan failed ${planRes.status()}`).toBeTruthy();
 
-    // The overview banner should flip on once detection lands. Detection
-    // is kicked async after POST /plan returns, so poll.
-    await page.goto(`/projects/${projectId}`);
-    await expect(page.getByTestId("conflict-banner")).toBeVisible({
-      timeout: 20_000,
-    });
-
-    // The nav badge mirrors the open count.
-    await expect(
-      page.getByRole("link", { name: /Conflicts/ }),
-    ).toBeVisible();
-
-    // Click through to the Conflicts tab.
-    await page.getByRole("link", { name: /Conflicts/ }).click();
+    // Detection is kicked async after POST /plan returns. Navigate to
+    // the conflicts page directly; the page polls for state.
+    await page.goto(`/projects/${projectId}/detail/conflicts`);
     await expect(page).toHaveURL(
       new RegExp(`/projects/${projectId}/detail/conflicts$`),
     );
 
-    // WebSocket status flips to `open` once hub connects.
+    // Summary mounts once the page reads conflict state.
     await expect(page.getByTestId("conflict-summary")).toBeVisible({
-      timeout: 15_000,
+      timeout: 20_000,
     });
 
     // At least one card must render.

@@ -223,6 +223,127 @@ class StreamService:
             "owner_user_id": user_id,
         }
 
+    # ---- N-Next: multi-room support ------------------------------------
+    #
+    # Per new_concepts.md §6.11 + north-star Correction R.2: a cell hosts
+    # multiple team-room streams (sub-team / topical / ad-hoc). Membership
+    # is a subset of the cell's project members. Rooms are first-class
+    # for the smallest-relevant-vote rule — DecisionRow.scope_stream_id
+    # points back at the room when a decision crystallizes inside it.
+    #
+    # TODO (N.4): wire creation through MembraneService.review() with
+    # CandidateKind='manual_room' so cell governance gates room creation
+    # the same way it gates KB / decision / task promotions. Today the
+    # membrane review() falls through to auto_merge for that kind.
+
+    async def create_room(
+        self,
+        *,
+        project_id: str,
+        creator_user_id: str,
+        name: str,
+        member_user_ids: list[str],
+    ) -> dict[str, Any]:
+        """Create a new 'room' stream inside a cell.
+
+        Auth: creator must be a project member of the cell. Members must
+        all be project members of the same cell — rooms cannot exfiltrate
+        cell-scoped state to outsiders. The creator is implicitly added
+        if not already in `member_user_ids`.
+        """
+        name = (name or "").strip()
+        if not name:
+            return {"ok": False, "error": "name_required"}
+        if len(name) > 200:
+            return {"ok": False, "error": "name_too_long"}
+
+        async with session_scope(self._sessionmaker) as session:
+            project_member_repo = ProjectMemberRepository(session)
+            if not await project_member_repo.is_member(
+                project_id, creator_user_id
+            ):
+                return {"ok": False, "error": "not_a_member"}
+
+            # Validate every requested member is also a cell member.
+            # Non-members are rejected wholesale — partial-create would
+            # surprise the caller.
+            for uid in member_user_ids:
+                if not await project_member_repo.is_member(project_id, uid):
+                    return {"ok": False, "error": "non_cell_member"}
+
+            stream_repo = StreamRepository(session)
+            stream = await stream_repo.create(
+                type="room", project_id=project_id, name=name
+            )
+            member_repo = StreamMemberRepository(session)
+            full_members = set(member_user_ids) | {creator_user_id}
+            for uid in full_members:
+                await member_repo.add(
+                    stream_id=stream.id,
+                    user_id=uid,
+                    role_in_stream=(
+                        "admin" if uid == creator_user_id else "member"
+                    ),
+                )
+            # Now persisted (alembic 0029); _shape_stream picks it up
+            # from stream.name on read paths too.
+            payload = await _shape_stream(
+                session, stream, viewer_id=creator_user_id
+            )
+
+        await self._event_bus.emit(
+            "stream.created",
+            {
+                "stream_id": stream.id,
+                "type": "room",
+                "project_id": project_id,
+                "name": name,
+                "members": sorted(full_members),
+            },
+        )
+        return {"ok": True, "stream": payload}
+
+    async def list_rooms_for_project(
+        self, *, project_id: str, viewer_user_id: str
+    ) -> dict[str, Any]:
+        """List every room stream in a cell.
+
+        Auth: viewer must be a project member, OR an organization-level
+        lead of the cell's owning organization (B4 leader bypass —
+        read-only). Rooms whose member list excludes the viewer are
+        still listed (so they can request to join); message access is
+        gated separately at post/list time.
+        """
+        async with session_scope(self._sessionmaker) as session:
+            project_member_repo = ProjectMemberRepository(session)
+            is_member = await project_member_repo.is_member(
+                project_id, viewer_user_id
+            )
+            if not is_member:
+                # Leader-bypass: org owner/admin may inspect the cell.
+                from workgraph_persistence import (
+                    OrganizationMemberRepository,
+                    ProjectRow,
+                )
+
+                project = await session.get(ProjectRow, project_id)
+                if (
+                    project is None
+                    or project.organization_id is None
+                    or not await OrganizationMemberRepository(session).is_lead(
+                        project.organization_id, viewer_user_id
+                    )
+                ):
+                    return {"ok": False, "error": "not_a_member"}
+
+            stream_repo = StreamRepository(session)
+            rooms = await stream_repo.list_rooms_for_project(project_id)
+            shaped = [
+                await _shape_stream(session, room, viewer_id=viewer_user_id)
+                for room in rooms
+            ]
+        return {"ok": True, "rooms": shaped}
+
     async def post_system_message(
         self,
         *,
@@ -311,6 +432,13 @@ class StreamService:
                 "author_id": r.author_id,
                 "author_username": authors.get(r.author_id),
                 "body": r.body,
+                # Room-stream slice: surface kind + linked_id so the
+                # frontend timeline dispatcher can render the right card
+                # per row (text / edge-answer / edge-route-proposal /
+                # edge-tool-result / membrane-clarify / etc.) without a
+                # second round-trip per message.
+                "kind": r.kind,
+                "linked_id": r.linked_id,
                 "created_at": r.created_at.isoformat(),
             }
             for r in rows
@@ -350,6 +478,10 @@ async def _shape_stream(
         "type": stream.type,
         "project_id": stream.project_id,
         "owner_user_id": stream.owner_user_id,
+        # Persisted display name for type='room' streams (alembic 0029).
+        # Null for project/personal/dm — caller derives display from
+        # project / owner / DM partner instead.
+        "name": stream.name,
         "members": members,
         "last_activity_at": stream.last_activity_at.isoformat()
         if stream.last_activity_at

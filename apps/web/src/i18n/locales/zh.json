@@ -1,7 +1,28 @@
 {
+  "topbar": {
+    "searchPlaceholder": "搜索项目、决策、任务或知识",
+    "notifications": "通知",
+    "newCta": "新建"
+  },
+  "inboxPage": {
+    "kicker": "路由信号",
+    "title": "路由收件箱",
+    "subtitle": "收件箱不是消息堆,而是系统认为需要人类介入的信号队列:问谁、为何问、对方会看到什么、是否需要审查。",
+    "totalPending": "{count} 项待处理",
+    "routedHeading": "路由给你的",
+    "routedEmpty": "目前没有路由给你的信号。",
+    "routedTag": "EDGE · 路由",
+    "routedNoFraming": "(尚无措辞)",
+    "gatedHeading": "等你签字的提案",
+    "gatedEmpty": "目前没有等你签字的提案。",
+    "gatedTag": "GATED · {cls}",
+    "gatedNoSummary": "(无摘要)",
+    "openInTeamRoom": "去团队会议室回应"
+  },
   "brand": {
     "name": "WorkGraph",
-    "tagline": "协作是一张图,而不是一份文档。"
+    "tagline": "协作是一张图,而不是一份文档。",
+    "shortTagline": "AI 原生团队记忆"
   },
   "nav": {
     "home": "首页",
@@ -130,10 +151,32 @@
     }
   },
   "projects": {
+    "kicker": "项目",
+    "subtitle": "用自然语言立项,或挑选一个已有项目。执行、审计、知识与组织都回到侧边栏。",
     "heading": "项目",
     "signedInAs": "当前账号:{name}",
     "empty": "还没有项目。在上方发出第一条需求消息即可开启。",
-    "roleLabel": "角色"
+    "roleLabel": "角色",
+    "intake": {
+      "title": "自然语言立项",
+      "subtitle": "目标 → 图谱种子"
+    },
+    "portfolio": {
+      "title": "项目总览",
+      "subtitle": "你参与的所有项目",
+      "projects": "项目",
+      "attention": "需要介入",
+      "singlePoint": "单点风险",
+      "members": "独立成员"
+    },
+    "listHeading": "你的项目",
+    "listSubtitle": "按活跃度排序,行内显示最关键的健康指标",
+    "row": {
+      "tasks": "{count} 任务",
+      "deliverables": "{count} 交付物",
+      "risks": "{count} 开放风险",
+      "open": "进入"
+    }
   },
   "language": {
     "switcher": "语言",
@@ -143,12 +186,41 @@
   "home": {
     "welcome": "欢迎,{name}",
     "signedInAs": "当前账号:{name}",
+    "hero": {
+      "kicker": "今日工作台",
+      "welcome": "欢迎,{name}",
+      "subtitle": "把会话、决策、任务和知识沉淀为同一张工作图谱。首页不只展示“列表”,而是告诉你:哪些信号需要处理,哪些决策正在等待结晶,哪些项目正在偏离目标。",
+      "primaryCta": "处理路由收件箱 ({count})",
+      "primaryCtaQuiet": "进入项目",
+      "secondaryCta": "查看所有项目",
+      "pulseEyebrow": "系统脉搏",
+      "pulseHeadline": "{count} 项待确认",
+      "pulseBodyActive": "这些信号路由给你,因为系统认为你最适合处理。",
+      "pulseBodyQuiet": "所有路由信号都已回应。可以利用工作台回顾项目、决策与知识变更。",
+      "pulseStat": {
+        "projects": "活跃项目",
+        "nodes": "图谱节点",
+        "decisions7d": "决策 · 7d"
+      }
+    },
     "pending": {
       "title": "需要你回应",
       "empty": "暂无待处理事项",
       "jumpToTurn": "跳到对话 →",
       "showMore": "再看 {count} 条",
+      "viewAll": "在收件箱中再看 {count} 条",
       "fromProject": "来自 {project}"
+    },
+    "miniGraph": {
+      "title": "工作图谱",
+      "empty": "暂无图谱快照 — 创建项目以查看其结构。",
+      "openGraph": "打开图谱",
+      "legend": {
+        "decision": "决策",
+        "deliverable": "交付物",
+        "risk": "风险",
+        "task": "任务"
+      }
     },
     "approvals": {
       "title": "待你审批",
@@ -214,6 +286,69 @@
     }
   },
   "stream": {
+    "recap": {
+      "kicker": "当前会议焦点",
+      "title": "这间房现在该思考的事",
+      "dismiss": "本次会话内不再显示",
+      "chips": {
+        "medRisks": "另有 {n} 项开放风险",
+        "commitments": "{n} 项未结承诺",
+        "recentDecisions": "{n} 条近期决策"
+      },
+      "suggestion": {
+        "ask_or_decide": "请在下一条消息中明确:你是在询问事实,还是在请求决策?",
+        "follow_up_risk": "首要的开放风险就是关键所在 —— 直接处理它,而非偏离到次要话题。",
+        "ratify_decision": "近期的决策尚未在群里确认 —— 请确认或重新讨论。"
+      }
+    },
+    "contextPanel": {
+      "buttonLabel": "上下文口径",
+      "buttonCount": "{n}/{total} 启用",
+      "buttonLoading": "加载中…",
+      "hint": "选择 Edge 在此会话中可读取的上下文源",
+      "kicker": "会话上下文",
+      "title": "Agent 在这里可以看哪些?",
+      "subtitle": "决定 Edge 在此会话中应答时会引用哪些来源。默认设置兼顾可信度,同时避免私信权限跨房间泄露。",
+      "source": {
+        "graph": {
+          "label": "项目图谱",
+          "hint": "任务、交付物、风险、决策"
+        },
+        "kb": {
+          "label": "知识库",
+          "hint": "Wiki、附件、决策日志"
+        },
+        "dms": {
+          "label": "私信",
+          "hint": "默认关闭,避免权限污染"
+        },
+        "audit": {
+          "label": "审计记录",
+          "hint": "信息密度高,仅在解释来龙去脉时启用"
+        }
+      }
+    },
+    "scopeTiers": {
+      "groupLabel": "可见范围层级",
+      "tier": {
+        "personal": {
+          "label": "个人",
+          "hint": "只看你的笔记与个人流"
+        },
+        "group": {
+          "label": "格子",
+          "hint": "项目格子内共享的内容"
+        },
+        "department": {
+          "label": "部门",
+          "hint": "部门级的决策与知识沉淀"
+        },
+        "enterprise": {
+          "label": "企业",
+          "hint": "组织级公开内容"
+        }
+      }
+    },
     "loading": "正在加载会话…",
     "empty": "还没有消息 —— 在下方开始吧。",
     "messageCount": "条消息",
@@ -230,8 +365,58 @@
       "label": "建议",
       "references": "涉及"
     },
+    "preview": {
+      "membraneReview": {
+        "kbItemGroup": "薄膜审核 · 群组知识条目",
+        "taskPromote": "薄膜审核 · 个人任务 → 计划",
+        "conflictsWith": "与 {count} 项现有条目冲突"
+      },
+      "wikiEntry": {
+        "label": "保存到项目 Wiki",
+        "willUseSourceMessage": "将以来源消息作为条目正文保存。"
+      }
+    },
     "decision": {
-      "recorded": "⚡ 已生成决策"
+      "recorded": "⚡ 已生成决策",
+      "voteScopeRoom": "由 {name} 房间的 {count} 名成员表决。",
+      "voteScopeProject": "项目级表决。"
+    },
+    "rooms": {
+      "loading": "正在加载时间线…",
+      "emptyTimeline": "还没有消息 — 来发起对话吧。",
+      "untitledRoom": "未命名房间",
+      "memberCount": "{count} 名成员",
+      "workbenchOpen": "评审",
+      "suggestionLabel": "Agent 建议（{kind}）",
+      "suggestionFromHint": "来源于上方消息。可在右侧评审面板中接受或忽略。",
+      "suggestionStatus": {
+        "accepted": "已接受",
+        "dismissed": "已忽略",
+        "countered": "被反提",
+        "escalated": "已上报"
+      }
+    },
+    "workbench": {
+      "title": "工作台",
+      "subtitle": "同一实体，多个投影",
+      "private": "私有",
+      "close": "关闭工作台",
+      "mode": {
+        "grid": "分屏",
+        "vertical": "纵向",
+        "focus": "聚焦"
+      },
+      "chipRequests": "评审",
+      "chipTasks": "任务中心",
+      "chipKnowledge": "知识记忆",
+      "chipSkills": "技能图谱",
+      "chipWorkflow": "工作流",
+      "comingSoon": "N.4 阶段上线 — 词汇已先建立。",
+      "comingSoonBody": "此面板属于投影词汇；具体渲染在下一切片落地。",
+      "requestsEmpty": "暂无待评审项 — 一切处理就绪。",
+      "untitledSuggestion": "未命名建议",
+      "accept": "接受",
+      "dismiss": "忽略"
     },
     "attribution": {
       "edge": "边缘",
@@ -266,7 +451,35 @@
       "offline": "离线"
     }
   },
+  "org": {
+    "kicker": "决策权限",
+    "title": "组织诊断",
+    "subtitle": "权限分布、单点风险与成员负荷。和「状态」(项目健康) 与「技能图谱」(能力地图) 不同 —— 这一页关注「谁有权决定什么」。",
+    "gateKeepers": {
+      "heading": "把关人分布",
+      "subhead": "按决策类别",
+      "empty": "尚未配置受控决策类别。",
+      "unset": "未指定把关人",
+      "noGate": "无把关人",
+      "singlePoint": "单点风险"
+    },
+    "load": {
+      "heading": "成员负荷",
+      "subhead": "已裁决数 + 持有的把关类别",
+      "empty": "暂无成员。",
+      "decisions": "{count} 项裁决",
+      "gateClasses": "{count} 个把关类别"
+    }
+  },
   "status": {
+    "kicker": "项目健康度",
+    "subtitle": "关键路径、风险、决策、外部产物与下一步。",
+    "metrics": {
+      "tasks": "任务",
+      "deliverables": "交付物",
+      "risks": "开放风险",
+      "decisions": "决策"
+    },
     "title": "项目状态",
     "lastRefreshed": "最后刷新 {time}",
     "members": {
@@ -279,6 +492,28 @@
         "member": "成员",
         "observer": "观察者"
       }
+    },
+    "skills": {
+      "noTags": "未声明技能",
+      "edit": "编辑技能",
+      "addTag": "添加",
+      "removeTag": "删除",
+      "placeholder": "输入技能后回车",
+      "save": "保存",
+      "saving": "保存中…",
+      "cancel": "取消",
+      "saveFailed": "保存失败"
+    },
+    "budget": {
+      "label": "需求预算",
+      "unset": "未设置",
+      "edit": "编辑",
+      "save": "保存",
+      "saving": "保存中…",
+      "cancel": "取消",
+      "placeholder": "小时",
+      "invalid": "1–100000",
+      "saveFailed": "保存失败"
     },
     "tasks": {
       "title": "进行中的任务",
@@ -295,7 +530,16 @@
       "newTaskSave": "添加",
       "newTaskSaving": "保存中……",
       "newTaskCancel": "取消",
-      "createFailed": "新建任务失败"
+      "newTaskEstimateLabel": "预估(小时)",
+      "newTaskEstimatePlaceholder": "如 4",
+      "newTaskRoleLabel": "角色",
+      "createFailed": "新建任务失败",
+      "draftsHeading": "我的草稿",
+      "draftChip": "草稿",
+      "promote": "提交计划",
+      "promoting": "提交中……",
+      "promoteDeferred": "已送审",
+      "promoteFailed": "提交失败"
     },
     "risks": {
       "title": "未解决的风险",
@@ -332,6 +576,17 @@
       "title": "外部产物",
       "empty": "尚未关联任何 git 提交或文档"
     },
+    "membraneNotes": {
+      "title": "膜层待办",
+      "empty": "膜层目前没有需要人工处理的事项。",
+      "pendingReviews": "待审核",
+      "pendingClarifications": "待澄清",
+      "kind": {
+        "taskPromote": "任务 → 计划",
+        "kbItemGroup": "个人 → 团队知识库",
+        "clarify": "需回复"
+      }
+    },
     "age": {
       "justNow": "刚刚",
       "minutes": "{n} 分钟",
@@ -358,10 +613,14 @@
     }
   },
   "kb": {
+    "kicker": "知识库",
+    "subtitle": "个人笔记与共享条目同在一棵树中,徽章标示来源。",
     "title": "知识库",
     "search": "搜索知识库…",
     "empty": "没有匹配的条目。",
     "notAvailable": "知识库即将上线。",
+    "sharedHeading": "团队知识树",
+    "sharedSubtitle": "团队共享的 KB 条目 —— 由个人笔记提升而来、从 Wiki/Git/RSS 摄入、或从消息流保存。项目内所有成员可见。",
     "filters": {
       "all": "全部",
       "wiki": "Wiki",
@@ -384,6 +643,7 @@
       "new": "+ 新建文件夹",
       "newItem": "管理信号来源…",
       "newItemHelp": "打开「项目设置 → 外部信号订阅」。知识库条目由采集管线生成,不需要手动创建。",
+      "newNoteHelp": "在所选文件夹中写一条个人范围的 KB 笔记。仅你可见;之后可以提升为团队共享。",
       "newPlaceholder": "文件夹名称",
       "selectPrompt": "请选择一个文件夹",
       "delete": "删除文件夹",
@@ -415,6 +675,10 @@
         "task_scoped": "任务范围",
         "observer": "观察者"
       }
+    },
+    "statusChip": {
+      "draft": "草稿",
+      "pendingReview": "待审"
     }
   },
   "personal": {
@@ -570,6 +834,11 @@
       "renders": "渲染文档",
       "renders_postmortem": "项目复盘",
       "renders_handoff": "交接文档",
+      "docs": "渲染文档",
+      "audit": "审计视图",
+      "audit_kicker": "审计视图",
+      "audit_subtitle": "图谱、计划、任务、风险与决策属于同一审计域，内部用切页保持在一起。",
+      "organization": "组织",
       "detail": "审计视图",
       "detail_graph": "图谱",
       "detail_plan": "计划",
@@ -763,6 +1032,7 @@
     "noPending": "暂无等待你处理的事项。",
     "openDrawer": "打开路由收件箱",
     "openDrawerN": "打开路由收件箱(还有 {n} 条待处理)",
+    "doubleClickHint": "单击预览侧栏 · 双击进入完整收件箱",
     "newRoutedFrom": "来自 {name} 的新路由询问",
     "pendingLabel": "待处理",
     "repliedLabel": "已回复"
@@ -860,6 +1130,30 @@
     "scanning": "扫描中…",
     "scanDone": "扫描完成 — 新增 {count} 条待审信号。"
   },
+  "renders": {
+    "index": {
+      "kicker": "渲染产物",
+      "title": "渲染文档",
+      "subtitle": "该页只保留由图谱衍生的文档:复盘、交接、外部汇报。计划、任务、风险都在审计视图。",
+      "postmortem": {
+        "title": "项目复盘",
+        "subtitle": "上次生成",
+        "heading": "{project} — 复盘",
+        "headingNoProject": "项目复盘",
+        "generatedAt": "生成于 {time}",
+        "notGenerated": "尚未生成",
+        "unavailable": "暂不可用",
+        "view": "查看",
+        "generate": "生成"
+      },
+      "handoff": {
+        "title": "交接文档",
+        "subtitle": "按成员",
+        "empty": "尚无队友 — 邀请成员后即可生成交接。",
+        "generate": "生成"
+      }
+    }
+  },
   "render": {
     "loading": "正在生成文档……",
     "loadFailed": "无法加载该渲染,请尝试重新生成,或确认你是项目成员。",
@@ -949,6 +1243,7 @@
     "members": "成员"
   },
   "skillAtlas": {
+    "kicker": "能力图谱",
     "title": "技能图谱",
     "subtitle": "每位成员绑定两种技能:角色技能(由角色赋予,随角色交接传承)与个人技能(由本人声明,由图谱实际观察到的工作验证)。它们与知识库一起,构成小组的资本。",
     "backToProject": "返回项目",
@@ -1266,7 +1561,8 @@
     "cancel": "取消"
   },
   "kbNotes": {
-    "title": "笔记",
+    "title": "个人知识库笔记",
+    "scopeExplainer": "这些是个人范围的 KB 条目 —— 仅你可见。点击「提升」即可与团队共享;共享后的条目会出现在下方的团队知识树中。",
     "newNote": "+ 新笔记",
     "cancelNew": "取消",
     "loading": "加载中……",
@@ -1285,6 +1581,10 @@
     "cancel": "取消",
     "promote": "晋级为共享",
     "promoteConfirm": "将此笔记设为团队可见?这会影响所有人的语境。",
+    "promoting": "提升中……",
+    "promoted": "已加入共享知识库。",
+    "promoteDeferred": "已送审 —— 项目所有者将在团队室中确认。",
+    "promoteFailed": "提升失败。",
     "demote": "降级为私人",
     "delete": "删除",
     "deleteConfirm": "确认删除此笔记?该操作不可撤销。",
