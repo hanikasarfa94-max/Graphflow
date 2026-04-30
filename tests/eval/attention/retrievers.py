@@ -1,10 +1,11 @@
-"""§7.2 hybrid retrieval primitives — slice 1 (BM25).
+"""§7.2 hybrid retrieval primitives — slices 1-3.
 
 The §7 stack composes five retrievers via RRF (`new_concepts.md §7.2`):
 
   * **BM25 / lexical** — exact-match strength: task ids, member names,
-    technical terms, decision ids, API names. Slice 1 — this module.
-  * Vector similarity — semantic neighbors. Slice 2.
+    technical terms, decision ids, API names. Slice 1.
+  * **Vector similarity** — semantic neighbors via Qwen3-Embedding-8B
+    (multilingual). Slice 2.
   * Graph-neighbor expansion — relationship-driven candidates. Slice 3.
   * Recent active nodes — last-N-day touch boost. Slice 3.
   * User-pinned — explicit anchors. Slice 3.
@@ -14,11 +15,11 @@ RRF (slice 4) merges rank lists without needing the scales to align,
 so we don't try to calibrate raw scores across retrievers — just the
 within-retriever ordering matters.
 
-This module is dep-free Python so the eval harness keeps shipping
-without pulling in `rank-bm25`, `bm25s`, `chromadb`, etc. Speed is a
-non-issue at eval scale (538 nodes × 12 queries fits in milliseconds).
-A production wiring (slice 5) can swap to a tuned C-backed BM25 + a
-real vector DB; the rank-list interface stays stable.
+BM25 is dep-free Python; the vector retriever calls SiliconFlow via
+the openai SDK (already a dep) and caches embeddings to disk so the
+eval scaffold keeps fast iteration. A production wiring (slice 5)
+can swap to a tuned C-backed BM25 + a real vector DB; the rank-list
+interface stays stable.
 """
 from __future__ import annotations
 
@@ -265,4 +266,93 @@ class BM25Retriever:
         return [(self._items[i], s) for i, s in ranked[:k]]
 
 
-__all__ = ["BM25Retriever", "tokenize"]
+# ---------------------------------------------------------------------------
+# Vector retrieval (Qwen3-Embedding-8B via SiliconFlow).
+# ---------------------------------------------------------------------------
+
+
+class VectorRetriever:
+    """Cosine-similarity retrieval over precomputed embeddings.
+
+    Construction takes the corpus + a parallel list of embedding
+    vectors (one per item, same length). The embedding step is
+    factored out into `tests/eval/attention/embeddings.py` so the
+    cache can be reused across slices and the retriever stays
+    sync — no asyncio.run inside per-query scoring.
+
+    Per `new_concepts.md §7.2`, vector retrieval covers exactly what
+    BM25 misses: semantic neighbors that don't share surface tokens.
+    The two retrievers compose via RRF in slice 4.
+    """
+
+    def __init__(
+        self,
+        corpus: Sequence[CorpusItem],
+        embeddings: Sequence[Sequence[float]],
+    ) -> None:
+        if len(corpus) != len(embeddings):
+            raise ValueError(
+                f"corpus/embeddings length mismatch: "
+                f"{len(corpus)} vs {len(embeddings)}"
+            )
+        self._items: tuple[CorpusItem, ...] = tuple(corpus)
+        # Pre-normalize so per-query scoring is one dot product per
+        # candidate instead of a divide. Matters more in production
+        # than at eval scale, but it costs nothing here.
+        self._unit_vectors: list[tuple[float, ...]] = [
+            _l2_normalize(v) for v in embeddings
+        ]
+
+    def top_k(
+        self,
+        query_embedding: Sequence[float],
+        *,
+        k: int = 50,
+        candidate_filter: "Iterable[bool] | None" = None,
+    ) -> list[tuple[CorpusItem, float]]:
+        """Return top-k items by cosine similarity to `query_embedding`.
+
+        `candidate_filter` mirrors BM25Retriever — boolean iterable
+        parallel to the corpus, True = candidate.
+        """
+        if not self._items:
+            return []
+        q = _l2_normalize(query_embedding)
+        if not q:
+            return []
+        keep_mask: list[bool] | None = (
+            list(candidate_filter) if candidate_filter is not None else None
+        )
+        scores: list[tuple[int, float]] = []
+        for idx, doc_vec in enumerate(self._unit_vectors):
+            if keep_mask is not None and not keep_mask[idx]:
+                continue
+            # Dot product on unit vectors == cosine similarity.
+            score = sum(a * b for a, b in zip(q, doc_vec))
+            scores.append((idx, score))
+        scores.sort(key=lambda p: p[1], reverse=True)
+        return [(self._items[i], s) for i, s in scores[:k]]
+
+
+def _l2_normalize(vec: Sequence[float]) -> tuple[float, ...]:
+    """Return `vec / ||vec||`. Returns empty on zero-norm input."""
+    norm = math.sqrt(sum(x * x for x in vec))
+    if norm == 0.0:
+        return ()
+    return tuple(x / norm for x in vec)
+
+
+def cosine_similarity(a: Sequence[float], b: Sequence[float]) -> float:
+    """Cosine similarity for two raw (un-normalized) vectors.
+
+    Convenience for tests / one-off comparisons. Production-style
+    bulk scoring goes through VectorRetriever which pre-normalizes.
+    """
+    na = math.sqrt(sum(x * x for x in a))
+    nb = math.sqrt(sum(x * x for x in b))
+    if na == 0.0 or nb == 0.0:
+        return 0.0
+    return sum(x * y for x, y in zip(a, b)) / (na * nb)
+
+
+__all__ = ["BM25Retriever", "VectorRetriever", "cosine_similarity", "tokenize"]

@@ -26,7 +26,12 @@ from collections.abc import Sequence
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from .retrievers import BM25Retriever
+from .embeddings import (
+    EmbeddingsCache,
+    SiliconFlowEmbeddingClient,
+    embed_with_cache,
+)
+from .retrievers import BM25Retriever, VectorRetriever
 from .types import ConfigRunResult, CorpusItem, Query
 
 
@@ -349,6 +354,134 @@ def config_c_full_stack(
             for item in visible
         },
     )
+
+
+# ---------------------------------------------------------------------------
+# Vector-only config (slice 2). Not in CONFIGS — driven by its own eval
+# script for the slice-2 baseline measurement. Slice 4's hybrid (Config C)
+# will compose this with BM25 + graph + recency + pinned via RRF.
+# ---------------------------------------------------------------------------
+
+
+def _embedding_text(item: CorpusItem) -> str:
+    """Concat title + content for embedding.
+
+    Title is repeated twice — same intuition as BM25's title weight:
+    the document title is stronger semantic signal than buried body
+    content. (Less aggressive than BM25's ×3 because vector models
+    don't double-count the same way TF does.)
+    """
+    title = (item.title or "").strip()
+    body = (item.content or "").strip()
+    if title and body:
+        return f"{title}\n{title}\n{body}"
+    return title or body
+
+
+def make_config_b_vector_only(
+    corpus: Sequence[CorpusItem],
+    *,
+    cache_path: "Path | None" = None,
+):
+    """Factory: build a Config-B-shaped vector-only callable.
+
+    Embedding the corpus is one-time work amortized across every query
+    in the run, so we factor it out of the per-query function. Returns
+    a callable matching the `(corpus, query) -> ConfigRunResult` shape
+    the runner expects.
+
+    `cache_path` defaults to `tests/eval/dataset/attention/
+    qwen3_embeddings.json`. Reusable across runs — only new content
+    triggers an API call.
+    """
+    repo_root = Path(__file__).resolve().parents[3]
+    if cache_path is None:
+        cache_path = (
+            repo_root
+            / "tests"
+            / "eval"
+            / "dataset"
+            / "attention"
+            / "qwen3_embeddings.json"
+        )
+
+    cache = EmbeddingsCache(cache_path)
+    client = SiliconFlowEmbeddingClient()
+
+    item_texts = [_embedding_text(item) for item in corpus]
+    item_vectors = asyncio.run(embed_with_cache(item_texts, cache, client))
+    retriever = VectorRetriever(corpus, item_vectors)
+
+    def _config_b_vector_only(
+        _corpus: Sequence[CorpusItem],
+        query: Query,
+        *,
+        k: int = 50,
+    ) -> ConfigRunResult:
+        """Vector top-k → DeepSeek over the survivors (LIVE — slice 2).
+
+        Same prompt frame as Config A and Config B/BM25, just retrieving
+        candidates by cosine similarity instead of BM25 score. The
+        membrane gate runs first (visibility filter), then vector
+        ranks among visible items.
+        """
+        started = time.monotonic()
+        visible_mask = [
+            _viewer_can_see(item, query.viewer_id) for item in corpus
+        ]
+        visible_ids = {
+            item.id for item, ok in zip(corpus, visible_mask) if ok
+        }
+        suppressed_ids = {item.id for item in corpus if item.suppressed}
+
+        # Embed the query (cached so re-runs of the same query set are
+        # zero-API).
+        q_vectors = asyncio.run(
+            embed_with_cache([query.text], cache, client)
+        )
+        q_vec = q_vectors[0]
+        ranked = retriever.top_k(
+            q_vec, k=k, candidate_filter=visible_mask
+        )
+        candidates = [item for item, _score in ranked]
+
+        if not candidates:
+            elapsed_ms = int((time.monotonic() - started) * 1000)
+            return ConfigRunResult(
+                config="B",
+                query_id=query.id,
+                cited_node_ids=(),
+                suppressed_cited=(),
+                tokens_in=0,
+                tokens_out=0,
+                latency_ms=elapsed_ms,
+            )
+
+        llm = _get_llm_client()
+        messages = _pack_prompt(candidates, query)
+        result = asyncio.run(
+            llm.complete(
+                messages,
+                temperature=0.1,
+                response_format={"type": "json_object"},
+            )
+        )
+        elapsed_ms = int((time.monotonic() - started) * 1000)
+
+        cited = _parse_cited_ids(result.content, visible_ids)
+        suppressed_cited = tuple(sorted(set(cited) & suppressed_ids))
+
+        return ConfigRunResult(
+            config="B",
+            query_id=query.id,
+            cited_node_ids=cited,
+            suppressed_cited=suppressed_cited,
+            tokens_in=result.prompt_tokens,
+            tokens_out=result.completion_tokens,
+            latency_ms=elapsed_ms,
+        )
+
+    return _config_b_vector_only
 
 
 CONFIGS = {

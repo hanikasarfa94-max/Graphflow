@@ -21,6 +21,10 @@ out/
 .env.local
 .env.*.local
 
+# Eval embedding cache (50MB+, deterministic — regenerate via
+# `python tests/eval/scripts/run_vector_baseline_eval.py`).
+tests/eval/dataset/attention/qwen3_embeddings.json
+
 # IDE / OS
 .vscode/
 .idea/

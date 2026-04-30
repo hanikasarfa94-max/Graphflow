@@ -14,7 +14,12 @@ from __future__ import annotations
 
 import pytest
 
-from tests.eval.attention.retrievers import BM25Retriever, tokenize
+from tests.eval.attention.retrievers import (
+    BM25Retriever,
+    VectorRetriever,
+    cosine_similarity,
+    tokenize,
+)
 from tests.eval.attention.types import CorpusItem
 
 
@@ -182,3 +187,63 @@ def test_bm25_repeated_query_terms_count_once():
     assert [(i.id, round(s, 6)) for i, s in once] == [
         (i.id, round(s, 6)) for i, s in twice
     ]
+
+
+# ---------------------------------------------------------------------------
+# VectorRetriever — pure cosine over precomputed vectors (no API calls).
+# ---------------------------------------------------------------------------
+
+
+def test_vector_retriever_ranks_nearest_neighbor_first():
+    """Higher cosine similarity → higher rank."""
+    items = [
+        _item("a"),  # near to query
+        _item("b"),  # orthogonal
+        _item("c"),  # opposite direction
+    ]
+    embeddings = [
+        [1.0, 0.1, 0.0],
+        [0.0, 1.0, 0.0],
+        [-1.0, 0.0, 0.0],
+    ]
+    vec = VectorRetriever(items, embeddings)
+    ranked = vec.top_k([1.0, 0.0, 0.0], k=3)
+    assert [item.id for item, _ in ranked] == ["a", "b", "c"]
+
+
+def test_vector_retriever_respects_candidate_filter():
+    items = [_item("a"), _item("b"), _item("c")]
+    embeddings = [[1.0, 0.0], [0.9, 0.1], [0.8, 0.2]]
+    vec = VectorRetriever(items, embeddings)
+    # Hide 'a' (the closest); expect 'b' to rank first.
+    ranked = vec.top_k(
+        [1.0, 0.0], k=3, candidate_filter=[False, True, True]
+    )
+    assert [item.id for item, _ in ranked] == ["b", "c"]
+
+
+def test_vector_retriever_handles_zero_norm_query():
+    """Zero-norm query vector returns no rows rather than dividing by zero."""
+    items = [_item("a"), _item("b")]
+    embeddings = [[1.0, 0.0], [0.0, 1.0]]
+    vec = VectorRetriever(items, embeddings)
+    assert vec.top_k([0.0, 0.0], k=5) == []
+
+
+def test_vector_retriever_length_mismatch_raises():
+    items = [_item("a"), _item("b")]
+    with pytest.raises(ValueError):
+        VectorRetriever(items, [[1.0]])
+
+
+def test_vector_retriever_empty_corpus_returns_empty():
+    vec = VectorRetriever([], [])
+    assert vec.top_k([1.0, 0.0], k=5) == []
+
+
+def test_cosine_similarity_basic():
+    assert cosine_similarity([1.0, 0.0], [1.0, 0.0]) == pytest.approx(1.0)
+    assert cosine_similarity([1.0, 0.0], [0.0, 1.0]) == pytest.approx(0.0)
+    assert cosine_similarity([1.0, 0.0], [-1.0, 0.0]) == pytest.approx(-1.0)
+    # Zero-norm input returns 0 rather than NaN.
+    assert cosine_similarity([0.0, 0.0], [1.0, 0.0]) == 0.0
