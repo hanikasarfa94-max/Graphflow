@@ -50,6 +50,9 @@ export function PanelItem({ title, meta, progress, entityRef, actions }: Props) 
   const clickable = entityRef !== undefined;
   return (
     <div
+      data-testid="workbench-panel-item"
+      data-entity-kind={entityRef?.kind}
+      data-entity-id={entityRef?.id}
       className={"panelItem" + (clickable ? " panelItem--clickable" : "")}
       onClick={
         clickable

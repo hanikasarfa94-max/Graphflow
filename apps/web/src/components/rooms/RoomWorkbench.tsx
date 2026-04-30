@@ -228,18 +228,21 @@ export function RoomWorkbench({ projectId, timeline, open, onClose }: Props) {
           }}
         >
           <button
+            data-testid="workbench-chip-requests"
             style={chipStyle}
             onClick={() => addPanel("requests", t("chipRequests"))}
           >
             ＋{t("chipRequests")}
           </button>
           <button
+            data-testid="workbench-chip-knowledge"
             style={chipStyle}
             onClick={() => addPanel("knowledge", t("chipKnowledge"))}
           >
             ＋{t("chipKnowledge")}
           </button>
           <button
+            data-testid="workbench-chip-tasks"
             style={chipStyle}
             onClick={() => addPanel("tasks", t("chipTasks"))}
           >
@@ -352,6 +355,7 @@ function RequestsPanelBody({
               <>
                 <button
                   type="button"
+                  data-testid="workbench-suggestion-accept"
                   onClick={() => void accept(s.id)}
                   style={{
                     padding: "3px 10px",
@@ -367,6 +371,7 @@ function RequestsPanelBody({
                 </button>
                 <button
                   type="button"
+                  data-testid="workbench-suggestion-dismiss"
                   onClick={() => void dismiss(s.id)}
                   style={{
                     padding: "3px 10px",
@@ -491,6 +496,7 @@ function TasksPanelBody({
         {!drafting ? (
           <button
             type="button"
+            data-testid="workbench-tasks-new"
             onClick={() => setDrafting(true)}
             style={{
               padding: "3px 10px",
@@ -508,6 +514,7 @@ function TasksPanelBody({
           <div style={{ display: "flex", gap: 6, width: "100%" }}>
             <input
               type="text"
+              data-testid="workbench-tasks-input"
               value={draftTitle}
               autoFocus
               onChange={(e) => setDraftTitle(e.target.value)}
@@ -529,6 +536,7 @@ function TasksPanelBody({
             />
             <button
               type="button"
+              data-testid="workbench-tasks-submit"
               onClick={() => void submit()}
               disabled={!draftTitle.trim() || tasksState.creating}
               style={{
