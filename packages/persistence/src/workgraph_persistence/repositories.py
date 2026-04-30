@@ -2057,12 +2057,20 @@ class StreamRepository:
         type: str,
         project_id: str | None = None,
         owner_user_id: str | None = None,
+        name: str | None = None,
     ) -> StreamRow:
+        """Create a new stream row.
+
+        `name` is optional and only meaningful for type='room' (display
+        name shown in the room nav + header). Other stream types derive
+        their display from the project / owner / DM partner.
+        """
         row = StreamRow(
             id=_new_id(),
             type=type,
             project_id=project_id,
             owner_user_id=owner_user_id,
+            name=name,
         )
         self._session.add(row)
         await self._session.flush()

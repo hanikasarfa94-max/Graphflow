@@ -273,7 +273,7 @@ class StreamService:
 
             stream_repo = StreamRepository(session)
             stream = await stream_repo.create(
-                type="room", project_id=project_id
+                type="room", project_id=project_id, name=name
             )
             member_repo = StreamMemberRepository(session)
             full_members = set(member_user_ids) | {creator_user_id}
@@ -285,11 +285,11 @@ class StreamService:
                         "admin" if uid == creator_user_id else "member"
                     ),
                 )
+            # Now persisted (alembic 0029); _shape_stream picks it up
+            # from stream.name on read paths too.
             payload = await _shape_stream(
                 session, stream, viewer_id=creator_user_id
             )
-            payload["name"] = name  # surfaced via metadata until §6 ORM
-                                     # gains a name column
 
         await self._event_bus.emit(
             "stream.created",
@@ -432,6 +432,13 @@ class StreamService:
                 "author_id": r.author_id,
                 "author_username": authors.get(r.author_id),
                 "body": r.body,
+                # Room-stream slice: surface kind + linked_id so the
+                # frontend timeline dispatcher can render the right card
+                # per row (text / edge-answer / edge-route-proposal /
+                # edge-tool-result / membrane-clarify / etc.) without a
+                # second round-trip per message.
+                "kind": r.kind,
+                "linked_id": r.linked_id,
                 "created_at": r.created_at.isoformat(),
             }
             for r in rows
@@ -471,6 +478,10 @@ async def _shape_stream(
         "type": stream.type,
         "project_id": stream.project_id,
         "owner_user_id": stream.owner_user_id,
+        # Persisted display name for type='room' streams (alembic 0029).
+        # Null for project/personal/dm — caller derives display from
+        # project / owner / DM partner instead.
+        "name": stream.name,
         "members": members,
         "last_activity_at": stream.last_activity_at.isoformat()
         if stream.last_activity_at

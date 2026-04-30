@@ -1113,6 +1113,13 @@ class StreamRow(Base):
     owner_user_id: Mapped[str | None] = mapped_column(
         ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True
     )
+    # Room-stream slice: persisted display name for type='room' streams
+    # (e.g. "design-sync", "auth-redesign"). Nullable because
+    # project/personal/dm streams don't carry a name — they derive their
+    # display from the project / owner / DM partner. Surfaced via
+    # GET /api/projects/{id}/rooms so the room nav and DecisionCard
+    # vote-scope explainer can render real names.
+    name: Mapped[str | None] = mapped_column(String(200), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_utcnow
     )
