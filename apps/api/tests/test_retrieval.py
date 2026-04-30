@@ -38,6 +38,7 @@ from workgraph_api.services._retrieval_primitives import (
     frecency_multiplier,
 )
 from workgraph_persistence import (
+    KbFolderRepository,
     KbIngestRepository,
     KbItemRepository,
     KbItemRow,
@@ -751,9 +752,11 @@ async def test_candidate_set_returns_kb_slice_shape(api_env):
     assert out, "expected at least one candidate"
     assert out[0]["id"] == hit_id
     # kb_slice shape (matches edge/v1.md prompt contract).
-    assert set(out[0].keys()) == {"id", "source", "excerpt"}
+    assert set(out[0].keys()) == {"id", "source", "excerpt", "edges"}
     assert out[0]["source"] in {"kb-note", "kb-personal"}
     assert "Postgres pool sizing" in out[0]["excerpt"]
+    # No folder + not ingested → no edges to surface.
+    assert out[0]["edges"] == []
 
 
 @pytest.mark.asyncio
@@ -773,6 +776,80 @@ async def test_candidate_set_for_ingest_uses_source_kind(api_env):
     )
     assert out
     assert out[0]["source"] == "user-drop"
+    # Ingest rows surface their provenance as an `ingested_via` edge so
+    # the LLM can weight external-source content distinctly.
+    edge_types = {e["type"] for e in out[0]["edges"]}
+    assert "ingested_via" in edge_types
+    ingest_edge = next(
+        e for e in out[0]["edges"] if e["type"] == "ingested_via"
+    )
+    assert ingest_edge["target_kind"] == "external"
+    assert ingest_edge["direction"] == "out"
+    assert ingest_edge["label"] == "user-drop"
+
+
+@pytest.mark.asyncio
+async def test_candidate_set_surfaces_folder_edges(api_env):
+    """Per the 5-layer architecture: graph supplies relation evidence,
+    not candidate competition. When two candidates share a folder, the
+    payload must carry `belongs_to` (out → folder) AND `same_folder_as`
+    (peer → sibling kb_item) so the LLM can cluster thematically.
+    """
+    _, maker, *_ = api_env
+    pid = await _mk_project(maker)
+    owner = await _mk_user(maker, "folder_edge_owner")
+    await _add_member(maker, pid, owner)
+
+    # Create a folder and put two co-topical kb items in it.
+    async with session_scope(maker) as session:
+        folder = await KbFolderRepository(session).create(
+            project_id=pid,
+            name="Auth & sessions",
+            parent_folder_id=None,
+            created_by_user_id=owner,
+        )
+        a = await KbItemRepository(session).create(
+            project_id=pid,
+            owner_user_id=owner,
+            title="Postgres pool sizing — auth service",
+            content_md="auth canonical sizing notes",
+            scope="group",
+            folder_id=folder.id,
+        )
+        b = await KbItemRepository(session).create(
+            project_id=pid,
+            owner_user_id=owner,
+            title="Postgres pool sizing — sessions service",
+            content_md="sessions canonical sizing notes",
+            scope="group",
+            folder_id=folder.id,
+        )
+        folder_id, a_id, b_id, folder_name = (
+            folder.id, a.id, b.id, folder.name,
+        )
+
+    svc = RetrievalService(maker)
+    out = await svc.candidate_set(
+        project_id=pid, query="postgres pool sizing", k=5
+    )
+    assert len(out) == 2
+
+    by_id = {c["id"]: c for c in out}
+    for cell_id, sibling_id in ((a_id, b_id), (b_id, a_id)):
+        edges = by_id[cell_id]["edges"]
+        # Folder belongs_to edge.
+        belongs = [e for e in edges if e["type"] == "belongs_to"]
+        assert len(belongs) == 1
+        assert belongs[0]["target_id"] == folder_id
+        assert belongs[0]["target_kind"] == "kb_folder"
+        assert belongs[0]["direction"] == "out"
+        assert belongs[0]["label"] == folder_name
+        # Sibling same_folder_as edge.
+        peers = [e for e in edges if e["type"] == "same_folder_as"]
+        assert len(peers) == 1
+        assert peers[0]["target_id"] == sibling_id
+        assert peers[0]["target_kind"] == "kb_item"
+        assert peers[0]["direction"] == "peer"
 
 
 @pytest.mark.asyncio

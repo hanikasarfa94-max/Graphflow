@@ -42,9 +42,11 @@ import logging
 from pathlib import Path
 from typing import Any
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from workgraph_persistence import (
+    KbFolderRow,
     KbItemRepository,
     KbItemRow,
     session_scope,
@@ -389,8 +391,8 @@ class RetrievalService:
         """Slice 5c — pre-formatted retrieval slice for agent prompts.
 
         Wraps `retrieve_kb_items` and adapts each candidate to the
-        `kb_slice` shape the EdgeAgent prompt already documents:
-        `[{"source": "...", "excerpt": "..."}, ...]`.
+        `kb_slice` shape the EdgeAgent prompt documents:
+        `[{"id", "source", "excerpt", "edges": [...]}]`.
 
         When this returns non-empty results, the agent prompt's
         "if kb_slice is empty, run kb_search if recall is wanted"
@@ -402,6 +404,23 @@ class RetrievalService:
         personal-scope rows, `kb-note` for group-scope user-authored.
         `excerpt` is the title + first 200 chars of body — small
         enough that ~5 candidates fit in a few hundred tokens.
+
+        `edges` carries graph-relation evidence so the LLM can
+        interpret cells with their structural context, not just as
+        a flat list. Per the 5-layer architecture, the graph layer
+        does not compete for candidate slots — it explains how the
+        cells we did surface relate to each other and to the wider
+        cell. v1 surfaces three edge kinds (every edge has
+        `{type, target_kind, direction}` plus optional `target_id`
+        and `label`):
+          * `belongs_to` → folder this kb item lives in
+          * `same_folder_as` → other kb items in this candidate pool
+            sharing the folder (peer edges; lets the LLM cluster)
+          * `ingested_via` → external provenance for ingest-source
+            rows (label = source_kind: git-commit, rss, user-drop…)
+        Future iterations can add `crystallized_from` (kb item ←
+        source message), `mentioned_by` (kb item ← message refs),
+        `overrides` / `supersedes` once those relations are modeled.
 
         `allowed_scopes` (pickup #7) — if provided, only rows whose
         scope is in the set are returned. Lets PersonalStreamService
@@ -416,6 +435,34 @@ class RetrievalService:
             allowed_scopes=allowed_scopes,
             k=k,
         )
+        if not candidates:
+            return []
+
+        # Batch-load folder names for any candidate that has a folder.
+        # One round trip regardless of pool size — keeps candidate_set
+        # cheap on the EdgeAgent hot path.
+        folder_ids = {
+            c.row.folder_id for c in candidates if c.row.folder_id
+        }
+        folder_name_by_id: dict[str, str] = {}
+        if folder_ids:
+            async with session_scope(self._sessionmaker) as session:
+                rows = (
+                    await session.execute(
+                        select(KbFolderRow).where(
+                            KbFolderRow.id.in_(folder_ids)
+                        )
+                    )
+                ).scalars().all()
+                folder_name_by_id = {r.id: r.name for r in rows}
+
+        # Group candidate ids by folder for same_folder_as peer edges.
+        folder_to_candidate_ids: dict[str, list[str]] = {}
+        for c in candidates:
+            fid = c.row.folder_id
+            if fid:
+                folder_to_candidate_ids.setdefault(fid, []).append(c.row.id)
+
         out: list[dict[str, Any]] = []
         for c in candidates:
             row = c.row
@@ -434,11 +481,47 @@ class RetrievalService:
                 excerpt = (
                     f"{title}: {body}" if title and body else (title or body)
                 )
+
+            edges: list[dict[str, Any]] = []
+            if row.folder_id and row.folder_id in folder_name_by_id:
+                edges.append(
+                    {
+                        "type": "belongs_to",
+                        "target_id": row.folder_id,
+                        "target_kind": "kb_folder",
+                        "direction": "out",
+                        "label": folder_name_by_id[row.folder_id],
+                    }
+                )
+            if row.folder_id:
+                for sibling_id in folder_to_candidate_ids.get(
+                    row.folder_id, []
+                ):
+                    if sibling_id != row.id:
+                        edges.append(
+                            {
+                                "type": "same_folder_as",
+                                "target_id": sibling_id,
+                                "target_kind": "kb_item",
+                                "direction": "peer",
+                            }
+                        )
+            if row.source == "ingest" and row.source_kind:
+                edges.append(
+                    {
+                        "type": "ingested_via",
+                        "target_kind": "external",
+                        "direction": "out",
+                        "label": row.source_kind,
+                    }
+                )
+
             out.append(
                 {
                     "id": row.id,
                     "source": source,
                     "excerpt": excerpt,
+                    "edges": edges,
                 }
             )
         return out
