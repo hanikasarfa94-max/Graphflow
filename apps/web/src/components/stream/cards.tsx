@@ -801,14 +801,38 @@ export function SubAgentTurnCard({
 export function DecisionCard({
   projectId,
   decision,
+  roomNameById,
 }: {
   projectId: string;
   decision: Decision;
+  // Room slice: caller resolves the rooms list once and passes the
+  // map so DecisionCard can render "Voting with <room>'s <N> members"
+  // without an N+1 fetch per card. Absent → fallback "project-wide
+  // vote" copy when scope_stream_id is set; no line when it's null.
+  roomNameById?: Record<string, { name: string; memberCount: number }>;
 }) {
   const t = useTranslations("stream");
+  const scopeStreamId = decision.scope_stream_id ?? null;
+  const roomMatch =
+    scopeStreamId && roomNameById ? roomNameById[scopeStreamId] : null;
+
+  let voteScopeLine: React.ReactNode = null;
+  if (scopeStreamId) {
+    if (roomMatch) {
+      voteScopeLine = t("decision.voteScopeRoom", {
+        name: roomMatch.name,
+        count: roomMatch.memberCount,
+      });
+    } else {
+      voteScopeLine = t("decision.voteScopeProject");
+    }
+  }
+
   return (
     <div
       data-testid="stream-decision-card"
+      data-entity-kind="decision"
+      data-entity-id={decision.id}
       className="wg-motion-crystallize"
       style={{
         marginBottom: 10,
@@ -840,6 +864,19 @@ export function DecisionCard({
       {decision.rationale && decision.custom_text && (
         <div style={{ color: "var(--wg-ink-soft)", marginTop: 2 }}>
           {decision.rationale}
+        </div>
+      )}
+      {voteScopeLine && (
+        <div
+          data-testid="decision-vote-scope"
+          style={{
+            marginTop: 6,
+            fontSize: 12,
+            color: "var(--wg-ink-soft)",
+            fontStyle: "italic",
+          }}
+        >
+          {voteScopeLine}
         </div>
       )}
       <div style={{ marginTop: 6 }}>
