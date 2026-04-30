@@ -46,6 +46,12 @@ class PreviewRequest(BaseModel):
     # {"kind": "silent_preview"} so the min_length guard here is just to
     # reject totally empty payloads — the value gate lives in the service.
     body: str = Field(min_length=0, max_length=4000)
+    # Mirror PostRequest so the rehearsal context honors
+    # StreamContextPanel + ScopeTierPills selection — the previewed
+    # kb_slice matches what post() would actually send. Pickup #7
+    # leftover (post-side wired in commit 0332031).
+    scope: dict[str, bool] | None = None
+    scope_tiers: dict[str, bool] | None = None
 
 
 class ConfirmRouteRequest(BaseModel):
@@ -104,7 +110,11 @@ async def post_personal_preview(
     """
     service = _get_service(request)
     result = await service.preview(
-        user_id=user.id, project_id=project_id, body=body.body
+        user_id=user.id,
+        project_id=project_id,
+        body=body.body,
+        scope=body.scope,
+        scope_tiers=body.scope_tiers,
     )
     if not result.get("ok"):
         err = result.get("error", "preview_failed")

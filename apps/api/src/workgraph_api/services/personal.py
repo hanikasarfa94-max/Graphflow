@@ -260,7 +260,13 @@ class PersonalStreamService:
     # --------------------------------------------------------------- preview
 
     async def preview(
-        self, *, user_id: str, project_id: str, body: str
+        self,
+        *,
+        user_id: str,
+        project_id: str,
+        body: str,
+        scope: dict[str, bool] | None = None,
+        scope_tiers: dict[str, bool] | None = None,
     ) -> dict[str, Any]:
         """Pre-commit rehearsal (vision.md §5.3).
 
@@ -268,6 +274,12 @@ class PersonalStreamService:
         and return the shaped EdgeResponse — but persist nothing. The
         frontend debounces this call on keystroke pause so the user sees
         how their draft would be classified before committing.
+
+        `scope` / `scope_tiers` mirror `post()` so the rehearsal context
+        honors StreamContextPanel + ScopeTierPills selection — the
+        previewed kb_slice matches what `post()` would actually send.
+        Pickup #7 leftover (the post() path was wired in commit 0332031;
+        preview() was deferred and lands here).
 
         Error codes:
           * 'project_not_found'
@@ -328,6 +340,8 @@ class PersonalStreamService:
             project_id=project_id,
             project_title=project_title,
             stream_id=stream_id,
+            scope=scope,
+            scope_tiers=scope_tiers,
             user_message=body,
         )
 
