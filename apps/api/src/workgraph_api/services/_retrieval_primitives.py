@@ -291,9 +291,81 @@ def reciprocal_rank_fusion(
     return [(doc_by_id[did], s) for did, s in ranked[:k]]
 
 
+# ---------------------------------------------------------------------------
+# Vector retrieval (Qwen3-Embedding-8B via SiliconFlow).
+# ---------------------------------------------------------------------------
+
+
+class VectorRetriever:
+    """Cosine similarity over precomputed embeddings.
+
+    Construction takes parallel sequences: docs + their L2-normalized
+    embedding vectors. Per-query scoring is one dot product per
+    candidate. Production wiring uses `_embeddings.py` to populate the
+    vector list from a content-hash-keyed cache.
+
+    Validated by the slice-2 eval at F1=0.818 against the realistic
+    538-node corpus (vector alone matched the Config A full-context
+    baseline at -91% tokens). At 2505 nodes vector alone drops to F1
+    0.727, but BM25+vector RRF (slice 4) holds at 0.818 — that's why
+    production wires both.
+    """
+
+    def __init__(
+        self,
+        docs: Sequence[RetrievalDoc],
+        embeddings: Sequence[Sequence[float]],
+    ) -> None:
+        if len(docs) != len(embeddings):
+            raise ValueError(
+                f"docs/embeddings length mismatch: "
+                f"{len(docs)} vs {len(embeddings)}"
+            )
+        self._docs: tuple[RetrievalDoc, ...] = tuple(docs)
+        # Pre-normalize so per-query scoring is one dot product per
+        # candidate instead of a divide.
+        self._unit_vectors: list[tuple[float, ...]] = [
+            _l2_normalize(v) for v in embeddings
+        ]
+
+    def top_k(
+        self,
+        query_embedding: Sequence[float],
+        *,
+        k: int = 50,
+    ) -> list[tuple[RetrievalDoc, float]]:
+        """Return top-k docs by cosine similarity to `query_embedding`.
+
+        Empty / zero-norm query → empty result (degraded gracefully
+        rather than raising; the caller can fall back to BM25 alone).
+        """
+        if not self._docs:
+            return []
+        q = _l2_normalize(query_embedding)
+        if not q:
+            return []
+        scores: list[tuple[int, float]] = []
+        for idx, doc_vec in enumerate(self._unit_vectors):
+            if not doc_vec:
+                continue  # zero-norm doc embedding — skip rather than NaN
+            score = sum(a * b for a, b in zip(q, doc_vec))
+            scores.append((idx, score))
+        scores.sort(key=lambda p: p[1], reverse=True)
+        return [(self._docs[i], s) for i, s in scores[:k]]
+
+
+def _l2_normalize(vec: Sequence[float]) -> tuple[float, ...]:
+    """Return `vec / ||vec||`. Returns empty on zero-norm input."""
+    norm = math.sqrt(sum(x * x for x in vec))
+    if norm == 0.0:
+        return ()
+    return tuple(x / norm for x in vec)
+
+
 __all__ = [
     "BM25Retriever",
     "RetrievalDoc",
+    "VectorRetriever",
     "frecency_multiplier",
     "reciprocal_rank_fusion",
     "tokenize",

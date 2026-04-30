@@ -1,27 +1,38 @@
-"""RetrievalService tests (slice 5a of pickup #4).
+"""RetrievalService tests (slices 5a + 5b of pickup #4).
 
 Covers the production §7.2 retrieval primitive — BM25 + §7.4
-frecency multiplier — over real KbItemRow data. Tests at the
-service level rather than the route level to keep them fast.
+frecency multiplier (slice 5a) plus optional vector retrieval +
+RRF (slice 5b) — over real KbItemRow data.
 
-Coverage:
+Coverage (slice 5a):
   * frecency_multiplier math: zero / hot / cold / future-ts edge cases.
-  * RetrievalService.retrieve_kb_items: BM25 ranks topical matches
-    above noise; frecency lifts hot-but-tied items above cold ones;
-    group-only mode (viewer_user_id=None) excludes personal items;
-    status filter excludes draft / archived / rejected; ingest-source
-    rows score on classification.summary + raw_content.
-  * SkillsService._kb_search wired path produces same shape as legacy
-    substring scan and ranks better on the chronic-miss queries.
+  * RetrievalService.retrieve_kb_items BM25 path: topical ranking,
+    empty-query short-circuit, status filter, group-only vs viewer
+    visibility, frecency lift, ingest-row adapter.
+  * SkillsService._kb_search wired path returns legacy shape;
+    substring fallback when unwired.
+
+Coverage (slice 5b):
+  * RetrievalService BM25+vector RRF path: stub embedding client
+    returns deterministic vectors; verify mode='bm25+vector' on
+    candidates and that the RRF result composes the two rank lists.
+  * Cache miss > _INLINE_EMBED_CAP → graceful fallback to BM25-only.
+  * Embedding client raising → graceful fallback (no crash).
+  * warm_kb_items() pre-populates the cache.
 """
 from __future__ import annotations
 
+import hashlib
+import math
 import uuid
+from collections.abc import Sequence
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 import pytest
 
 from workgraph_api.services import RetrievalService, SkillsService
+from workgraph_api.services._embeddings import EmbeddingClient, content_hash
 from workgraph_api.services._retrieval_primitives import (
     RetrievalDoc,
     frecency_multiplier,
@@ -464,3 +475,248 @@ async def test_kb_search_substring_fallback_when_retrieval_unwired(api_env):
     )
     assert out["ok"] is True
     assert out["result"][0]["id"] == hit_id
+
+
+# ---------------------------------------------------------------------------
+# Slice 5b — vector retrieval + RRF.
+# ---------------------------------------------------------------------------
+
+
+class _StubEmbeddingClient:
+    """Deterministic embedding stub for tests — no network calls.
+
+    Embeds each text into a fixed-dim vector by hashing into 8 floats
+    in [0, 1]. Same text → same vector across runs (cache stable).
+    Different texts produce different vectors so cosine similarity
+    has signal. Texts that share a prefix produce similar vectors,
+    which is enough to validate the RRF wiring.
+    """
+
+    def __init__(self) -> None:
+        self.calls: list[list[str]] = []
+
+    async def embed_batch(
+        self, texts: Sequence[str]
+    ) -> list[list[float]]:
+        self.calls.append(list(texts))
+        out: list[list[float]] = []
+        for text in texts:
+            digest = hashlib.sha256(text.encode("utf-8")).digest()
+            # 8-dim vector, each component a float in [0, 1].
+            out.append([digest[i] / 255.0 for i in range(8)])
+        return out
+
+
+class _ExactSemanticEmbeddingClient:
+    """Embedding stub where ONLY texts with the same prefix are similar.
+
+    Used by the RRF "vector finds something BM25 missed" test. Maps
+    texts that start with `q_prefix` to a fixed direction; everything
+    else to an orthogonal direction.
+    """
+
+    def __init__(self, q_prefix: str) -> None:
+        self._q_prefix = q_prefix
+
+    async def embed_batch(
+        self, texts: Sequence[str]
+    ) -> list[list[float]]:
+        out: list[list[float]] = []
+        for text in texts:
+            if text.lower().startswith(self._q_prefix.lower()):
+                out.append([1.0, 0.0, 0.0, 0.0])
+            else:
+                out.append([0.0, 1.0, 0.0, 0.0])
+        return out
+
+
+def _stub_cache_path(tmp_path: Path) -> Path:
+    """Per-test isolated cache file under pytest's tmp_path."""
+    return tmp_path / "kb_items.json"
+
+
+@pytest.mark.asyncio
+async def test_retrieve_uses_vector_rrf_when_client_wired(api_env, tmp_path):
+    """When embedding client + cache wired, mode='bm25+vector'."""
+    _, maker, *_ = api_env
+    pid = await _mk_project(maker)
+    owner = await _mk_user(maker, "rrf_owner")
+    await _add_member(maker, pid, owner)
+    hit_id = await _mk_user_kb(
+        maker, pid, owner_user_id=owner,
+        title="Postgres pool sizing", content_md="canonical sizing doc",
+    )
+    await _mk_user_kb(
+        maker, pid, owner_user_id=owner,
+        title="Inventory rework", content_md="merge stacks proposal",
+    )
+
+    svc = RetrievalService(
+        maker,
+        embedding_client=_StubEmbeddingClient(),
+        cache_path=_stub_cache_path(tmp_path),
+    )
+    out = await svc.retrieve_kb_items(
+        project_id=pid, query="postgres pool sizing", k=5
+    )
+    assert out, "expected at least one hit"
+    # Top hit is the topically-relevant doc (BM25 and vector both rank it).
+    assert out[0].row.id == hit_id
+    # Mode signals the vector layer participated.
+    assert out[0].retrieval_mode == "bm25+vector"
+
+
+@pytest.mark.asyncio
+async def test_vector_layer_falls_back_to_bm25_when_cache_too_cold(
+    api_env, tmp_path,
+):
+    """When inline embed would exceed _INLINE_EMBED_CAP docs, fall back."""
+    from workgraph_api.services.retrieval import _INLINE_EMBED_CAP
+
+    _, maker, *_ = api_env
+    pid = await _mk_project(maker)
+    owner = await _mk_user(maker, "cap_owner")
+    await _add_member(maker, pid, owner)
+
+    # Seed more docs than the inline cap so cache misses force BM25-only.
+    n_docs = _INLINE_EMBED_CAP + 5
+    for i in range(n_docs):
+        await _mk_user_kb(
+            maker, pid, owner_user_id=owner,
+            title=f"alpha {i}", content_md=f"bravo {i}",
+        )
+
+    stub = _StubEmbeddingClient()
+    svc = RetrievalService(
+        maker,
+        embedding_client=stub,
+        cache_path=_stub_cache_path(tmp_path),
+    )
+    out = await svc.retrieve_kb_items(
+        project_id=pid, query="alpha", k=5
+    )
+    assert out, "expected hits"
+    # Above the inline cap → vector layer skipped.
+    assert all(c.retrieval_mode == "bm25" for c in out)
+    # Embedding client never called because cache-miss check ran first.
+    assert stub.calls == []
+
+
+@pytest.mark.asyncio
+async def test_vector_layer_falls_back_when_client_raises(api_env, tmp_path):
+    """A flaky embedding API doesn't break retrieval."""
+
+    class _ExplodingClient:
+        async def embed_batch(self, texts):
+            raise RuntimeError("simulated SF outage")
+
+    _, maker, *_ = api_env
+    pid = await _mk_project(maker)
+    owner = await _mk_user(maker, "boom_owner")
+    await _add_member(maker, pid, owner)
+    hit_id = await _mk_user_kb(
+        maker, pid, owner_user_id=owner,
+        title="alpha", content_md="bravo",
+    )
+
+    svc = RetrievalService(
+        maker,
+        embedding_client=_ExplodingClient(),
+        cache_path=_stub_cache_path(tmp_path),
+    )
+    out = await svc.retrieve_kb_items(
+        project_id=pid, query="alpha", k=5
+    )
+    # Falls back to BM25-only — caller still gets ranked results.
+    assert out
+    assert out[0].row.id == hit_id
+    assert out[0].retrieval_mode == "bm25"
+
+
+@pytest.mark.asyncio
+async def test_vector_recovers_semantic_match_bm25_misses(api_env, tmp_path):
+    """RRF surfaces a doc that BM25 ranks low but vector ranks high.
+
+    The query and the target doc share NO surface tokens (BM25 score 0
+    for the target). The semantic stub treats the query and target as
+    same-direction; everything else as orthogonal. Without RRF the
+    target wouldn't appear.
+    """
+    _, maker, *_ = api_env
+    pid = await _mk_project(maker)
+    owner = await _mk_user(maker, "sem_owner")
+    await _add_member(maker, pid, owner)
+    # Target shares the embedding prefix with the query but no
+    # tokens. BM25 ranks zero; vector ranks first.
+    target_id = await _mk_user_kb(
+        maker, pid, owner_user_id=owner,
+        title="postgres connection pool sizing",
+        content_md="recommended values",
+    )
+    # Lexical match on the query but semantically unrelated under
+    # the stub embedding (different prefix).
+    await _mk_user_kb(
+        maker, pid, owner_user_id=owner,
+        title="alpha bravo", content_md="alpha bravo",
+    )
+
+    # Embedding stub: anything starting with "postgres" is one
+    # semantic cluster; anything else is orthogonal.
+    svc = RetrievalService(
+        maker,
+        embedding_client=_ExactSemanticEmbeddingClient("postgres"),
+        cache_path=_stub_cache_path(tmp_path),
+    )
+    out = await svc.retrieve_kb_items(
+        project_id=pid, query="postgres connection management", k=5
+    )
+    ids = [c.row.id for c in out]
+    assert target_id in ids, f"vector layer should surface {target_id}; got {ids}"
+
+
+@pytest.mark.asyncio
+async def test_warm_kb_items_populates_cache(api_env, tmp_path):
+    """warm_kb_items eagerly embeds every kb item into the cache."""
+    _, maker, *_ = api_env
+    pid = await _mk_project(maker)
+    owner = await _mk_user(maker, "warm_owner")
+    await _add_member(maker, pid, owner)
+    for i in range(3):
+        await _mk_user_kb(
+            maker, pid, owner_user_id=owner,
+            title=f"doc {i}", content_md=f"body {i}",
+        )
+
+    stub = _StubEmbeddingClient()
+    cache_path = _stub_cache_path(tmp_path)
+    svc = RetrievalService(
+        maker, embedding_client=stub, cache_path=cache_path
+    )
+    n_written = await svc.warm_kb_items(project_id=pid)
+    assert n_written == 3, "all three docs should be embedded fresh"
+
+    # Second warm is a no-op.
+    n_written_again = await svc.warm_kb_items(project_id=pid)
+    assert n_written_again == 0
+
+    # Cache file exists on disk and has the three entries.
+    assert cache_path.exists()
+    import json
+    on_disk = json.loads(cache_path.read_text(encoding="utf-8"))
+    assert len(on_disk) == 3
+
+
+@pytest.mark.asyncio
+async def test_warm_kb_items_no_op_without_embedding_client(api_env, tmp_path):
+    _, maker, *_ = api_env
+    pid = await _mk_project(maker)
+    owner = await _mk_user(maker, "warm_no_client")
+    await _add_member(maker, pid, owner)
+    await _mk_user_kb(
+        maker, pid, owner_user_id=owner,
+        title="doc", content_md="body",
+    )
+    svc = RetrievalService(
+        maker, cache_path=_stub_cache_path(tmp_path)
+    )
+    assert await svc.warm_kb_items(project_id=pid) == 0

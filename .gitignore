@@ -25,6 +25,10 @@ out/
 # `python tests/eval/scripts/run_vector_baseline_eval.py`).
 tests/eval/dataset/attention/qwen3_embeddings.json
 
+# Production embedding cache (slice 5b §7.2 vector retrieval — JSON
+# content-hash → vector map, regenerated lazily on retrieve calls).
+data/embeddings/
+
 # IDE / OS
 .vscode/
 .idea/

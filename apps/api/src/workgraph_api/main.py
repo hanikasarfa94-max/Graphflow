@@ -484,7 +484,14 @@ async def lifespan(app: FastAPI):
     # IMService share one KbItemService (state-free anyway, but one
     # instance keeps the dependency graph readable).
     kb_item_service = kb_item_service_early
-    retrieval_service = RetrievalService(sessionmaker)
+    # Slice 5b: lazy-instantiate the SiliconFlow embedding client only
+    # if SILICONFLOW_API_KEY is configured. When absent, RetrievalService
+    # gracefully runs BM25-only — production deploys without the key
+    # still get the slice-5a BM25 ranking improvement over substring scan.
+    embedding_client = _build_embedding_client()
+    retrieval_service = RetrievalService(
+        sessionmaker, embedding_client=embedding_client
+    )
     skills_service = SkillsService(
         sessionmaker,
         kb_item_service=kb_item_service,
@@ -792,6 +799,39 @@ async def lifespan(app: FastAPI):
             _log.exception("collab hub stop failed during shutdown")
         await engine.dispose()
         _log.info("api shutdown ok")
+
+
+def _build_embedding_client():
+    """Slice 5b — instantiate the SiliconFlow client if configured.
+
+    Returns None when SILICONFLOW_API_KEY is absent so RetrievalService
+    falls back to BM25-only without raising. This keeps deployments
+    that haven't wired the embedding provider yet (or want to disable
+    it explicitly) from breaking on startup.
+    """
+    from workgraph_api.services._embeddings import (
+        SiliconFlowEmbeddingClient,
+        load_embeddings_settings,
+    )
+
+    settings = load_embeddings_settings()
+    if settings is None:
+        _log.info(
+            "SILICONFLOW_API_KEY not configured; vector retrieval disabled"
+        )
+        return None
+    try:
+        client = SiliconFlowEmbeddingClient(settings=settings)
+        _log.info(
+            "vector retrieval enabled via SiliconFlow (model=%s)",
+            settings.embedding_model,
+        )
+        return client
+    except Exception:
+        _log.exception(
+            "SiliconFlowEmbeddingClient init failed; vector retrieval disabled"
+        )
+        return None
 
 
 def _ensure_sqlite_parent(url: str) -> None:
