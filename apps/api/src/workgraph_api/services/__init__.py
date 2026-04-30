@@ -86,6 +86,7 @@ from .silent_consensus import (
 )
 from .kb_items import KbItemError, KbItemService
 from .render import RenderError, RenderService
+from .retrieval import RetrievalCandidate, RetrievalService
 from .routing import RoutingService
 from .signal_tally import SIGNAL_KINDS, SignalTallyService
 from .simulation import SimulationError, SimulationService
@@ -193,6 +194,8 @@ __all__ = [
     "SILENT_CONSENSUS_WINDOW_DAYS",
     "RenderService",
     "RenderError",
+    "RetrievalCandidate",
+    "RetrievalService",
     "RoutingService",
     "SIGNAL_KINDS",
     "SignalTallyService",

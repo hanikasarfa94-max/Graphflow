@@ -107,11 +107,17 @@ class SkillsService:
         self,
         sessionmaker: async_sessionmaker,
         kb_item_service: Any | None = None,
+        retrieval_service: Any | None = None,
     ) -> None:
         self._sessionmaker = sessionmaker
         # Optional — propose_wiki_entry needs it; other skills do not.
         # Lazy-resolved if not injected so legacy constructors still work.
         self._kb_item_service = kb_item_service
+        # Optional — when present, _kb_search uses BM25 + frecency
+        # ranking via the §7.2 RetrievalService (slice 5a). When None
+        # (legacy callers, tests that haven't wired it yet) falls back
+        # to the substring scan that shipped before slice 5a.
+        self._retrieval_service = retrieval_service
 
     async def execute(
         self,
@@ -186,7 +192,17 @@ class SkillsService:
         query: str = "",
         limit: int = 3,
     ) -> list[dict[str, Any]]:
-        """Case-insensitive substring search across the project's KB.
+        """Search the project's group-scope KB.
+
+        Slice 5a (pickup #4): when `RetrievalService` is wired,
+        ranking is BM25 + §7.4 frecency multiplier per the §7.2
+        thesis (validated at 2505 nodes — see `tests/eval/reports/
+        test_report.md` Test 6). When not wired (legacy callers /
+        unmigrated tests), falls back to the original substring scan.
+
+        Output shape unchanged across both paths so downstream
+        consumers (PersonalStreamService persistence, frontend tool-
+        result renderer) don't need to change.
 
         Single-table read post-fold (F4): KbItemRow holds both the
         externally-ingested rows (`source='ingest'`, formerly
@@ -198,22 +214,95 @@ class SkillsService:
         across the team, so personal forks would leak across viewers.
         Rejected / archived / draft rows excluded — drafts are
         membrane-staged and not yet canonical.
-
-        v1: substring match. Full-text / vector search is v2.
         """
-        q = (query or "").strip().lower()
+        q = (query or "").strip()
         try:
             limit_val = max(1, min(int(limit), _KB_SEARCH_MAX_LIMIT))
         except (TypeError, ValueError):
             limit_val = 3
 
+        if self._retrieval_service is not None and q:
+            matched = await self._kb_search_via_retrieval(
+                project_id=project_id, query=q, limit_val=limit_val
+            )
+        else:
+            matched = await self._kb_search_substring(
+                project_id=project_id, query=q.lower(), limit_val=limit_val
+            )
+
+        # §7.4 frecency bump-on-touch: every kb item we surfaced to the
+        # caller counts as a "search hit" access event. Best-effort —
+        # failure must not turn a successful search into an error.
+        hit_ids = [m["id"] for m in matched]
+        if hit_ids:
+            async with session_scope(self._sessionmaker) as session:
+                await bump_frecency(session, kbitem_ids=hit_ids)
+
+        return matched
+
+    # ------------------------------------------------------------------
+    # _kb_search rendering helpers — slice 5a wires both paths so the
+    # output dict matches whether ranking came from substring or BM25.
+    # ------------------------------------------------------------------
+
+    def _render_kb_row(self, row) -> dict[str, Any]:
+        """Adapt a KbItemRow to the kb_search wire shape.
+
+        Keeps the dual-shape rendering rule from the legacy substring
+        scan: ingest rows surface classification.summary + tags;
+        user-authored rows surface title + content_md prefix. Wire
+        format is what `personal.py` persists into edge-tool-result
+        bodies, so any change here ripples to the frontend renderer.
+        """
+        if row.source == "ingest":
+            classification = dict(row.classification_json or {})
+            summary = classification.get("summary") or ""
+            tags = list(classification.get("tags") or [])
+            return {
+                "id": row.id,
+                "source_kind": row.source_kind,
+                "source_identifier": row.source_identifier,
+                "summary": (
+                    summary[:200]
+                    if summary
+                    else (row.raw_content or "")[:200]
+                ),
+                "tags": tags,
+                "status": row.status,
+                "created_at": (
+                    row.created_at.isoformat() if row.created_at else None
+                ),
+            }
+        return {
+            "id": row.id,
+            "source_kind": (
+                "kb-personal" if row.scope == "personal" else "kb-note"
+            ),
+            "source_identifier": None,
+            "summary": (row.title or "")
+            + (
+                ": " + (row.content_md or "")[:160]
+                if row.content_md
+                else ""
+            ),
+            "tags": [],
+            "status": row.status,
+            "created_at": (
+                row.created_at.isoformat() if row.created_at else None
+            ),
+        }
+
+    async def _kb_search_substring(
+        self,
+        *,
+        project_id: str,
+        query: str,
+        limit_val: int,
+    ) -> list[dict[str, Any]]:
+        """Legacy substring scan — preserved for callers without
+        RetrievalService wired (existing test fixtures, embedded usage).
+        """
         async with session_scope(self._sessionmaker) as session:
-            # F4: single-table read. KbItemRepository returns BOTH
-            # ingest-source rows (the old MembraneSignalRow surface) and
-            # user-authored ones. Status filter excludes the per-source
-            # "not yet canonical" markers:
-            #   * 'rejected' / 'archived' — withheld signals + archived notes
-            #   * 'draft' — membrane-staged, owner hasn't approved yet
             kb_item_rows = [
                 r
                 for r in await KbItemRepository(session).list_group_for_project(
@@ -233,62 +322,38 @@ class SkillsService:
                     summary.lower(),
                     " ".join(str(t).lower() for t in tags),
                 ]
-                if q and not any(q in part for part in haystack):
+                if query and not any(query in part for part in haystack):
                     continue
-                matched.append(
-                    {
-                        "id": row.id,
-                        "source_kind": row.source_kind,
-                        "source_identifier": row.source_identifier,
-                        "summary": (
-                            summary[:200]
-                            if summary
-                            else (row.raw_content or "")[:200]
-                        ),
-                        "tags": tags,
-                        "status": row.status,
-                        "created_at": (
-                            row.created_at.isoformat() if row.created_at else None
-                        ),
-                    }
-                )
             else:
                 title = (row.title or "").lower()
                 content = (row.content_md or "").lower()
-                if q and q not in title and q not in content:
+                if query and query not in title and query not in content:
                     continue
-                matched.append(
-                    {
-                        "id": row.id,
-                        "source_kind": (
-                            "kb-personal" if row.scope == "personal" else "kb-note"
-                        ),
-                        "source_identifier": None,
-                        "summary": (row.title or "")
-                        + (
-                            ": " + (row.content_md or "")[:160]
-                            if row.content_md
-                            else ""
-                        ),
-                        "tags": [],
-                        "status": row.status,
-                        "created_at": (
-                            row.created_at.isoformat() if row.created_at else None
-                        ),
-                    }
-                )
+            matched.append(self._render_kb_row(row))
             if len(matched) >= limit_val:
                 break
-
-        # §7.4 frecency bump-on-touch: every kb item we surfaced to the
-        # caller counts as a "search hit" access event. Best-effort —
-        # failure must not turn a successful search into an error.
-        hit_ids = [m["id"] for m in matched]
-        if hit_ids:
-            async with session_scope(self._sessionmaker) as session:
-                await bump_frecency(session, kbitem_ids=hit_ids)
-
         return matched
+
+    async def _kb_search_via_retrieval(
+        self,
+        *,
+        project_id: str,
+        query: str,
+        limit_val: int,
+    ) -> list[dict[str, Any]]:
+        """BM25 + frecency ranking via RetrievalService (slice 5a path).
+
+        Group-scope only — RetrievalService.retrieve_kb_items with
+        viewer_user_id=None. Validated by the §7.2 eval at 2505 nodes
+        (BM25+frecency F1 ~0.7, vs substring scan's positionless O(N)).
+        """
+        candidates = await self._retrieval_service.retrieve_kb_items(
+            project_id=project_id,
+            query=query,
+            viewer_user_id=None,  # group-scope only — see RetrievalService docstring
+            k=limit_val,
+        )
+        return [self._render_kb_row(c.row) for c in candidates]
 
     async def _recent_decisions(
         self, *, project_id: str, limit: int = 5

@@ -123,6 +123,7 @@ from workgraph_api.services import (
     SignalTallyService,
     SimulationService,
     SkillAtlasService,
+    RetrievalService,
     SkillsService,
     SlaService,
     StreamService,
@@ -483,7 +484,12 @@ async def lifespan(app: FastAPI):
     # IMService share one KbItemService (state-free anyway, but one
     # instance keeps the dependency graph readable).
     kb_item_service = kb_item_service_early
-    skills_service = SkillsService(sessionmaker, kb_item_service=kb_item_service)
+    retrieval_service = RetrievalService(sessionmaker)
+    skills_service = SkillsService(
+        sessionmaker,
+        kb_item_service=kb_item_service,
+        retrieval_service=retrieval_service,
+    )
     personal_service = PersonalStreamService(
         sessionmaker,
         stream_service,

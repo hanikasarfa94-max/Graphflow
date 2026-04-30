@@ -441,6 +441,7 @@ from workgraph_api.services import (
     SignalTallyService,
     SimulationService,
     SkillAtlasService,
+    RetrievalService,
     SkillsService,
     SlaService,
     StreamService,
@@ -582,7 +583,8 @@ async def api_env():
     # `tutorial_seed_enabled` fixture (see tests/test_tutorial_seed.py).
     tutorial_seed_service = TutorialSeedService(maker, stream_service)
     edge_agent = _SilenceEdgeAgent()
-    skills_service = SkillsService(maker)
+    retrieval_service = RetrievalService(maker)
+    skills_service = SkillsService(maker, retrieval_service=retrieval_service)
     personal_service = PersonalStreamService(
         maker,
         stream_service,
