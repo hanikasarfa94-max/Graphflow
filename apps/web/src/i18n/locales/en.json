@@ -453,7 +453,14 @@
       "dismiss": "Dismiss",
       "knowledgeLoading": "Loading knowledge…",
       "knowledgeEmpty": "No knowledge items yet — promote a message to start.",
-      "knowledgeUntitled": "Untitled knowledge item"
+      "knowledgeUntitled": "Untitled knowledge item",
+      "tasksLoading": "Loading tasks…",
+      "tasksEmpty": "No personal tasks yet — add one to start drafting.",
+      "tasksUntitled": "Untitled task",
+      "tasksNew": "New task",
+      "tasksDraftPlaceholder": "Task title…",
+      "tasksDraftSubmit": "Add",
+      "tasksDraftCancel": "Cancel"
     },
     "attribution": {
       "edge": "edge",

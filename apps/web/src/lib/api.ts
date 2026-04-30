@@ -2636,6 +2636,24 @@ export function fetchPersonalTasks(
   return api(`/api/projects/${projectId}/personal-tasks`, { baseUrl });
 }
 
+export interface CreatePersonalTaskInput {
+  title: string;
+  description?: string;
+  source_message_id?: string | null;
+  estimate_hours?: number | null;
+  assignee_role?: string | null;
+}
+
+export function createPersonalTask(
+  projectId: string,
+  body: CreatePersonalTaskInput,
+): Promise<{ ok: true; task: PersonalTask }> {
+  return api(`/api/projects/${projectId}/tasks`, {
+    method: "POST",
+    body: body as unknown as JsonValue,
+  });
+}
+
 export interface PromoteTaskResponse {
   ok: true;
   task: PersonalTask | null;

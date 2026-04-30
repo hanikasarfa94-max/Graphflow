@@ -16,6 +16,7 @@ import Link from "next/link";
 import { useTranslations } from "next-intl";
 
 import { useRoomKnowledge } from "@/hooks/useRoomKnowledge";
+import { useRoomTasks } from "@/hooks/useRoomTasks";
 import type { UseRoomTimelineResult } from "@/hooks/useRoomTimeline";
 
 import { PanelItem } from "./PanelItem";
@@ -79,6 +80,7 @@ const chipDisabledStyle: CSSProperties = {
 const FUNCTIONAL_KINDS: ReadonlySet<PanelKind> = new Set([
   "requests",
   "knowledge",
+  "tasks",
 ]);
 
 export function RoomWorkbench({ projectId, timeline, open, onClose }: Props) {
@@ -237,9 +239,14 @@ export function RoomWorkbench({ projectId, timeline, open, onClose }: Props) {
           >
             ＋{t("chipKnowledge")}
           </button>
+          <button
+            style={chipStyle}
+            onClick={() => addPanel("tasks", t("chipTasks"))}
+          >
+            ＋{t("chipTasks")}
+          </button>
           {(
             [
-              ["tasks", t("chipTasks")],
               ["skills", t("chipSkills")],
               ["workflow", t("chipWorkflow")],
             ] as Array<[PanelKind, string]>
@@ -290,6 +297,9 @@ function renderPanelBody(
   }
   if (kind === "knowledge") {
     return <KnowledgePanelBody projectId={projectId} t={t} />;
+  }
+  if (kind === "tasks") {
+    return <TasksPanelBody projectId={projectId} t={t} />;
   }
   // Inert panels — empty-state for vocabulary establishment.
   return (
@@ -445,5 +455,158 @@ function KnowledgePanelBody({
         );
       })}
     </>
+  );
+}
+
+// TasksPanelBody — projects the viewer's personal-scope tasks for
+// this project. Personal tasks are owner-only by design (matches
+// the KB tree's personal-items rule), so this panel acts as a
+// private draft surface inside the workbench. The +New affordance
+// rides POST /api/projects/{id}/tasks — same route the membrane's
+// promote-to-plan flow consumes from.
+function TasksPanelBody({
+  projectId,
+  t,
+}: {
+  projectId: string;
+  t: ReturnType<typeof useTranslations>;
+}) {
+  const tasksState = useRoomTasks({ projectId });
+  const [drafting, setDrafting] = useState(false);
+  const [draftTitle, setDraftTitle] = useState("");
+
+  const submit = useCallback(async () => {
+    const title = draftTitle.trim();
+    if (!title) return;
+    const created = await tasksState.create({ title });
+    if (created) {
+      setDraftTitle("");
+      setDrafting(false);
+    }
+  }, [draftTitle, tasksState]);
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+      <div style={{ display: "flex", justifyContent: "flex-end" }}>
+        {!drafting ? (
+          <button
+            type="button"
+            onClick={() => setDrafting(true)}
+            style={{
+              padding: "3px 10px",
+              fontSize: 12,
+              border: "1px solid var(--wg-line)",
+              borderRadius: 3,
+              background: "#fff",
+              color: "var(--wg-ink-soft)",
+              cursor: "pointer",
+            }}
+          >
+            ＋{t("tasksNew")}
+          </button>
+        ) : (
+          <div style={{ display: "flex", gap: 6, width: "100%" }}>
+            <input
+              type="text"
+              value={draftTitle}
+              autoFocus
+              onChange={(e) => setDraftTitle(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") void submit();
+                if (e.key === "Escape") {
+                  setDrafting(false);
+                  setDraftTitle("");
+                }
+              }}
+              placeholder={t("tasksDraftPlaceholder")}
+              style={{
+                flex: 1,
+                padding: "4px 8px",
+                fontSize: 12,
+                border: "1px solid var(--wg-line)",
+                borderRadius: 3,
+              }}
+            />
+            <button
+              type="button"
+              onClick={() => void submit()}
+              disabled={!draftTitle.trim() || tasksState.creating}
+              style={{
+                padding: "3px 10px",
+                fontSize: 12,
+                border: "1px solid var(--wg-accent)",
+                borderRadius: 3,
+                background: "var(--wg-accent)",
+                color: "#fff",
+                cursor: "pointer",
+                opacity: !draftTitle.trim() || tasksState.creating ? 0.5 : 1,
+              }}
+            >
+              {t("tasksDraftSubmit")}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setDrafting(false);
+                setDraftTitle("");
+              }}
+              style={{
+                padding: "3px 8px",
+                fontSize: 12,
+                border: "1px solid var(--wg-line)",
+                borderRadius: 3,
+                background: "#fff",
+                color: "var(--wg-ink-soft)",
+                cursor: "pointer",
+              }}
+              aria-label={t("tasksDraftCancel")}
+            >
+              ×
+            </button>
+          </div>
+        )}
+      </div>
+      {tasksState.loading && tasksState.tasks.length === 0 ? (
+        <p style={{ fontSize: 12, color: "var(--wg-ink-soft)", margin: 0 }}>
+          {t("tasksLoading")}
+        </p>
+      ) : tasksState.error ? (
+        <p
+          style={{
+            fontSize: 12,
+            color: "var(--wg-warn, #b94a48)",
+            margin: 0,
+          }}
+        >
+          {tasksState.error}
+        </p>
+      ) : tasksState.tasks.length === 0 ? (
+        <p style={{ fontSize: 12, color: "var(--wg-ink-soft)", margin: 0 }}>
+          {t("tasksEmpty")}
+        </p>
+      ) : (
+        <>
+          {tasksState.tasks.map((task) => {
+            const meta = `${task.status}${
+              task.assignee_role && task.assignee_role !== "unknown"
+                ? ` · ${task.assignee_role}`
+                : ""
+            }`;
+            // Personal tasks have no inline timeline projection today
+            // (no manual_task candidate kind on the membrane yet), so
+            // the PanelItem is a passive row. When the membrane learns
+            // manual_task, source_message_id will let it scrollToEntity
+            // back to the originating message instead.
+            return (
+              <PanelItem
+                key={task.id}
+                title={task.title || t("tasksUntitled")}
+                meta={meta}
+              />
+            );
+          })}
+        </>
+      )}
+    </div>
   );
 }
