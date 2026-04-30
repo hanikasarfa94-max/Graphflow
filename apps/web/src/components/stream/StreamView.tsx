@@ -599,6 +599,14 @@ export function StreamView({ projectId, currentUserId, members, streamId, stream
               key={d.id}
               projectId={projectId}
               decision={d}
+              // Project-wide vote scope: when scope_stream_id is null,
+              // DecisionVoteService uses the project member pool — the
+              // viewer is a project member by virtue of seeing this
+              // stream. When scope_stream_id is set, the decision was
+              // crystallized inside a room and only that room's members
+              // can vote; the room view (RoomStreamTimeline) handles
+              // that surface. So enable here only for the project pool.
+              voteEnabled={!d.scope_stream_id}
             />
           ))}
 
