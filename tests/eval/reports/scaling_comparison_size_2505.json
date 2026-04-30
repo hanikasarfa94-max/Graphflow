@@ -1,0 +1,555 @@
+{
+  "corpus_size": 2505,
+  "n_queries": 12,
+  "sources": [
+    [
+      "hand-curated",
+      40
+    ],
+    [
+      "realistic_padding.json",
+      498
+    ],
+    [
+      "realistic_padding_xl.json",
+      1967
+    ]
+  ],
+  "summaries": {
+    "vector_only": {
+      "wall_seconds": 50.5,
+      "f1": 0.7272727272727273,
+      "precision": 0.7272727272727273,
+      "recall": 0.7272727272727273,
+      "leak_rate": 0.0,
+      "n_leaks": 0,
+      "tokens_total": 82739,
+      "tokens_per_query": 6894,
+      "latency_p50_ms": 3999,
+      "latency_p95_ms": 5062,
+      "audit_score": 0.0
+    },
+    "bm25_vector_rrf": {
+      "wall_seconds": 46.0,
+      "f1": 0.8181818181818182,
+      "precision": 0.8181818181818182,
+      "recall": 0.8181818181818182,
+      "leak_rate": 0.0,
+      "n_leaks": 0,
+      "tokens_total": 97181,
+      "tokens_per_query": 8098,
+      "latency_p50_ms": 3858,
+      "latency_p95_ms": 4203,
+      "audit_score": 0.0
+    },
+    "full_hybrid": {
+      "wall_seconds": 48.2,
+      "f1": 0.7317073170731707,
+      "precision": 0.7894736842105263,
+      "recall": 0.6818181818181818,
+      "leak_rate": 0.0,
+      "n_leaks": 0,
+      "tokens_total": 99690,
+      "tokens_per_query": 8307,
+      "latency_p50_ms": 4046,
+      "latency_p95_ms": 4296,
+      "audit_score": 1.0
+    }
+  },
+  "per_query": {
+    "vector_only": [
+      {
+        "config": "B",
+        "query_id": "q01",
+        "cited_node_ids": [
+          "kb_decision_lineage_new",
+          "dec_no_multicurrency",
+          "dec_v1_scope_freeze"
+        ],
+        "suppressed_cited": [],
+        "tokens_in": 7790,
+        "tokens_out": 153,
+        "latency_ms": 4344,
+        "explanations": {}
+      },
+      {
+        "config": "B",
+        "query_id": "q02",
+        "cited_node_ids": [
+          "kb_pg_pool"
+        ],
+        "suppressed_cited": [],
+        "tokens_in": 6607,
+        "tokens_out": 149,
+        "latency_ms": 5062,
+        "explanations": {}
+      },
+      {
+        "config": "B",
+        "query_id": "q03",
+        "cited_node_ids": [
+          "kb_rate_limiter_perip",
+          "stream_bob_ratelimit_a"
+        ],
+        "suppressed_cited": [],
+        "tokens_in": 6470,
+        "tokens_out": 138,
+        "latency_ms": 4218,
+        "explanations": {}
+      },
+      {
+        "config": "B",
+        "query_id": "q04",
+        "cited_node_ids": [
+          "stream_dave_design_q"
+        ],
+        "suppressed_cited": [],
+        "tokens_in": 7797,
+        "tokens_out": 76,
+        "latency_ms": 3390,
+        "explanations": {}
+      },
+      {
+        "config": "B",
+        "query_id": "q05",
+        "cited_node_ids": [
+          "kb_decision_lineage_new",
+          "dec_no_multicurrency",
+          "dec_v1_scope_freeze"
+        ],
+        "suppressed_cited": [],
+        "tokens_in": 6363,
+        "tokens_out": 188,
+        "latency_ms": 6641,
+        "explanations": {}
+      },
+      {
+        "config": "B",
+        "query_id": "q06",
+        "cited_node_ids": [
+          "dec_v1_scope_freeze",
+          "stream_alice_freeze_call"
+        ],
+        "suppressed_cited": [],
+        "tokens_in": 6284,
+        "tokens_out": 124,
+        "latency_ms": 3718,
+        "explanations": {}
+      },
+      {
+        "config": "B",
+        "query_id": "q07",
+        "cited_node_ids": [
+          "gen_xl_01193",
+          "gen_xl_00410"
+        ],
+        "suppressed_cited": [],
+        "tokens_in": 6286,
+        "tokens_out": 111,
+        "latency_ms": 3500,
+        "explanations": {}
+      },
+      {
+        "config": "B",
+        "query_id": "q08",
+        "cited_node_ids": [
+          "dec_signin_provider"
+        ],
+        "suppressed_cited": [],
+        "tokens_in": 6341,
+        "tokens_out": 110,
+        "latency_ms": 3719,
+        "explanations": {}
+      },
+      {
+        "config": "B",
+        "query_id": "q09",
+        "cited_node_ids": [
+          "stream_alex_ratelimit_q",
+          "stream_bob_ratelimit_a"
+        ],
+        "suppressed_cited": [],
+        "tokens_in": 6408,
+        "tokens_out": 102,
+        "latency_ms": 3342,
+        "explanations": {}
+      },
+      {
+        "config": "B",
+        "query_id": "q10",
+        "cited_node_ids": [
+          "kb_decision_lineage_new",
+          "dec_no_multicurrency",
+          "dec_v1_scope_freeze"
+        ],
+        "suppressed_cited": [],
+        "tokens_in": 6215,
+        "tokens_out": 188,
+        "latency_ms": 4547,
+        "explanations": {}
+      },
+      {
+        "config": "B",
+        "query_id": "q11",
+        "cited_node_ids": [
+          "kb_pg_pool"
+        ],
+        "suppressed_cited": [],
+        "tokens_in": 6528,
+        "tokens_out": 142,
+        "latency_ms": 4077,
+        "explanations": {}
+      },
+      {
+        "config": "B",
+        "query_id": "q12",
+        "cited_node_ids": [
+          "kb_corp_ai_use"
+        ],
+        "suppressed_cited": [],
+        "tokens_in": 8034,
+        "tokens_out": 135,
+        "latency_ms": 3922,
+        "explanations": {}
+      }
+    ],
+    "bm25_vector_rrf": [
+      {
+        "config": "C",
+        "query_id": "q01",
+        "cited_node_ids": [
+          "kb_decision_lineage_new",
+          "dec_no_multicurrency",
+          "dec_v1_scope_freeze"
+        ],
+        "suppressed_cited": [],
+        "tokens_in": 8788,
+        "tokens_out": 170,
+        "latency_ms": 3952,
+        "explanations": {}
+      },
+      {
+        "config": "C",
+        "query_id": "q02",
+        "cited_node_ids": [
+          "kb_pg_pool"
+        ],
+        "suppressed_cited": [],
+        "tokens_in": 9084,
+        "tokens_out": 118,
+        "latency_ms": 3858,
+        "explanations": {}
+      },
+      {
+        "config": "C",
+        "query_id": "q03",
+        "cited_node_ids": [
+          "kb_rate_limiter_perip",
+          "stream_bob_ratelimit_a"
+        ],
+        "suppressed_cited": [],
+        "tokens_in": 7389,
+        "tokens_out": 140,
+        "latency_ms": 3766,
+        "explanations": {}
+      },
+      {
+        "config": "C",
+        "query_id": "q04",
+        "cited_node_ids": [
+          "stream_dave_design_q"
+        ],
+        "suppressed_cited": [],
+        "tokens_in": 8184,
+        "tokens_out": 77,
+        "latency_ms": 3046,
+        "explanations": {}
+      },
+      {
+        "config": "C",
+        "query_id": "q05",
+        "cited_node_ids": [
+          "kb_decision_lineage_new",
+          "dec_v1_scope_freeze",
+          "dec_no_multicurrency"
+        ],
+        "suppressed_cited": [],
+        "tokens_in": 7433,
+        "tokens_out": 164,
+        "latency_ms": 4281,
+        "explanations": {}
+      },
+      {
+        "config": "C",
+        "query_id": "q06",
+        "cited_node_ids": [
+          "dec_v1_scope_freeze",
+          "stream_alice_freeze_call"
+        ],
+        "suppressed_cited": [],
+        "tokens_in": 6572,
+        "tokens_out": 128,
+        "latency_ms": 3718,
+        "explanations": {}
+      },
+      {
+        "config": "C",
+        "query_id": "q07",
+        "cited_node_ids": [
+          "task_sla_wire",
+          "kb_sla_lifecycle"
+        ],
+        "suppressed_cited": [],
+        "tokens_in": 6708,
+        "tokens_out": 112,
+        "latency_ms": 3500,
+        "explanations": {}
+      },
+      {
+        "config": "C",
+        "query_id": "q08",
+        "cited_node_ids": [
+          "dec_signin_provider"
+        ],
+        "suppressed_cited": [],
+        "tokens_in": 6440,
+        "tokens_out": 122,
+        "latency_ms": 3953,
+        "explanations": {}
+      },
+      {
+        "config": "C",
+        "query_id": "q09",
+        "cited_node_ids": [
+          "stream_alex_ratelimit_q",
+          "stream_bob_ratelimit_a"
+        ],
+        "suppressed_cited": [],
+        "tokens_in": 10743,
+        "tokens_out": 118,
+        "latency_ms": 4203,
+        "explanations": {}
+      },
+      {
+        "config": "C",
+        "query_id": "q10",
+        "cited_node_ids": [
+          "kb_decision_lineage_new",
+          "dec_no_multicurrency",
+          "dec_v1_scope_freeze"
+        ],
+        "suppressed_cited": [],
+        "tokens_in": 6711,
+        "tokens_out": 140,
+        "latency_ms": 4062,
+        "explanations": {}
+      },
+      {
+        "config": "C",
+        "query_id": "q11",
+        "cited_node_ids": [
+          "kb_pg_pool"
+        ],
+        "suppressed_cited": [],
+        "tokens_in": 8511,
+        "tokens_out": 120,
+        "latency_ms": 3780,
+        "explanations": {}
+      },
+      {
+        "config": "C",
+        "query_id": "q12",
+        "cited_node_ids": [
+          "kb_corp_ai_use"
+        ],
+        "suppressed_cited": [],
+        "tokens_in": 9071,
+        "tokens_out": 138,
+        "latency_ms": 3859,
+        "explanations": {}
+      }
+    ],
+    "full_hybrid": [
+      {
+        "config": "C",
+        "query_id": "q01",
+        "cited_node_ids": [
+          "dec_no_multicurrency",
+          "dec_v1_scope_freeze"
+        ],
+        "suppressed_cited": [],
+        "tokens_in": 8757,
+        "tokens_out": 153,
+        "latency_ms": 4280,
+        "explanations": {
+          "dec_no_multicurrency": "§7 hybrid: kept by bm25 + vector",
+          "dec_v1_scope_freeze": "§7 hybrid: kept by bm25 + vector"
+        }
+      },
+      {
+        "config": "C",
+        "query_id": "q02",
+        "cited_node_ids": [
+          "kb_pg_pool"
+        ],
+        "suppressed_cited": [],
+        "tokens_in": 8948,
+        "tokens_out": 137,
+        "latency_ms": 3812,
+        "explanations": {
+          "kb_pg_pool": "§7 hybrid: kept by bm25 + vector"
+        }
+      },
+      {
+        "config": "C",
+        "query_id": "q03",
+        "cited_node_ids": [
+          "kb_rate_limiter_perip",
+          "stream_bob_ratelimit_a"
+        ],
+        "suppressed_cited": [],
+        "tokens_in": 7559,
+        "tokens_out": 153,
+        "latency_ms": 4296,
+        "explanations": {
+          "kb_rate_limiter_perip": "§7 hybrid: kept by bm25 + vector",
+          "stream_bob_ratelimit_a": "§7 hybrid: kept by bm25 + vector"
+        }
+      },
+      {
+        "config": "C",
+        "query_id": "q04",
+        "cited_node_ids": [
+          "stream_dave_design_q"
+        ],
+        "suppressed_cited": [],
+        "tokens_in": 8293,
+        "tokens_out": 105,
+        "latency_ms": 3281,
+        "explanations": {
+          "stream_dave_design_q": "§7 hybrid: kept by bm25 + vector"
+        }
+      },
+      {
+        "config": "C",
+        "query_id": "q05",
+        "cited_node_ids": [
+          "kb_decision_lineage_new",
+          "dec_v1_scope_freeze",
+          "dec_no_multicurrency"
+        ],
+        "suppressed_cited": [],
+        "tokens_in": 7728,
+        "tokens_out": 151,
+        "latency_ms": 4046,
+        "explanations": {
+          "kb_decision_lineage_new": "§7 hybrid: kept by bm25 + vector",
+          "dec_v1_scope_freeze": "§7 hybrid: kept by bm25 + vector",
+          "dec_no_multicurrency": "§7 hybrid: kept by bm25 + vector"
+        }
+      },
+      {
+        "config": "C",
+        "query_id": "q06",
+        "cited_node_ids": [
+          "dec_v1_scope_freeze",
+          "stream_alice_freeze_call"
+        ],
+        "suppressed_cited": [],
+        "tokens_in": 7144,
+        "tokens_out": 131,
+        "latency_ms": 3953,
+        "explanations": {
+          "dec_v1_scope_freeze": "§7 hybrid: kept by bm25 + vector",
+          "stream_alice_freeze_call": "§7 hybrid: kept by bm25 + vector"
+        }
+      },
+      {
+        "config": "C",
+        "query_id": "q07",
+        "cited_node_ids": [],
+        "suppressed_cited": [],
+        "tokens_in": 7137,
+        "tokens_out": 111,
+        "latency_ms": 3780,
+        "explanations": {}
+      },
+      {
+        "config": "C",
+        "query_id": "q08",
+        "cited_node_ids": [
+          "dec_signin_provider"
+        ],
+        "suppressed_cited": [],
+        "tokens_in": 6813,
+        "tokens_out": 138,
+        "latency_ms": 4047,
+        "explanations": {
+          "dec_signin_provider": "§7 hybrid: kept by vector"
+        }
+      },
+      {
+        "config": "C",
+        "query_id": "q09",
+        "cited_node_ids": [
+          "stream_alex_ratelimit_q",
+          "stream_bob_ratelimit_a"
+        ],
+        "suppressed_cited": [],
+        "tokens_in": 10805,
+        "tokens_out": 165,
+        "latency_ms": 4296,
+        "explanations": {
+          "stream_alex_ratelimit_q": "§7 hybrid: kept by vector",
+          "stream_bob_ratelimit_a": "§7 hybrid: kept by vector"
+        }
+      },
+      {
+        "config": "C",
+        "query_id": "q10",
+        "cited_node_ids": [
+          "kb_decision_lineage_new",
+          "dec_no_multicurrency",
+          "dec_v1_scope_freeze"
+        ],
+        "suppressed_cited": [],
+        "tokens_in": 7222,
+        "tokens_out": 145,
+        "latency_ms": 4296,
+        "explanations": {
+          "kb_decision_lineage_new": "§7 hybrid: kept by bm25 + vector",
+          "dec_no_multicurrency": "§7 hybrid: kept by vector",
+          "dec_v1_scope_freeze": "§7 hybrid: kept by vector"
+        }
+      },
+      {
+        "config": "C",
+        "query_id": "q11",
+        "cited_node_ids": [
+          "kb_pg_pool"
+        ],
+        "suppressed_cited": [],
+        "tokens_in": 8714,
+        "tokens_out": 121,
+        "latency_ms": 3687,
+        "explanations": {
+          "kb_pg_pool": "§7 hybrid: kept by bm25 + vector"
+        }
+      },
+      {
+        "config": "C",
+        "query_id": "q12",
+        "cited_node_ids": [
+          "kb_corp_ai_use"
+        ],
+        "suppressed_cited": [],
+        "tokens_in": 8934,
+        "tokens_out": 126,
+        "latency_ms": 4421,
+        "explanations": {
+          "kb_corp_ai_use": "§7 hybrid: kept by bm25 + vector"
+        }
+      }
+    ]
+  }
+}
