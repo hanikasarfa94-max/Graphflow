@@ -89,8 +89,15 @@ def _build_specs(
     seed: int,
     kind_mix: dict[str, float],
     scope_mix: dict[str, float],
+    id_prefix: str = "gen_",
 ) -> list[GenSpec]:
-    """Deterministic plan: ids, kinds, scopes, languages, owners, ages."""
+    """Deterministic plan: ids, kinds, scopes, languages, owners, ages.
+
+    `id_prefix` lets the caller produce non-colliding id sets when
+    layering multiple generations into one combined corpus (e.g.
+    `gen_` for the 498-item baseline + `gen_xl_` for an additional
+    2000-item scaling pass).
+    """
     rng = random.Random(seed)
     kinds, kweights = zip(*kind_mix.items())
     scopes, sweights = zip(*scope_mix.items())
@@ -111,7 +118,7 @@ def _build_specs(
         age_days = rng.randint(*band)
         specs.append(
             GenSpec(
-                id=f"gen_{i:05d}",
+                id=f"{id_prefix}{i:05d}",
                 kind=kind,
                 scope=scope,
                 lang=lang,
@@ -228,8 +235,16 @@ async def _generate_one(client: LLMClient, spec: GenSpec) -> dict | None:
     }
 
 
-async def _run(count: int, seed: int, output_path: Path, concurrency: int):
-    specs = _build_specs(count, seed, DEFAULT_KIND_MIX, DEFAULT_SCOPE_MIX)
+async def _run(
+    count: int,
+    seed: int,
+    output_path: Path,
+    concurrency: int,
+    id_prefix: str = "gen_",
+):
+    specs = _build_specs(
+        count, seed, DEFAULT_KIND_MIX, DEFAULT_SCOPE_MIX, id_prefix=id_prefix
+    )
     print(
         f"plan: {len(specs)} items  "
         f"kinds={dict((k, sum(1 for s in specs if s.kind == k)) for k in DEFAULT_KIND_MIX)}  "
@@ -275,9 +290,24 @@ def main():
         default=REPO_ROOT / "tests" / "eval" / "dataset" / "attention" / "realistic_padding.json",
     )
     p.add_argument("--concurrency", type=int, default=8)
+    p.add_argument(
+        "--id-prefix",
+        type=str,
+        default="gen_",
+        help="Item id prefix — use a non-default value when generating "
+        "incremental items meant to layer with an existing file.",
+    )
     args = p.parse_args()
     t0 = time.monotonic()
-    asyncio.run(_run(args.count, args.seed, args.output, args.concurrency))
+    asyncio.run(
+        _run(
+            args.count,
+            args.seed,
+            args.output,
+            args.concurrency,
+            id_prefix=args.id_prefix,
+        )
+    )
     print(f"total wall: {time.monotonic() - t0:.1f}s", flush=True)
 
 
