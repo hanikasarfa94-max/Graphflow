@@ -264,3 +264,166 @@ A still produces clean leak rate and stable F1 across realistic
 content. What's now clearer is that **§7.2 + §7.4 frecency must ship
 in v-Next baseline**, not as scale-triggered fallback — they're
 required by month one of a 100-person org's usage.
+
+## Test 6 — §7.2 hybrid retrieval (slices 1-4, pickup #4)
+
+Compiled 2026-04-30. Builds on Test 5's realistic-corpus baseline
+(Config A at 538 nodes: F1=0.821, leak=0.000, ~73K tokens/q, p50
+18.1s) and tests four progressively richer retrieval architectures
+against it. Goal: replace Config A's full-context approach with a
+candidate-trimming retrieval stack that holds F1 + leak rate while
+collapsing tokens and latency by 10×.
+
+### Architecture under test
+
+`new_concepts.md §7.2` proposes a five-layer hybrid: BM25 + vector +
+graph-neighbor + recency + pinned, fused via Reciprocal Rank Fusion
+(RRF), then membrane-filtered (§7.7) before context assembly. Slices
+1-4 of pickup #4 implemented and evaluated this stack:
+
+  * **Slice 1 (BM25)** — pure-Python Okapi BM25 with bilingual
+    zh + en char-unigram tokenization. Title weighted ×3. No external
+    deps. (commit `7357d03`)
+  * **Slice 2 (Vector)** — Qwen3-Embedding-8B via SiliconFlow's
+    OpenAI-compatible API (4096-dim multilingual embeddings).
+    Disk-cached `{content_hash: vec}` so re-runs are zero-API.
+    (commit `3133825`)
+  * **Slice 3 (Graph + Recency + Pinned)** — graph-neighbor with
+    @-mention edges + supersedes edges + tag-Jaccard expansion;
+    recency by `metadata.ts` descending; explicit pinned ids in
+    user-specified order. (commit `c8e1ef8`)
+  * **Slice 4 (RRF + real Config C)** — `reciprocal_rank_fusion()`
+    with weighted contributions (rrf_k=60, pinned 1.5, bm25/vector
+    1.0, graph 0.8, recency 0.5). Real Config C wires all five via
+    RRF + §7.7 membrane filter + DeepSeek over the survivors.
+    (commit `8ddcc8e`)
+
+### First pass — 538-node realistic corpus (slice-4 commit)
+
+Live DeepSeek runs against the same 12 queries used throughout the
+N.1.5 test report. Same prompt frame as Config A (timestamp-aware,
+strict-JSON cite extraction). All variants pass the §7.7 membrane
+floor (suppressed items dropped before LLM sees them).
+
+| Variant                        |     F1 | Recall |  Leak | Tok/q  | p50    |
+|--------------------------------|-------:|-------:|------:|-------:|-------:|
+| Config A (full context)        | 0.821  | 0.727  | 0.000 | 73,000 | 18.1s  |
+| BM25 alone (slice 1)           | 0.700  | 0.636  | 0.000 |  9,438 |  3.5s  |
+| **Vector alone (slice 2)**     | **0.818** | **0.818** | 0.000 |  6,842 |  4.6s  |
+| BM25 + Vector RRF              | 0.698  | 0.682  | 0.000 |  8,203 |  3.2s  |
+| 5-layer hybrid (slice 4)       | 0.652  | 0.682  | 0.000 |  8,262 |  3.5s  |
+
+**First-pass conclusion (later partially overturned):** vector alone
+matched Config A's F1 with 91% fewer tokens and ¼ the latency. RRF
+fusion *hurt* — both 2-layer (BM25+vec) and 5-layer variants
+underperformed vector alone. Diagnostic on q07 ("What's blocking the
+SLA work?") showed the expected items were at fused ranks 1-2 in the
+candidate set, but the LLM didn't cite them; RRF mixing pulled in
+tangential items that distracted the LLM. Vector top-50 was
+topically tight; hybrid top-50 was mixed-quality.
+
+The §7.2 5-layer hypothesis was rejected by this data. The slice-4
+commit (`8ddcc8e`) recommended **vector-as-primary** with BM25 as a
+fallback — a meaningful pivot from the original spec.
+
+### Second pass — 2505-node realistic corpus (slice-4 addendum)
+
+Generated 1967 more realistic items via DeepSeek (`gen_xl_NNNNN`,
+seed=1337) into `realistic_padding_xl.json`. Combined corpus =
+40 hand-curated + 498 existing + 1967 new = **2505 nodes**. Re-ran
+the three Config-C-shaped variants on the same queries (commit
+`1769c1a`).
+
+| Variant            | F1 @ 538  | F1 @ 2505 |       Δ |
+|--------------------|----------:|----------:|--------:|
+| Vector only        | **0.818** |     0.727 |  -0.091 |
+| BM25 + Vector RRF  |     0.698 | **0.818** |  +0.120 |
+| Full 5-layer hybrid|     0.652 |     0.732 |  +0.080 |
+
+**Per-query reversal:** q07 (the chronic semantic miss) recovered
+with BM25+vector RRF at 2505 (hits=2/2), even though vector alone
+*lost* it (0/2). The lexical layer rescues recall as the corpus widens
+and relevant items fall outside vector's top-50.
+
+The §7.2 RRF thesis is **confirmed at scale** — just not at the
+538-node first-pass scale. The crossover point lies somewhere
+between, and Path B targets corpus sizes (thousands of nodes by
+month one of a 100-person org) where RRF wins decisively.
+
+### Final 2505-node summary
+
+| Variant            | F1     | P      | R      | Leak  | Tok/q | p50    |
+|--------------------|-------:|-------:|-------:|------:|------:|-------:|
+| Vector only        | 0.727  | 0.727  | 0.727  | 0.000 | 6,894 |  4.0s  |
+| **BM25+Vector RRF**| **0.818** | **0.818** | **0.818** | **0.000** | **8,098** | **3.9s** |
+| 5-layer hybrid     | 0.732  | 0.789  | 0.682  | 0.000 | 8,307 |  4.0s  |
+
+Single full eval costs ~$0.05 in DeepSeek + ~30s embed time on a
+warm cache.
+
+### Why the 5-layer still loses to the 2-layer at 2505
+
+The graph-neighbor / recency / pinned layers add candidates that the
+LLM reads as distractors. Recency is the worst offender — pure ts
+descending has zero topical signal, so its top-20 is just "what
+happened recently" regardless of query. The §7.2 spec listed it as
+a layer, but the data says it should be a **score multiplier**, not
+a standalone retriever.
+
+Specifically:
+  * **Recency** → §7.4 frecency multiplier on retrieved items
+    (`log(1 + access_count) × time_decay(now - last_accessed_at)`).
+    Frecency primitives shipped 387aef6 + bump-on-touch hooks shipped
+    95aaeef are ready to plug in.
+  * **Graph-neighbor** → on-demand expansion when the query mentions
+    a node id (one-hop expansion only, not a default RRF layer).
+  * **Pinned** → always-include union (bypass scoring; pins shouldn't
+    compete on rank).
+
+### Architectural verdict for slice 5 (production wiring)
+
+  * **BM25 + Vector RRF is the production retrieval primitive.**
+    Validated at 2505 nodes against the most realistic noise we can
+    generate. Targets the v-Next Path B regime (1.5K-5K node cells).
+  * **Frecency as score multiplier**, not retriever. Per §7.4
+    original design. The bump-on-touch infra lands here.
+  * **Graph-neighbor as on-demand**, query-classifier-driven. Adds
+    cost when an anchor is present, doesn't dilute when there isn't.
+  * **Pinned as always-include union.** No rank competition.
+  * **Embedding storage strategy** is the next load-bearing decision
+    before slice 5 starts coding. Options: in-memory rebuild on boot
+    (simple, scales to ~50K rows/cell), persistent table with pgvector
+    (scales further, requires extension), or persistent JSON cache
+    file per cell (low-effort, low-scale ceiling).
+
+### Caveats
+
+  * **Same-model circularity persists** — DeepSeek generated the
+    realistic padding *and* runs the eval. Cross-provider eval would
+    tighten the signal but no other LLM provider is configured.
+  * **12 queries is still small.** The crossover behavior between
+    538 and 2505 might shift with a different query mix.
+  * **Slice-4 weights pre-tuned** — `pinned 1.5, bm25/vector 1.0,
+    graph 0.8, recency 0.5` was a rule-of-thumb default. A weight
+    sweep was deferred since the conclusion (drop graph/recency from
+    the default RRF) doesn't hinge on the specific weight values.
+  * **Embedding model not swept.** Qwen3-Embedding-8B is multilingual
+    and 4096-dim; smaller / different models might shift the
+    crossover scale. SiliconFlow's other multilingual options are
+    cheap to test if needed.
+
+### Reports
+
+  * `tests/eval/reports/config_b_bm25_realistic_size_538_k50.json`
+  * `tests/eval/reports/config_b_vector_realistic_size_538_k50.json`
+  * `tests/eval/reports/config_c_hybrid_realistic_size_538.json`
+  * `tests/eval/reports/scaling_comparison_size_2505.json`
+
+### Replayable scripts
+
+  * `tests/eval/scripts/run_bm25_baseline_eval.py`
+  * `tests/eval/scripts/run_vector_baseline_eval.py`
+  * `tests/eval/scripts/run_hybrid_eval.py`
+  * `tests/eval/scripts/run_scaling_comparison_eval.py`
+  * `tests/eval/scripts/generate_realistic_corpus.py --id-prefix gen_xl_
+    --seed 1337 --count 2000` (regenerates the 2K padding)
