@@ -96,6 +96,7 @@ class IMService:
         body: str,
         scope: dict[str, bool] | None = None,
         scope_tiers: dict[str, bool] | None = None,
+        stream_id: str | None = None,
     ) -> dict[str, Any]:
         # `scope_tiers` (N.2) carries the four-tier ScopeTierPills selection
         # from the client (personal / group / department / enterprise, where
@@ -109,8 +110,18 @@ class IMService:
                 author_id,
                 project_id,
             )
+        # Pickup #6 — when supplied, the message lands in that specific
+        # stream (typically a room) instead of the project's team-room.
+        # The B3 chain (commit 5266b10) reads source_msg.stream_id to
+        # stamp DecisionRow.scope_stream_id, so a decision crystallized
+        # from a room-scoped message now scopes the vote to that room
+        # instead of the team-room. MessageService.post validates the
+        # stream + author membership.
         post_result = await self._messages.post(
-            project_id=project_id, author_id=author_id, body=body
+            project_id=project_id,
+            author_id=author_id,
+            body=body,
+            stream_id=stream_id,
         )
         if not post_result.get("ok"):
             return post_result

@@ -29,6 +29,7 @@ from workgraph_persistence import (
     ProjectMemberRepository,
     ProjectMemberRow,
     ProjectRow,
+    StreamMemberRepository,
     StreamRepository,
     TaskRow,
     UserRepository,
@@ -416,8 +417,32 @@ class MessageService:
         self._signal_tally = signal_tally
 
     async def post(
-        self, *, project_id: str, author_id: str, body: str
+        self,
+        *,
+        project_id: str,
+        author_id: str,
+        body: str,
+        stream_id: str | None = None,
     ) -> dict:
+        """Post a message into a project's stream.
+
+        `stream_id` (pickup #6, B3 sequel) — when provided, the message
+        lands in that specific stream (typically a room) instead of the
+        project's default team-room. Validates:
+          * stream exists
+          * stream.project_id matches the request's project_id (no
+            cross-project posting)
+          * for room streams: author is a stream member (rooms are
+            opt-in; non-members can't post)
+          * personal streams owned by author are allowed (so the
+            personal-stream post path could route through here too if
+            it ever wants to)
+        Returns `{ok: False, error: 'stream_not_found' | 'wrong_project'
+        | 'not_a_stream_member'}` on validation failure.
+
+        When None, falls back to the project's team-room stream (the
+        legacy behavior every existing caller relies on).
+        """
         if not self._hub.rate_limit_ok(author_id, project_id, limit_per_sec=10):
             return {"ok": False, "error": "rate_limited"}
 
@@ -435,15 +460,44 @@ class MessageService:
             if member is not None and member.license_tier == "observer":
                 return {"ok": False, "error": "observer_cannot_post"}
 
-            # Fetch (or backfill) the project stream so every message gets a
-            # stream_id. Idempotent — the boot-time backfill usually does this
-            # already, but tests + freshly-seeded projects may race.
             stream_repo = StreamRepository(session)
-            stream = await stream_repo.get_for_project(project_id)
-            if stream is None:
-                stream = await stream_repo.create(
-                    type="project", project_id=project_id
-                )
+            if stream_id is not None:
+                # Caller specified a target stream — validate it.
+                target = await stream_repo.get(stream_id)
+                if target is None:
+                    return {"ok": False, "error": "stream_not_found"}
+                if target.project_id != project_id:
+                    return {"ok": False, "error": "wrong_project"}
+                # Room streams require explicit membership (the cell
+                # has rooms but membership is opt-in per
+                # new_concepts.md §6.11). Project + personal + DM
+                # streams have their own gates: `project` is open to
+                # any project member (already checked above), `personal`
+                # only allows the owner, `dm` requires StreamMember.
+                if target.type == "room":
+                    sm_repo = StreamMemberRepository(session)
+                    if not await sm_repo.is_member(stream_id, author_id):
+                        return {"ok": False, "error": "not_a_stream_member"}
+                elif target.type == "personal":
+                    if target.owner_user_id != author_id:
+                        return {"ok": False, "error": "not_a_stream_member"}
+                elif target.type == "dm":
+                    sm_repo = StreamMemberRepository(session)
+                    if not await sm_repo.is_member(stream_id, author_id):
+                        return {"ok": False, "error": "not_a_stream_member"}
+                # type='project' falls through — open to any project
+                # member (project membership already verified above).
+                stream = target
+            else:
+                # Fetch (or backfill) the project stream so every message
+                # gets a stream_id. Idempotent — the boot-time backfill
+                # usually does this already, but tests + freshly-seeded
+                # projects may race.
+                stream = await stream_repo.get_for_project(project_id)
+                if stream is None:
+                    stream = await stream_repo.create(
+                        type="project", project_id=project_id
+                    )
             stream_id = stream.id
 
             row = await MessageRepository(session).append(

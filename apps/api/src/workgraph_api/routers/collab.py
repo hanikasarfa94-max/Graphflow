@@ -57,12 +57,16 @@ class MessageRequest(BaseModel):
     # off). The field is explicitly typed instead of widening to
     # extra="ignore" so a client typo still gets a 422.
     scope: dict[str, bool] | None = None
-    # Per-project scope-tier toggles from ScopeTierPills (N.2).
-    # Keys: personal / group / department / enterprise (group = Cell).
-    # Absent → server treats as all-tiers-on. Today the field is
-    # accepted-and-logged plumbing; LicenseContextService.allowed_scopes
-    # intersection lands in N.4.
+    # Per-project scope-tier toggles from ScopeTierPills (N.2 →
+    # consumed in pickup #7). Keys: personal / group / department /
+    # enterprise (group = Cell). Absent → server treats as all-tiers-on.
     scope_tiers: dict[str, bool] | None = None
+    # Pickup #6 — when supplied, the message lands in this specific
+    # stream (typically a room) instead of the project's team-room.
+    # Validated server-side: stream must belong to the project AND
+    # the author must have membership for room/dm streams. Absent →
+    # team-room (legacy behavior every existing client relies on).
+    stream_id: str | None = None
 
 
 class CounterRequest(BaseModel):
@@ -264,6 +268,7 @@ async def post_message(
         body=body.body,
         scope=body.scope,
         scope_tiers=body.scope_tiers,
+        stream_id=body.stream_id,
     )
     if not result.get("ok"):
         err = result.get("error", "post_failed")
@@ -271,6 +276,12 @@ async def post_message(
             raise HTTPException(status_code=429, detail="rate_limited")
         if err == "observer_cannot_post":
             raise HTTPException(status_code=403, detail="observer_cannot_post")
+        if err in (
+            "stream_not_found",
+            "wrong_project",
+            "not_a_stream_member",
+        ):
+            raise HTTPException(status_code=403, detail=err)
         raise HTTPException(status_code=400, detail=err)
     return result
 
