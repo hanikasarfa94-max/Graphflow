@@ -306,6 +306,17 @@ class IMService:
             await self._hub.publish(
                 project_id, {"type": "suggestion", "payload": payload}
             )
+            # Room-stream slice: when the source message landed in a
+            # room, also broadcast a RoomTimelineEvent on the stream
+            # WS so the room view picks up the new pending suggestion
+            # in both projections (inline timeline + workbench
+            # `Requests` panel) without a refetch.
+            await self._maybe_publish_room_event(
+                source_message_id=message_id,
+                event=None,  # built lazily below to skip if non-room
+                payload=payload,
+                kind="suggestion",
+            )
         except Exception:
             _log.exception(
                 "im_assist classification failed", extra={"message_id": message_id}
@@ -564,6 +575,23 @@ class IMService:
             await self._hub.publish(
                 project_id, {"type": "graph", "payload": {"reason": "im_accept"}}
             )
+        # Room-stream slice: room view's projection consumers (inline
+        # timeline + workbench Requests panel) need to learn about the
+        # status flip + the freshly-crystallized decision via the
+        # canonical RoomTimelineEvent shape.
+        await self._maybe_publish_room_event(
+            source_message_id=row.message_id,
+            event=None,
+            payload={"id": suggestion_id, "status": "accepted"},
+            kind="suggestion_status",
+        )
+        if decision_payload is not None:
+            await self._maybe_publish_room_event(
+                source_message_id=row.message_id,
+                event=None,
+                payload=decision_payload,
+                kind="decision",
+            )
         return {
             "ok": True,
             "applied": applied,
@@ -580,6 +608,7 @@ class IMService:
             if row.status != "pending":
                 return {"ok": False, "error": "already_resolved"}
             project_id = row.project_id
+            source_message_id = row.message_id
             await IMSuggestionRepository(session).resolve(suggestion_id, "dismissed")
             refreshed = await IMSuggestionRepository(session).get(suggestion_id)
             payload = self._suggestion_payload(refreshed) if refreshed else None
@@ -596,6 +625,14 @@ class IMService:
             await self._hub.publish(
                 project_id, {"type": "suggestion", "payload": payload}
             )
+        # Room-stream slice: room view's `Requests` panel needs to drop
+        # the dismissed suggestion via the canonical update event.
+        await self._maybe_publish_room_event(
+            source_message_id=source_message_id,
+            event=None,
+            payload={"id": suggestion_id, "status": "dismissed"},
+            kind="suggestion_status",
+        )
         return {"ok": True, "suggestion": payload}
 
     async def counter(
@@ -1053,6 +1090,79 @@ class IMService:
 
         # tag or `none` kinds have nothing to apply.
         return {"ok": True, "graph_touched": False, "action": action or "noop"}
+
+    # ------------------------------------------------------------------
+    # Room-stream WS fan-out (room-stream slice).
+    # ------------------------------------------------------------------
+
+    async def _maybe_publish_room_event(
+        self,
+        *,
+        source_message_id: str | None,
+        event: dict | None,
+        payload: dict,
+        kind: str,
+    ) -> None:
+        """Emit a RoomTimelineEvent on the source message's stream WS
+        if the source message landed in a 'room' stream.
+
+        `kind` is the event-builder selector:
+          * 'suggestion' → make_suggestion_event(payload)
+          * 'decision'   → make_decision_event(payload)
+          * 'suggestion_status' → make_suggestion_status_update(
+                                     suggestion_id, status)
+            In this case `payload` should be {"id": ..., "status": ...}.
+
+        Best-effort: any DB lookup or publish failure is swallowed
+        with a log — the WS is a real-time enhancement, not a
+        correctness path.
+        """
+        from .room_timeline import (
+            is_room_stream,
+            make_decision_event,
+            make_suggestion_event,
+            make_suggestion_status_update,
+        )
+        if source_message_id is None:
+            return
+        try:
+            async with session_scope(self._sessionmaker) as session:
+                source_msg = await MessageRepository(session).get(
+                    source_message_id
+                )
+                if source_msg is None or source_msg.stream_id is None:
+                    return
+                stream = await StreamRepository(session).get(
+                    source_msg.stream_id
+                )
+                if not is_room_stream(stream):
+                    return
+                stream_id = stream.id
+        except Exception:
+            _log.exception(
+                "_maybe_publish_room_event: source lookup failed",
+                extra={"source_message_id": source_message_id},
+            )
+            return
+
+        if event is None:
+            if kind == "suggestion":
+                event = make_suggestion_event(payload)
+            elif kind == "decision":
+                event = make_decision_event(payload)
+            elif kind == "suggestion_status":
+                event = make_suggestion_status_update(
+                    payload["id"], payload["status"]
+                )
+            else:
+                return
+        try:
+            await self._hub.publish_stream(stream_id, event)
+        except Exception:
+            _log.exception(
+                "_maybe_publish_room_event: publish_stream failed",
+                extra={"stream_id": stream_id, "kind": kind},
+            )
 
 
 def _new_uuid() -> str:

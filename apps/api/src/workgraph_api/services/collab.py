@@ -540,6 +540,15 @@ class MessageService:
             )
         await self._event_bus.emit("message.posted", payload)
         await self._hub.publish(project_id, _broadcast_payload("message", payload))
+        # Room-stream slice: when the message landed in a 'room' stream,
+        # also broadcast a RoomTimelineEvent on the stream WS so the
+        # room view's useRoomTimeline reducer can reconcile via a single
+        # canonical event shape (upsert / update / delete by entity ref).
+        if stream.type == "room":
+            from .room_timeline import make_message_event  # local: avoids cycle
+            await self._hub.publish_stream(
+                stream_id, make_message_event(row, author_username=author.username if author else None)
+            )
         return {"ok": True, **payload}
 
     async def list_recent(self, project_id: str, limit: int = 100) -> list[dict]:

@@ -191,3 +191,43 @@ async def get_list_rooms(
             raise HTTPException(status_code=403, detail=err)
         raise HTTPException(status_code=400, detail=err)
     return {"rooms": result["rooms"]}
+
+
+@router.get("/projects/{project_id}/rooms/{room_id}/timeline")
+async def get_room_timeline(
+    project_id: str,
+    room_id: str,
+    request: Request,
+    limit: int = Query(default=200, ge=1, le=500),
+    user: AuthenticatedUser = Depends(require_user),
+):
+    """Snapshot of a room's chronological timeline.
+
+    One canonical entity, multiple projections — same wire shape WS
+    upserts use. Returns a `TimelineItem[]` joining messages,
+    pending/resolved IM suggestions, and decisions whose
+    `scope_stream_id` matches this room. The frontend
+    `useRoomTimeline` hook seeds its reducer from this then applies
+    live `RoomTimelineEvent` frames over the WS.
+
+    Membership-gated by both project and stream.
+    """
+    timeline_service = request.app.state.room_timeline_service
+    result = await timeline_service.get_timeline(
+        project_id=project_id,
+        stream_id=room_id,
+        viewer_user_id=user.id,
+        limit=limit,
+    )
+    if not result.get("ok"):
+        err = result.get("error", "timeline_failed")
+        if err == "stream_not_found":
+            raise HTTPException(status_code=404, detail=err)
+        if err in ("wrong_project", "not_a_member"):
+            raise HTTPException(status_code=403, detail=err)
+        raise HTTPException(status_code=400, detail=err)
+    return {
+        "stream_id": result["stream_id"],
+        "project_id": result["project_id"],
+        "items": result["items"],
+    }
