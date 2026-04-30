@@ -267,27 +267,32 @@ class RoomTimelineService:
                     else None,
                 }
             )
+        # Lazy import — keeps the room_timeline → decision_votes
+        # dependency one-way (decision_votes does not import this).
+        from .decision_votes import enrich_decision_with_tally
         for d in decision_rows:
-            items.append(
-                {
-                    "kind": "decision",
-                    "id": d.id,
-                    "project_id": d.project_id,
-                    "conflict_id": d.conflict_id,
-                    "source_suggestion_id": d.source_suggestion_id,
-                    "resolver_id": d.resolver_id,
-                    "rationale": d.rationale,
-                    "custom_text": d.custom_text,
-                    "scope_stream_id": d.scope_stream_id,
-                    "apply_outcome": d.apply_outcome,
-                    "created_at": d.created_at.isoformat()
-                    if d.created_at
-                    else None,
-                    "applied_at": d.applied_at.isoformat()
-                    if d.applied_at
-                    else None,
-                }
-            )
+            payload = {
+                "kind": "decision",
+                "id": d.id,
+                "project_id": d.project_id,
+                "conflict_id": d.conflict_id,
+                "source_suggestion_id": d.source_suggestion_id,
+                "resolver_id": d.resolver_id,
+                "rationale": d.rationale,
+                "custom_text": d.custom_text,
+                "scope_stream_id": d.scope_stream_id,
+                "apply_outcome": d.apply_outcome,
+                "created_at": d.created_at.isoformat()
+                if d.created_at
+                else None,
+                "applied_at": d.applied_at.isoformat()
+                if d.applied_at
+                else None,
+            }
+            # Per-decision tally enrichment so the room view doesn't
+            # need a follow-up GET per card.
+            await enrich_decision_with_tally(payload, self._sessionmaker)
+            items.append(payload)
         # Single chronological merge — all kinds share a created_at.
         # Ties (same instant): messages first so a derived suggestion
         # renders below its source.

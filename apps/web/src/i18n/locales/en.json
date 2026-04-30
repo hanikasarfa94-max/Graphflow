@@ -379,7 +379,24 @@
     "decision": {
       "recorded": "⚡ Decision recorded",
       "voteScopeRoom": "Voting with {name}'s {count} members.",
-      "voteScopeProject": "Project-wide vote."
+      "voteScopeProject": "Project-wide vote.",
+      "voteApproveLabel": "Approve",
+      "voteDenyLabel": "Deny",
+      "voteAbstainLabel": "Abstain",
+      "voteTallyMeta": "({cast}/{quorum} cast)",
+      "voteVerdict": {
+        "approve": "Yes",
+        "deny": "No",
+        "abstain": "Abstain"
+      },
+      "voteStatus": {
+        "open": "open",
+        "passed": "passed",
+        "failed": "failed",
+        "tied": "tied"
+      },
+      "voting": "Voting…",
+      "voteError": "Could not record vote"
     },
     "rooms": {
       "loading": "Loading timeline…",

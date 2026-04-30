@@ -35,6 +35,8 @@ import { Button } from "@/components/ui";
 import { ApiError, saveMessageAsKb } from "@/lib/api";
 import type { Decision, IMMessage, IMSuggestion } from "@/lib/api";
 
+import { DecisionVoteControls } from "./DecisionVoteControls";
+
 import {
   attributionFor,
   presenceDotColor,
@@ -802,6 +804,7 @@ export function DecisionCard({
   projectId,
   decision,
   roomNameById,
+  voteEnabled = false,
 }: {
   projectId: string;
   decision: Decision;
@@ -810,6 +813,12 @@ export function DecisionCard({
   // without an N+1 fetch per card. Absent → fallback "project-wide
   // vote" copy when scope_stream_id is set; no line when it's null.
   roomNameById?: Record<string, { name: string; memberCount: number }>;
+  // N.4 — when true, mounts DecisionVoteControls (tally + Yes/No/
+  // Abstain buttons). Caller decides — typically: scope_stream_id
+  // matches the current room AND viewer is a room member. The room
+  // view sets this true; team-room / project-wide views may pass
+  // false today and enable later.
+  voteEnabled?: boolean;
 }) {
   const t = useTranslations("stream");
   const scopeStreamId = decision.scope_stream_id ?? null;
@@ -878,6 +887,12 @@ export function DecisionCard({
         >
           {voteScopeLine}
         </div>
+      )}
+      {voteEnabled && (
+        <DecisionVoteControls
+          decisionId={decision.id}
+          tally={decision.tally}
+        />
       )}
       <div style={{ marginTop: 6 }}>
         <Link

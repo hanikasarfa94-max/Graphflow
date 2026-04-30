@@ -379,7 +379,24 @@
     "decision": {
       "recorded": "⚡ 已生成决策",
       "voteScopeRoom": "由 {name} 房间的 {count} 名成员表决。",
-      "voteScopeProject": "项目级表决。"
+      "voteScopeProject": "项目级表决。",
+      "voteApproveLabel": "赞成",
+      "voteDenyLabel": "反对",
+      "voteAbstainLabel": "弃权",
+      "voteTallyMeta": "（{cast}/{quorum} 票）",
+      "voteVerdict": {
+        "approve": "赞成",
+        "deny": "反对",
+        "abstain": "弃权"
+      },
+      "voteStatus": {
+        "open": "进行中",
+        "passed": "通过",
+        "failed": "未通过",
+        "tied": "平局"
+      },
+      "voting": "投票中…",
+      "voteError": "投票失败"
     },
     "rooms": {
       "loading": "正在加载时间线…",

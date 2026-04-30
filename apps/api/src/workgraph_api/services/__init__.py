@@ -23,6 +23,12 @@ from .collab_hub import CollabHub
 from .commitments import CommitmentService, CommitmentValidationError
 from .composition import CompositionError, CompositionService
 from .conflicts import ConflictService
+from .decision_votes import (
+    DecisionVoteError,
+    DecisionVoteService,
+    SUBJECT_KIND as DECISION_VOTE_SUBJECT_KIND,
+    VALID_VERDICTS as DECISION_VOTE_VERDICTS,
+)
 from .decisions import DecisionError, DecisionService
 from .delivery import DeliveryError, DeliveryService
 from .dissent import DissentError, DissentService, MAX_STANCE_CHARS
@@ -143,6 +149,10 @@ __all__ = [
     "ConflictService",
     "DecisionService",
     "DecisionError",
+    "DecisionVoteError",
+    "DecisionVoteService",
+    "DECISION_VOTE_SUBJECT_KIND",
+    "DECISION_VOTE_VERDICTS",
     "DeliveryService",
     "DeliveryError",
     "DissentError",

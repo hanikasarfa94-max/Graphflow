@@ -442,6 +442,7 @@ from workgraph_api.services import (
     SimulationService,
     SkillAtlasService,
     RetrievalService,
+    DecisionVoteService,
     RoomTimelineService,
     SkillsService,
     SlaService,
@@ -668,6 +669,9 @@ async def api_env():
     app.state.personal_service = personal_service
     app.state.skills_service = skills_service
     app.state.room_timeline_service = RoomTimelineService(maker)
+    app.state.decision_vote_service = DecisionVoteService(
+        maker, collab_hub=collab_hub
+    )
     app.state.membrane_agent = membrane_agent
     app.state.membrane_service = membrane_service
     app.state.membrane_ingest_service = membrane_ingest_service

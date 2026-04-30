@@ -720,8 +720,71 @@ export interface Decision {
   // view reads this to render the "Voting with <room>'s <N> members"
   // explainer on DecisionCard.
   scope_stream_id?: string | null;
+  // N.4 — current vote tally + scope-derived quorum. Backend
+  // enriches every decision payload with this (REST + WS upserts) so
+  // the FE can render the tally without a follow-up GET.
+  tally?: DecisionTally;
   created_at: string | null;
   applied_at: string | null;
+}
+
+// N.4 vote tally shape — emitted by DecisionVoteService.
+export interface DecisionTally {
+  approve: number;
+  deny: number;
+  abstain: number;
+  cast: number;
+  outstanding: number;
+  quorum: number;
+  majority: number;
+  // 'open' = vote in progress; 'passed'/'failed' = majority reached;
+  // 'tied' = full participation, no majority. The frontend should
+  // render the badge differently per status.
+  status: "open" | "passed" | "failed" | "tied";
+  scope_kind: "room" | "project";
+  scope_stream_id: string | null;
+}
+
+// Decision vote record. (VoteVerdict is defined further down in this
+// file under the gated-proposals section — same shape, reused here.)
+export interface DecisionVoteRecord {
+  id: string;
+  verdict: "approve" | "deny" | "abstain";
+  rationale: string | null;
+  voter_user_id: string;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+// GET response: my_vote may be null when the viewer hasn't voted yet.
+export interface DecisionTallyResponse {
+  tally: DecisionTally;
+  my_vote: DecisionVoteRecord | null;
+}
+
+// POST response: my_vote is always populated (we just cast it).
+export interface DecisionVoteCastResponse {
+  tally: DecisionTally;
+  my_vote: DecisionVoteRecord;
+}
+
+export function castDecisionVote(
+  decisionId: string,
+  body: { verdict: "approve" | "deny" | "abstain"; rationale?: string },
+): Promise<DecisionVoteCastResponse> {
+  return api<DecisionVoteCastResponse>(
+    `/api/decisions/${decisionId}/votes`,
+    {
+      method: "POST",
+      body,
+    },
+  );
+}
+
+export function getDecisionTally(
+  decisionId: string,
+): Promise<DecisionTallyResponse> {
+  return api<DecisionTallyResponse>(`/api/decisions/${decisionId}/votes`);
 }
 
 // ---------- IM suggestions ----------
@@ -896,6 +959,8 @@ export type TimelineDecisionItem = {
     | "failed"
     | "advisory"
     | null;
+  // N.4 — tally enriched at the timeline endpoint.
+  tally?: DecisionTally;
   created_at: string | null;
   applied_at: string | null;
 };

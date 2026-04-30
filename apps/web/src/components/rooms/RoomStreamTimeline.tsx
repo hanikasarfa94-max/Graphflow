@@ -173,6 +173,11 @@ function TimelineRow({
         projectId={projectId}
         decision={timelineItemToDecision(item)}
         roomNameById={roomNameById}
+        // Inside a room the viewer is always at scope_stream_id ===
+        // current room (timeline endpoint already filters), so vote
+        // controls are always enabled here. The DecisionVoteControls
+        // component handles its own membership check via the backend.
+        voteEnabled
       />
     );
   }
@@ -307,6 +312,9 @@ function timelineItemToDecision(item: TimelineDecisionItem): Decision {
     gated_via_proposal_id: null,
     decision_class: null,
     scope_stream_id: item.scope_stream_id,
+    // N.4 — tally enriched at the timeline endpoint flows through
+    // so DecisionCard's vote affordance can render without a fetch.
+    tally: item.tally,
     created_at: item.created_at,
     applied_at: item.applied_at,
   };

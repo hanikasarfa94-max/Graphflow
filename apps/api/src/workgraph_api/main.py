@@ -53,6 +53,7 @@ from workgraph_api.routers import composition as composition_router
 from workgraph_api.routers import conflicts as conflicts_router
 from workgraph_api.routers import delivery as delivery_router
 from workgraph_api.routers import demo as demo_router
+from workgraph_api.routers import decision_votes as decision_votes_router
 from workgraph_api.routers import dissent as dissent_router
 from workgraph_api.routers import drift as drift_router
 from workgraph_api.routers import gated_proposals as gated_proposals_router
@@ -124,6 +125,7 @@ from workgraph_api.services import (
     SimulationService,
     SkillAtlasService,
     RetrievalService,
+    DecisionVoteService,
     RoomTimelineService,
     SkillsService,
     SlaService,
@@ -634,6 +636,11 @@ async def lifespan(app: FastAPI):
     app.state.personal_service = personal_service
     app.state.skills_service = skills_service
     app.state.room_timeline_service = RoomTimelineService(sessionmaker)
+    # N.4 vote affordance — needs collab_hub to publish RoomTimelineEvent
+    # patches on the room stream when a vote lands.
+    app.state.decision_vote_service = DecisionVoteService(
+        sessionmaker, collab_hub=collab_hub
+    )
     app.state.membrane_service = membrane_service
     app.state.membrane_agent = membrane_agent
     app.state.membrane_ingest_service = membrane_ingest_service
@@ -868,6 +875,7 @@ app.include_router(collab_router.router)
 app.include_router(conflicts_router.router)
 app.include_router(delivery_router.router)
 app.include_router(demo_router.router)
+app.include_router(decision_votes_router.router)
 app.include_router(dissent_router.router)
 app.include_router(drift_router.router)
 app.include_router(gated_proposals_router.router)

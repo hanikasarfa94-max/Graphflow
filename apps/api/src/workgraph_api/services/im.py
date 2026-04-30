@@ -559,6 +559,11 @@ class IMService:
                 {"type": "suggestion", "payload": payload},
             )
         if decision_payload is not None:
+            # Enrich the payload with the (initial empty) tally so
+            # consumers see the same shape REST does. Cheap call —
+            # opens its own session, no votes exist yet at crystallize.
+            from .decision_votes import enrich_decision_with_tally
+            await enrich_decision_with_tally(decision_payload, self._sessionmaker)
             await self._event_bus.emit(
                 "decision.crystallized",
                 {
