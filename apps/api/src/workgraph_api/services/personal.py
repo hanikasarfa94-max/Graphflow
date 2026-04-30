@@ -216,6 +216,7 @@ class PersonalStreamService:
         edge_agent: EdgeAgent,
         event_bus: EventBus,
         skills_service: SkillsService | None = None,
+        retrieval_service: Any | None = None,
     ) -> None:
         self._sessionmaker = sessionmaker
         self._stream_service = stream_service
@@ -227,6 +228,12 @@ class PersonalStreamService:
         # If None, tool_call responses degrade to the preamble body so the
         # stream still gets a sensible answer instead of a dead card.
         self._skills_service = skills_service or SkillsService(sessionmaker)
+        # Slice 5c — when wired, fills the EdgeAgent prompt's kb_slice
+        # field with retrieval candidates for the user's message. Saves
+        # a tool-call round trip when retrieval already has the answer.
+        # Absent: kb_slice ships empty, agent falls back to issuing
+        # kb_search if recall is what's wanted (existing behavior).
+        self._retrieval_service = retrieval_service
         # Per (user_id, project_id) -> last-preview monotonic timestamp.
         # In-memory is fine for v1: worst case on process restart one
         # keystroke-triggered preview slips through. Keyed by tuple so a
@@ -314,6 +321,7 @@ class PersonalStreamService:
             project_id=project_id,
             project_title=project_title,
             stream_id=stream_id,
+            user_message=body,
         )
 
         try:
@@ -448,6 +456,7 @@ class PersonalStreamService:
             project_title=project_title,
             stream_id=stream_id,
             scope=scope,
+            user_message=body,
         )
 
         # Agent loop — the EdgeAgent may request up to
@@ -1155,6 +1164,7 @@ class PersonalStreamService:
         project_title: str,
         stream_id: str,
         scope: dict[str, bool] | None = None,
+        user_message: str = "",
     ) -> dict[str, Any]:
         """Shape the EdgeAgent.respond context. See edge.py prompt contract.
 
@@ -1295,6 +1305,31 @@ class PersonalStreamService:
                 "authority_pool_sizes": {},
             }
             teammates = []
+        # Slice 5c — pre-fill kb_slice with retrieval candidates for
+        # the current user_message. The EdgeAgent prompt (edge/v1.md)
+        # documents kb_slice as `[{"source": ..., "excerpt": ...}]`
+        # and says "if kb_slice is empty, run kb_search if recall is
+        # what's wanted." Pre-filling shortcuts that tool-call round
+        # trip on common queries.
+        # Group-scope only (viewer_user_id=None) — same conservative
+        # rule as kb_search to avoid leaking personal items into
+        # cross-viewer LLM context.
+        kb_slice: list[dict[str, Any]] = []
+        if self._retrieval_service is not None and (user_message or "").strip():
+            try:
+                kb_slice = await self._retrieval_service.candidate_set(
+                    project_id=project_id,
+                    query=user_message,
+                    viewer_user_id=None,
+                    k=5,
+                )
+            except Exception:
+                _log.exception(
+                    "personal._build_respond_context: candidate_set failed; "
+                    "shipping empty kb_slice"
+                )
+                kb_slice = []
+
         return {
             "user": {
                 "id": user_id,
@@ -1313,6 +1348,7 @@ class PersonalStreamService:
             "teammates": teammates,  # legacy alias; keep until tests migrate
             "recent_messages": recent_messages,
             "background": [],
+            "kb_slice": kb_slice,
         }
 
     async def _load_proposal(

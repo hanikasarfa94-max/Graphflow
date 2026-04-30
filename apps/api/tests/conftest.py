@@ -592,6 +592,7 @@ async def api_env():
         edge_agent,
         bus,
         skills_service=skills_service,
+        retrieval_service=retrieval_service,
     )
     membrane_agent = _ScriptableMembraneAgent()
     membrane_service = MembraneService(

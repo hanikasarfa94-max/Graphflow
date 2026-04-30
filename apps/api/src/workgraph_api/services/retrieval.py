@@ -363,6 +363,64 @@ class RetrievalService:
         )
         return vec_retriever.top_k(query_vector, k=k)
 
+    async def candidate_set(
+        self,
+        *,
+        project_id: str,
+        query: str,
+        viewer_user_id: str | None = None,
+        k: int = 5,
+    ) -> list[dict[str, Any]]:
+        """Slice 5c — pre-formatted retrieval slice for agent prompts.
+
+        Wraps `retrieve_kb_items` and adapts each candidate to the
+        `kb_slice` shape the EdgeAgent prompt already documents:
+        `[{"source": "...", "excerpt": "..."}, ...]`.
+
+        When this returns non-empty results, the agent prompt's
+        "if kb_slice is empty, run kb_search if recall is wanted"
+        path is short-circuited — saves a tool-call round trip when
+        retrieval already has the answer.
+
+        `source` mirrors the kb_search wire format: source_kind for
+        ingest rows (`user-drop`/`feishu`/etc.), `kb-personal` for
+        personal-scope rows, `kb-note` for group-scope user-authored.
+        `excerpt` is the title + first 200 chars of body — small
+        enough that ~5 candidates fit in a few hundred tokens.
+        """
+        candidates = await self.retrieve_kb_items(
+            project_id=project_id,
+            query=query,
+            viewer_user_id=viewer_user_id,
+            k=k,
+        )
+        out: list[dict[str, Any]] = []
+        for c in candidates:
+            row = c.row
+            if row.source == "ingest":
+                source = row.source_kind or "ingest"
+                classification = dict(row.classification_json or {})
+                summary = str(classification.get("summary") or "").strip()
+                body = (row.raw_content or "")[:200]
+                excerpt = summary or body
+            else:
+                source = (
+                    "kb-personal" if row.scope == "personal" else "kb-note"
+                )
+                title = (row.title or "").strip()
+                body = (row.content_md or "")[:200]
+                excerpt = (
+                    f"{title}: {body}" if title and body else (title or body)
+                )
+            out.append(
+                {
+                    "id": row.id,
+                    "source": source,
+                    "excerpt": excerpt,
+                }
+            )
+        return out
+
     async def warm_kb_items(self, *, project_id: str) -> int:
         """Eagerly embed every group-scope kb item in `project_id`.
 

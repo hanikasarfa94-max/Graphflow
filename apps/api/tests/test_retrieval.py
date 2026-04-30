@@ -720,3 +720,233 @@ async def test_warm_kb_items_no_op_without_embedding_client(api_env, tmp_path):
         maker, cache_path=_stub_cache_path(tmp_path)
     )
     assert await svc.warm_kb_items(project_id=pid) == 0
+
+
+# ---------------------------------------------------------------------------
+# Slice 5c — candidate_set + kb_slice in EdgeAgent context.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_candidate_set_returns_kb_slice_shape(api_env):
+    """RetrievalService.candidate_set returns the kb_slice prompt shape."""
+    _, maker, *_ = api_env
+    pid = await _mk_project(maker)
+    owner = await _mk_user(maker, "cand_owner")
+    await _add_member(maker, pid, owner)
+    hit_id = await _mk_user_kb(
+        maker, pid, owner_user_id=owner,
+        title="Postgres pool sizing",
+        content_md="canonical sizing doc with details",
+    )
+    await _mk_user_kb(
+        maker, pid, owner_user_id=owner,
+        title="Inventory rework", content_md="merge stacks proposal",
+    )
+
+    svc = RetrievalService(maker)
+    out = await svc.candidate_set(
+        project_id=pid, query="postgres pool sizing", k=3
+    )
+    assert out, "expected at least one candidate"
+    assert out[0]["id"] == hit_id
+    # kb_slice shape (matches edge/v1.md prompt contract).
+    assert set(out[0].keys()) == {"id", "source", "excerpt"}
+    assert out[0]["source"] in {"kb-note", "kb-personal"}
+    assert "Postgres pool sizing" in out[0]["excerpt"]
+
+
+@pytest.mark.asyncio
+async def test_candidate_set_for_ingest_uses_source_kind(api_env):
+    """Ingest-source kb items report their source_kind, not 'kb-note'."""
+    _, maker, *_ = api_env
+    pid = await _mk_project(maker)
+    await _mk_ingest_kb(
+        maker, pid,
+        source_identifier="kb-feishu-1",
+        raw_content="canonical reply about Postgres connection pool",
+        summary="Postgres pool sizing canonical",
+    )
+    svc = RetrievalService(maker)
+    out = await svc.candidate_set(
+        project_id=pid, query="postgres pool", k=3
+    )
+    assert out
+    assert out[0]["source"] == "user-drop"
+
+
+@pytest.mark.asyncio
+async def test_candidate_set_empty_query_returns_empty(api_env):
+    _, maker, *_ = api_env
+    pid = await _mk_project(maker)
+    owner = await _mk_user(maker, "cand_empty")
+    await _add_member(maker, pid, owner)
+    await _mk_user_kb(
+        maker, pid, owner_user_id=owner,
+        title="something", content_md="anything",
+    )
+    svc = RetrievalService(maker)
+    assert await svc.candidate_set(project_id=pid, query="", k=5) == []
+
+
+@pytest.mark.asyncio
+async def test_personal_post_pre_fills_kb_slice_in_context(api_env):
+    """Slice 5c — _build_respond_context pre-fills kb_slice with
+    retrieval candidates for the user's message body.
+
+    Wires a scriptable EdgeAgent stub to capture the context dict it
+    receives. Asserts kb_slice carries the topical match.
+    """
+    from workgraph_agents import EdgeResponse, EdgeResponseOutcome
+    from workgraph_agents.llm import LLMResult
+    from workgraph_api.main import app
+    from workgraph_api.services import PersonalStreamService
+    from workgraph_persistence import backfill_streams_from_projects
+
+    client, maker, bus, *_ = api_env
+
+    class _CapturingEdgeAgent:
+        def __init__(self):
+            self.calls: list[dict] = []
+
+        async def respond(self, *, user_message, context):
+            self.calls.append(
+                {"user_message": user_message, "context": context}
+            )
+            return EdgeResponseOutcome(
+                response=EdgeResponse(
+                    kind="silence", body=None, route_targets=[]
+                ),
+                result=LLMResult(
+                    content="", model="stub",
+                    prompt_tokens=0, completion_tokens=0, latency_ms=0,
+                ),
+                outcome="ok",
+                attempts=1,
+            )
+
+    stub = _CapturingEdgeAgent()
+    retrieval = RetrievalService(maker)
+    app.state.personal_service = PersonalStreamService(
+        maker,
+        app.state.stream_service,
+        app.state.routing_service,
+        stub,
+        bus,
+        retrieval_service=retrieval,
+    )
+
+    # Register caller, intake a project, seed a topical kb item.
+    r = await client.post(
+        "/api/auth/register",
+        json={"username": "kbslice_user", "password": "hunter22"},
+    )
+    assert r.status_code == 200, r.text
+    r = await client.post(
+        "/api/intake/message",
+        json={
+            "text": (
+                "We need to launch an event registration page next week. "
+                "It needs invitation code validation, phone number "
+                "validation, admin export, and conversion tracking."
+            ),
+            "source_event_id": "kbslice-1",
+        },
+    )
+    assert r.status_code == 200, r.text
+    pid = r.json()["project"]["id"]
+    me = (await client.get("/api/auth/me")).json()["id"]
+    await backfill_streams_from_projects(maker)
+
+    hit_id = await _mk_user_kb(
+        maker, pid, owner_user_id=me,
+        title="Postgres pool sizing", content_md="canonical sizing doc",
+    )
+    await _mk_user_kb(
+        maker, pid, owner_user_id=me,
+        title="Inventory rework", content_md="merge stacks proposal",
+    )
+
+    r = await client.post(
+        f"/api/personal/{pid}/post",
+        json={"body": "what's the postgres pool sizing recommendation?"},
+    )
+    assert r.status_code == 200, r.text
+    assert stub.calls, "edge agent should have been called"
+    ctx = stub.calls[0]["context"]
+    assert "kb_slice" in ctx
+    kb_slice = ctx["kb_slice"]
+    assert kb_slice, f"expected kb_slice populated; got {kb_slice}"
+    assert kb_slice[0]["id"] == hit_id
+    assert "Postgres pool sizing" in kb_slice[0]["excerpt"]
+
+
+@pytest.mark.asyncio
+async def test_personal_post_kb_slice_empty_when_no_retrieval_service(
+    api_env,
+):
+    """Without retrieval_service wired, kb_slice ships empty (legacy)."""
+    from workgraph_agents import EdgeResponse, EdgeResponseOutcome
+    from workgraph_agents.llm import LLMResult
+    from workgraph_api.main import app
+    from workgraph_api.services import PersonalStreamService
+    from workgraph_persistence import backfill_streams_from_projects
+
+    client, maker, bus, *_ = api_env
+
+    class _CapturingEdgeAgent:
+        def __init__(self):
+            self.calls = []
+
+        async def respond(self, *, user_message, context):
+            self.calls.append({"context": context})
+            return EdgeResponseOutcome(
+                response=EdgeResponse(
+                    kind="silence", body=None, route_targets=[]
+                ),
+                result=LLMResult(
+                    content="", model="stub",
+                    prompt_tokens=0, completion_tokens=0, latency_ms=0,
+                ),
+                outcome="ok",
+                attempts=1,
+            )
+
+    stub = _CapturingEdgeAgent()
+    app.state.personal_service = PersonalStreamService(
+        maker,
+        app.state.stream_service,
+        app.state.routing_service,
+        stub,
+        bus,
+        # NO retrieval_service
+    )
+
+    r = await client.post(
+        "/api/auth/register",
+        json={"username": "noretr_user", "password": "hunter22"},
+    )
+    assert r.status_code == 200, r.text
+    r = await client.post(
+        "/api/intake/message",
+        json={
+            "text": (
+                "We need to launch an event registration page next week. "
+                "It needs invitation code validation, phone number "
+                "validation, admin export, and conversion tracking."
+            ),
+            "source_event_id": "noretr-1",
+        },
+    )
+    assert r.status_code == 200, r.text
+    pid = r.json()["project"]["id"]
+    await backfill_streams_from_projects(maker)
+
+    r = await client.post(
+        f"/api/personal/{pid}/post",
+        json={"body": "anything"},
+    )
+    assert r.status_code == 200, r.text
+    ctx = stub.calls[0]["context"]
+    # Field is present (uniform shape) but empty since no retrieval.
+    assert ctx.get("kb_slice") == []
