@@ -377,7 +377,46 @@
       }
     },
     "decision": {
-      "recorded": "⚡ Decision recorded"
+      "recorded": "⚡ Decision recorded",
+      "voteScopeRoom": "Voting with {name}'s {count} members.",
+      "voteScopeProject": "Project-wide vote."
+    },
+    "rooms": {
+      "loading": "Loading timeline…",
+      "emptyTimeline": "No messages yet — start the conversation.",
+      "untitledRoom": "Untitled room",
+      "memberCount": "{count, plural, one {# member} other {# members}}",
+      "workbenchOpen": "Reviews",
+      "suggestionLabel": "Agent suggestion ({kind})",
+      "suggestionFromHint": "From the message above. Accept or dismiss in the Reviews panel.",
+      "suggestionStatus": {
+        "accepted": "accepted",
+        "dismissed": "dismissed",
+        "countered": "countered",
+        "escalated": "escalated"
+      }
+    },
+    "workbench": {
+      "title": "Workbench",
+      "subtitle": "Same entity, multiple projections",
+      "private": "private",
+      "close": "Close workbench",
+      "mode": {
+        "grid": "Grid",
+        "vertical": "Stack",
+        "focus": "Focus"
+      },
+      "chipRequests": "Requests",
+      "chipTasks": "Tasks",
+      "chipKnowledge": "Knowledge",
+      "chipSkills": "Skills",
+      "chipWorkflow": "Workflow",
+      "comingSoon": "Coming in N.4 — vocabulary established now.",
+      "comingSoonBody": "This panel kind is part of the projection vocabulary; its renderer ships next slice.",
+      "requestsEmpty": "No pending reviews — everything's settled.",
+      "untitledSuggestion": "Untitled suggestion",
+      "accept": "Accept",
+      "dismiss": "Dismiss"
     },
     "attribution": {
       "edge": "edge",
