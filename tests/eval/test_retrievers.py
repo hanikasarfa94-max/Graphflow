@@ -1,14 +1,20 @@
-"""Unit tests for the BM25 retriever (slice 1 of §7.2 hybrid stack).
+"""Unit tests for the §7.2 hybrid retrieval primitives (slices 1-3).
 
-Pure-Python, no LLM calls — these run in the default unit-test sweep,
-unlike the `@pytest.mark.eval` harness tests which exercise live
-DeepSeek paths.
+Pure-Python, no LLM / embedding API calls — these run in the default
+unit-test sweep, unlike the `@pytest.mark.eval` harness tests which
+exercise live DeepSeek paths.
 
 Coverage:
   * tokenize: en + zh + technical-id + stop-word filtering
-  * BM25Retriever: ranks lexical-match items above noise; respects
-    title-weighting; honors the candidate_filter mask; handles empty
-    inputs without raising.
+  * BM25Retriever (slice 1): lexical ranking, title weighting, mask,
+    empty inputs.
+  * VectorRetriever (slice 2): cosine ranking, mask, zero-norm,
+    length-mismatch.
+  * GraphNeighborRetriever (slice 3): @-mention edges, supersedes
+    edges, tag-Jaccard expansion.
+  * RecencyRetriever (slice 3): ts ordering, mask, missing-ts fallback.
+  * PinnedRetriever (slice 3): pin-order preservation, dedupe,
+    unknown-id skip.
 """
 from __future__ import annotations
 
@@ -16,6 +22,9 @@ import pytest
 
 from tests.eval.attention.retrievers import (
     BM25Retriever,
+    GraphNeighborRetriever,
+    PinnedRetriever,
+    RecencyRetriever,
     VectorRetriever,
     cosine_similarity,
     tokenize,
@@ -30,9 +39,15 @@ def _item(
     content: str = "",
     kind: str = "kb_item",
     scope: str = "group",
+    metadata: dict | None = None,
 ) -> CorpusItem:
     return CorpusItem(
-        id=id_, kind=kind, scope=scope, title=title, content=content
+        id=id_,
+        kind=kind,
+        scope=scope,
+        title=title,
+        content=content,
+        metadata=dict(metadata or {}),
     )
 
 
@@ -247,3 +262,205 @@ def test_cosine_similarity_basic():
     assert cosine_similarity([1.0, 0.0], [-1.0, 0.0]) == pytest.approx(-1.0)
     # Zero-norm input returns 0 rather than NaN.
     assert cosine_similarity([0.0, 0.0], [1.0, 0.0]) == 0.0
+
+
+# ---------------------------------------------------------------------------
+# GraphNeighborRetriever — slice 3.
+# ---------------------------------------------------------------------------
+
+
+def test_graph_neighbor_finds_at_mention_target():
+    """Item B mentions @kb_a in body → kb_a is a neighbor of any seed
+    that includes B.
+    """
+    items = [
+        _item("kb_a", title="canonical KB note"),
+        _item(
+            "kb_b",
+            title="follow-up note",
+            content="See @kb_a for the original spec.",
+        ),
+        _item("kb_c", title="unrelated"),
+    ]
+    g = GraphNeighborRetriever(items)
+    ranked = g.top_k(["kb_b"], k=5)
+    assert [item.id for item, _ in ranked] == ["kb_a"]
+
+
+def test_graph_neighbor_finds_inbound_mentions():
+    """Seed kb_a has no outbound edges, but kb_b mentions it — kb_b is
+    surfaced as an inbound neighbor.
+    """
+    items = [
+        _item("kb_a", title="seed note"),
+        _item(
+            "kb_b",
+            title="referencing note",
+            content="builds on @kb_a",
+        ),
+        _item("kb_c", title="unrelated"),
+    ]
+    g = GraphNeighborRetriever(items)
+    ranked = g.top_k(["kb_a"], k=5)
+    assert [item.id for item, _ in ranked] == ["kb_b"]
+
+
+def test_graph_neighbor_supersedes_edge_pulls_old_version():
+    items = [
+        _item(
+            "dec_new",
+            title="updated decision",
+            metadata={"supersedes": ["dec_old"]},
+        ),
+        _item("dec_old", title="superseded"),
+    ]
+    g = GraphNeighborRetriever(items)
+    ranked = g.top_k(["dec_new"], k=5)
+    # Following the supersedes edge from dec_new lands on dec_old.
+    assert [item.id for item, _ in ranked] == ["dec_old"]
+
+
+def test_graph_neighbor_tag_jaccard_links_topical_items():
+    items = [
+        _item(
+            "a",
+            title="Postgres pool sizing",
+            metadata={"tags": ["infra", "postgres"]},
+        ),
+        _item(
+            "b",
+            title="Postgres replication",
+            metadata={"tags": ["infra", "postgres", "replication"]},
+        ),
+        _item(
+            "c",
+            title="Localization plan",
+            metadata={"tags": ["i18n", "frontend"]},
+        ),
+    ]
+    g = GraphNeighborRetriever(items)
+    ranked = g.top_k(["a"], k=5)
+    # b shares 2/3 tags with a; c shares 0. Only b should surface.
+    assert [item.id for item, _ in ranked] == ["b"]
+
+
+def test_graph_neighbor_excludes_seeds_from_output():
+    items = [
+        _item("a", title="alpha"),
+        _item("b", title="bravo", content="@a"),
+    ]
+    g = GraphNeighborRetriever(items)
+    ranked = g.top_k(["a", "b"], k=5)
+    # Neither a nor b should appear — both are seeds.
+    assert [item.id for item, _ in ranked] == []
+
+
+def test_graph_neighbor_empty_seeds_returns_empty():
+    items = [_item("a"), _item("b", content="@a")]
+    g = GraphNeighborRetriever(items)
+    assert g.top_k([], k=5) == []
+
+
+def test_graph_neighbor_respects_candidate_filter():
+    items = [
+        _item("a", title="seed"),
+        _item("b", title="hidden neighbor", content="@a"),
+        _item("c", title="visible neighbor", content="@a"),
+    ]
+    g = GraphNeighborRetriever(items)
+    ranked = g.top_k(
+        ["a"], k=5, candidate_filter=[True, False, True]
+    )
+    assert [item.id for item, _ in ranked] == ["c"]
+
+
+# ---------------------------------------------------------------------------
+# RecencyRetriever — slice 3.
+# ---------------------------------------------------------------------------
+
+
+def test_recency_orders_by_ts_descending():
+    items = [
+        _item("old", metadata={"ts": "2026-01-01T00:00:00+00:00"}),
+        _item("mid", metadata={"ts": "2026-03-15T00:00:00+00:00"}),
+        _item("new", metadata={"ts": "2026-04-20T00:00:00+00:00"}),
+    ]
+    r = RecencyRetriever(items)
+    ranked = r.top_k(k=5)
+    assert [item.id for item, _ in ranked] == ["new", "mid", "old"]
+
+
+def test_recency_handles_zulu_z_suffix():
+    """ISO `2026-04-20T19:40:00Z` should parse, not silently fall to sentinel."""
+    items = [
+        _item("z", metadata={"ts": "2026-04-20T19:40:00Z"}),
+        _item("none", metadata={}),  # parses to sentinel epoch-zero
+    ]
+    r = RecencyRetriever(items)
+    ranked = r.top_k(k=5)
+    assert [item.id for item, _ in ranked] == ["z", "none"]
+
+
+def test_recency_respects_candidate_filter():
+    items = [
+        _item("a", metadata={"ts": "2026-04-20T00:00:00+00:00"}),
+        _item("b", metadata={"ts": "2026-04-19T00:00:00+00:00"}),
+        _item("c", metadata={"ts": "2026-04-18T00:00:00+00:00"}),
+    ]
+    r = RecencyRetriever(items)
+    # Hide the most recent (a). Should surface b then c.
+    ranked = r.top_k(k=5, candidate_filter=[False, True, True])
+    assert [item.id for item, _ in ranked] == ["b", "c"]
+
+
+def test_recency_caps_at_k():
+    items = [
+        _item(
+            f"i{n}", metadata={"ts": f"2026-04-{20 - n:02d}T00:00:00+00:00"}
+        )
+        for n in range(10)
+    ]
+    r = RecencyRetriever(items)
+    ranked = r.top_k(k=3)
+    assert len(ranked) == 3
+
+
+# ---------------------------------------------------------------------------
+# PinnedRetriever — slice 3.
+# ---------------------------------------------------------------------------
+
+
+def test_pinned_returns_items_in_pin_order():
+    items = [_item("a"), _item("b"), _item("c")]
+    p = PinnedRetriever(items)
+    ranked = p.top_k(["c", "a"], k=5)
+    assert [item.id for item, _ in ranked] == ["c", "a"]
+    # Higher score for earlier pins.
+    assert ranked[0][1] > ranked[1][1]
+
+
+def test_pinned_dedupes_repeated_ids():
+    items = [_item("a"), _item("b")]
+    p = PinnedRetriever(items)
+    ranked = p.top_k(["a", "a", "b"], k=5)
+    assert [item.id for item, _ in ranked] == ["a", "b"]
+
+
+def test_pinned_skips_unknown_ids_silently():
+    items = [_item("a")]
+    p = PinnedRetriever(items)
+    ranked = p.top_k(["zzz", "a"], k=5)
+    assert [item.id for item, _ in ranked] == ["a"]
+
+
+def test_pinned_respects_candidate_filter():
+    items = [_item("a"), _item("b")]
+    p = PinnedRetriever(items)
+    ranked = p.top_k(["a", "b"], k=5, candidate_filter=[False, True])
+    assert [item.id for item, _ in ranked] == ["b"]
+
+
+def test_pinned_empty_pin_list_returns_empty():
+    items = [_item("a"), _item("b")]
+    p = PinnedRetriever(items)
+    assert p.top_k([], k=5) == []

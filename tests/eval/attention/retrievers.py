@@ -26,6 +26,8 @@ from __future__ import annotations
 import math
 import re
 from collections.abc import Iterable, Sequence
+from datetime import datetime, timezone
+from typing import Any
 
 from .types import CorpusItem
 
@@ -355,4 +357,299 @@ def cosine_similarity(a: Sequence[float], b: Sequence[float]) -> float:
     return sum(x * y for x, y in zip(a, b)) / (na * nb)
 
 
-__all__ = ["BM25Retriever", "VectorRetriever", "cosine_similarity", "tokenize"]
+# ---------------------------------------------------------------------------
+# Graph-neighbor expansion (slice 3).
+# ---------------------------------------------------------------------------
+
+# Match `@kb_some_id` or `@u_some_id` in body text — the lightweight
+# explicit-reference convention the realistic corpus uses. Trailing
+# `\w*` (not `+`) so single-letter ids like `@a` still match — they
+# don't appear in the realistic corpus but they do in unit tests, and
+# the regex shouldn't disagree with itself across scales.
+_AT_MENTION_RE = re.compile(r"@([a-zA-Z]\w*)")
+
+
+class GraphNeighborRetriever:
+    """Edge-aware expansion from a seed set.
+
+    Per `new_concepts.md §7.2`, graph-neighbor catches what neither BM25
+    nor vector finds: items downstream of a known-relevant seed via
+    explicit references, supersede chains, or strong tag overlap. The
+    classic example: a query matches one decision lexically, and the
+    *implementing tasks* (linked only via the decision's id, not via
+    shared text) come back as neighbors.
+
+    Edge sources extracted from each item:
+      * `@kb_xxx` / `@u_xxx` mentions in body text (regex)
+      * `metadata.supersedes` — list of older ids this item replaces
+      * `metadata.tags` — Jaccard overlap with the seed's tag set,
+        weighted lower because tag overlap is a fuzzier signal than
+        an explicit reference
+
+    Edge weights:
+      * explicit @-mention: 1.0
+      * supersede edge:     0.8
+      * tag-Jaccard:        up to 0.5 (Jaccard × 0.5)
+
+    The retriever sums edge weights across all incoming seed-edges to
+    a candidate, then ranks. Seeds themselves are excluded from the
+    output (they're already ranked by the upstream retriever that
+    produced them).
+    """
+
+    _W_MENTION = 1.0
+    _W_SUPERSEDE = 0.8
+    _W_TAG_JACCARD = 0.5
+
+    def __init__(self, corpus: Sequence[CorpusItem]) -> None:
+        self._items: tuple[CorpusItem, ...] = tuple(corpus)
+        self._by_id: dict[str, CorpusItem] = {it.id: it for it in self._items}
+        # Pre-extract per-item: mentioned ids, supersedes ids, tag set.
+        self._mentions: dict[str, set[str]] = {}
+        self._supersedes: dict[str, set[str]] = {}
+        self._tags: dict[str, frozenset[str]] = {}
+        for it in self._items:
+            mentioned = {
+                f"@{m}" for m in _AT_MENTION_RE.findall(it.content or "")
+            }
+            # Resolve `@kb_foo` / `@u_foo` to bare id `kb_foo` / `u_foo`.
+            self._mentions[it.id] = {
+                ref[1:] for ref in mentioned if ref[1:] in self._by_id
+            }
+            meta = it.metadata or {}
+            sup = meta.get("supersedes")
+            self._supersedes[it.id] = (
+                {s for s in sup if s in self._by_id}
+                if isinstance(sup, list)
+                else set()
+            )
+            tags = meta.get("tags") or []
+            self._tags[it.id] = frozenset(
+                str(t).lower() for t in tags if isinstance(t, str)
+            )
+
+    def top_k(
+        self,
+        seed_ids: Iterable[str],
+        *,
+        k: int = 30,
+        candidate_filter: "Iterable[bool] | None" = None,
+    ) -> list[tuple[CorpusItem, float]]:
+        """Return top-k neighbors of `seed_ids` ranked by summed edge weight.
+
+        Empty seed set → empty result (graph-neighbor needs an anchor).
+        """
+        seeds = {s for s in seed_ids if s in self._by_id}
+        if not seeds or not self._items:
+            return []
+        keep_mask: list[bool] | None = (
+            list(candidate_filter) if candidate_filter is not None else None
+        )
+        idx_by_id = {it.id: idx for idx, it in enumerate(self._items)}
+
+        scores: dict[str, float] = {}
+
+        # Outgoing mentions / supersedes from each seed → those targets
+        # are neighbors. Plus incoming: items that mention or supersede
+        # this seed. Both directions count — graph-neighbor is undirected
+        # for the retrieval pass (production may distinguish). Targets
+        # that are themselves seeds are excluded — the upstream retriever
+        # has already ranked them.
+        for seed_id in seeds:
+            for tgt in self._mentions.get(seed_id, set()):
+                if tgt in seeds:
+                    continue
+                scores[tgt] = scores.get(tgt, 0.0) + self._W_MENTION
+            for tgt in self._supersedes.get(seed_id, set()):
+                if tgt in seeds:
+                    continue
+                scores[tgt] = scores.get(tgt, 0.0) + self._W_SUPERSEDE
+
+        for src_id in self._by_id:
+            if src_id in seeds:
+                continue
+            outgoing = self._mentions.get(src_id, set()) | self._supersedes.get(
+                src_id, set()
+            )
+            inbound_seed_hits = outgoing & seeds
+            if inbound_seed_hits:
+                # Reverse mention edge counts the same as forward — we're
+                # surfacing items that reference one of our seeds.
+                scores[src_id] = scores.get(src_id, 0.0) + self._W_MENTION * len(
+                    inbound_seed_hits
+                )
+
+        # Tag-Jaccard expansion: union of all seed tag sets is the
+        # query "topic"; score each non-seed item by Jaccard similarity
+        # to it. Cheaper than per-seed pairwise (and more honest about
+        # "which topic cluster is the query in").
+        seed_tag_union: frozenset[str] = frozenset()
+        for seed_id in seeds:
+            seed_tag_union = seed_tag_union | self._tags.get(seed_id, frozenset())
+        if seed_tag_union:
+            for it in self._items:
+                if it.id in seeds:
+                    continue
+                cand_tags = self._tags.get(it.id, frozenset())
+                if not cand_tags:
+                    continue
+                inter = len(seed_tag_union & cand_tags)
+                if inter == 0:
+                    continue
+                union = len(seed_tag_union | cand_tags)
+                jaccard = inter / union
+                scores[it.id] = (
+                    scores.get(it.id, 0.0) + self._W_TAG_JACCARD * jaccard
+                )
+
+        # Apply visibility mask + sort by score desc.
+        ranked: list[tuple[str, float]] = []
+        for cand_id, score in scores.items():
+            if score <= 0.0:
+                continue
+            if keep_mask is not None:
+                idx = idx_by_id.get(cand_id)
+                if idx is None or not keep_mask[idx]:
+                    continue
+            ranked.append((cand_id, score))
+        ranked.sort(key=lambda p: p[1], reverse=True)
+        return [(self._by_id[cid], s) for cid, s in ranked[:k]]
+
+
+# ---------------------------------------------------------------------------
+# Recency retriever (slice 3).
+# ---------------------------------------------------------------------------
+
+
+def _parse_ts(raw: Any) -> datetime | None:
+    """Best-effort ISO-8601 parser. Returns None on anything unparseable."""
+    if raw is None:
+        return None
+    if isinstance(raw, datetime):
+        return raw if raw.tzinfo else raw.replace(tzinfo=timezone.utc)
+    if not isinstance(raw, str):
+        return None
+    try:
+        # fromisoformat handles "2026-04-26T19:40:00+00:00" but not
+        # the trailing "Z" alone — normalize before parsing.
+        s = raw.rstrip("Z") + "+00:00" if raw.endswith("Z") else raw
+        dt = datetime.fromisoformat(s)
+        return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+    except (ValueError, TypeError):
+        return None
+
+
+class RecencyRetriever:
+    """Top-k items by recency. Constant per-query: it's a sorted slice.
+
+    Per §7.2, recency is the "what's hot right now" axis — surfaces
+    nodes the team has touched in the last few days even if no other
+    retriever ranks them. The frecency primitives shipped in 387aef6
+    (`last_accessed_at` + `access_count`) will replace pure recency
+    with `log(1 + access_count) × time_decay` once §7.4 wires up
+    (slice 5 in production); the eval scaffold stands in with raw
+    `metadata.ts` since access counts are 0 across a synthetic corpus.
+    """
+
+    def __init__(self, corpus: Sequence[CorpusItem]) -> None:
+        self._items: tuple[CorpusItem, ...] = tuple(corpus)
+        # Pre-sort once by ts descending. Items with no parseable ts
+        # fall to the end with a sentinel datetime.min.
+        sentinel = datetime(1970, 1, 1, tzinfo=timezone.utc)
+        with_ts = [
+            (idx, _parse_ts((it.metadata or {}).get("ts")) or sentinel)
+            for idx, it in enumerate(self._items)
+        ]
+        with_ts.sort(key=lambda pair: pair[1], reverse=True)
+        self._sorted_indices: list[int] = [idx for idx, _ in with_ts]
+        self._ts_by_idx: dict[int, datetime] = {idx: ts for idx, ts in with_ts}
+
+    def top_k(
+        self,
+        *,
+        k: int = 20,
+        candidate_filter: "Iterable[bool] | None" = None,
+    ) -> list[tuple[CorpusItem, float]]:
+        """Return top-k visible items by recency.
+
+        Score is the unix epoch seconds of the timestamp — only the
+        ordering matters for RRF, but a numeric score keeps the
+        rank-list interface uniform with BM25 / vector / graph.
+        """
+        keep_mask: list[bool] | None = (
+            list(candidate_filter) if candidate_filter is not None else None
+        )
+        out: list[tuple[CorpusItem, float]] = []
+        for idx in self._sorted_indices:
+            if keep_mask is not None and not keep_mask[idx]:
+                continue
+            ts = self._ts_by_idx[idx]
+            out.append((self._items[idx], ts.timestamp()))
+            if len(out) >= k:
+                break
+        return out
+
+
+# ---------------------------------------------------------------------------
+# Pinned retriever (slice 3).
+# ---------------------------------------------------------------------------
+
+
+class PinnedRetriever:
+    """Returns explicitly-pinned items in pin order.
+
+    Per §7.2, user-pinned nodes are the "always include" anchor — the
+    user has told the system "this thing matters, no matter what the
+    score-fusion says." In production this comes from a pin table; in
+    the eval it's whatever the caller passes via `top_k(pinned_ids)`.
+
+    Score is a descending integer so the RRF rank is stable across
+    however many pins were supplied (rank 1 = first pin).
+    """
+
+    def __init__(self, corpus: Sequence[CorpusItem]) -> None:
+        self._items: tuple[CorpusItem, ...] = tuple(corpus)
+        self._by_id: dict[str, CorpusItem] = {it.id: it for it in self._items}
+        self._idx_by_id: dict[str, int] = {
+            it.id: idx for idx, it in enumerate(self._items)
+        }
+
+    def top_k(
+        self,
+        pinned_ids: Iterable[str],
+        *,
+        k: int = 10,
+        candidate_filter: "Iterable[bool] | None" = None,
+    ) -> list[tuple[CorpusItem, float]]:
+        keep_mask: list[bool] | None = (
+            list(candidate_filter) if candidate_filter is not None else None
+        )
+        out: list[tuple[CorpusItem, float]] = []
+        seen: set[str] = set()
+        for rank, pid in enumerate(pinned_ids):
+            if pid in seen:
+                continue
+            seen.add(pid)
+            item = self._by_id.get(pid)
+            if item is None:
+                continue
+            if keep_mask is not None:
+                idx = self._idx_by_id[pid]
+                if not keep_mask[idx]:
+                    continue
+            # Higher score for earlier pins so the rank-list is sorted.
+            out.append((item, float(len(self._items) - rank)))
+            if len(out) >= k:
+                break
+        return out
+
+
+__all__ = [
+    "BM25Retriever",
+    "GraphNeighborRetriever",
+    "PinnedRetriever",
+    "RecencyRetriever",
+    "VectorRetriever",
+    "cosine_similarity",
+    "tokenize",
+]
