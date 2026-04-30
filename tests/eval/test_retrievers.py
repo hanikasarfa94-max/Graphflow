@@ -27,6 +27,7 @@ from tests.eval.attention.retrievers import (
     RecencyRetriever,
     VectorRetriever,
     cosine_similarity,
+    reciprocal_rank_fusion,
     tokenize,
 )
 from tests.eval.attention.types import CorpusItem
@@ -464,3 +465,68 @@ def test_pinned_empty_pin_list_returns_empty():
     items = [_item("a"), _item("b")]
     p = PinnedRetriever(items)
     assert p.top_k([], k=5) == []
+
+
+# ---------------------------------------------------------------------------
+# Reciprocal Rank Fusion — slice 4.
+# ---------------------------------------------------------------------------
+
+
+def test_rrf_single_list_passes_through_in_rank_order():
+    items = [_item(c) for c in "abcde"]
+    rank_list = [(items[0], 10.0), (items[1], 9.0), (items[2], 8.0)]
+    fused = reciprocal_rank_fusion([rank_list], k=10)
+    assert [it.id for it, _ in fused] == ["a", "b", "c"]
+
+
+def test_rrf_promotes_overlap_across_lists():
+    """Item appearing high in both lists outranks an item only in one list."""
+    items = {c: _item(c) for c in "abcde"}
+    list_one = [(items["a"], 1.0), (items["b"], 0.9), (items["c"], 0.8)]
+    list_two = [(items["b"], 1.0), (items["d"], 0.9), (items["e"], 0.8)]
+    fused = reciprocal_rank_fusion([list_one, list_two], k=10)
+    # b is in both lists — should rank first under RRF.
+    assert fused[0][0].id == "b"
+
+
+def test_rrf_dedupes_items_across_lists():
+    items = {c: _item(c) for c in "ab"}
+    list_one = [(items["a"], 1.0), (items["b"], 0.5)]
+    list_two = [(items["a"], 1.0), (items["b"], 0.5)]
+    fused = reciprocal_rank_fusion([list_one, list_two], k=10)
+    assert {it.id for it, _ in fused} == {"a", "b"}
+    assert len(fused) == 2
+
+
+def test_rrf_weights_lift_designated_list():
+    """Same items in two lists, opposite order — weight tilts the result."""
+    items = {c: _item(c) for c in "ab"}
+    list_one = [(items["a"], 1.0), (items["b"], 0.5)]
+    list_two = [(items["b"], 1.0), (items["a"], 0.5)]
+    # Equal weights: a and b tie (same rank distribution).
+    equal = reciprocal_rank_fusion([list_one, list_two], k=10)
+    # Weight list_two heavily — b should win.
+    weighted = reciprocal_rank_fusion(
+        [list_one, list_two], k=10, weights=[1.0, 5.0]
+    )
+    assert {it.id for it, _ in equal} == {"a", "b"}
+    assert weighted[0][0].id == "b"
+
+
+def test_rrf_caps_at_k():
+    items = [_item(f"i{n}") for n in range(20)]
+    rank_list = [(it, 1.0) for it in items]
+    fused = reciprocal_rank_fusion([rank_list], k=5)
+    assert len(fused) == 5
+
+
+def test_rrf_empty_input_returns_empty():
+    assert reciprocal_rank_fusion([], k=10) == []
+    assert reciprocal_rank_fusion([[]], k=10) == []
+
+
+def test_rrf_weights_length_mismatch_raises():
+    items = [_item("a")]
+    rank_list = [(items[0], 1.0)]
+    with pytest.raises(ValueError):
+        reciprocal_rank_fusion([rank_list], k=5, weights=[1.0, 2.0])

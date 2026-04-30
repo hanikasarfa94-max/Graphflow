@@ -644,6 +644,63 @@ class PinnedRetriever:
         return out
 
 
+# ---------------------------------------------------------------------------
+# Reciprocal Rank Fusion (slice 4).
+# ---------------------------------------------------------------------------
+
+
+def reciprocal_rank_fusion(
+    rank_lists: Sequence[Sequence[tuple[CorpusItem, float]]],
+    *,
+    k: int = 50,
+    rrf_k: int = 60,
+    weights: Sequence[float] | None = None,
+) -> list[tuple[CorpusItem, float]]:
+    """Merge ranked candidate lists via Reciprocal Rank Fusion.
+
+    RRF (`new_concepts.md §7.2`) merges rank-only signals from
+    heterogeneous retrievers without needing the raw scores to share
+    a scale. Score for each item is `Σ_i weight_i × 1 / (rrf_k + rank_i)`
+    where rank is 1-indexed within each list and absent items
+    contribute 0 from that retriever.
+
+    `rrf_k=60` is the standard Cormack/Clarke default — keeps lower
+    ranks contributing meaningfully so a top-50 list isn't
+    dominated by the top-3 of any one retriever.
+
+    `weights` lets the caller emphasize one retriever (e.g. pinned 2.0
+    so an explicit anchor outranks any organic match). Defaults to
+    1.0 for every input list.
+
+    Items returned in fused-score-descending order, capped at `k`.
+    Identity is by `item.id` so two retrievers reporting the same
+    item dedupe naturally.
+    """
+    if not rank_lists:
+        return []
+    weight_vec: list[float] = (
+        [1.0] * len(rank_lists)
+        if weights is None
+        else [float(w) for w in weights]
+    )
+    if len(weight_vec) != len(rank_lists):
+        raise ValueError(
+            f"weights length {len(weight_vec)} != rank_lists length {len(rank_lists)}"
+        )
+
+    scores: dict[str, float] = {}
+    item_by_id: dict[str, CorpusItem] = {}
+    for rank_list, weight in zip(rank_lists, weight_vec):
+        for rank, (item, _raw_score) in enumerate(rank_list, start=1):
+            item_by_id[item.id] = item
+            scores[item.id] = scores.get(item.id, 0.0) + weight * (
+                1.0 / (rrf_k + rank)
+            )
+
+    ranked = sorted(scores.items(), key=lambda p: p[1], reverse=True)
+    return [(item_by_id[cid], s) for cid, s in ranked[:k]]
+
+
 __all__ = [
     "BM25Retriever",
     "GraphNeighborRetriever",
@@ -651,5 +708,6 @@ __all__ = [
     "RecencyRetriever",
     "VectorRetriever",
     "cosine_similarity",
+    "reciprocal_rank_fusion",
     "tokenize",
 ]

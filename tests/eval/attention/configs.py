@@ -31,7 +31,14 @@ from .embeddings import (
     SiliconFlowEmbeddingClient,
     embed_with_cache,
 )
-from .retrievers import BM25Retriever, VectorRetriever
+from .retrievers import (
+    BM25Retriever,
+    GraphNeighborRetriever,
+    PinnedRetriever,
+    RecencyRetriever,
+    VectorRetriever,
+    reciprocal_rank_fusion,
+)
 from .types import ConfigRunResult, CorpusItem, Query
 
 
@@ -333,6 +340,11 @@ def config_c_full_stack(
         (§7.7; the only ship-floor regardless of eval outcome)
       * Explainable rank with weighted features (§7.4)
       * Context-bundle assembly (§7.8)
+
+    Use `make_config_c_hybrid(corpus)` for the LIVE slice-4 hybrid
+    that wires all five §7.2 retrievers + RRF; this stub stays so the
+    smoke-test contract in `test_attention_eval.py` keeps passing
+    without an embedding API call.
     """
     started = time.monotonic()
     visible = [
@@ -482,6 +494,231 @@ def make_config_b_vector_only(
         )
 
     return _config_b_vector_only
+
+
+# ---------------------------------------------------------------------------
+# Hybrid Config C — RRF over BM25 + vector + graph-neighbor + recency +
+# pinned (slice 4). The §7 stack made real.
+# ---------------------------------------------------------------------------
+
+
+# Per-retriever caps (per `new_concepts.md §7.2`).
+_HYBRID_BM25_TOPK = 50
+_HYBRID_VECTOR_TOPK = 50
+_HYBRID_GRAPH_TOPK = 30
+_HYBRID_RECENCY_TOPK = 20
+_HYBRID_PINNED_TOPK = 10
+# Final RRF cap fed to the LLM. Smaller than the per-retriever sum
+# because RRF promotes overlap across retrievers — items multiple
+# layers agree on bubble up, leaving room within k for one-source
+# longshots without flooding the prompt.
+_HYBRID_FUSED_TOPK = 50
+
+# RRF weights (slice 4 baseline, pre-tuning):
+#   pinned          1.5 — explicit user intent should outrank organic
+#   bm25 / vector   1.0 — coequal lexical / semantic baseline
+#   graph-neighbor  0.8 — derived signal, slightly downweighted
+#   recency         0.5 — tie-breaker; pure recency without topical
+#                         signal is a common false positive.
+_HYBRID_WEIGHTS = {
+    "pinned": 1.5,
+    "bm25": 1.0,
+    "vector": 1.0,
+    "graph": 0.8,
+    "recency": 0.5,
+}
+
+
+def make_config_c_hybrid(
+    corpus: Sequence[CorpusItem],
+    *,
+    cache_path: "Path | None" = None,
+):
+    """Factory: build a Config-C-shaped hybrid callable (LIVE — slice 4).
+
+    Wires the full §7.2 stack:
+      1. Five rank lists from BM25 / vector / graph-neighbor / recency /
+         pinned, each scoped to viewer-visible items.
+      2. RRF fusion with weighted contributions; produces ≤ 50 fused
+         candidates.
+      3. Membrane filter (§7.7 floor) — drops anything `suppressed=True`
+         before the LLM sees it. Belt-and-suspenders against any
+         retriever leaking a private/superseded item; the eval's
+         leak_rate gate stays at 0.
+      4. DeepSeek call over the survivors, same prompt frame as
+         Config A and the slice-1/2 Config B variants.
+
+    Graph-neighbor's seed set is the union of BM25 + vector top-k,
+    which is the natural anchor — items multiple text retrievers
+    already trust. Pinned ids are passed per-call via
+    `query.scope_anchor.get('pinned_ids')` if the query carries them
+    (defaults to empty so the slice-4 eval doesn't need new fixtures).
+
+    The embedding index is built once at factory time, same pattern as
+    `make_config_b_vector_only`.
+    """
+    repo_root = Path(__file__).resolve().parents[3]
+    if cache_path is None:
+        cache_path = (
+            repo_root
+            / "tests"
+            / "eval"
+            / "dataset"
+            / "attention"
+            / "qwen3_embeddings.json"
+        )
+
+    cache = EmbeddingsCache(cache_path)
+    embed_client = SiliconFlowEmbeddingClient()
+
+    item_texts = [_embedding_text(item) for item in corpus]
+    item_vectors = asyncio.run(embed_with_cache(item_texts, cache, embed_client))
+
+    bm25 = BM25Retriever(corpus)
+    vec = VectorRetriever(corpus, item_vectors)
+    graph = GraphNeighborRetriever(corpus)
+    recency = RecencyRetriever(corpus)
+    pinned = PinnedRetriever(corpus)
+
+    def _config_c_hybrid(
+        _corpus: Sequence[CorpusItem],
+        query: Query,
+    ) -> ConfigRunResult:
+        started = time.monotonic()
+        visible_mask = [
+            _viewer_can_see(item, query.viewer_id) for item in corpus
+        ]
+        visible_ids = {
+            item.id for item, ok in zip(corpus, visible_mask) if ok
+        }
+        suppressed_ids = {item.id for item in corpus if item.suppressed}
+
+        # Embed the query (cached on second + invocation).
+        q_vectors = asyncio.run(
+            embed_with_cache([query.text], cache, embed_client)
+        )
+        q_vec = q_vectors[0]
+
+        # Layer 1-2: lexical + semantic.
+        bm25_hits = bm25.top_k(
+            query.text, k=_HYBRID_BM25_TOPK, candidate_filter=visible_mask
+        )
+        vector_hits = vec.top_k(
+            q_vec, k=_HYBRID_VECTOR_TOPK, candidate_filter=visible_mask
+        )
+
+        # Layer 3: graph-neighbor seeded from the union of BM25 + vector
+        # top-k. The seed set is what the lexical / semantic layers
+        # already trust; graph expands one hop to surface items that
+        # share edges with the trusted set.
+        seed_ids = {it.id for it, _ in bm25_hits} | {
+            it.id for it, _ in vector_hits
+        }
+        graph_hits = graph.top_k(
+            list(seed_ids),
+            k=_HYBRID_GRAPH_TOPK,
+            candidate_filter=visible_mask,
+        )
+
+        # Layer 4: recency. Pure ts ordering — the §7.4 frecency ranker
+        # (production) reads from the bumped access_count + last_accessed_at
+        # columns shipped in 95aaeef.
+        recency_hits = recency.top_k(
+            k=_HYBRID_RECENCY_TOPK, candidate_filter=visible_mask
+        )
+
+        # Layer 5: explicit user-pinned anchors.
+        pinned_ids_in = (
+            query.scope_anchor.get("pinned_ids", [])
+            if isinstance(query.scope_anchor, dict)
+            else []
+        )
+        pinned_hits = pinned.top_k(
+            list(pinned_ids_in),
+            k=_HYBRID_PINNED_TOPK,
+            candidate_filter=visible_mask,
+        )
+
+        # RRF fusion — order matters only for the weights vector.
+        fused = reciprocal_rank_fusion(
+            [pinned_hits, bm25_hits, vector_hits, graph_hits, recency_hits],
+            k=_HYBRID_FUSED_TOPK,
+            weights=[
+                _HYBRID_WEIGHTS["pinned"],
+                _HYBRID_WEIGHTS["bm25"],
+                _HYBRID_WEIGHTS["vector"],
+                _HYBRID_WEIGHTS["graph"],
+                _HYBRID_WEIGHTS["recency"],
+            ],
+        )
+
+        # §7.7 membrane floor — drop suppressed items before the LLM
+        # sees them. This is the ship-floor regardless of any other
+        # retriever quality; leak_rate stays 0.
+        candidates = [item for item, _s in fused if not item.suppressed]
+
+        # Per-candidate explanation: which retrievers contributed.
+        # Powers the audit_score axis Config C is supposed to win on.
+        contrib_by_id: dict[str, list[str]] = {}
+        for label, hits in (
+            ("pinned", pinned_hits),
+            ("bm25", bm25_hits),
+            ("vector", vector_hits),
+            ("graph", graph_hits),
+            ("recency", recency_hits),
+        ):
+            for it, _s in hits:
+                contrib_by_id.setdefault(it.id, []).append(label)
+        explanations = {
+            cid: f"§7 hybrid: kept by {' + '.join(labels)}"
+            for cid, labels in contrib_by_id.items()
+        }
+
+        if not candidates:
+            elapsed_ms = int((time.monotonic() - started) * 1000)
+            return ConfigRunResult(
+                config="C",
+                query_id=query.id,
+                cited_node_ids=(),
+                suppressed_cited=(),
+                tokens_in=0,
+                tokens_out=0,
+                latency_ms=elapsed_ms,
+                explanations={},
+            )
+
+        llm = _get_llm_client()
+        messages = _pack_prompt(candidates, query)
+        result = asyncio.run(
+            llm.complete(
+                messages,
+                temperature=0.1,
+                response_format={"type": "json_object"},
+            )
+        )
+        elapsed_ms = int((time.monotonic() - started) * 1000)
+
+        cited = _parse_cited_ids(result.content, visible_ids)
+        suppressed_cited = tuple(sorted(set(cited) & suppressed_ids))
+
+        # Trim explanations to cited items — the audit score scores
+        # 1.0 if every cite has a `why`, 0.0 if any cite lacks one.
+        cited_explanations = {
+            cid: explanations[cid] for cid in cited if cid in explanations
+        }
+
+        return ConfigRunResult(
+            config="C",
+            query_id=query.id,
+            cited_node_ids=cited,
+            suppressed_cited=suppressed_cited,
+            tokens_in=result.prompt_tokens,
+            tokens_out=result.completion_tokens,
+            latency_ms=elapsed_ms,
+            explanations=cited_explanations,
+        )
+
+    return _config_c_hybrid
 
 
 CONFIGS = {
