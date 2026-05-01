@@ -15,7 +15,10 @@ import { getTranslations } from "next-intl/server";
 
 import { Heading, Metric, Text } from "@/components/ui";
 
-import type { HomePulseAggregates } from "./data";
+import type {
+  HomePulseAggregates,
+  HomeTopProjectSnapshot,
+} from "./data";
 
 const heroCard: React.CSSProperties = {
   position: "relative",
@@ -73,15 +76,23 @@ export async function HomeHero({
   displayName,
   pendingCount,
   pulse,
+  topProject,
 }: {
   displayName: string;
   pendingCount: number;
   pulse: HomePulseAggregates;
+  // Most-relevant project to "resume" into, when one exists. The
+  // prototype's home is the project's personal stream — surfacing a
+  // direct CTA gets the chat-flow surface one click from the dashboard
+  // without dropping the dashboard itself.
+  topProject?: HomeTopProjectSnapshot | null;
 }) {
   const t = await getTranslations("home.hero");
 
   // Pick a primary CTA target — if there's pending work, jump to it; if
-  // not, surface the projects list as the "what now" option.
+  // not, surface the projects list as the "what now" option. The
+  // resume CTA below is independent of this and always preferred when
+  // a top project exists.
   const primaryHref = pendingCount > 0 ? "#pending" : "/projects";
 
   return (
@@ -139,7 +150,19 @@ export async function HomeHero({
             flexWrap: "wrap",
           }}
         >
-          <Link href={primaryHref} style={heroBtnPrimary}>
+          {topProject ? (
+            <Link
+              href={`/projects/${topProject.project_id}`}
+              style={heroBtnPrimary}
+              data-testid="home-resume-cta"
+            >
+              {t("resumeCta", { name: topProject.project_title })}
+            </Link>
+          ) : null}
+          <Link
+            href={primaryHref}
+            style={topProject ? heroBtn : heroBtnPrimary}
+          >
             {pendingCount > 0
               ? t("primaryCta", { count: pendingCount })
               : t("primaryCtaQuiet")}

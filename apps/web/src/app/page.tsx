@@ -61,6 +61,7 @@ export default async function Home() {
         displayName={user.display_name}
         pendingCount={data.pending.length}
         pulse={data.pulse}
+        topProject={data.top_project}
       />
 
       <section

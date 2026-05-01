@@ -239,6 +239,7 @@
       "primaryCta": "处理路由收件箱 ({count})",
       "primaryCtaQuiet": "进入项目",
       "secondaryCta": "查看所有项目",
+      "resumeCta": "继续在 {name} →",
       "pulseEyebrow": "系统脉搏",
       "pulseHeadline": "{count} 项待确认",
       "pulseBodyActive": "这些信号路由给你,因为系统认为你最适合处理。",
