@@ -248,6 +248,17 @@ class IMService:
         scope: dict[str, bool] | None = None,
     ) -> None:
         try:
+            # User-driven crystallization may have already produced a
+            # suggestion for this message. The im_suggestions table has
+            # a UNIQUE(message_id) constraint, so writing a second row
+            # would fail with IntegrityError. Skip silently — the
+            # user's deliberate signal beats classifier output.
+            async with session_scope(self._sessionmaker) as session:
+                if await IMSuggestionRepository(session).get_for_message(
+                    message_id
+                ) is not None:
+                    return
+
             project_snapshot, _, recent_msgs = await self._project_snapshot(
                 project_id, scope=scope
             )
@@ -425,6 +436,84 @@ class IMService:
                 project_id=project_id, stream_id=stream_id, limit=limit
             )
             return [self._suggestion_payload(r) for r in rows]
+
+    async def propose_decision_from_message(
+        self,
+        *,
+        message_id: str,
+        actor_id: str,
+        rationale: str | None = None,
+    ) -> dict | None:
+        """User-driven crystallization override.
+
+        Per north-star room flow: "if users think some message is hard
+        to understand, allow users to subjectively click clarify etc,
+        and decision crystallize if meet conflict." This is the
+        crystallize half — a team-room member identifies a message as
+        decision-shaped and the system creates an IMSuggestion candidate
+        without waiting for (or in disagreement with) the auto-classifier.
+
+        Confidence is 1.0 — it's a deliberate human signal, not an LLM
+        probability. `outcome="user_proposed"` so AgentRunLog distinguishes
+        user-driven candidates from classifier output. Idempotent: if a
+        suggestion already exists for this message, return it unchanged.
+
+        Returns the suggestion payload, or None if the message doesn't
+        exist or the actor isn't a project member.
+        """
+        async with session_scope(self._sessionmaker) as session:
+            msg = await MessageRepository(session).get(message_id)
+            if msg is None:
+                return None
+            project_id = msg.project_id
+            body = (msg.body or "").strip()
+            if not await ProjectMemberRepository(session).is_member(
+                project_id, actor_id
+            ):
+                return None
+            existing = await IMSuggestionRepository(session).get_for_message(
+                message_id
+            )
+            if existing is not None:
+                return self._suggestion_payload(existing)
+
+            summary = body[:240] or "Decision proposed by user"
+            if rationale:
+                trimmed = rationale.strip()[:240]
+                if trimmed:
+                    summary = f"{summary}\n\nRationale: {trimmed}"
+
+            row = await IMSuggestionRepository(session).append(
+                project_id=project_id,
+                message_id=message_id,
+                kind="decision",
+                confidence=1.0,
+                targets=None,
+                proposal={
+                    "summary": summary,
+                    "source": "user_proposed",
+                    "proposer_id": actor_id,
+                },
+                reasoning="User-proposed crystallization (subjective override).",
+                prompt_version=None,
+                outcome="user_proposed",
+                attempts=0,
+            )
+            payload = self._suggestion_payload(row)
+
+        # Mirror the classifier path so downstream listeners (event bus,
+        # WS hub, room-stream fan-out) stay agnostic to the trigger origin.
+        await self._event_bus.emit("im_suggestion.produced", payload)
+        await self._hub.publish(
+            project_id, {"type": "suggestion", "payload": payload}
+        )
+        await self._maybe_publish_room_event(
+            source_message_id=message_id,
+            event=None,
+            payload=payload,
+            kind="suggestion",
+        )
+        return payload
 
     async def accept(
         self,

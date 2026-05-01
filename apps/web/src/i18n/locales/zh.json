@@ -479,7 +479,9 @@
       "tasksNew": "新建任务",
       "tasksDraftPlaceholder": "任务标题…",
       "tasksDraftSubmit": "添加",
-      "tasksDraftCancel": "取消"
+      "tasksDraftCancel": "取消",
+      "crystallizeAction": "结晶为决策",
+      "crystallizeHint": "把这条消息作为决策候选（主观提议，绕过自动分类器）。"
     },
     "attribution": {
       "edge": "边缘",

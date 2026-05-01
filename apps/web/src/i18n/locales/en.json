@@ -479,7 +479,9 @@
       "tasksNew": "New task",
       "tasksDraftPlaceholder": "Task title…",
       "tasksDraftSubmit": "Add",
-      "tasksDraftCancel": "Cancel"
+      "tasksDraftCancel": "Cancel",
+      "crystallizeAction": "Crystallize",
+      "crystallizeHint": "Propose this message as a decision candidate (subjective override of the auto-classifier)."
     },
     "attribution": {
       "edge": "edge",

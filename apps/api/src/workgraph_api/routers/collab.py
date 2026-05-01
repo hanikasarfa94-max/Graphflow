@@ -75,6 +75,15 @@ class CounterRequest(BaseModel):
     text: str = Field(min_length=1, max_length=4000)
 
 
+class ProposeDecisionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    # Optional rationale appended to the proposal summary so the
+    # accepting reviewer / membrane sees WHY the user thought this
+    # message was decision-shaped.
+    rationale: str | None = Field(default=None, max_length=2000)
+
+
 async def _project_from_task(sessionmaker, task_id: str) -> str | None:
     async with session_scope(sessionmaker) as session:
         task = (
@@ -331,6 +340,40 @@ async def post_save_message_as_kb(
         status = getattr(e, "status", None) or 400
         raise HTTPException(status_code=status, detail=code) from e
     return {"ok": True, "item": item, "source_message_id": message_id}
+
+
+@router.post("/messages/{message_id}/propose_decision")
+async def post_propose_decision_from_message(
+    message_id: str,
+    body: ProposeDecisionRequest,
+    request: Request,
+    user: AuthenticatedUser = Depends(require_user),
+):
+    """User-driven decision crystallization override.
+
+    Subjective surface: a team-room member identifies a message as
+    decision-shaped without waiting for the auto-classifier (or in
+    disagreement with it). Creates an IMSuggestion candidate that
+    flows through the same accept / dismiss / vote pipeline as
+    classifier-produced suggestions.
+
+    Idempotent: re-posting on the same message returns the existing
+    suggestion. The created suggestion has confidence=1.0, kind=
+    'decision', outcome='user_proposed', so AgentRunLog and the
+    membrane review queue can distinguish user-driven candidates.
+    """
+    im_service: IMService = request.app.state.im_service
+    payload = await im_service.propose_decision_from_message(
+        message_id=message_id,
+        actor_id=user.id,
+        rationale=body.rationale,
+    )
+    if payload is None:
+        raise HTTPException(
+            status_code=404,
+            detail="message_not_found_or_not_member",
+        )
+    return {"ok": True, "suggestion": payload}
 
 
 @router.get("/projects/{project_id}/messages")

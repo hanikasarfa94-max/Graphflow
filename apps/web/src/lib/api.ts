@@ -2654,6 +2654,32 @@ export function createPersonalTask(
   });
 }
 
+// Subjective decision crystallization — user identifies a message as
+// decision-shaped and bypasses the auto-classifier. Idempotent on the
+// backend; safe to retry. Returns the suggestion (existing or new).
+export interface ProposeDecisionResponse {
+  ok: true;
+  suggestion: {
+    id: string;
+    project_id: string;
+    message_id: string;
+    kind: string;
+    status: string;
+    confidence: number;
+    [k: string]: unknown;
+  };
+}
+
+export function proposeDecisionFromMessage(
+  messageId: string,
+  body: { rationale?: string } = {},
+): Promise<ProposeDecisionResponse> {
+  return api(`/api/messages/${messageId}/propose_decision`, {
+    method: "POST",
+    body: body as unknown as JsonValue,
+  });
+}
+
 export interface PromoteTaskResponse {
   ok: true;
   task: PersonalTask | null;

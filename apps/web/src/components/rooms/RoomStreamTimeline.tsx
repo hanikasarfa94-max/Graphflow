@@ -11,18 +11,20 @@
 // id) so posted messages land in this room's stream and any
 // crystallized decision auto-scopes to it (B3 + pickup #6 chain).
 
-import { useCallback, useState, type CSSProperties } from "react";
+import { useCallback, useMemo, useState, type CSSProperties } from "react";
 import { useTranslations } from "next-intl";
 
 import { Composer } from "@/components/stream/Composer";
 import { DecisionCard } from "@/components/stream/cards";
-import type {
-  Decision,
-  IMMessage,
-  TimelineDecisionItem,
-  TimelineItem,
-  TimelineMessageItem,
-  TimelineSuggestionItem,
+import {
+  ApiError,
+  proposeDecisionFromMessage,
+  type Decision,
+  type IMMessage,
+  type TimelineDecisionItem,
+  type TimelineItem,
+  type TimelineMessageItem,
+  type TimelineSuggestionItem,
 } from "@/lib/api";
 import type { UseRoomTimelineResult } from "@/hooks/useRoomTimeline";
 
@@ -76,6 +78,19 @@ export function RoomStreamTimeline({
     [removeOptimistic],
   );
 
+  // Set of message ids that already have an IM suggestion attached.
+  // Used to suppress the per-message Crystallize affordance — both
+  // backend (UNIQUE constraint) and the propose endpoint (idempotent)
+  // would handle a re-click correctly, but hiding the button is the
+  // right UX once a suggestion is already in flight.
+  const messagesWithSuggestion = useMemo(() => {
+    const ids = new Set<string>();
+    for (const it of items) {
+      if (it.kind === "im_suggestion") ids.add(it.message_id);
+    }
+    return ids;
+  }, [items]);
+
   return (
     <div
       style={{
@@ -112,6 +127,7 @@ export function RoomStreamTimeline({
             item={item}
             projectId={projectId}
             roomNameById={roomNameById}
+            messagesWithSuggestion={messagesWithSuggestion}
           />
         ))}
       </div>
@@ -156,13 +172,20 @@ function TimelineRow({
   item,
   projectId,
   roomNameById,
+  messagesWithSuggestion,
 }: {
   item: TimelineItem;
   projectId: string;
   roomNameById: Record<string, { name: string; memberCount: number }>;
+  messagesWithSuggestion: Set<string>;
 }) {
   if (item.kind === "message") {
-    return <MessageBubble item={item} />;
+    return (
+      <MessageBubble
+        item={item}
+        hasSuggestion={messagesWithSuggestion.has(item.id)}
+      />
+    );
   }
   if (item.kind === "im_suggestion") {
     return <SuggestionInlineCard item={item} />;
@@ -187,7 +210,48 @@ function TimelineRow({
 // Lightweight chat-bubble renderer for room messages. PersonalStream's
 // renderer is coupled to the personal-stream user→agent shape;
 // rooms are flat multi-author chat so a simpler bubble is right.
-function MessageBubble({ item }: { item: TimelineMessageItem }) {
+//
+// `hasSuggestion` suppresses the per-message Crystallize action when a
+// suggestion already exists for this message (auto-classifier or a
+// prior user-propose). Backend is idempotent, but hiding the button
+// once a suggestion is in flight is the right UX.
+function MessageBubble({
+  item,
+  hasSuggestion,
+}: {
+  item: TimelineMessageItem;
+  hasSuggestion: boolean;
+}) {
+  const t = useTranslations("stream.rooms");
+  const [crystallizing, setCrystallizing] = useState(false);
+  const [crystallizeError, setCrystallizeError] = useState<string | null>(
+    null,
+  );
+
+  const handleCrystallize = useCallback(async () => {
+    setCrystallizing(true);
+    setCrystallizeError(null);
+    try {
+      // Idempotent on the backend; no rationale field exposed in the
+      // bubble v1 (cleaner UX). Future iteration can attach a small
+      // textarea for rationale.
+      await proposeDecisionFromMessage(item.id, {});
+      // Suggestion lands via the WS upsert — no local state change
+      // here. The reducer in useRoomTimeline will reconcile and
+      // hasSuggestion will flip to true on the next render.
+    } catch (e) {
+      if (e instanceof ApiError) {
+        setCrystallizeError(`error ${e.status}`);
+      } else if (e instanceof Error) {
+        setCrystallizeError(e.message);
+      } else {
+        setCrystallizeError("crystallize failed");
+      }
+    } finally {
+      setCrystallizing(false);
+    }
+  }, [item.id]);
+
   return (
     <div
       data-entity-kind="message"
@@ -205,13 +269,41 @@ function MessageBubble({ item }: { item: TimelineMessageItem }) {
           color: "var(--wg-ink-soft)",
           marginBottom: 2,
           fontFamily: "var(--wg-font-mono)",
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
         }}
       >
-        {item.author_username ?? item.author_id}
-        {item.kind_message !== "text" && (
-          <span style={{ marginLeft: 6, opacity: 0.7 }}>
-            · {item.kind_message}
-          </span>
+        <span>
+          {item.author_username ?? item.author_id}
+          {item.kind_message !== "text" && (
+            <span style={{ marginLeft: 6, opacity: 0.7 }}>
+              · {item.kind_message}
+            </span>
+          )}
+        </span>
+        <div style={{ flex: 1 }} />
+        {!hasSuggestion && (
+          <button
+            type="button"
+            data-testid="message-crystallize"
+            onClick={handleCrystallize}
+            disabled={crystallizing}
+            title={t("crystallizeHint")}
+            style={{
+              padding: "1px 8px",
+              fontSize: 11,
+              border: "1px solid var(--wg-line)",
+              borderRadius: 10,
+              background: "transparent",
+              color: "var(--wg-ink-soft)",
+              cursor: crystallizing ? "wait" : "pointer",
+              opacity: crystallizing ? 0.5 : 1,
+              fontFamily: "var(--wg-font-mono)",
+            }}
+          >
+            💎 {t("crystallizeAction")}
+          </button>
         )}
       </div>
       <div
@@ -223,6 +315,17 @@ function MessageBubble({ item }: { item: TimelineMessageItem }) {
       >
         {item.body}
       </div>
+      {crystallizeError && (
+        <div
+          style={{
+            marginTop: 4,
+            fontSize: 11,
+            color: "var(--wg-warn, #b94a48)",
+          }}
+        >
+          {crystallizeError}
+        </div>
+      )}
     </div>
   );
 }
