@@ -49,6 +49,56 @@ import { RoutedInboxBadge } from "./RoutedInboxBadge";
 import type { ShellDM, ShellProject, ShellWorkspace } from "./AppShellClient";
 
 const SIDEBAR_WIDTH = 256;
+const SIDEBAR_WIDTH_COLLAPSED = 64;
+const SIDEBAR_COLLAPSED_KEY = "wg:sidebar:collapsed";
+
+// Stable hue per id — deterministic so the same project / user always
+// renders the same color across reloads. Avoids cookies / DB calls just
+// to pick an avatar color. Used by ProjectAvatar + DmAvatar in the
+// collapsed sidebar where the label disappears and we need a visual
+// identifier for at-a-glance recognition.
+function stableHue(id: string): number {
+  let h = 0;
+  for (let i = 0; i < id.length; i++) {
+    h = (h * 31 + id.charCodeAt(i)) >>> 0;
+  }
+  return h % 360;
+}
+
+function ItemAvatar({
+  id,
+  label,
+  shape = "round",
+}: {
+  id: string;
+  label: string;
+  shape?: "round" | "square";
+}) {
+  const hue = stableHue(id);
+  const initial = (label || "?").trim().charAt(0).toUpperCase() || "?";
+  return (
+    <span
+      aria-hidden
+      className="wg-sb-avatar"
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+        width: 22,
+        height: 22,
+        borderRadius: shape === "round" ? "50%" : 5,
+        background: `hsl(${hue}deg 55% 88%)`,
+        color: `hsl(${hue}deg 55% 28%)`,
+        fontSize: 11,
+        fontWeight: 700,
+        fontFamily: "var(--wg-font-mono)",
+        flexShrink: 0,
+      }}
+    >
+      {initial}
+    </span>
+  );
+}
 
 const linkBase: CSSProperties = {
   display: "flex",
@@ -94,6 +144,7 @@ function UnreadDot({ count }: { count: number }) {
   if (count <= 0) return null;
   return (
     <span
+      className="wg-sb-unread wg-sb-keep"
       aria-label={`${count} unread`}
       style={{
         marginLeft: "auto",
@@ -169,11 +220,13 @@ function ProjectNode({
   };
 
   return (
-    <li style={{ marginBottom: 2 }}>
+    <li style={{ marginBottom: 2, position: "relative" }}>
       <button
         type="button"
+        className="wg-sb-row"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
+        title={project.title}
         style={{
           ...linkBase,
           width: "100%",
@@ -185,9 +238,14 @@ function ProjectNode({
           fontWeight: pathname?.startsWith(`/projects/${project.id}`) ? 600 : 400,
         }}
       >
-        <span style={{ width: 14, textAlign: "center", fontSize: 10 }} aria-hidden>
+        <span
+          className="wg-sb-collapsible"
+          style={{ width: 14, textAlign: "center", fontSize: 10 }}
+          aria-hidden
+        >
           {open ? "▾" : "▸"}
         </span>
+        <ItemAvatar id={project.id} label={project.title} shape="square" />
         <span
           style={{
             overflow: "hidden",
@@ -202,7 +260,10 @@ function ProjectNode({
         <UnreadDot count={project.unread_count} />
       </button>
       {open && (
-        <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
+        <ul
+          className="wg-sb-collapsible"
+          style={{ listStyle: "none", margin: 0, padding: 0 }}
+        >
           <li>
             <Link
               href={myThread}
@@ -535,13 +596,45 @@ export function AppSidebar({
   // /projects/[id]/* — those highlight the per-project tree below.
   const projectsActive = isActive(pathname, "/projects", true);
 
+  // Auto-collapse default: when the user is inside a project route,
+  // the project's own chrome (ProjectBar + ProjectModuleRail) carries
+  // the navigation weight — collapsing the global sidebar matches the
+  // prototype's single-Rail density. Outside project routes (home,
+  // /projects index, /streams, /settings, /workspaces), expanded reads
+  // better. localStorage override always wins so user choice persists.
+  const insideProject = pathname?.startsWith("/projects/") ?? false;
+  const [collapsed, setCollapsed] = useState<boolean>(insideProject);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const stored = window.localStorage.getItem(SIDEBAR_COLLAPSED_KEY);
+    if (stored === "1") setCollapsed(true);
+    else if (stored === "0") setCollapsed(false);
+    else setCollapsed(insideProject);
+    // Re-evaluate when route changes; localStorage still wins when set.
+  }, [insideProject]);
+
+  const toggleCollapsed = useCallback(() => {
+    setCollapsed((prev) => {
+      const next = !prev;
+      try {
+        window.localStorage.setItem(SIDEBAR_COLLAPSED_KEY, next ? "1" : "0");
+      } catch {
+        // Quota / private mode — non-fatal.
+      }
+      return next;
+    });
+  }, []);
+
   return (
     <aside
       aria-label={t("shell.sidebar")}
       data-testid="app-sidebar"
+      data-collapsed={collapsed ? "true" : undefined}
       style={{
-        width: SIDEBAR_WIDTH,
-        minWidth: SIDEBAR_WIDTH,
+        width: collapsed ? SIDEBAR_WIDTH_COLLAPSED : SIDEBAR_WIDTH,
+        minWidth: collapsed
+          ? SIDEBAR_WIDTH_COLLAPSED
+          : SIDEBAR_WIDTH,
         borderRight: "1px solid var(--wg-line)",
         // Glass over the page-level gradient so the sidebar reads as a
         // surface, not a slab. Backdrop-filter degrades silently on
@@ -554,8 +647,79 @@ export function AppSidebar({
         height: "100vh",
         position: "sticky",
         top: 0,
+        transition: "width 180ms ease-out, min-width 180ms ease-out",
+        overflow: "hidden",
       }}
     >
+      {/* Collapse-mode CSS rules. Scoped to this sidebar so other
+          surfaces aren't affected. Uses :not([aria-hidden]) — every
+          decorative icon span in this file already has aria-hidden,
+          so the rule cleanly hides only labels + section headers. */}
+      <style>{`
+        /* Hide every text span inside the collapsed sidebar EXCEPT the
+           ones marked aria-hidden (decorative icons) or wg-sb-keep
+           (avatars / unread dots that should persist).
+           Specifically the immediate-child spans of nav rows — keeps
+           the icon + avatar visible, drops the label + tagline. */
+        [data-testid="app-sidebar"][data-collapsed="true"] a > span:not([aria-hidden]):not(.wg-sb-keep),
+        [data-testid="app-sidebar"][data-collapsed="true"] button > span:not([aria-hidden]):not(.wg-sb-keep),
+        [data-testid="app-sidebar"][data-collapsed="true"] .wg-sb-section,
+        [data-testid="app-sidebar"][data-collapsed="true"] .wg-sb-collapsible,
+        [data-testid="app-sidebar"][data-collapsed="true"] .wg-sb-tagline {
+          display: none !important;
+        }
+        /* Brand link — collapse the column to just the W mark. */
+        [data-testid="app-sidebar"][data-collapsed="true"] a[href="/"] > span:not([aria-hidden]) {
+          display: none !important;
+        }
+        /* Center the icon when only it remains. */
+        [data-testid="app-sidebar"][data-collapsed="true"] a,
+        [data-testid="app-sidebar"][data-collapsed="true"] button.wg-sb-row {
+          justify-content: center !important;
+          padding-left: 8px !important;
+          padding-right: 8px !important;
+        }
+        /* Float the unread badge as a small dot in the corner. */
+        [data-testid="app-sidebar"][data-collapsed="true"] .wg-sb-unread {
+          position: absolute !important;
+          top: 2px !important;
+          right: 4px !important;
+          padding: 0 4px !important;
+          font-size: 9px !important;
+          min-width: 14px !important;
+          line-height: 1.4 !important;
+        }
+      `}</style>
+      <button
+        type="button"
+        data-testid="sidebar-collapse-toggle"
+        onClick={toggleCollapsed}
+        title={
+          collapsed ? t("shell.sidebarExpand") : t("shell.sidebarCollapse")
+        }
+        aria-pressed={collapsed}
+        style={{
+          position: "absolute",
+          top: 16,
+          right: collapsed ? 4 : 6,
+          zIndex: 2,
+          width: 22,
+          height: 22,
+          padding: 0,
+          border: "1px solid var(--wg-line)",
+          borderRadius: 6,
+          background: "var(--wg-surface)",
+          color: "var(--wg-ink-soft)",
+          fontSize: 12,
+          lineHeight: 1,
+          cursor: "pointer",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        {collapsed ? "›" : "‹"}
+      </button>
       {/* Brand — gradient W mark + name + tagline. The mark is the
           single most repeated visual; making it a small instrument
           (gradient + soft shadow) is cheap personality. */}
@@ -590,7 +754,10 @@ export function AppSidebar({
         >
           W
         </span>
-        <span style={{ display: "flex", flexDirection: "column", gap: 1 }}>
+        <span
+          className="wg-sb-label"
+          style={{ display: "flex", flexDirection: "column", gap: 1 }}
+        >
           <span
             style={{
               fontSize: 15,
@@ -601,6 +768,7 @@ export function AppSidebar({
             {t("brand.name")}
           </span>
           <span
+            className="wg-sb-tagline"
             style={{
               fontSize: 10,
               color: "var(--wg-ink-soft)",
@@ -627,13 +795,15 @@ export function AppSidebar({
             <Link
               href="/"
               data-testid="sidebar-home-link"
+              title={t("shell.home")}
               style={{
                 ...linkBase,
                 ...(homeActive ? linkActive : null),
+                position: "relative",
               }}
             >
               <span aria-hidden>⌂</span>
-              <span>{t("shell.home")}</span>
+              <span className="wg-sb-label">{t("shell.home")}</span>
             </Link>
           </li>
           <li>
@@ -670,7 +840,7 @@ export function AppSidebar({
             workspace see the existing layout unchanged. */}
         {workspaces.length > 0 ? (
           <>
-            <div style={sectionLabel}>{t("workspace.sidebarSection")}</div>
+            <div className="wg-sb-section" style={sectionLabel}>{t("workspace.sidebarSection")}</div>
             <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
               {workspaces.map((w) => {
                 const wsHref = `/workspaces/${w.slug}`;
@@ -707,7 +877,7 @@ export function AppSidebar({
         ) : null}
 
         {/* Projects */}
-        <div style={sectionLabel}>{t("shell.projects")}</div>
+        <div className="wg-sb-section" style={sectionLabel}>{t("shell.projects")}</div>
         {projects.length === 0 ? (
           <div
             style={{
@@ -733,7 +903,7 @@ export function AppSidebar({
         )}
 
         {/* Direct messages */}
-        <div style={sectionLabel}>{t("shell.dms")}</div>
+        <div className="wg-sb-section" style={sectionLabel}>{t("shell.dms")}</div>
         <NewDMPicker projects={projects} currentUserId={user.id} />
         {dms.length === 0 ? (
           <div
@@ -751,15 +921,22 @@ export function AppSidebar({
               const href = `/streams/${dm.stream_id}`;
               const active = isActive(pathname, href, true);
               return (
-                <li key={dm.stream_id} style={{ marginBottom: 2 }}>
+                <li
+                  key={dm.stream_id}
+                  style={{ marginBottom: 2, position: "relative" }}
+                >
                   <Link
                     href={href}
+                    title={dm.other_display_name}
                     style={{
                       ...linkBase,
                       ...(active ? linkActive : null),
                     }}
                   >
-                    <span aria-hidden>☁</span>
+                    <ItemAvatar
+                      id={dm.stream_id}
+                      label={dm.other_display_name}
+                    />
                     <span
                       style={{
                         overflow: "hidden",
@@ -794,6 +971,7 @@ export function AppSidebar({
         <Link
           href="/settings/profile"
           data-testid="sidebar-profile-link"
+          title={user.display_name || user.username || ""}
           style={{
             ...linkBase,
             padding: "6px 8px",
@@ -831,6 +1009,7 @@ export function AppSidebar({
           </span>
         </Link>
         <div
+          className="wg-sb-collapsible"
           style={{
             display: "flex",
             alignItems: "center",

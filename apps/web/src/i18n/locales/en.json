@@ -947,6 +947,8 @@
     "profile": "Profile",
     "signOut": "Sign out",
     "collapse": "Collapse",
+    "sidebarCollapse": "Collapse sidebar",
+    "sidebarExpand": "Expand sidebar",
     "project": {
       "myThread": "My thread",
       "teamRoom": "Team room",
