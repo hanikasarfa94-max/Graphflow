@@ -83,6 +83,17 @@ const FUNCTIONAL_KINDS: ReadonlySet<PanelKind> = new Set([
   "tasks",
 ]);
 
+const tasksScopePillStyle = (active: boolean): CSSProperties => ({
+  padding: "2px 10px",
+  fontSize: 11,
+  fontFamily: "var(--wg-font-mono)",
+  border: `1px solid ${active ? "var(--wg-accent)" : "var(--wg-line)"}`,
+  borderRadius: 999,
+  background: active ? "var(--wg-accent-soft)" : "#fff",
+  color: active ? "var(--wg-accent)" : "var(--wg-ink-soft)",
+  cursor: "pointer",
+});
+
 export function RoomWorkbench({ projectId, timeline, open, onClose }: Props) {
   const t = useTranslations("stream.workbench");
 
@@ -407,16 +418,55 @@ function KnowledgePanelBody({
   t: ReturnType<typeof useTranslations>;
 }) {
   const knowledge = useRoomKnowledge({ projectId });
+  const [query, setQuery] = useState("");
 
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return knowledge.items;
+    return knowledge.items.filter((item) => {
+      const haystack = [
+        item.summary ?? "",
+        item.source_kind ?? "",
+        // Title isn't always set (ingests use summary) — include both
+        // anyway so the search feels comprehensive.
+        (item as { title?: string | null }).title ?? "",
+      ]
+        .join(" ")
+        .toLowerCase();
+      return haystack.includes(q);
+    });
+  }, [knowledge.items, query]);
+
+  // Search input is always visible — port of prototype App.tsx:490.
+  // Sits above whichever state (loading / error / empty / list) renders.
+  const search = (
+    <input
+      type="text"
+      data-testid="knowledge-search"
+      value={query}
+      onChange={(e) => setQuery(e.target.value)}
+      placeholder={t("knowledgeSearchPlaceholder")}
+      style={{
+        width: "100%",
+        padding: "5px 8px",
+        marginBottom: 8,
+        fontSize: 12,
+        border: "1px solid var(--wg-line)",
+        borderRadius: 3,
+        fontFamily: "var(--wg-font-sans)",
+      }}
+    />
+  );
+
+  let body: React.ReactNode;
   if (knowledge.loading && knowledge.items.length === 0) {
-    return (
+    body = (
       <p style={{ fontSize: 12, color: "var(--wg-ink-soft)", margin: 0 }}>
         {t("knowledgeLoading")}
       </p>
     );
-  }
-  if (knowledge.error) {
-    return (
+  } else if (knowledge.error) {
+    body = (
       <p
         style={{
           fontSize: 12,
@@ -427,38 +477,44 @@ function KnowledgePanelBody({
         {knowledge.error}
       </p>
     );
-  }
-  if (knowledge.items.length === 0) {
-    return (
+  } else if (knowledge.items.length === 0) {
+    body = (
       <p style={{ fontSize: 12, color: "var(--wg-ink-soft)", margin: 0 }}>
         {t("knowledgeEmpty")}
       </p>
     );
+  } else if (filtered.length === 0) {
+    // Topical-search empty state distinct from "no items at all" so
+    // the user knows the search excluded matches rather than the cell
+    // being empty.
+    body = (
+      <p style={{ fontSize: 12, color: "var(--wg-ink-soft)", margin: 0 }}>
+        {t("knowledgeSearchEmpty")}
+      </p>
+    );
+  } else {
+    body = filtered.map((item) => {
+      const status = item.status ?? "";
+      const meta = `${item.source_kind}${status ? ` · ${status}` : ""}`;
+      return (
+        <Link
+          key={item.id}
+          href={`/projects/${projectId}/kb/${item.id}`}
+          style={{ textDecoration: "none" }}
+        >
+          <PanelItem
+            title={item.summary || t("knowledgeUntitled")}
+            meta={meta}
+          />
+        </Link>
+      );
+    });
   }
+
   return (
     <>
-      {knowledge.items.map((item) => {
-        const status = item.status ?? "";
-        const meta = `${item.source_kind}${
-          status ? ` · ${status}` : ""
-        }`;
-        // KB items don't render inline in the room timeline today
-        // (they're cell-scoped, not room-scoped) so the PanelItem
-        // wraps a link to the canonical KB detail page rather than
-        // a scrollToEntity. Click → drop into /kb/<id>.
-        return (
-          <Link
-            key={item.id}
-            href={`/projects/${projectId}/kb/${item.id}`}
-            style={{ textDecoration: "none" }}
-          >
-            <PanelItem
-              title={item.summary || t("knowledgeUntitled")}
-              meta={meta}
-            />
-          </Link>
-        );
-      })}
+      {search}
+      {body}
     </>
   );
 }
@@ -479,6 +535,13 @@ function TasksPanelBody({
   const tasksState = useRoomTasks({ projectId });
   const [drafting, setDrafting] = useState(false);
   const [draftTitle, setDraftTitle] = useState("");
+  // Prototype-port: 我的 / 团队 scope toggle (App.tsx:480). 我的 is
+  // functional today (personal-scope tasks via fetchPersonalTasks).
+  // 团队 is inert pending a list-plan-tasks endpoint — clicking it
+  // surfaces a "coming soon" hint inline instead of swapping the list,
+  // matching the "vocabulary first" rule we use across workbench chips
+  // and the composer plus-menu.
+  const [scope, setScope] = useState<"mine" | "team">("mine");
 
   const submit = useCallback(async () => {
     const title = draftTitle.trim();
@@ -490,8 +553,38 @@ function TasksPanelBody({
     }
   }, [draftTitle, tasksState]);
 
+  const teamComingSoon = scope === "team";
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+      <div style={{ display: "flex", gap: 4 }}>
+        <button
+          type="button"
+          data-testid="tasks-scope-mine"
+          onClick={() => setScope("mine")}
+          aria-pressed={scope === "mine"}
+          style={tasksScopePillStyle(scope === "mine")}
+        >
+          {t("tasksScopeMine")}
+        </button>
+        <button
+          type="button"
+          data-testid="tasks-scope-team"
+          onClick={() => setScope("team")}
+          aria-pressed={scope === "team"}
+          title={t("tasksScopeTeamComingSoon")}
+          style={tasksScopePillStyle(scope === "team")}
+        >
+          {t("tasksScopeTeam")}
+        </button>
+      </div>
+      {teamComingSoon ? (
+        <p style={{ fontSize: 12, color: "var(--wg-ink-soft)", margin: 0 }}>
+          {t("tasksScopeTeamComingSoon")}
+        </p>
+      ) : null}
+      {!teamComingSoon && (
+      <>
       <div style={{ display: "flex", justifyContent: "flex-end" }}>
         {!drafting ? (
           <button
@@ -614,6 +707,8 @@ function TasksPanelBody({
             );
           })}
         </>
+      )}
+      </>
       )}
     </div>
   );

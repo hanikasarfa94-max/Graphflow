@@ -87,6 +87,30 @@ export function RoomShell({
   const timeline = useRoomTimeline({ projectId, roomId: room.id });
   const [workbenchOpen, setWorkbenchOpen] = useState(true);
   const [isWide, setIsWide] = useState(true);
+  // Immersive mode — port of prototype App.tsx::AgentFlow ⛶ toggle.
+  // Hides the workbench so the timeline gets full width; persisted
+  // per-room so the user's preference survives reloads. Future
+  // iteration can also hide AppSidebar (needs shell coordination).
+  const immersiveStorageKey = `wg:room:${room.id}:immersive`;
+  const [immersive, setImmersive] = useState(false);
+  // Hydrate from localStorage on the client only.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const stored = window.localStorage.getItem(immersiveStorageKey);
+    if (stored === "1") setImmersive(true);
+  }, [immersiveStorageKey]);
+
+  const toggleImmersive = () => {
+    setImmersive((prev) => {
+      const next = !prev;
+      try {
+        window.localStorage.setItem(immersiveStorageKey, next ? "1" : "0");
+      } catch {
+        // Quota / private mode — non-fatal.
+      }
+      return next;
+    });
+  };
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -96,6 +120,9 @@ export function RoomShell({
     mq.addEventListener("change", apply);
     return () => mq.removeEventListener("change", apply);
   }, []);
+
+  // Effective workbench-visible: open AND wide-viewport AND not immersive.
+  const workbenchVisible = workbenchOpen && isWide && !immersive;
 
   const memberCount = room.members?.length ?? 0;
 
@@ -123,7 +150,31 @@ export function RoomShell({
         </span>
         <MemberAvatars members={room.members ?? []} />
         <div style={{ flex: 1 }} />
-        {!workbenchOpen && (
+        <button
+          type="button"
+          data-testid="room-immersive-toggle"
+          onClick={toggleImmersive}
+          aria-pressed={immersive}
+          title={
+            immersive ? t("immersiveExit") : t("immersiveEnter")
+          }
+          style={{
+            padding: "4px 9px",
+            fontSize: 14,
+            border: "1px solid var(--wg-line)",
+            borderRadius: 3,
+            background: immersive ? "var(--wg-accent-soft)" : "#fff",
+            color: immersive
+              ? "var(--wg-accent)"
+              : "var(--wg-ink-soft)",
+            cursor: "pointer",
+            marginRight: 8,
+            lineHeight: 1,
+          }}
+        >
+          ⛶
+        </button>
+        {!workbenchOpen && !immersive && (
           <button
             type="button"
             onClick={() => setWorkbenchOpen(true)}
@@ -165,8 +216,7 @@ export function RoomShell({
           flex: 1,
           minHeight: 0,
           display: "grid",
-          gridTemplateColumns:
-            workbenchOpen && isWide ? "1fr 360px" : "1fr",
+          gridTemplateColumns: workbenchVisible ? "1fr 360px" : "1fr",
         }}
       >
         <RoomStreamTimeline
@@ -176,7 +226,7 @@ export function RoomShell({
           roomNameById={roomNameById}
           timeline={timeline}
         />
-        {workbenchOpen && isWide && (
+        {workbenchVisible && (
           <RoomWorkbench
             projectId={projectId}
             timeline={timeline}
@@ -185,8 +235,9 @@ export function RoomShell({
           />
         )}
       </div>
-      {/* Mobile workbench sheet: when narrow + open, render as overlay. */}
-      {workbenchOpen && !isWide && (
+      {/* Mobile workbench sheet: when narrow + open + not immersive,
+          render as overlay. Immersive mode also collapses the sheet. */}
+      {workbenchOpen && !isWide && !immersive && (
         <div
           style={{
             position: "fixed",

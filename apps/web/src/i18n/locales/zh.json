@@ -482,6 +482,8 @@
       "knowledgeLoading": "加载知识库…",
       "knowledgeEmpty": "还没有知识条目 — 从消息中提升一条吧。",
       "knowledgeUntitled": "未命名知识条目",
+      "knowledgeSearchPlaceholder": "搜索知识库…",
+      "knowledgeSearchEmpty": "没有匹配的知识条目。",
       "tasksLoading": "加载任务…",
       "tasksEmpty": "还没有个人任务 — 添加一项开始起草。",
       "tasksUntitled": "未命名任务",
@@ -490,7 +492,12 @@
       "tasksDraftSubmit": "添加",
       "tasksDraftCancel": "取消",
       "crystallizeAction": "结晶为决策",
-      "crystallizeHint": "把这条消息作为决策候选（主观提议，绕过自动分类器）。"
+      "crystallizeHint": "把这条消息作为决策候选（主观提议，绕过自动分类器）。",
+      "tasksScopeMine": "我的",
+      "tasksScopeTeam": "团队",
+      "tasksScopeTeamComingSoon": "团队计划任务的视图将在下一切片落地。",
+      "immersiveEnter": "进入沉浸模式（隐藏工具栏）",
+      "immersiveExit": "退出沉浸模式（显示工具栏）"
     },
     "attribution": {
       "edge": "边缘",
