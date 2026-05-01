@@ -18,6 +18,7 @@ import { Composer } from "@/components/stream/Composer";
 import { DecisionCard } from "@/components/stream/cards";
 import {
   ApiError,
+  createPersonalTask,
   proposeDecisionFromMessage,
   type Decision,
   type IMMessage,
@@ -156,6 +157,17 @@ export function RoomStreamTimeline({
           onOptimisticSend={handleOptimisticSend}
           onOptimisticError={handleOptimisticError}
           onError={setComposerError}
+          onSubmitAsTask={async (text) => {
+            // First-line of the draft becomes the task title (capped);
+            // rest goes into the description so context isn't lost.
+            const lines = text.split(/\r?\n/);
+            const title = (lines[0] ?? text).slice(0, 500);
+            const description = lines.slice(1).join("\n").slice(0, 4000);
+            await createPersonalTask(projectId, {
+              title,
+              description: description || undefined,
+            });
+          }}
         />
       </div>
     </div>

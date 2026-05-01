@@ -375,7 +375,16 @@
     "viewLineage": "查看来龙去脉",
     "counterNote": "↳ 反提较早的建议",
     "composer": {
-      "placeholder": "向团队发消息…"
+      "placeholder": "向团队发消息…",
+      "plusMenu": {
+        "openLabel": "打开输入操作",
+        "uploadFile": "上传文件",
+        "adjustContext": "调整上下文",
+        "adjustContextHint": "请使用顶部项目栏的范围 pill。",
+        "askPerson": "请相关人判断",
+        "submitAsTask": "提交为任务",
+        "comingSoon": "敬请期待"
+      }
     },
     "counter": {
       "placeholder": "写下你的反提框架…"

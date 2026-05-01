@@ -375,7 +375,16 @@
     "viewLineage": "View lineage",
     "counterNote": "↳ counter to earlier suggestion",
     "composer": {
-      "placeholder": "Message the team…"
+      "placeholder": "Message the team…",
+      "plusMenu": {
+        "openLabel": "Open compose actions",
+        "uploadFile": "Upload file",
+        "adjustContext": "Adjust context",
+        "adjustContextHint": "Use the scope pills in the project bar at the top.",
+        "askPerson": "Ask someone to weigh in",
+        "submitAsTask": "Submit as task",
+        "comingSoon": "Coming soon"
+      }
     },
     "counter": {
       "placeholder": "Write your counter framing…"

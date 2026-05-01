@@ -81,6 +81,13 @@ type Props = {
   // resulting decision crystallization. Existing personal-stream
   // composers omit this prop and keep posting to the team-room.
   streamId?: string;
+  // Prototype port (App.tsx:256 plusMenu) — when supplied, renders a
+  // `+` button to the left of the textarea that opens a small menu.
+  // Caller wires the functional item (typically: submit-as-task →
+  // POST /api/projects/{id}/tasks). Other vocabulary items render as
+  // inert "coming soon" rows so the prototype's plus-menu shape lands
+  // even before all four affordances exist.
+  onSubmitAsTask?: (text: string) => Promise<void>;
 };
 
 const MAX_ROWS = 8;
@@ -107,6 +114,7 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
     onPreviewClear,
     streamKey,
     streamId,
+    onSubmitAsTask,
   },
   ref,
 ) {
@@ -116,8 +124,30 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
   const [posting, setPosting] = useState(false);
   const [ingesting, setIngesting] = useState(false);
   const [ingestMessage, setIngestMessage] = useState<string | null>(null);
+  const [plusOpen, setPlusOpen] = useState(false);
+  const [submittingTask, setSubmittingTask] = useState(false);
   const taRef = useRef<HTMLTextAreaElement | null>(null);
   const previewTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleSubmitAsTask = useCallback(async () => {
+    if (!onSubmitAsTask) return;
+    const draft = value.trim();
+    if (!draft) return;
+    setSubmittingTask(true);
+    try {
+      await onSubmitAsTask(draft);
+      setValue("");
+      setPlusOpen(false);
+      requestAnimationFrame(() => {
+        const ta = taRef.current;
+        if (ta) ta.style.height = "auto";
+      });
+    } catch (e) {
+      onError(e instanceof Error ? e.message : "submit-as-task failed");
+    } finally {
+      setSubmittingTask(false);
+    }
+  }, [onSubmitAsTask, value, onError]);
 
   const detectedUrl = extractFirstUrl(value);
 
@@ -347,7 +377,80 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
           ) : null}
         </div>
       ) : null}
-      <div style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
+      <div style={{ display: "flex", gap: 8, alignItems: "flex-end", position: "relative" }}>
+      {onSubmitAsTask && (
+        <>
+          <button
+            type="button"
+            data-testid="composer-plus"
+            onClick={() => setPlusOpen((o) => !o)}
+            aria-expanded={plusOpen}
+            aria-label={t("composer.plusMenu.openLabel")}
+            style={{
+              alignSelf: "stretch",
+              padding: "0 12px",
+              border: "1px solid var(--wg-line)",
+              borderRadius: "var(--wg-radius)",
+              background: plusOpen
+                ? "var(--wg-accent-soft)"
+                : "var(--wg-surface)",
+              color: "var(--wg-ink-soft)",
+              fontSize: 18,
+              cursor: "pointer",
+              minWidth: 38,
+            }}
+          >
+            +
+          </button>
+          {plusOpen && (
+            <div
+              data-testid="composer-plus-menu"
+              role="menu"
+              style={{
+                position: "absolute",
+                bottom: "calc(100% + 6px)",
+                left: 0,
+                minWidth: 220,
+                padding: 6,
+                background: "#fff",
+                border: "1px solid var(--wg-line)",
+                borderRadius: "var(--wg-radius)",
+                boxShadow: "0 6px 18px rgba(0,0,0,0.08)",
+                zIndex: 10,
+                display: "flex",
+                flexDirection: "column",
+                gap: 2,
+              }}
+            >
+              <PlusMenuItem
+                icon="📎"
+                label={t("composer.plusMenu.uploadFile")}
+                hint={t("composer.plusMenu.comingSoon")}
+                disabled
+              />
+              <PlusMenuItem
+                icon="🧩"
+                label={t("composer.plusMenu.adjustContext")}
+                hint={t("composer.plusMenu.adjustContextHint")}
+                disabled
+              />
+              <PlusMenuItem
+                icon="📨"
+                label={t("composer.plusMenu.askPerson")}
+                hint={t("composer.plusMenu.comingSoon")}
+                disabled
+              />
+              <PlusMenuItem
+                icon="✅"
+                label={t("composer.plusMenu.submitAsTask")}
+                onClick={() => void handleSubmitAsTask()}
+                disabled={!value.trim() || submittingTask}
+                testId="composer-submit-as-task"
+              />
+            </div>
+          )}
+        </>
+      )}
       <textarea
         ref={taRef}
         value={value}
@@ -421,3 +524,50 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
     </div>
   );
 });
+
+function PlusMenuItem({
+  icon,
+  label,
+  hint,
+  onClick,
+  disabled,
+  testId,
+}: {
+  icon: string;
+  label: string;
+  hint?: string;
+  onClick?: () => void;
+  disabled?: boolean;
+  testId?: string;
+}) {
+  return (
+    <button
+      type="button"
+      role="menuitem"
+      onClick={onClick}
+      disabled={disabled}
+      data-testid={testId}
+      title={hint}
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 8,
+        padding: "8px 10px",
+        background: "transparent",
+        border: "none",
+        borderRadius: 4,
+        textAlign: "left",
+        cursor: disabled ? "not-allowed" : "pointer",
+        opacity: disabled ? 0.55 : 1,
+        fontSize: 13,
+        color: "var(--wg-ink)",
+        fontFamily: "var(--wg-font-sans)",
+      }}
+    >
+      <span aria-hidden style={{ fontSize: 14 }}>
+        {icon}
+      </span>
+      <span>{label}</span>
+    </button>
+  );
+}
