@@ -15,6 +15,7 @@ import { useCallback, useMemo, useState, type CSSProperties } from "react";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
 
+import { useProjectMembers } from "@/hooks/useProjectMembers";
 import { useRoomKnowledge } from "@/hooks/useRoomKnowledge";
 import { useRoomTasks } from "@/hooks/useRoomTasks";
 import type { UseRoomTimelineResult } from "@/hooks/useRoomTimeline";
@@ -81,6 +82,8 @@ const FUNCTIONAL_KINDS: ReadonlySet<PanelKind> = new Set([
   "requests",
   "knowledge",
   "tasks",
+  "skills",
+  "workflow",
 ]);
 
 const tasksScopePillStyle = (active: boolean): CSSProperties => ({
@@ -259,21 +262,20 @@ export function RoomWorkbench({ projectId, timeline, open, onClose }: Props) {
           >
             ＋{t("chipTasks")}
           </button>
-          {(
-            [
-              ["skills", t("chipSkills")],
-              ["workflow", t("chipWorkflow")],
-            ] as Array<[PanelKind, string]>
-          ).map(([kind, title]) => (
-            <button
-              key={kind}
-              style={chipDisabledStyle}
-              title={t("comingSoon")}
-              onClick={() => addPanel(kind, title)}
-            >
-              ＋{title}
-            </button>
-          ))}
+          <button
+            data-testid="workbench-chip-skills"
+            style={chipStyle}
+            onClick={() => addPanel("skills", t("chipSkills"))}
+          >
+            ＋{t("chipSkills")}
+          </button>
+          <button
+            data-testid="workbench-chip-workflow"
+            style={chipStyle}
+            onClick={() => addPanel("workflow", t("chipWorkflow"))}
+          >
+            ＋{t("chipWorkflow")}
+          </button>
         </div>
         <div className={"panelGrid"} style={gridStyle}>
           {panels.map((panel) => (
@@ -315,7 +317,13 @@ function renderPanelBody(
   if (kind === "tasks") {
     return <TasksPanelBody projectId={projectId} t={t} />;
   }
-  // Inert panels — empty-state for vocabulary establishment.
+  if (kind === "skills") {
+    return <SkillsPanelBody projectId={projectId} t={t} />;
+  }
+  if (kind === "workflow") {
+    return <WorkflowPanelBody t={t} />;
+  }
+  // Inert fallback — every functional kind already returns above.
   return (
     <p style={{ fontSize: 12, color: "var(--wg-ink-soft)", margin: 0 }}>
       {t("comingSoonBody")}
@@ -712,4 +720,196 @@ function TasksPanelBody({
       )}
     </div>
   );
+}
+
+// SkillsPanelBody — port of prototype App.tsx:496. Lists project
+// members with their declared skill_tags as the meta line. The
+// prototype's `.graphBox` (an empty visual placeholder for a future
+// network rendering) ports as a small SVG so the panel doesn't open
+// to a wall of text — a low-fidelity placeholder is more honest than
+// a large empty div.
+function SkillsPanelBody({
+  projectId,
+  t,
+}: {
+  projectId: string;
+  t: ReturnType<typeof useTranslations>;
+}) {
+  const { members, loading, error } = useProjectMembers({ projectId });
+
+  let body: React.ReactNode;
+  if (loading && members.length === 0) {
+    body = (
+      <p style={{ fontSize: 12, color: "var(--wg-ink-soft)", margin: 0 }}>
+        {t("skillsLoading")}
+      </p>
+    );
+  } else if (error) {
+    body = (
+      <p
+        style={{
+          fontSize: 12,
+          color: "var(--wg-warn, #b94a48)",
+          margin: 0,
+        }}
+      >
+        {error}
+      </p>
+    );
+  } else if (members.length === 0) {
+    body = (
+      <p style={{ fontSize: 12, color: "var(--wg-ink-soft)", margin: 0 }}>
+        {t("skillsEmpty")}
+      </p>
+    );
+  } else {
+    body = members.map((m) => {
+      const tags = m.skill_tags ?? [];
+      const meta = `${m.role}${
+        tags.length > 0 ? ` · ${tags.join(", ")}` : ""
+      }`;
+      const title = m.display_name || m.username || m.user_id;
+      return <PanelItem key={m.user_id} title={title} meta={meta} />;
+    });
+  }
+
+  return (
+    <>
+      <SkillsGraphPlaceholder t={t} />
+      {body}
+    </>
+  );
+}
+
+function SkillsGraphPlaceholder({
+  t,
+}: {
+  t: ReturnType<typeof useTranslations>;
+}) {
+  return (
+    <div
+      role="img"
+      aria-label={t("skillsGraphAlt")}
+      style={{
+        position: "relative",
+        height: 80,
+        marginBottom: 8,
+        background: "var(--wg-bg-soft, #f7f8fa)",
+        border: "1px dashed var(--wg-line)",
+        borderRadius: 4,
+        overflow: "hidden",
+      }}
+    >
+      <svg
+        viewBox="0 0 240 80"
+        preserveAspectRatio="xMidYMid meet"
+        style={{ width: "100%", height: "100%" }}
+      >
+        {/* Three nodes + two edges — minimal "skill atlas" hint. */}
+        <line x1="50" y1="40" x2="120" y2="40" stroke="var(--wg-line)" strokeWidth="1" />
+        <line x1="120" y1="40" x2="190" y2="40" stroke="var(--wg-line)" strokeWidth="1" />
+        <circle cx="50" cy="40" r="10" fill="var(--wg-accent)" opacity="0.55" />
+        <circle cx="120" cy="40" r="14" fill="var(--wg-accent)" opacity="0.85" />
+        <circle cx="190" cy="40" r="10" fill="var(--wg-accent)" opacity="0.55" />
+      </svg>
+      <span
+        style={{
+          position: "absolute",
+          bottom: 4,
+          right: 6,
+          fontSize: 10,
+          color: "var(--wg-ink-soft)",
+          fontFamily: "var(--wg-font-mono)",
+          opacity: 0.7,
+        }}
+      >
+        {t("skillsGraphHint")}
+      </span>
+    </div>
+  );
+}
+
+// WorkflowPanelBody — port of prototype App.tsx:514. Hardcoded 4-stage
+// DAG (需求收集 → 方案设计 → 评审确认 → 开发实现) with one stage
+// marked active. Dynamic stage selection (driven by real project
+// state) lands when the workflow data model exists; today this is
+// vocabulary establishment matching the prototype rather than a
+// data-driven view.
+function WorkflowPanelBody({
+  t,
+}: {
+  t: ReturnType<typeof useTranslations>;
+}) {
+  type StageStatus = "done" | "active" | "pending";
+  const stages: { key: string; status: StageStatus }[] = [
+    { key: "requirements", status: "done" },
+    { key: "design", status: "active" },
+    { key: "review", status: "pending" },
+    { key: "build", status: "pending" },
+  ];
+
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 4,
+        flexWrap: "wrap",
+      }}
+    >
+      {stages.map((stage, idx) => (
+        <span
+          key={stage.key}
+          style={{ display: "inline-flex", alignItems: "center", gap: 4 }}
+        >
+          <div style={workflowNodeStyle(stage.status)}>
+            <strong style={{ fontSize: 12, color: "var(--wg-ink)" }}>
+              {t(`workflowStage.${stage.key}.label`)}
+            </strong>
+            <small
+              style={{
+                fontSize: 10,
+                color: "var(--wg-ink-soft)",
+                fontFamily: "var(--wg-font-mono)",
+              }}
+            >
+              {t(`workflowStatus.${stage.status}`)}
+            </small>
+          </div>
+          {idx < stages.length - 1 && (
+            <span
+              aria-hidden
+              style={{
+                color: "var(--wg-ink-soft)",
+                fontSize: 14,
+              }}
+            >
+              →
+            </span>
+          )}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function workflowNodeStyle(
+  status: "done" | "active" | "pending",
+): CSSProperties {
+  const palette = {
+    done: { bg: "var(--wg-accent-soft)", border: "var(--wg-accent)" },
+    active: { bg: "#fff8e6", border: "var(--wg-warn, #d99500)" },
+    pending: { bg: "#fff", border: "var(--wg-line)" },
+  }[status];
+  return {
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "flex-start",
+    gap: 2,
+    padding: "6px 10px",
+    minWidth: 90,
+    background: palette.bg,
+    border: `1px solid ${palette.border}`,
+    borderRadius: 4,
+  };
 }

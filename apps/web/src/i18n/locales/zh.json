@@ -2,7 +2,20 @@
   "topbar": {
     "searchPlaceholder": "搜索项目、决策、任务或知识",
     "notifications": "通知",
-    "newCta": "新建"
+    "newCta": "新建",
+    "switchProject": "切换项目",
+    "projectMenu": {
+      "loading": "加载项目…",
+      "empty": "还没有项目。",
+      "viewAll": "查看全部项目 →"
+    },
+    "newMenu": {
+      "project": "新建项目",
+      "agent": "新建 Agent",
+      "channel": "新建频道",
+      "task": "新建任务",
+      "comingSoon": "敬请期待"
+    }
   },
   "inboxPage": {
     "kicker": "路由信号",
@@ -497,7 +510,22 @@
       "tasksScopeTeam": "团队",
       "tasksScopeTeamComingSoon": "团队计划任务的视图将在下一切片落地。",
       "immersiveEnter": "进入沉浸模式（隐藏工具栏）",
-      "immersiveExit": "退出沉浸模式（显示工具栏）"
+      "immersiveExit": "退出沉浸模式（显示工具栏）",
+      "skillsLoading": "加载技能图谱…",
+      "skillsEmpty": "项目还没有成员 — 邀请队友以构建技能图谱。",
+      "skillsGraphAlt": "技能图谱占位",
+      "skillsGraphHint": "技能图谱（预览）",
+      "workflowStage": {
+        "requirements": { "label": "需求收集" },
+        "design": { "label": "方案设计" },
+        "review": { "label": "评审确认" },
+        "build": { "label": "开发实现" }
+      },
+      "workflowStatus": {
+        "done": "已完成",
+        "active": "进行中",
+        "pending": "等待中"
+      }
     },
     "attribution": {
       "edge": "边缘",

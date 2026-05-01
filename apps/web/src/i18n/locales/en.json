@@ -2,7 +2,20 @@
   "topbar": {
     "searchPlaceholder": "Search projects, decisions, tasks or knowledge",
     "notifications": "Notifications",
-    "newCta": "New"
+    "newCta": "New",
+    "switchProject": "Switch project",
+    "projectMenu": {
+      "loading": "Loading projects…",
+      "empty": "No projects yet.",
+      "viewAll": "View all projects →"
+    },
+    "newMenu": {
+      "project": "New project",
+      "agent": "New agent",
+      "channel": "New channel",
+      "task": "New task",
+      "comingSoon": "Coming soon"
+    }
   },
   "inboxPage": {
     "kicker": "Routing signals",
@@ -497,7 +510,22 @@
       "tasksScopeTeam": "Team",
       "tasksScopeTeamComingSoon": "Team-scope plan tasks land in a follow-up slice.",
       "immersiveEnter": "Enter immersive mode (hide workbench)",
-      "immersiveExit": "Exit immersive mode (show workbench)"
+      "immersiveExit": "Exit immersive mode (show workbench)",
+      "skillsLoading": "Loading skills…",
+      "skillsEmpty": "No project members yet — invite teammates to populate the skill atlas.",
+      "skillsGraphAlt": "Skill atlas placeholder",
+      "skillsGraphHint": "skill atlas (preview)",
+      "workflowStage": {
+        "requirements": { "label": "Requirements" },
+        "design": { "label": "Design" },
+        "review": { "label": "Review" },
+        "build": { "label": "Build" }
+      },
+      "workflowStatus": {
+        "done": "Done",
+        "active": "In progress",
+        "pending": "Pending"
+      }
     },
     "attribution": {
       "edge": "edge",

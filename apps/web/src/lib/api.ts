@@ -71,6 +71,36 @@ export interface ProjectSummary {
   updated_at: string | null;
 }
 
+// Topbar project-switcher fetch. Same shape as the server-rendered
+// /projects list; the difference is calling context (client component
+// loading on dropdown open).
+export function fetchMyProjects(
+  baseUrl?: string,
+): Promise<ProjectSummary[]> {
+  return api<ProjectSummary[]>("/api/projects", { baseUrl });
+}
+
+export interface ProjectMember {
+  user_id: string;
+  username: string | null;
+  display_name: string | null;
+  role: string;
+  license_tier?: "full" | "task_scoped" | "observer";
+  skill_tags?: string[];
+}
+
+// Lightweight members fetch used by the workbench Skills panel.
+// Distinct from /state (which is a full graph snapshot) so the
+// Skills panel doesn't pay for goals + risks + decisions on every open.
+export function fetchProjectMembers(
+  projectId: string,
+  baseUrl?: string,
+): Promise<ProjectMember[]> {
+  return api<ProjectMember[]>(`/api/projects/${projectId}/members`, {
+    baseUrl,
+  });
+}
+
 export interface GraphNode {
   id: string;
   title: string;
