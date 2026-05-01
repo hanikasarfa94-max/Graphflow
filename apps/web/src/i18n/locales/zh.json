@@ -193,6 +193,20 @@
         "unknown": "—"
       }
     },
+    "moduleRail": {
+      "ariaLabel": "项目模块导航",
+      "module": {
+        "stream": "对话流",
+        "team": "团队",
+        "status": "状态",
+        "kb": "知识库",
+        "audit": "审计",
+        "skills": "技能",
+        "meetings": "会议",
+        "renders": "渲染",
+        "settings": "设置"
+      }
+    },
     "portfolio": {
       "title": "项目总览",
       "subtitle": "你参与的所有项目",

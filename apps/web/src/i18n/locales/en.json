@@ -193,6 +193,20 @@
         "unknown": "—"
       }
     },
+    "moduleRail": {
+      "ariaLabel": "Project modules",
+      "module": {
+        "stream": "Stream",
+        "team": "Team room",
+        "status": "Status",
+        "kb": "KB",
+        "audit": "Audit",
+        "skills": "Skills",
+        "meetings": "Meetings",
+        "renders": "Renders",
+        "settings": "Settings"
+      }
+    },
     "portfolio": {
       "title": "Portfolio overview",
       "subtitle": "across the projects you're on",

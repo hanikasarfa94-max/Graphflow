@@ -1,4 +1,5 @@
 import { ProjectBar } from "@/components/projects/ProjectBar";
+import { ProjectModuleRail } from "@/components/projects/ProjectModuleRail";
 import type { ProjectState } from "@/lib/api";
 import { requireUser, serverFetch } from "@/lib/auth";
 
@@ -38,6 +39,7 @@ export default async function ProjectLayout({
   return (
     <>
       <ProjectBar projectId={id} projectTitle={projectTitle} />
+      <ProjectModuleRail projectId={id} />
       {children}
     </>
   );
