@@ -11,7 +11,6 @@ import { getTranslations } from "next-intl/server";
 
 import { OnboardingOverlay } from "@/components/onboarding/OnboardingOverlay";
 import { PersonalStream } from "@/components/stream/PersonalStream";
-import { ScopeTierPills } from "@/components/stream/ScopeTierPills";
 import { StreamCompactToolbar } from "@/components/stream/StreamCompactToolbar";
 import { StreamContextPanel } from "@/components/stream/StreamContextPanel";
 import type { StreamMember } from "@/components/stream/types";
@@ -77,8 +76,9 @@ export default async function ProjectPersonalPage({
             : t("personal.subtitle")
         }
         actions={
+          // Scope pills moved to the global ProjectBar (one canonical
+          // place to toggle scope per memory workgraph_next_design_20260428).
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <ScopeTierPills projectKey={`project:${id}`} />
             <StreamContextPanel streamKey={`project:${id}:personal`} />
           </div>
         }

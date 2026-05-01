@@ -161,6 +161,25 @@
       "title": "Natural-language intake",
       "subtitle": "goal → graph seed"
     },
+    "bar": {
+      "projectLabel": "Project:",
+      "untitledProject": "Untitled",
+      "surfaceLabel": "Surface:",
+      "surface": {
+        "personal": "Personal stream",
+        "team": "Team room",
+        "room": "Room",
+        "kb": "Knowledge base",
+        "status": "Status",
+        "detail": "Detail",
+        "renders": "Renders",
+        "skills": "Skill atlas",
+        "meetings": "Meetings",
+        "settings": "Settings",
+        "node": "Node",
+        "unknown": "—"
+      }
+    },
     "portfolio": {
       "title": "Portfolio overview",
       "subtitle": "across the projects you're on",

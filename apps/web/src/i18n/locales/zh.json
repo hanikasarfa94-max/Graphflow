@@ -161,6 +161,25 @@
       "title": "自然语言立项",
       "subtitle": "目标 → 图谱种子"
     },
+    "bar": {
+      "projectLabel": "当前项目：",
+      "untitledProject": "未命名",
+      "surfaceLabel": "当前工作台：",
+      "surface": {
+        "personal": "个人 Agent 工作台",
+        "team": "团队会议室",
+        "room": "团队房间",
+        "kb": "知识库",
+        "status": "状态",
+        "detail": "详情",
+        "renders": "渲染",
+        "skills": "技能图谱",
+        "meetings": "会议",
+        "settings": "设置",
+        "node": "节点",
+        "unknown": "—"
+      }
+    },
     "portfolio": {
       "title": "项目总览",
       "subtitle": "你参与的所有项目",
