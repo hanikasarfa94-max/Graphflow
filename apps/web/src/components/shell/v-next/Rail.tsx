@@ -161,15 +161,10 @@ export function Rail({
             </form>
           </>
         )}
-        <button
-          type="button"
-          className={styles.item}
-          title="帮助"
-          aria-label="帮助"
-        >
-          <span aria-hidden>?</span>
-          <span className={styles.tip}>帮助</span>
-        </button>
+        {/* Help "?" used to live here without an onClick — removed for
+            v1 since there's no help center to point at and a dead
+            button reads worse than no button. Reintroduce alongside
+            real docs. */}
       </div>
     </nav>
   );

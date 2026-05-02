@@ -12,17 +12,21 @@
   --rail: 50px;
   --im: 254px;
   --tools: 420px;
-  --top: 44px;
   --bar: 34px;
 
   height: 100vh;
   display: grid;
-  grid-template-rows: var(--top) var(--bar) 1fr;
+  /* Top row is `auto` because Topbar's intrinsic height (~66px with
+     its 16/14 padding around 36px buttons) exceeded the previous
+     fixed 44px and overflowed into the bar row, which read as the
+     Topbar visually piling onto the ProjectBar. Letting the row
+     fit content removes the overlap and survives any future Topbar
+     padding tweak. */
+  grid-template-rows: auto var(--bar) 1fr;
   min-width: 0;
 }
 
 .top {
-  height: var(--top);
   border-bottom: 1px solid var(--wg-line, #e4eaf3);
   background: rgba(255, 255, 255, 0.9);
   backdrop-filter: blur(16px);
@@ -71,7 +75,7 @@
 
 /* immersive: hides bar + rail + im + splitters + tools, just top + main. */
 .app.immersive {
-  grid-template-rows: var(--top) 1fr;
+  grid-template-rows: auto 1fr;
 }
 .app.immersive .bar {
   display: none;

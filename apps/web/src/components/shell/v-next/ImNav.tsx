@@ -142,6 +142,13 @@ export function ImNav({
       <div className={styles.imTop}>
         <strong>{t("personalAgentSection")}</strong>
         <div className={styles.imTopActions}>
+          {/* Settings ⚙ and "new" ＋ used to live here as decorative
+              prototype glyphs without onClick handlers. Removed because
+              their actions are already wired elsewhere — settings via
+              the Rail's profile avatar (→ /settings/profile), and "new"
+              via Topbar's "+ New ▾" menu plus the section-level "+"
+              buttons in 群组 and 私聊. The narrow chevron stays here
+              because it has no other home. */}
           {onToggleNarrow && (
             <button
               type="button"
@@ -155,16 +162,6 @@ export function ImNav({
               {narrow ? "»" : "«"}
             </button>
           )}
-          <button
-            type="button"
-            className={styles.miniBtn}
-            aria-label="settings"
-          >
-            ⚙
-          </button>
-          <button type="button" className={styles.miniBtn} aria-label="new">
-            ＋
-          </button>
         </div>
       </div>
 
