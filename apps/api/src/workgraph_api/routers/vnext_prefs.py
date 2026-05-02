@@ -90,7 +90,7 @@ def _defaults() -> dict:
         "thinking_mode": "deep",
         "workbench_layout": {
             "personal": ["tasks", "knowledge", "skills"],
-            "room": ["tasks", "knowledge", "requests"],
+            "room": ["tasks", "knowledge", "requests", "skills"],
             "dm": [],
         },
     }

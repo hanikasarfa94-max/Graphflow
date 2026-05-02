@@ -1,14 +1,12 @@
 /* v-next shell grid — adapted from
    workgraph-ts-prototype/legacy-standalone-v6.html.
 
-   The prototype reserved 6px gutter tracks for resize-handle splitters
-   between columns. Our port doesn't render splitter elements yet, so
-   those reserved tracks were silently absorbing the <main> element via
-   CSS Grid auto-flow (3 children placed into tracks 1/2/3 instead of
-   the intended 1/2/4) — that's what produced the "blank block from the
-   right" with main visibly squeezed to 6px. We've dropped the gutter
-   tracks; main / tools now sit on contiguous tracks. Use
-   border-left: 1px on .tools for the visual separator. */
+   The 6px gutter tracks ARE rendered as real <div className=splitter>
+   elements (resize handles), so the JSX child count matches the grid
+   track count exactly. Drag the splitter between im/main to resize the
+   ImNav (clamped 76-340px) or between main/tools to resize the
+   Workbench (clamped 330-760px). Driven by AppShellClient's
+   beginResize handler. */
 
 .app {
   --rail: 50px;
@@ -36,23 +34,26 @@
   background: rgba(255, 255, 255, 0.72);
 }
 
-/* Default desktop: rail | im | main | tools (4 contiguous tracks). */
+/* Default desktop: rail | im | splitter | main | splitter | tools.
+   Six children for six tracks. */
 .layout {
   display: grid;
   grid-template-columns:
-    var(--rail) var(--im) minmax(0, 1fr) var(--tools);
+    var(--rail) var(--im) 6px minmax(0, 1fr) 6px var(--tools);
   min-height: 0;
   overflow: hidden;
 }
 
-/* moduleMode: Rail-detail-view active. Hides ImNav → 3 tracks. */
+/* moduleMode: hides ImNav + its splitter — 4 tracks: rail | main |
+   splitter | tools. */
 .app.moduleMode .layout {
-  grid-template-columns: var(--rail) minmax(0, 1fr) var(--tools);
+  grid-template-columns: var(--rail) minmax(0, 1fr) 6px var(--tools);
 }
 
-/* toolsClosed: Workbench hidden → 3 tracks. */
+/* toolsClosed: hides tools + its splitter — 4 tracks: rail | im |
+   splitter | main. */
 .app.toolsClosed .layout {
-  grid-template-columns: var(--rail) var(--im) minmax(0, 1fr);
+  grid-template-columns: var(--rail) var(--im) 6px minmax(0, 1fr);
 }
 
 /* Both moduleMode and toolsClosed → 2 tracks: rail | main. */
@@ -60,7 +61,7 @@
   grid-template-columns: var(--rail) minmax(0, 1fr);
 }
 
-/* immersive: hides bar + rail + im + tools, just top + main. */
+/* immersive: hides bar + rail + im + splitters + tools, just top + main. */
 .app.immersive {
   grid-template-rows: var(--top) 1fr;
 }
@@ -69,6 +70,16 @@
 }
 .app.immersive .layout {
   grid-template-columns: minmax(0, 1fr);
+}
+
+/* Resize handle. col-resize cursor + hover tint per prototype line 72. */
+.splitter {
+  cursor: col-resize;
+  background: transparent;
+  transition: background 80ms;
+}
+.splitter:hover {
+  background: #dbeafe;
 }
 
 .main {
@@ -113,8 +124,7 @@
   margin: 0;
 }
 
-/* Mid-narrow viewports — shrink ImNav + tools widths but keep all
-   columns. */
+/* Mid-narrow viewports — shrink ImNav + tools defaults. */
 @media (max-width: 1320px) {
   .app {
     --im: 230px;
@@ -124,17 +134,16 @@
 
 /* Narrow viewports — collapse ImNav to a 76px icon strip per
    prototype line 104, shrink tools to 330px. Same modal flags as
-   desktop apply, so toolsClosed / moduleMode still drop their tracks
-   correctly. */
+   desktop apply, so toolsClosed / moduleMode still drop their tracks. */
 @media (max-width: 980px) {
   .layout {
-    grid-template-columns: 50px 76px minmax(0, 1fr) 330px;
+    grid-template-columns: 50px 76px 6px minmax(0, 1fr) 6px 330px;
   }
   .app.toolsClosed .layout {
-    grid-template-columns: 50px 76px minmax(0, 1fr);
+    grid-template-columns: 50px 76px 6px minmax(0, 1fr);
   }
   .app.moduleMode .layout {
-    grid-template-columns: 50px minmax(0, 1fr) 330px;
+    grid-template-columns: 50px minmax(0, 1fr) 6px 330px;
   }
   .app.moduleMode.toolsClosed .layout {
     grid-template-columns: 50px minmax(0, 1fr);

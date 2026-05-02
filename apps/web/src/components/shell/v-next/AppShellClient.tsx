@@ -13,7 +13,7 @@
 // hidden). leftNarrow not yet wired in v1; comes with the splitter
 // resize affordance in a follow-up.
 
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import type { User } from "@/lib/api";
 
@@ -78,6 +78,47 @@ export function AppShellVNextClient({
 
   const moduleMode = activeView !== "agentView";
 
+  // Splitter resize — port of legacy-standalone-v6.html lines 263-271.
+  // ImNav width clamps to [76, 340]; Workbench width clamps to [330, 760].
+  // We write to CSS variables on the .app element so the existing grid
+  // template picks them up without re-rendering the layout.
+  const appRef = useRef<HTMLDivElement>(null);
+  const resizingRef = useRef<"left" | "tools" | null>(null);
+
+  useEffect(() => {
+    function onMove(e: MouseEvent) {
+      const which = resizingRef.current;
+      if (!which || !appRef.current) return;
+      if (which === "left") {
+        // ImNav width = mouseX - rail (50px). Clamp [76, 340].
+        const w = Math.max(76, Math.min(340, e.clientX - 50));
+        appRef.current.style.setProperty("--im", `${w}px`);
+      } else {
+        // Tools width = viewport - mouseX. Clamp [330, 760].
+        const w = Math.max(330, Math.min(760, window.innerWidth - e.clientX));
+        appRef.current.style.setProperty("--tools", `${w}px`);
+      }
+    }
+    function onUp() {
+      if (!resizingRef.current) return;
+      resizingRef.current = null;
+      document.body.style.userSelect = "";
+      document.body.style.cursor = "";
+    }
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+  }, []);
+
+  function beginResize(which: "left" | "tools") {
+    resizingRef.current = which;
+    document.body.style.userSelect = "none";
+    document.body.style.cursor = "col-resize";
+  }
+
   // Derive ProjectBar context from the active stream — the v-next
   // shell uses stream-as-primary-nav, so the project crumb tracks
   // whichever stream the user has focused (per spec §5: read-only
@@ -136,6 +177,7 @@ export function AppShellVNextClient({
 
   return (
     <div
+      ref={appRef}
       className={[
         styles.app,
         moduleMode ? styles.moduleMode : "",
@@ -180,6 +222,16 @@ export function AppShellVNextClient({
           />
         )}
 
+        {!moduleMode && !immersive && (
+          <div
+            className={styles.splitter}
+            data-testid="vnext-splitter-left"
+            role="separator"
+            aria-orientation="vertical"
+            onMouseDown={() => beginResize("left")}
+          />
+        )}
+
         <main className={styles.main}>
           {activeView === "agentView" ? (
             <AgentFlow
@@ -202,6 +254,16 @@ export function AppShellVNextClient({
             <ModuleView view={activeView} />
           )}
         </main>
+
+        {!immersive && toolsOpen && (
+          <div
+            className={styles.splitter}
+            data-testid="vnext-splitter-tools"
+            role="separator"
+            aria-orientation="vertical"
+            onMouseDown={() => beginResize("tools")}
+          />
+        )}
 
         {!immersive && toolsOpen && (
           <Workbench
