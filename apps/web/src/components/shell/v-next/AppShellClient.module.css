@@ -1,7 +1,14 @@
-/* v-next shell grid — exact dimensions from
-   workgraph-ts-prototype/legacy-standalone-v6.html lines 50, 96-105.
-   Using the prototype's CSS variable names so the contract stays
-   visible if we ever lift the styles to globals.css. */
+/* v-next shell grid — adapted from
+   workgraph-ts-prototype/legacy-standalone-v6.html.
+
+   The prototype reserved 6px gutter tracks for resize-handle splitters
+   between columns. Our port doesn't render splitter elements yet, so
+   those reserved tracks were silently absorbing the <main> element via
+   CSS Grid auto-flow (3 children placed into tracks 1/2/3 instead of
+   the intended 1/2/4) — that's what produced the "blank block from the
+   right" with main visibly squeezed to 6px. We've dropped the gutter
+   tracks; main / tools now sit on contiguous tracks. Use
+   border-left: 1px on .tools for the visual separator. */
 
 .app {
   --rail: 50px;
@@ -29,32 +36,31 @@
   background: rgba(255, 255, 255, 0.72);
 }
 
+/* Default desktop: rail | im | main | tools (4 contiguous tracks). */
 .layout {
   display: grid;
   grid-template-columns:
-    var(--rail) var(--im) 6px minmax(0, 1fr) 6px var(--tools);
+    var(--rail) var(--im) minmax(0, 1fr) var(--tools);
   min-height: 0;
   overflow: hidden;
 }
 
-/* moduleMode: Rail-detail-view active. Hides ImNav, shrinks columns
-   to 4 (rail | main | splitter | tools). Matches legacy line 96-97. */
+/* moduleMode: Rail-detail-view active. Hides ImNav → 3 tracks. */
 .app.moduleMode .layout {
-  grid-template-columns: var(--rail) minmax(0, 1fr) 6px var(--tools);
+  grid-template-columns: var(--rail) minmax(0, 1fr) var(--tools);
 }
 
-/* toolsClosed: Workbench hidden. legacy line 98-100. */
+/* toolsClosed: Workbench hidden → 3 tracks. */
 .app.toolsClosed .layout {
-  grid-template-columns: var(--rail) var(--im) 6px minmax(0, 1fr);
+  grid-template-columns: var(--rail) var(--im) minmax(0, 1fr);
 }
 
-/* Both moduleMode and toolsClosed: just rail | main. legacy line 101. */
+/* Both moduleMode and toolsClosed → 2 tracks: rail | main. */
 .app.moduleMode.toolsClosed .layout {
   grid-template-columns: var(--rail) minmax(0, 1fr);
 }
 
-/* immersive: hides bar/rail/im/splitter/tools, just top + main.
-   legacy line 103. */
+/* immersive: hides bar + rail + im + tools, just top + main. */
 .app.immersive {
   grid-template-rows: var(--top) 1fr;
 }
@@ -107,8 +113,8 @@
   margin: 0;
 }
 
-/* Responsive shrinks per legacy line 104. Search hides + brand min-w
-   reset live in Topbar styles already. */
+/* Mid-narrow viewports — shrink ImNav + tools widths but keep all
+   columns. */
 @media (max-width: 1320px) {
   .app {
     --im: 230px;
@@ -116,22 +122,19 @@
   }
 }
 
-/* Narrow viewports — the prototype's compact mode collapses ImNav to
-   a 76px icon strip and shrinks the (open) tools column. We respect
-   the same modal flags as the desktop rules so toolsClosed / moduleMode
-   still hide what they should — earlier the unconditional !important
-   forced a 6-track grid even when toolsOpen=false, leaving a 330px
-   blank column on the right that covered most of the page on small
-   screens. */
+/* Narrow viewports — collapse ImNav to a 76px icon strip per
+   prototype line 104, shrink tools to 330px. Same modal flags as
+   desktop apply, so toolsClosed / moduleMode still drop their tracks
+   correctly. */
 @media (max-width: 980px) {
   .layout {
-    grid-template-columns: 50px 76px 0 minmax(0, 1fr) 0 330px;
+    grid-template-columns: 50px 76px minmax(0, 1fr) 330px;
   }
   .app.toolsClosed .layout {
-    grid-template-columns: 50px 76px 0 minmax(0, 1fr);
+    grid-template-columns: 50px 76px minmax(0, 1fr);
   }
   .app.moduleMode .layout {
-    grid-template-columns: 50px minmax(0, 1fr) 0 330px;
+    grid-template-columns: 50px minmax(0, 1fr) 330px;
   }
   .app.moduleMode.toolsClosed .layout {
     grid-template-columns: 50px minmax(0, 1fr);
