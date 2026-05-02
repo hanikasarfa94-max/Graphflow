@@ -169,6 +169,46 @@
   color: var(--wg-red, #e11d48);
 }
 
+/* E-8 — keyword-match suggestion strip above the composer.
+   Soft accent panel; clickable accept turns the active stream over to
+   the matched project agent. */
+.suggestion {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 11px;
+  margin: 0 auto 6px;
+  max-width: 950px;
+  background: var(--wg-accent-soft, #f1f6ff);
+  border: 1px solid var(--wg-accent-ring, #c0d3f5);
+  border-radius: 11px;
+  font-size: 12px;
+}
+
+.suggestionText {
+  flex: 1 1 auto;
+  color: var(--wg-ink, #1c2230);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.suggestionAccept {
+  flex: 0 0 auto;
+  background: var(--wg-blue, #2563eb);
+  color: #fff;
+  border: 0;
+  padding: 4px 10px;
+  border-radius: 9px;
+  font-weight: 700;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.suggestionAccept:hover {
+  filter: brightness(1.05);
+}
+
 @media (max-width: 980px) {
   .autoAgent span:first-child,
   .select {

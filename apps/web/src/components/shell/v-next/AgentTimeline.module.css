@@ -84,3 +84,13 @@
 .error {
   color: var(--wg-red, #e11d48);
 }
+
+/* Ambient one-line rows (gated-proposal-resolved, edge-route-confirmed).
+   Match PersonalStream's compact ambient style. */
+.ambient {
+  padding: 2px 8px;
+  font-size: 11px;
+  font-family: var(--wg-font-mono);
+  color: var(--wg-ok, #2f8f4f);
+  margin-left: 42px;
+}

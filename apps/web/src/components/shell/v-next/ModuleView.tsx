@@ -2,17 +2,27 @@
 
 // v-next ModuleView — Rail detail-page renderer per spec §4d.
 //
-// Maps a moduleView ActiveView ('projectView'/'taskView'/'knowledgeView'/
-// 'orgView'/'auditView') to the corresponding prototype-shape card grid
-// from data.ts. v1 ships static cards matching the prototype's content
-// (per spec §4d: "v1 wiring just glues existing detail data into the
-// module-view card layout — no new BE endpoints needed for this slice").
-//
-// Replacing static placeholder rows with real data from existing
-// /api/projects/{id}/state, /api/perf, /api/kb/* endpoints is a
-// follow-up slice — Phase 3 wiring per detail kind.
+// Each detail page (项目 / 任务 / 知识 / 组织 / 审计) fetches real data
+// from existing endpoints. v1 picks the user's most-recently-active
+// project as the anchor for taskView / knowledgeView / orgView since
+// those views are project-scoped and the v-next shell does not yet
+// surface a project picker inside ModuleView. The audit feed has no
+// dedicated endpoint yet — that one keeps a static placeholder until
+// the audit-stream slice ships.
 
+import { useEffect, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
+
+import {
+  fetchMyProjects,
+  fetchPersonalTasks,
+  fetchProjectMembers,
+  listKbNotes,
+  type KbNote,
+  type PersonalTask,
+  type ProjectMember,
+  type ProjectSummary,
+} from "@/lib/api";
 
 import type { ActiveView } from "./AppShellClient";
 
@@ -21,12 +31,14 @@ import styles from "./ModuleView.module.css";
 interface CardRow {
   title: string;
   meta: string;
+  href?: string;
 }
 
 interface ModuleCardData {
   title: string;
   body?: string;
   rows?: CardRow[];
+  emptyHint?: string;
 }
 
 interface ModuleViewSpec {
@@ -35,116 +47,8 @@ interface ModuleViewSpec {
   action?: string;
   cards: ModuleCardData[];
   twoColumn?: boolean;
-}
-
-// Static seeds match prototype data.ts:120-193.
-// Phase 3 will swap each ModuleViewSpec for a server-fetched version.
-function specForView(view: ActiveView): ModuleViewSpec | null {
-  switch (view) {
-    case "projectView":
-      return {
-        title: "项目管理",
-        subtitle: "目标、里程碑、风险与交付物。",
-        action: "+ 新建里程碑",
-        cards: [
-          {
-            title: "当前目标",
-            rows: [
-              { title: "Q3 智能助手 v3.0 上线", meta: "68%" },
-              { title: "首次方案刺激安排", meta: "进行中" },
-            ],
-          },
-          {
-            title: "开放风险",
-            rows: [
-              { title: "模型置信度评估不足", meta: "高" },
-              { title: "知识图谱同步延迟", meta: "中" },
-            ],
-          },
-          {
-            title: "项目资源",
-            body: "技术评审资源偏紧。新功能进入开发前建议先保持 L2 容量确认。",
-          },
-        ],
-      };
-    case "taskView":
-      return {
-        title: "任务视图",
-        subtitle: "个人计划、团队可见、容量确认与正式承诺。",
-        action: "+ 新建任务",
-        cards: [
-          {
-            title: "L0 个人计划",
-            rows: [{ title: "整理竞品帮助验证", meta: "个人" }],
-          },
-          {
-            title: "L2 容量确认",
-            rows: [{ title: "后端接口可行性评审", meta: "待 Blake" }],
-          },
-          {
-            title: "L3 正式承诺",
-            rows: [{ title: "CRM 后端接口对接", meta: "进行中" }],
-          },
-        ],
-      };
-    case "knowledgeView":
-      return {
-        title: "知识库",
-        subtitle: "AI 可调用依据与团队记忆。",
-        action: "+ 添加来源",
-        twoColumn: true,
-        cards: [
-          {
-            title: "最近调用",
-            rows: [
-              { title: "Boss-3 智能设计实践 v0.3", meta: "1 分钟前" },
-              { title: "团队标准 · 合作规范 v2.1", meta: "10 分钟前" },
-            ],
-          },
-          {
-            title: "上下文策略",
-            body: "个人草稿默认私有；外部反馈默认弱信号；已确认规格可作为项目依据进入当前工作记忆。",
-          },
-        ],
-      };
-    case "orgView":
-      return {
-        title: "组织管理",
-        subtitle: "技能图谱、权限控制、成员角色与技术边界规则。",
-        action: "+ 邀请成员",
-        cards: [
-          {
-            title: "技能图谱",
-            rows: [{ title: "后端架构", meta: "Blake · 9.2" }],
-          },
-          {
-            title: "权限控制",
-            rows: [{ title: "技术上下文 L1", meta: "产品可见" }],
-          },
-          {
-            title: "成员负载",
-            body: "Blake 有 2 个协同请求待处理。建议新增技术评审保持 L2。",
-          },
-        ],
-      };
-    case "auditView":
-      return {
-        title: "审计视图",
-        subtitle: "高影响动作、确认人、上下文来源与图谱写入结果。",
-        action: "导出记录",
-        cards: [
-          {
-            title: "审计记录",
-            rows: [
-              { title: "智能助手技术方案：personal → proposed", meta: "待 Blake" },
-              { title: "用户调研摘要：visible → knowledge", meta: "已写入" },
-            ],
-          },
-        ],
-      };
-    case "agentView":
-      return null;
-  }
+  loading?: boolean;
+  error?: string | null;
 }
 
 interface Props {
@@ -152,10 +56,30 @@ interface Props {
 }
 
 export function ModuleView({ view }: Props) {
-  const t = useTranslations("shellVNext");
-  const spec = specForView(view);
-  if (!spec) return null;
+  if (view === "agentView") return null;
+  switch (view) {
+    case "projectView":
+      return <ProjectsView />;
+    case "taskView":
+      return <TasksView />;
+    case "knowledgeView":
+      return <KnowledgeView />;
+    case "orgView":
+      return <OrgView />;
+    case "auditView":
+      return <AuditView />;
+  }
+}
 
+// ---- Shared shell ----
+
+function ModuleShell({
+  view,
+  spec,
+}: {
+  view: ActiveView;
+  spec: ModuleViewSpec;
+}) {
   return (
     <section className={styles.module} data-testid={`vnext-module-${view}`}>
       <div className={styles.moduleHeader}>
@@ -169,7 +93,11 @@ export function ModuleView({ view }: Props) {
           </button>
         )}
       </div>
-      <p className={styles.placeholderHint}>{t("module.placeholderHint")}</p>
+      {spec.error && (
+        <p className={styles.errorHint} data-testid="vnext-module-error">
+          {spec.error}
+        </p>
+      )}
       <div
         className={`${styles.moduleGrid} ${spec.twoColumn ? styles.gridTwo : ""}`}
       >
@@ -177,15 +105,379 @@ export function ModuleView({ view }: Props) {
           <div key={card.title} className={styles.moduleCard}>
             <h3>{card.title}</h3>
             {card.body && <p>{card.body}</p>}
-            {card.rows?.map((row) => (
-              <div key={row.title} className={styles.moduleRow}>
-                <strong>{row.title}</strong>
-                <span>{row.meta}</span>
-              </div>
-            ))}
+            {card.rows && card.rows.length > 0
+              ? card.rows.map((row, idx) =>
+                  row.href ? (
+                    <a
+                      key={`${row.title}-${idx}`}
+                      href={row.href}
+                      className={styles.moduleRow}
+                    >
+                      <strong>{row.title}</strong>
+                      <span>{row.meta}</span>
+                    </a>
+                  ) : (
+                    <div
+                      key={`${row.title}-${idx}`}
+                      className={styles.moduleRow}
+                    >
+                      <strong>{row.title}</strong>
+                      <span>{row.meta}</span>
+                    </div>
+                  ),
+                )
+              : card.rows
+                ? card.emptyHint && (
+                    <p className={styles.emptyHint}>{card.emptyHint}</p>
+                  )
+                : null}
           </div>
         ))}
       </div>
     </section>
   );
+}
+
+// Picks the user's primary project (most-recently-updated) so the views
+// scoped to a single project have a default anchor without forcing the
+// user to pick first.
+function pickAnchorProject(projects: ProjectSummary[]): ProjectSummary | null {
+  if (projects.length === 0) return null;
+  // ProjectSummary.updated_at may be null on freshly-seeded rows; sort
+  // null-last so projects with activity float up.
+  const sorted = [...projects].sort((a, b) => {
+    if (!a.updated_at) return 1;
+    if (!b.updated_at) return -1;
+    return b.updated_at.localeCompare(a.updated_at);
+  });
+  return sorted[0];
+}
+
+function fmtDate(iso: string | null | undefined): string {
+  if (!iso) return "";
+  try {
+    return new Date(iso).toLocaleDateString();
+  } catch {
+    return "";
+  }
+}
+
+// ---- Per-view fetchers ----
+
+function ProjectsView() {
+  const t = useTranslations("shellVNext");
+  const [projects, setProjects] = useState<ProjectSummary[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchMyProjects()
+      .then((p) => {
+        if (cancelled) return;
+        setProjects(p);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setError(t("module.loadError"));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [t]);
+
+  const spec: ModuleViewSpec = useMemo(() => {
+    if (projects === null && !error) {
+      return {
+        title: t("module.projects.title"),
+        subtitle: t("module.projects.subtitle"),
+        cards: [
+          {
+            title: t("module.loading"),
+            body: t("module.loadingHint"),
+          },
+        ],
+      };
+    }
+    const ps = projects ?? [];
+    return {
+      title: t("module.projects.title"),
+      subtitle: t("module.projects.subtitle"),
+      action: t("module.projects.action"),
+      error,
+      cards: [
+        {
+          title: t("module.projects.activeCard"),
+          rows: ps.slice(0, 8).map((p) => ({
+            title: p.title,
+            meta: p.role + (p.updated_at ? ` · ${fmtDate(p.updated_at)}` : ""),
+            href: `/projects/${p.id}`,
+          })),
+          emptyHint: t("module.projects.empty"),
+        },
+        {
+          title: t("module.projects.summaryCard"),
+          body: t("module.projects.summaryBody", { count: ps.length }),
+        },
+      ],
+    };
+  }, [projects, error, t]);
+
+  return <ModuleShell view="projectView" spec={spec} />;
+}
+
+function TasksView() {
+  const t = useTranslations("shellVNext");
+  const [anchor, setAnchor] = useState<ProjectSummary | null>(null);
+  const [tasks, setTasks] = useState<PersonalTask[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchMyProjects()
+      .then((ps) => {
+        if (cancelled) return;
+        const a = pickAnchorProject(ps);
+        setAnchor(a);
+        if (a === null) {
+          setTasks([]);
+          return;
+        }
+        return fetchPersonalTasks(a.id);
+      })
+      .then((res) => {
+        if (cancelled || !res) return;
+        setTasks(res.tasks);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setError(t("module.loadError"));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [t]);
+
+  const spec: ModuleViewSpec = useMemo(() => {
+    if (tasks === null && !error) {
+      return {
+        title: t("module.tasks.title"),
+        subtitle: t("module.tasks.subtitle"),
+        cards: [
+          {
+            title: t("module.loading"),
+            body: t("module.loadingHint"),
+          },
+        ],
+      };
+    }
+    const list = tasks ?? [];
+    const personal = list.filter((row) => row.scope === "personal");
+    const planTasks = list.filter((row) => row.scope === "plan");
+    return {
+      title: t("module.tasks.title"),
+      subtitle: anchor
+        ? t("module.tasks.subtitleWithAnchor", { project: anchor.title })
+        : t("module.tasks.subtitle"),
+      action: t("module.tasks.action"),
+      error,
+      cards: [
+        {
+          title: t("module.tasks.personalCard"),
+          rows: personal.slice(0, 10).map((row) => ({
+            title: row.title,
+            meta: row.status,
+          })),
+          emptyHint: t("module.tasks.personalEmpty"),
+        },
+        {
+          title: t("module.tasks.planCard"),
+          rows: planTasks.slice(0, 10).map((row) => ({
+            title: row.title,
+            meta:
+              (row.assignee_role ? `${row.assignee_role} · ` : "") +
+              row.status,
+          })),
+          emptyHint: t("module.tasks.planEmpty"),
+        },
+      ],
+    };
+  }, [anchor, tasks, error, t]);
+
+  return <ModuleShell view="taskView" spec={spec} />;
+}
+
+function KnowledgeView() {
+  const t = useTranslations("shellVNext");
+  const [anchor, setAnchor] = useState<ProjectSummary | null>(null);
+  const [items, setItems] = useState<KbNote[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchMyProjects()
+      .then((ps) => {
+        if (cancelled) return;
+        const a = pickAnchorProject(ps);
+        setAnchor(a);
+        if (a === null) {
+          setItems([]);
+          return;
+        }
+        return listKbNotes(a.id);
+      })
+      .then((res) => {
+        if (cancelled || !res) return;
+        setItems(res.items);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setError(t("module.loadError"));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [t]);
+
+  const spec: ModuleViewSpec = useMemo(() => {
+    if (items === null && !error) {
+      return {
+        title: t("module.knowledge.title"),
+        subtitle: t("module.knowledge.subtitle"),
+        twoColumn: true,
+        cards: [
+          {
+            title: t("module.loading"),
+            body: t("module.loadingHint"),
+          },
+        ],
+      };
+    }
+    const list = items ?? [];
+    const personal = list.filter((row) => row.scope === "personal");
+    const group = list.filter((row) => row.scope === "group");
+    return {
+      title: t("module.knowledge.title"),
+      subtitle: anchor
+        ? t("module.knowledge.subtitleWithAnchor", { project: anchor.title })
+        : t("module.knowledge.subtitle"),
+      action: t("module.knowledge.action"),
+      twoColumn: true,
+      error,
+      cards: [
+        {
+          title: t("module.knowledge.groupCard"),
+          rows: group.slice(0, 8).map((row) => ({
+            title: row.title,
+            meta: `${row.status} · ${fmtDate(row.updated_at)}`,
+          })),
+          emptyHint: t("module.knowledge.groupEmpty"),
+        },
+        {
+          title: t("module.knowledge.personalCard"),
+          rows: personal.slice(0, 8).map((row) => ({
+            title: row.title,
+            meta: `${row.status} · ${fmtDate(row.updated_at)}`,
+          })),
+          emptyHint: t("module.knowledge.personalEmpty"),
+        },
+      ],
+    };
+  }, [anchor, items, error, t]);
+
+  return <ModuleShell view="knowledgeView" spec={spec} />;
+}
+
+function OrgView() {
+  const t = useTranslations("shellVNext");
+  const [anchor, setAnchor] = useState<ProjectSummary | null>(null);
+  const [members, setMembers] = useState<ProjectMember[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchMyProjects()
+      .then((ps) => {
+        if (cancelled) return;
+        const a = pickAnchorProject(ps);
+        setAnchor(a);
+        if (a === null) {
+          setMembers([]);
+          return;
+        }
+        return fetchProjectMembers(a.id);
+      })
+      .then((res) => {
+        if (cancelled || !res) return;
+        setMembers(res);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setError(t("module.loadError"));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [t]);
+
+  const spec: ModuleViewSpec = useMemo(() => {
+    if (members === null && !error) {
+      return {
+        title: t("module.org.title"),
+        subtitle: t("module.org.subtitle"),
+        cards: [
+          {
+            title: t("module.loading"),
+            body: t("module.loadingHint"),
+          },
+        ],
+      };
+    }
+    const list = members ?? [];
+    return {
+      title: t("module.org.title"),
+      subtitle: anchor
+        ? t("module.org.subtitleWithAnchor", { project: anchor.title })
+        : t("module.org.subtitle"),
+      action: t("module.org.action"),
+      error,
+      cards: [
+        {
+          title: t("module.org.membersCard"),
+          rows: list.map((m) => ({
+            title: m.display_name ?? m.username ?? m.user_id.slice(0, 8),
+            meta:
+              (m.role ?? "member") +
+              (m.skill_tags && m.skill_tags.length > 0
+                ? ` · ${m.skill_tags.join(", ")}`
+                : ""),
+          })),
+          emptyHint: t("module.org.membersEmpty"),
+        },
+        {
+          title: t("module.org.summaryCard"),
+          body: t("module.org.summaryBody", { count: list.length }),
+        },
+      ],
+    };
+  }, [anchor, members, error, t]);
+
+  return <ModuleShell view="orgView" spec={spec} />;
+}
+
+function AuditView() {
+  // No audit-feed endpoint in v1. Render a placeholder card noting the
+  // pending wiring; spec §11 doesn't enumerate this slice yet.
+  const t = useTranslations("shellVNext");
+  const spec: ModuleViewSpec = {
+    title: t("module.audit.title"),
+    subtitle: t("module.audit.subtitle"),
+    action: t("module.audit.action"),
+    cards: [
+      {
+        title: t("module.audit.pendingCard"),
+        body: t("module.audit.pendingBody"),
+      },
+    ],
+  };
+  return <ModuleShell view="auditView" spec={spec} />;
 }

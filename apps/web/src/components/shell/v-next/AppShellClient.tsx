@@ -107,6 +107,26 @@ export function AppShellVNextClient({
     return { projectTitle: null, surfaceLabel: null };
   }, [activeStreamId, generalAgent, projectAgents, groups, dms]);
 
+  // Stream-kind for E-9 workbench-layout lookup. Personal streams
+  // (global + per-project agents) share one composition; rooms / DMs
+  // get their own.
+  const activeStreamKind: "personal" | "room" | "dm" = useMemo(() => {
+    if (!activeStreamId) return "personal";
+    if (generalAgent && generalAgent.stream_id === activeStreamId) {
+      return "personal";
+    }
+    if (projectAgents.some((p) => p.stream_id === activeStreamId)) {
+      return "personal";
+    }
+    if (groups.some((g) => g.stream_id === activeStreamId)) {
+      return "room";
+    }
+    if (dms.some((d) => d.stream_id === activeStreamId)) {
+      return "dm";
+    }
+    return "personal";
+  }, [activeStreamId, generalAgent, projectAgents, groups, dms]);
+
   return (
     <div
       className={[
@@ -164,6 +184,10 @@ export function AppShellVNextClient({
               dms={dms}
               immersive={immersive}
               onToggleImmersive={() => setImmersive((v) => !v)}
+              onSwitchStream={(id) => {
+                setActiveStreamId(id);
+                setActiveView("agentView");
+              }}
             >
               {children}
             </AgentFlow>
@@ -172,7 +196,12 @@ export function AppShellVNextClient({
           )}
         </main>
 
-        {!immersive && toolsOpen && <Workbench onClose={() => setToolsOpen(false)} />}
+        {!immersive && toolsOpen && (
+          <Workbench
+            onClose={() => setToolsOpen(false)}
+            streamKind={activeStreamKind}
+          />
+        )}
       </div>
     </div>
   );

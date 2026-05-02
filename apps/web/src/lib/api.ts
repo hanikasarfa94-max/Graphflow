@@ -981,6 +981,81 @@ export function postStreamMessage(
   });
 }
 
+// ---------- v-Next user preferences (E-6 / E-7 / E-9) ----------
+
+export type VNextThinkingMode = "deep" | "fast";
+export type VNextStreamKind = "personal" | "room" | "dm";
+export type VNextPanelKind =
+  | "tasks"
+  | "knowledge"
+  | "skills"
+  | "requests"
+  | "workflow";
+
+export interface VNextPrefs {
+  // E-6: per-stream override for the composer's auto-dispatch toggle.
+  // Default is on — keys are present only for streams the user has
+  // explicitly disabled.
+  auto_dispatch_streams: Record<string, boolean>;
+  // E-7: user's last-selected thinking-mode hint.
+  thinking_mode: VNextThinkingMode;
+  // E-9: per-stream-kind panel composition (order + presence).
+  workbench_layout: Record<VNextStreamKind, VNextPanelKind[]>;
+}
+
+export function fetchVNextPrefs(): Promise<VNextPrefs> {
+  return api("/api/vnext/prefs");
+}
+
+export interface VNextPrefsUpdate {
+  thinking_mode?: VNextThinkingMode;
+  auto_dispatch?: { stream_id: string; enabled: boolean };
+  workbench?: { stream_kind: VNextStreamKind; panels: VNextPanelKind[] };
+}
+
+export function updateVNextPrefs(
+  body: VNextPrefsUpdate,
+): Promise<VNextPrefs> {
+  return api("/api/vnext/prefs", {
+    method: "PUT",
+    body: body as unknown as JsonValue,
+  });
+}
+
+// ---------- v-Next related-entities (E-5 analysisCard) ----------
+
+export interface VNextRelatedTask {
+  id: string;
+  title: string;
+  status: string;
+  scope: string;
+  assignee_role: string | null;
+}
+
+export interface VNextRelatedDecision {
+  id: string;
+  title: string;
+  outcome: string;
+  decision_class: string | null;
+}
+
+export interface VNextRelatedRisk {
+  id: string;
+  title: string;
+  severity: string;
+  status: string;
+}
+
+export interface VNextRelated {
+  tasks: VNextRelatedTask[];
+  decisions: VNextRelatedDecision[];
+  risks: VNextRelatedRisk[];
+}
+
+export function fetchVNextRelated(streamId: string): Promise<VNextRelated> {
+  return api(`/api/vnext/streams/${streamId}/related`);
+}
+
 // ---------- Room timeline (room-stream slice) ----------
 
 // Discriminated union of timeline rows the room view renders.

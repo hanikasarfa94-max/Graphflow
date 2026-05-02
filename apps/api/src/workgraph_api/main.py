@@ -82,6 +82,8 @@ from workgraph_api.routers import simulation as simulation_router
 from workgraph_api.routers import skill_atlas as skill_atlas_router
 from workgraph_api.routers import streams as streams_router
 from workgraph_api.routers import users as users_router
+from workgraph_api.routers import vnext_prefs as vnext_prefs_router
+from workgraph_api.routers import vnext_streams as vnext_streams_router
 from workgraph_api.routers import ws as ws_router
 from workgraph_api.services import (
     AssignmentService,
@@ -899,6 +901,8 @@ app.include_router(scrimmage_router.router)
 app.include_router(silent_consensus_router.router)
 app.include_router(streams_router.router)
 app.include_router(users_router.router)
+app.include_router(vnext_prefs_router.router)
+app.include_router(vnext_streams_router.router)
 app.include_router(ws_router.router)
 
 

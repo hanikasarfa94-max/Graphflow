@@ -1777,11 +1777,22 @@
     },
     "flowPill": {
       "info": "资料",
-      "infoTip": "此 stream 的资料（待接入 —— 见 §11 E-4）。",
+      "infoTip": "无项目上下文 —— 切换到项目 Agent 后可查看其知识库。",
+      "infoTipProject": "查看该项目的知识库。",
       "memory": "记忆",
-      "memoryTip": "此 stream 的长期记忆（待接入 —— 见 §11 E-4）。",
+      "memoryTip": "无项目上下文 —— 切换到项目 Agent 后可查看其记忆。",
+      "memoryTipProject": "查看该项目的表现 / 记忆页。",
       "skills": "技能",
-      "skillsTip": "此 stream 相关的技能（待接入 —— 见 §11 E-4）。"
+      "skillsTip": "无项目上下文 —— 切换到项目 Agent 后可查看技能图谱。",
+      "skillsTipProject": "查看该项目的技能图谱。"
+    },
+    "analysis": {
+      "title": "关联任务",
+      "summary": "{tasks} 任务 · {decisions} 决策 · {risks} 风险"
+    },
+    "suggestion": {
+      "label": "看起来与「{project}」相关 —— 切到该项目 Agent？",
+      "accept": "切换"
     },
     "immersiveToggle": "切换沉浸模式",
     "timelineLoading": "正在加载消息…",
@@ -1854,7 +1865,55 @@
       "unknownKind": "未知面板"
     },
     "module": {
-      "placeholderHint": "Phase 2 外壳 —— Rail 详情页渲染原型种子卡片。每个详情页的真实数据接入将在 Phase 3 进行。"
+      "loading": "加载中…",
+      "loadingHint": "正在从服务端拉取数据。",
+      "loadError": "加载失败。",
+      "projects": {
+        "title": "项目",
+        "subtitle": "你所在的 Cell（项目）列表。点击进入对应 Agent。",
+        "action": "+ 新建项目",
+        "activeCard": "活跃项目",
+        "summaryCard": "概览",
+        "summaryBody": "{count, plural, =0 {暂无项目，先新建一个。} other {你目前参与了 # 个项目。}}",
+        "empty": "暂无项目 —— 新建一个开始。"
+      },
+      "tasks": {
+        "title": "任务",
+        "subtitle": "个人草稿与团队正式计划。",
+        "subtitleWithAnchor": "锚定项目：{project}。",
+        "action": "+ 新建任务",
+        "personalCard": "我的草稿",
+        "personalEmpty": "暂无个人草稿。",
+        "planCard": "团队计划",
+        "planEmpty": "该项目暂无计划任务。"
+      },
+      "knowledge": {
+        "title": "知识库",
+        "subtitle": "Cell 共享知识与个人笔记。",
+        "subtitleWithAnchor": "锚定项目：{project}。",
+        "action": "+ 新建笔记",
+        "groupCard": "团队知识",
+        "groupEmpty": "暂无团队知识。",
+        "personalCard": "个人笔记",
+        "personalEmpty": "暂无个人笔记。"
+      },
+      "org": {
+        "title": "组织",
+        "subtitle": "活跃项目的成员与技能标签。",
+        "subtitleWithAnchor": "锚定项目：{project}。",
+        "action": "+ 邀请成员",
+        "membersCard": "成员",
+        "membersEmpty": "暂无成员。",
+        "summaryCard": "概览",
+        "summaryBody": "{count, plural, =0 {暂无成员。} other {共 # 位成员。}}"
+      },
+      "audit": {
+        "title": "审计",
+        "subtitle": "高影响动作与图谱写入。",
+        "action": "导出",
+        "pendingCard": "审计流",
+        "pendingBody": "审计流接口尚未接入 —— 待 audit-stream slice 上线。"
+      }
     }
   }
 }

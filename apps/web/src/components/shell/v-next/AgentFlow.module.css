@@ -4,7 +4,7 @@
 .flow {
   height: 100%;
   display: grid;
-  grid-template-rows: 54px 1fr 66px;
+  grid-template-rows: 54px auto 1fr 66px;
   min-height: 0;
 }
 
@@ -98,6 +98,79 @@
 
 .pill:hover {
   background: #f6f9ff;
+}
+
+a.pill {
+  text-decoration: none;
+}
+
+.pillDisabled {
+  cursor: not-allowed;
+  color: var(--wg-muted, #9aa8ba);
+  background: #f6f8fc;
+}
+
+.pillDisabled:hover {
+  background: #f6f8fc;
+}
+
+/* E-5 analysisCard — single line above the timeline that summarizes
+   related entities and shows the top tasks. Lightened card per spec
+   (sunk surface, no hard accent border). */
+.analysisCard {
+  margin: 10px 26px 0;
+  padding: 10px 12px;
+  border: 1px solid var(--wg-line, #e4eaf3);
+  background: rgba(255, 255, 255, 0.86);
+  border-radius: 12px;
+}
+
+.analysisHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+  margin-bottom: 6px;
+  color: var(--wg-ink-soft, #4d5b73);
+}
+
+.analysisHeader strong {
+  color: var(--wg-ink, #1c2230);
+  font-size: 13px;
+}
+
+.analysisList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.analysisList li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+  padding: 4px 6px;
+  border-radius: 7px;
+  background: var(--wg-surface-sunk, #f7f9fc);
+}
+
+.taskTitle {
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-right: 8px;
+}
+
+.taskMeta {
+  flex: 0 0 auto;
+  color: var(--wg-ink-soft, #58687d);
+  font-family: var(--wg-font-mono);
+  font-size: 11px;
 }
 
 .iconBtn {

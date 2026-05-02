@@ -1777,11 +1777,22 @@
     },
     "flowPill": {
       "info": "Info",
-      "infoTip": "Reference materials for this stream (deferred — needs E-4 backend).",
+      "infoTip": "No project context — switch to a project agent to browse its knowledge.",
+      "infoTipProject": "Open this project's knowledge base.",
       "memory": "Memory",
-      "memoryTip": "Long-term memory of this stream (deferred — needs E-4 backend).",
+      "memoryTip": "No project context — switch to a project agent to see its memory.",
+      "memoryTipProject": "Open this project's performance / memory page.",
       "skills": "Skills",
-      "skillsTip": "Skills surfaced for this stream (deferred — needs E-4 backend)."
+      "skillsTip": "No project context — switch to a project agent for the skill atlas.",
+      "skillsTipProject": "Open this project's skill atlas."
+    },
+    "analysis": {
+      "title": "Related",
+      "summary": "{tasks} task(s) · {decisions} decision(s) · {risks} risk(s)"
+    },
+    "suggestion": {
+      "label": "Looks like \"{project}\" — open in that project's agent?",
+      "accept": "Switch"
     },
     "immersiveToggle": "Toggle immersive mode",
     "timelineLoading": "Loading messages…",
@@ -1854,7 +1865,55 @@
       "unknownKind": "Unknown panel"
     },
     "module": {
-      "placeholderHint": "Phase 2 shell — Rail detail pages render the prototype's seed cards. Real data wiring per page lands in Phase 3."
+      "loading": "Loading…",
+      "loadingHint": "Fetching from the server.",
+      "loadError": "Couldn't load this view.",
+      "projects": {
+        "title": "Projects",
+        "subtitle": "Cells you belong to. Click one to drop into its agent.",
+        "action": "+ New project",
+        "activeCard": "Active projects",
+        "summaryCard": "Summary",
+        "summaryBody": "{count, plural, =0 {No projects yet — start one above.} =1 {You're in 1 project.} other {You're in # projects.}}",
+        "empty": "Nothing to show — create a project to begin."
+      },
+      "tasks": {
+        "title": "Tasks",
+        "subtitle": "Personal drafts and the canonical group plan.",
+        "subtitleWithAnchor": "Anchored on {project}.",
+        "action": "+ New task",
+        "personalCard": "My drafts",
+        "personalEmpty": "No personal drafts yet.",
+        "planCard": "Group plan",
+        "planEmpty": "No plan tasks yet for this project."
+      },
+      "knowledge": {
+        "title": "Knowledge",
+        "subtitle": "Cell knowledge and personal notes.",
+        "subtitleWithAnchor": "Anchored on {project}.",
+        "action": "+ New note",
+        "groupCard": "Group knowledge",
+        "groupEmpty": "No group notes yet.",
+        "personalCard": "Personal notes",
+        "personalEmpty": "No personal notes yet."
+      },
+      "org": {
+        "title": "Organization",
+        "subtitle": "Members + skill tags from your active project.",
+        "subtitleWithAnchor": "Anchored on {project}.",
+        "action": "+ Invite member",
+        "membersCard": "Members",
+        "membersEmpty": "No members visible.",
+        "summaryCard": "Summary",
+        "summaryBody": "{count, plural, =0 {No members yet.} =1 {1 member.} other {# members.}}"
+      },
+      "audit": {
+        "title": "Audit",
+        "subtitle": "High-impact actions and graph writes.",
+        "action": "Export",
+        "pendingCard": "Audit feed",
+        "pendingBody": "The audit-feed endpoint isn't wired yet — this slice ships when the audit-stream slice lands."
+      }
     }
   }
 }

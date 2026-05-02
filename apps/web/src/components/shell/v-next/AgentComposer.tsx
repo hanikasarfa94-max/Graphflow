@@ -1,27 +1,57 @@
 "use client";
 
-// AgentComposer — Phase 2 message composer for the v-next shell.
+// AgentComposer — Phase 3 message composer for the v-next shell.
 //
-// Layout matches prototype App.tsx:254-287 exactly:
+// Layout matches prototype App.tsx:254-287:
 //   [+] [plusMenu] [textarea]  [autoAgent toggle] [thinking select] [Send]
 //
-// Per spec §11:
-//   E-6 (autoAgent toggle persistence) — client-side state only in v1
-//   E-7 (thinking-mode hint plumbing)  — client-side state only in v1
-//
-// The toggle + select are rendered + persisted in localStorage but
-// don't yet ride the wire to the backend. Real plumbing lands when
-// PersonalStreamService.respond / POST /api/messages accept the hint.
+// Phase 3 wiring (per spec §11):
+//   E-6 (autoAgent toggle) — server-persisted per-stream override via
+//       /api/vnext/prefs. Default-on; the row only persists explicit
+//       disables (matches BE semantics).
+//   E-7 (thinking-mode hint) — server-persisted per-user preference
+//       via the same endpoint. v1 stores the choice; the LLM-side
+//       wire-through (model temperature / tier) is still deferred.
+//   E-8 (project-inference suggestion) — when active stream is the
+//       global 通用 Agent and the draft body case-insensitively
+//       contains the title of one of the user's projects, show a
+//       deterministic "open in Project X's agent" suggestion above
+//       the textarea. Click switches the active stream via
+//       onSuggestionAccept. LLM-based inference is the v2 upgrade
+//       (flagged in code as TODO).
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 
-import { ApiError, postStreamMessage } from "@/lib/api";
+import {
+  ApiError,
+  fetchMyProjects,
+  fetchVNextPrefs,
+  postStreamMessage,
+  updateVNextPrefs,
+  type ProjectSummary,
+  type VNextThinkingMode,
+} from "@/lib/api";
 
 import styles from "./AgentComposer.module.css";
 
+interface ProjectAgentForSuggestion {
+  project_id: string;
+  title: string;
+  stream_id: string;
+}
+
 interface Props {
   streamId: string;
+  // True when this composer is bound to the user's global 通用 Agent.
+  // Drives E-8 keyword suggestion (only fires for the global stream).
+  isGeneralAgent?: boolean;
+  // Project-agent stream ids by project_id. Used by E-8 to map a
+  // project-title match to the destination stream. Pass an empty list
+  // when there are no project agents (the suggestion stays inert).
+  projectAgents?: ProjectAgentForSuggestion[];
+  // Switch the active stream to this id. Wired by AppShellClient.
+  onSuggestionAccept?: (streamId: string) => void;
   onSent?: () => void;
 }
 
@@ -32,35 +62,103 @@ const PLUS_MENU_ITEMS = [
   { icon: "✅", labelKey: "plus.submitTask" },
 ] as const;
 
-export function AgentComposer({ streamId, onSent }: Props) {
+// E-8 deterministic match — substring (case-insensitive) of the project
+// title in the draft body. A real LLM-based intent classifier is the v2
+// upgrade; the spec calls this out as v1 explicitly out of scope.
+function findKeywordMatch(
+  body: string,
+  candidates: ProjectAgentForSuggestion[],
+): ProjectAgentForSuggestion | null {
+  const trimmed = body.trim();
+  if (trimmed.length < 3) return null;
+  const lower = trimmed.toLowerCase();
+  // Sort by title length descending so a longer title (more specific)
+  // wins when one is a substring of another.
+  const sorted = [...candidates].sort(
+    (a, b) => b.title.length - a.title.length,
+  );
+  for (const c of sorted) {
+    const t = c.title.trim();
+    if (t.length < 2) continue;
+    if (lower.includes(t.toLowerCase())) {
+      return c;
+    }
+  }
+  return null;
+}
+
+export function AgentComposer({
+  streamId,
+  isGeneralAgent = false,
+  projectAgents = [],
+  onSuggestionAccept,
+  onSent,
+}: Props) {
   const t = useTranslations("shellVNext");
   const [body, setBody] = useState("");
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [plusOpen, setPlusOpen] = useState(false);
   const [autoAgent, setAutoAgent] = useState(true);
-  const [thinkingMode, setThinkingMode] = useState<"deep" | "fast">("deep");
+  const [thinkingMode, setThinkingMode] =
+    useState<VNextThinkingMode>("deep");
+  const [prefsHydrated, setPrefsHydrated] = useState(false);
+  // Cached set of project agents fetched if the parent didn't pass them.
+  // Keeps E-8 self-sufficient when the composer is rendered without the
+  // shell's stream lists in scope.
+  const [fallbackAgents, setFallbackAgents] = useState<
+    ProjectAgentForSuggestion[]
+  >([]);
+
   const taRef = useRef<HTMLTextAreaElement>(null);
 
-  // Restore client-side state per E-6 / E-7.
+  // Hydrate from /api/vnext/prefs on mount and whenever the active
+  // stream changes (autoAgent is per-stream).
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    const a = window.localStorage.getItem("wg:vnext:autoAgent");
-    if (a === "false") setAutoAgent(false);
-    const m = window.localStorage.getItem("wg:vnext:thinking");
-    if (m === "fast" || m === "deep") setThinkingMode(m);
-  }, []);
+    let cancelled = false;
+    fetchVNextPrefs()
+      .then((p) => {
+        if (cancelled) return;
+        // Default-on: missing key means enabled.
+        const disabled = p.auto_dispatch_streams[streamId] === false;
+        setAutoAgent(!disabled);
+        setThinkingMode(p.thinking_mode);
+        setPrefsHydrated(true);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        // Hydration failure is non-fatal — keep defaults and let the
+        // user toggle. Persistence will retry on the next user action.
+        setPrefsHydrated(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [streamId]);
 
-  // Persist on change.
+  // Project-agents fallback fetch for E-8 when parent didn't supply.
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    window.localStorage.setItem("wg:vnext:autoAgent", autoAgent ? "true" : "false");
-  }, [autoAgent]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    window.localStorage.setItem("wg:vnext:thinking", thinkingMode);
-  }, [thinkingMode]);
+    if (!isGeneralAgent || projectAgents.length > 0) return;
+    let cancelled = false;
+    fetchMyProjects()
+      .then((ps: ProjectSummary[]) => {
+        if (cancelled) return;
+        // We only know project ids + titles from /api/projects; without
+        // a stream id we can't redirect on click. Fall back to hiding
+        // the suggestion when the parent doesn't supply mappings.
+        // Keeping the fetch so a future endpoint that does include the
+        // stream id can swap in here.
+        setFallbackAgents(
+          ps.map((p) => ({ project_id: p.id, title: p.title, stream_id: "" })),
+        );
+      })
+      .catch(() => {
+        // Silent — E-8 is opt-in polish, not load-bearing.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isGeneralAgent, projectAgents.length]);
 
   // Focus textarea on stream change so user can immediately type.
   useEffect(() => {
@@ -68,6 +166,39 @@ export function AgentComposer({ streamId, onSent }: Props) {
     setBody("");
     setError(null);
   }, [streamId]);
+
+  // E-8 — suggestion is computed from current draft + available project
+  // agents. Only fires on the 通用 Agent surface; project-agent streams
+  // already have the right context.
+  const suggestion = useMemo(() => {
+    if (!isGeneralAgent) return null;
+    const candidates =
+      projectAgents.length > 0 ? projectAgents : fallbackAgents;
+    const haveStreamIds = candidates.some((c) => c.stream_id);
+    if (!haveStreamIds) return null;
+    return findKeywordMatch(body, candidates.filter((c) => c.stream_id));
+  }, [body, isGeneralAgent, projectAgents, fallbackAgents]);
+
+  async function persistAutoAgent(next: boolean) {
+    setAutoAgent(next);
+    try {
+      await updateVNextPrefs({
+        auto_dispatch: { stream_id: streamId, enabled: next },
+      });
+    } catch {
+      // Non-fatal — leave the local toggle in the new state. The next
+      // mount will reconcile from the server.
+    }
+  }
+
+  async function persistThinkingMode(next: VNextThinkingMode) {
+    setThinkingMode(next);
+    try {
+      await updateVNextPrefs({ thinking_mode: next });
+    } catch {
+      // Non-fatal.
+    }
+  }
 
   async function send() {
     const trimmed = body.trim();
@@ -99,6 +230,26 @@ export function AgentComposer({ streamId, onSent }: Props) {
 
   return (
     <div className={styles.composer} data-testid="vnext-composer">
+      {suggestion && onSuggestionAccept && (
+        <div
+          className={styles.suggestion}
+          data-testid="vnext-composer-suggestion"
+          data-suggestion-stream-id={suggestion.stream_id}
+        >
+          <span aria-hidden>💡</span>
+          <span className={styles.suggestionText}>
+            {t("suggestion.label", { project: suggestion.title })}
+          </span>
+          <button
+            type="button"
+            className={styles.suggestionAccept}
+            onClick={() => onSuggestionAccept(suggestion.stream_id)}
+            data-testid="vnext-composer-suggestion-accept"
+          >
+            {t("suggestion.accept")}
+          </button>
+        </div>
+      )}
       <div className={styles.inner}>
         <div className={styles.plusWrapper}>
           <button
@@ -151,8 +302,9 @@ export function AgentComposer({ streamId, onSent }: Props) {
             type="button"
             role="switch"
             aria-checked={autoAgent}
+            disabled={!prefsHydrated}
             className={`${styles.toggle} ${autoAgent ? styles.toggleOn : ""}`}
-            onClick={() => setAutoAgent((v) => !v)}
+            onClick={() => void persistAutoAgent(!autoAgent)}
             data-testid="vnext-composer-auto-agent"
           />
         </label>
@@ -160,8 +312,11 @@ export function AgentComposer({ streamId, onSent }: Props) {
         <select
           className={styles.select}
           value={thinkingMode}
+          disabled={!prefsHydrated}
           onChange={(e) =>
-            setThinkingMode(e.target.value === "fast" ? "fast" : "deep")
+            void persistThinkingMode(
+              e.target.value === "fast" ? "fast" : "deep",
+            )
           }
           aria-label={t("thinkingMode")}
           data-testid="vnext-composer-thinking"

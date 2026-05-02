@@ -6,26 +6,40 @@
 // body (toolShelf 5 chips + panelGrid). Panel kinds: tasks / knowledge /
 // skills / requests / workflow.
 //
-// Phase 2 scope:
+// Phase 3 (E-9): panel composition is now persisted per stream_kind
+// via /api/vnext/prefs. Defaults match the prototype when nothing is
+// stored. Add/remove/reorder fires updateVNextPrefs in the background
+// so the layout survives reload.
+//
+// Phase 2 chrome remains:
 //   * full layout chrome (head + shelf + grid + modes + drag-reorder + close)
 //   * panel renderers as static placeholders matching the prototype's
 //     visual shape — real data wiring per panel kind lands as separate
 //     follow-up slices (each panel kind has its own backend dependency).
-//   * panel composition is in-memory (per spec §11 E-9: defer
-//     persistence to a follow-up).
 //
 // Workflow panel kept inert per 04-28 memo + spec §12 DEVIATE: stages
 // are derived from graph on demand, so the static 4-stage DAG is a
 // visual placeholder. We render it because the prototype does, with a
 // hint that says "stages derived live in production".
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
+
+import {
+  fetchVNextPrefs,
+  updateVNextPrefs,
+  type VNextPanelKind,
+  type VNextStreamKind,
+} from "@/lib/api";
 
 import styles from "./Workbench.module.css";
 
-type PanelKind = "tasks" | "knowledge" | "skills" | "requests" | "workflow";
+type PanelKind = VNextPanelKind;
 type PanelMode = "grid" | "vertical" | "focus";
+
+// Fallback when prefs haven't hydrated yet — the prototype's default
+// for personal-stream surfaces. Matches Phase 2's hardcoded list.
+const DEFAULT_PANELS: PanelKind[] = ["tasks", "knowledge", "skills"];
 
 interface Panel {
   id: string;
@@ -45,18 +59,77 @@ const SHELF_CHIPS: { kind: PanelKind; labelKey: string }[] = [
 
 interface Props {
   onClose: () => void;
+  // Active stream kind — drives which workbench layout to load. Default
+  // 'personal' so the workbench has a sensible composition before a
+  // stream is selected.
+  streamKind?: VNextStreamKind;
 }
 
-export function Workbench({ onClose }: Props) {
+function makePanel(
+  kind: PanelKind,
+  title: string,
+  focus: boolean,
+): Panel {
+  return {
+    id: `p-${kind}`,
+    kind,
+    title,
+    focus,
+    wide: kind === "workflow",
+  };
+}
+
+export function Workbench({ onClose, streamKind = "personal" }: Props) {
   const t = useTranslations("shellVNext");
   const [mode, setMode] = useState<PanelMode>("grid");
-  const [panels, setPanels] = useState<Panel[]>([
-    { id: "p-tasks", kind: "tasks", title: t("wb.title.tasks"), focus: true },
-    { id: "p-knowledge", kind: "knowledge", title: t("wb.title.knowledge"), focus: false },
-    { id: "p-skills", kind: "skills", title: t("wb.title.skills"), focus: false },
-    { id: "p-workflow", kind: "workflow", title: t("wb.title.workflow"), focus: false, wide: true },
-  ]);
+  const [panels, setPanels] = useState<Panel[]>(() =>
+    DEFAULT_PANELS.map((kind, i) =>
+      makePanel(kind, t(`wb.title.${kind}` as const), i === 0),
+    ),
+  );
   const [draggingId, setDraggingId] = useState<string | null>(null);
+  // Skip the persistence write that immediately follows hydration —
+  // otherwise we'd echo the server's own value back to it on every
+  // mount.
+  const skipPersistRef = useRef(true);
+
+  // E-9 hydrate from /api/vnext/prefs. Falls back to DEFAULT_PANELS.
+  useEffect(() => {
+    let cancelled = false;
+    skipPersistRef.current = true;
+    fetchVNextPrefs()
+      .then((p) => {
+        if (cancelled) return;
+        const stored = p.workbench_layout[streamKind];
+        const kinds = stored && stored.length > 0 ? stored : DEFAULT_PANELS;
+        setPanels(
+          kinds.map((kind, i) =>
+            makePanel(kind, t(`wb.title.${kind}` as const), i === 0),
+          ),
+        );
+      })
+      .catch(() => {
+        // Silent — keep the default composition.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [streamKind, t]);
+
+  // Persist on every panel mutation.
+  useEffect(() => {
+    if (skipPersistRef.current) {
+      // First effect run after hydration is the echo — skip.
+      skipPersistRef.current = false;
+      return;
+    }
+    const kinds = panels.map((p) => p.kind);
+    void updateVNextPrefs({
+      workbench: { stream_kind: streamKind, panels: kinds },
+    }).catch(() => {
+      // Non-fatal.
+    });
+  }, [panels, streamKind]);
 
   function focusPanel(id: string) {
     setPanels((prev) => prev.map((p) => ({ ...p, focus: p.id === id })));
