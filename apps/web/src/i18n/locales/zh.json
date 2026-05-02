@@ -1772,6 +1772,8 @@
     "newGroupTip": "在当前项目内新建一个群组。",
     "newGroupNoProjectTip": "请先切换到某个项目 Agent，再在其中创建群组。",
     "workspaces": "团队",
+    "collapseNav": "收起导航",
+    "expandNav": "展开导航",
     "noDMs": "暂无私聊。",
     "unnamedGroup": "未命名群组",
     "tag": {

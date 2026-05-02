@@ -52,6 +52,37 @@
   padding: 2px 4px 4px;
 }
 
+/* leftNarrow mode — column compresses to 76px, labels hide, only the
+   leading face/avatar + counts show. Section headers shrink so the
+   section structure is still visible at a glance. */
+.imNarrow .label,
+.imNarrow .subLabel,
+.imNarrow .sectionHead span:first-child,
+.imNarrow .imTop strong,
+.imNarrow .emptyHint,
+.imNarrow .dmPicker {
+  display: none;
+}
+.imNarrow .navItem {
+  justify-content: center;
+  padding: 0;
+}
+.imNarrow .agentPrimary {
+  padding: 8px 4px;
+  justify-content: center;
+}
+.imNarrow .navText {
+  display: none;
+}
+.imNarrow .face,
+.imNarrow .robot {
+  margin: 0 auto;
+}
+.imNarrow .sectionHead {
+  justify-content: center;
+  padding: 4px 0;
+}
+
 .section {
   border-bottom: 1px solid var(--wg-line, #e4eaf3);
   padding: 5px 0 9px;

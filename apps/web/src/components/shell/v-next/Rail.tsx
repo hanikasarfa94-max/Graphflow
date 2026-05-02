@@ -4,11 +4,16 @@
 //
 // Items: agentView ⌂ | graphView ⊛ | projectView ▣ | taskView ✓ |
 // knowledgeView ◇ | orgView ◎ | auditView ⌕ | tools ▦ (toggle).
-// Bottom: profile avatar + sign-out (Wave 1 port from legacy
-// AppSidebar footer — these were the most visible features lost in
-// the v-next migration). Help "?" sits below them.
+// Bottom: language toggle, profile avatar, sign-out — Wave 1+2.5 ports
+// from legacy AppSidebar footer (most visible features lost in the
+// v-next migration). Help "?" sits below them.
 
 import Link from "next/link";
+import { useLocale, useTranslations } from "next-intl";
+import { useRouter } from "next/navigation";
+import { useTransition } from "react";
+
+import { LOCALE_COOKIE, type Locale } from "@/i18n/config";
 import type { User } from "@/lib/api";
 
 import type { ActiveView } from "./AppShellClient";
@@ -51,6 +56,30 @@ export function Rail({
     .trim()
     .charAt(0)
     .toUpperCase() || "?");
+
+  // Compact language toggle. Clicks flip between en ↔ zh — same cookie
+  // + best-effort profile-write semantics as the legacy LanguageSwitcher,
+  // just rendered as a single rail-sized button instead of an inline
+  // <select> (a 50px column can't host the dropdown). Two locales is
+  // the entire v1 set so a toggle is enough.
+  const currentLocale = useLocale() as Locale;
+  const tLang = useTranslations("language");
+  const langRouter = useRouter();
+  const [langPending, langStartTransition] = useTransition();
+  const otherLocale: Locale = currentLocale === "en" ? "zh" : "en";
+  function flipLocale() {
+    document.cookie = `${LOCALE_COOKIE}=${otherLocale}; path=/; max-age=${
+      60 * 60 * 24 * 365
+    }; samesite=lax`;
+    void fetch("/api/users/me", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ display_language: otherLocale }),
+    }).catch(() => undefined);
+    langStartTransition(() => langRouter.refresh());
+  }
+  const localeBadge = currentLocale === "en" ? "EN" : "中";
   return (
     <nav
       className={styles.rail}
@@ -88,6 +117,18 @@ export function Rail({
         <span className={styles.tip}>工具栏</span>
       </button>
       <div className={styles.bottom}>
+        <button
+          type="button"
+          className={styles.langBtn}
+          onClick={flipLocale}
+          disabled={langPending}
+          title={tLang("switcher")}
+          aria-label={tLang("switcher")}
+          data-testid="vnext-rail-language"
+        >
+          <span aria-hidden>{localeBadge}</span>
+          <span className={styles.tip}>{tLang("switcher")}</span>
+        </button>
         {user && (
           <>
             <Link

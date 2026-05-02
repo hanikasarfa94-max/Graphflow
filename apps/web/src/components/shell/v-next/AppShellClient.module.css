@@ -61,6 +61,14 @@
   grid-template-columns: var(--rail) minmax(0, 1fr);
 }
 
+/* leftNarrow: ImNav collapses to a 76px icon strip without losing
+   discoverability. Splitter drag below 120px sets this; the toggle
+   button in ImNav header sets it explicitly. CSS-only — labels hide
+   in ImNav.module.css via the matching class on .app. */
+.app.leftNarrow {
+  --im: 76px;
+}
+
 /* immersive: hides bar + rail + im + splitters + tools, just top + main. */
 .app.immersive {
   grid-template-rows: var(--top) 1fr;

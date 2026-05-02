@@ -51,6 +51,11 @@ interface Props {
   // or disables itself if the user has no projects.
   activeProjectId: string | null;
   currentUserId: string;
+  // Narrow-mode flag — labels collapse, columns get the 76px treatment.
+  // Same flag the splitter drag toggles when ImNav is dragged < 120px;
+  // also flippable via the chevron button in the imTop header.
+  narrow?: boolean;
+  onToggleNarrow?: () => void;
   onSelectStream: (streamId: string) => void;
 }
 
@@ -63,6 +68,8 @@ export function ImNav({
   activeStreamId,
   activeProjectId,
   currentUserId,
+  narrow = false,
+  onToggleNarrow,
   onSelectStream,
 }: Props) {
   const t = useTranslations("shellVNext");
@@ -128,13 +135,26 @@ export function ImNav({
 
   return (
     <aside
-      className={styles.im}
+      className={`${styles.im} ${narrow ? styles.imNarrow : ""}`}
       aria-label="Stream navigation"
       data-testid="vnext-imnav"
     >
       <div className={styles.imTop}>
         <strong>{t("personalAgentSection")}</strong>
         <div className={styles.imTopActions}>
+          {onToggleNarrow && (
+            <button
+              type="button"
+              className={styles.miniBtn}
+              onClick={onToggleNarrow}
+              aria-pressed={narrow}
+              aria-label={narrow ? t("expandNav") : t("collapseNav")}
+              title={narrow ? t("expandNav") : t("collapseNav")}
+              data-testid="vnext-imnav-narrow-toggle"
+            >
+              {narrow ? "»" : "«"}
+            </button>
+          )}
           <button
             type="button"
             className={styles.miniBtn}

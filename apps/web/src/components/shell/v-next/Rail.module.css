@@ -144,3 +144,33 @@
 .signoutBtn:hover .tip {
   opacity: 1;
 }
+
+/* Language toggle — compact two-letter button (EN / 中). Clicks flip
+   between en ↔ zh; the legacy <select>-based LanguageSwitcher doesn't
+   fit a 50px rail, but two locales is the entire v1 set so a toggle
+   is enough. */
+.langBtn {
+  width: 36px;
+  height: 28px;
+  border: 1px solid var(--wg-line, #e4eaf3);
+  background: var(--wg-surface, #fff);
+  color: var(--wg-ink-soft, #4d5b73);
+  border-radius: 10px;
+  font-size: 11px;
+  font-family: var(--wg-font-mono);
+  font-weight: 800;
+  cursor: pointer;
+  position: relative;
+}
+.langBtn:hover {
+  background: var(--wg-accent-soft, #f1f6ff);
+  color: var(--wg-blue, #2563eb);
+  border-color: #cfe0ff;
+}
+.langBtn:disabled {
+  cursor: progress;
+  opacity: 0.6;
+}
+.langBtn:hover .tip {
+  opacity: 1;
+}

@@ -91,6 +91,11 @@ export function AppShellVNextClient({
   // primary affordance, not a hidden tray. Users toggle off via the ▦
   // button in the Rail.
   const [toolsOpen, setToolsOpen] = useState(true);
+  // ImNav narrow mode — labels collapse, icon column at 76px. Discovers
+  // the same `leftNarrow` state the splitter-drag handler sets when the
+  // user drags ImNav < 120px wide; the toggle just adds a one-click
+  // affordance so users don't need to discover the drag.
+  const [leftNarrow, setLeftNarrow] = useState(false);
   const [immersive, setImmersive] = useState(false);
   const [cellPillOn, setCellPillOn] = useState(false);
 
@@ -124,6 +129,9 @@ export function AppShellVNextClient({
         // ImNav width = mouseX - rail (50px). Clamp [76, 340].
         const w = Math.max(76, Math.min(340, e.clientX - 50));
         appRef.current.style.setProperty("--im", `${w}px`);
+        // Mirror the prototype's leftNarrow toggle so labels collapse
+        // when the column gets too narrow to read them.
+        setLeftNarrow(w < 120);
       } else {
         // Tools width = viewport - mouseX. Clamp [330, 760].
         const w = Math.max(330, Math.min(760, window.innerWidth - e.clientX));
@@ -228,6 +236,7 @@ export function AppShellVNextClient({
           moduleMode ? styles.moduleMode : "",
           toolsOpen ? "" : styles.toolsClosed,
           immersive ? styles.immersive : "",
+          leftNarrow ? styles.leftNarrow : "",
         ].join(" ")}
         data-testid="vnext-app-shell"
       >
@@ -277,6 +286,21 @@ export function AppShellVNextClient({
             activeStreamId={activeStreamId}
             activeProjectId={activeProjectId}
             currentUserId={user.id}
+            narrow={leftNarrow}
+            onToggleNarrow={() => {
+              setLeftNarrow((v) => {
+                const next = !v;
+                // Snap the CSS variable in lockstep so the splitter
+                // drag and the toggle agree on width.
+                if (appRef.current) {
+                  appRef.current.style.setProperty(
+                    "--im",
+                    next ? "76px" : "254px",
+                  );
+                }
+                return next;
+              });
+            }}
             onSelectStream={(id) => {
               setActiveStreamId(id);
               setActiveView("agentView");

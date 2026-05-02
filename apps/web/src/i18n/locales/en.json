@@ -1774,6 +1774,8 @@
     "newGroupTip": "Create a new group inside the current project.",
     "newGroupNoProjectTip": "Switch to a project agent first to create a group inside it.",
     "workspaces": "Workspaces",
+    "collapseNav": "Collapse navigation",
+    "expandNav": "Expand navigation",
     "tag": {
       "agent": "Agent",
       "group": "Group",
