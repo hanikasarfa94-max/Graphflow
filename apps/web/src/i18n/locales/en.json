@@ -1866,12 +1866,27 @@
         "requests": "Collaboration Requests",
         "workflow": "Workflow / Schedule"
       },
+      "loading": "Loading…",
       "tasks": {
         "mine": "Mine",
-        "team": "Team"
+        "team": "Team",
+        "noProject": "Pick a project agent to see this project's tasks.",
+        "newPlaceholder": "+ Add a personal task",
+        "emptyMine": "No personal drafts yet. Add one above.",
+        "emptyTeam": "No team plan tasks yet."
       },
       "knowledge": {
-        "searchPlaceholder": "Search knowledge"
+        "searchPlaceholder": "Search knowledge",
+        "noProject": "Pick a project agent to see this project's knowledge.",
+        "empty": "No knowledge items yet."
+      },
+      "skills": {
+        "noProject": "Pick a project agent to see its members + skill tags.",
+        "empty": "No members visible."
+      },
+      "requests": {
+        "empty": "No pending routed signals.",
+        "untitled": "(no framing)"
       },
       "workflow": {
         "hint": "Stages render live from the graph in production — this is a placeholder shape."

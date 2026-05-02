@@ -1866,12 +1866,27 @@
         "requests": "协同请求",
         "workflow": "工作流 / 日程"
       },
+      "loading": "加载中…",
       "tasks": {
         "mine": "我的",
-        "team": "团队"
+        "team": "团队",
+        "noProject": "请先切换到某个项目 Agent，再查看其任务。",
+        "newPlaceholder": "+ 新建个人任务",
+        "emptyMine": "暂无个人草稿。在上方输入新增。",
+        "emptyTeam": "暂无团队计划任务。"
       },
       "knowledge": {
-        "searchPlaceholder": "搜索知识库"
+        "searchPlaceholder": "搜索知识库",
+        "noProject": "请先切换到某个项目 Agent，再查看其知识库。",
+        "empty": "暂无知识条目。"
+      },
+      "skills": {
+        "noProject": "请先切换到某个项目 Agent，查看成员与技能标签。",
+        "empty": "暂无成员。"
+      },
+      "requests": {
+        "empty": "暂无待处理的协同请求。",
+        "untitled": "(无 framing)"
       },
       "workflow": {
         "hint": "实际生产中阶段从图谱实时派生，此处为占位形状。"

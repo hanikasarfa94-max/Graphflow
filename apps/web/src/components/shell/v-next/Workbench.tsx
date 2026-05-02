@@ -26,8 +26,17 @@ import { useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 
 import {
+  createPersonalTask,
+  fetchPersonalTasks,
+  fetchProjectMembers,
   fetchVNextPrefs,
+  listKbNotes,
+  listRoutedInbox,
   updateVNextPrefs,
+  type KbNote,
+  type PersonalTask,
+  type ProjectMember,
+  type RoutingSignal,
   type VNextPanelKind,
   type VNextStreamKind,
 } from "@/lib/api";
@@ -71,6 +80,10 @@ interface Props {
   // 'personal' so the workbench has a sensible composition before a
   // stream is selected.
   streamKind?: VNextStreamKind;
+  // Active project — drives the live data fetch for tasks / knowledge /
+  // skills / requests panels. Without a project context the panels
+  // render their empty-state "pick a project agent" copy.
+  activeProjectId?: string | null;
 }
 
 function makePanel(
@@ -87,7 +100,11 @@ function makePanel(
   };
 }
 
-export function Workbench({ onClose, streamKind = "personal" }: Props) {
+export function Workbench({
+  onClose,
+  streamKind = "personal",
+  activeProjectId = null,
+}: Props) {
   const t = useTranslations("shellVNext");
   const [mode, setMode] = useState<PanelMode>("grid");
   const [panels, setPanels] = useState<Panel[]>(() =>
@@ -231,6 +248,7 @@ export function Workbench({ onClose, streamKind = "personal" }: Props) {
               key={p.id}
               panel={p}
               modeFocus={mode === "focus"}
+              activeProjectId={activeProjectId}
               onFocus={() => focusPanel(p.id)}
               onClose={() => closePanel(p.id)}
               onDragStart={() => setDraggingId(p.id)}
@@ -247,6 +265,7 @@ export function Workbench({ onClose, streamKind = "personal" }: Props) {
 function PanelCard({
   panel,
   modeFocus,
+  activeProjectId,
   onFocus,
   onClose,
   onDragStart,
@@ -255,6 +274,7 @@ function PanelCard({
 }: {
   panel: Panel;
   modeFocus: boolean;
+  activeProjectId: string | null;
   onFocus: () => void;
   onClose: () => void;
   onDragStart: () => void;
@@ -298,64 +318,36 @@ function PanelCard({
         </div>
       </div>
       <div className={styles.panelBody}>
-        <PanelBody kind={panel.kind} />
+        <PanelBody kind={panel.kind} activeProjectId={activeProjectId} />
       </div>
     </section>
   );
 }
 
-// PanelBody — kind-specific renderers. Phase 2 ships static placeholder
-// content matching the prototype's visual shape. Real data wiring per
-// kind is a separate follow-up (each kind has its own BE dependency:
-// tasks → personal-tasks API, knowledge → kb_search, skills →
-// project-members + skill atlas, requests → routing inbox).
-function PanelBody({ kind }: { kind: PanelKind }) {
+// PanelBody — kind-specific renderers. Wave 4 swap: tasks / knowledge /
+// skills / requests now fetch real data from the relevant BE endpoint
+// when an active project context exists. Workflow stays as the static
+// stage DAG per spec §12 DEVIATE (stages derived from graph in v2).
+function PanelBody({
+  kind,
+  activeProjectId,
+}: {
+  kind: PanelKind;
+  activeProjectId: string | null;
+}) {
   const t = useTranslations("shellVNext");
 
   if (kind === "tasks") {
-    return (
-      <>
-        <div className={styles.scopeRow}>
-          <span className={`${styles.scopePill} ${styles.scopePillActive}`}>
-            {t("wb.tasks.mine")}
-          </span>
-          <span className={styles.scopePill}>{t("wb.tasks.team")}</span>
-        </div>
-        <PanelItem title="CRM 后端接口对接" meta="进行中" progress={70} />
-        <PanelItem title="客户标签体系重构" meta="进行中 · 2 天后" />
-        <PanelItem title="渠道满意分析设计" meta="进行中" />
-      </>
-    );
+    return <TasksPanel activeProjectId={activeProjectId} />;
   }
   if (kind === "knowledge") {
-    return (
-      <>
-        <input
-          className={styles.panelInput}
-          placeholder={t("wb.knowledge.searchPlaceholder")}
-        />
-        <PanelItem title="Boss-3 智能设计实践 v0.3" meta="可用字数：12.8 MB" />
-        <PanelItem title="团队标准 · 合作规范 v2.1" meta="10 分钟前" />
-      </>
-    );
+    return <KnowledgePanel activeProjectId={activeProjectId} />;
   }
   if (kind === "skills") {
-    return (
-      <>
-        <div className={styles.graphBox} aria-hidden />
-        <PanelItem title="Blake" meta="后端负责人 · 9.2" />
-        <PanelItem title="Diana" meta="设计负责人 · 8.6" />
-      </>
-    );
+    return <SkillsPanel activeProjectId={activeProjectId} />;
   }
   if (kind === "requests") {
-    return (
-      <>
-        <PanelItem title="请 Blake 判断" meta="后端接口可行性 · 等待中" />
-        <PanelItem title="请 Diana 确认" meta="数据口径定义 · 已发送" />
-        <PanelItem title="请 Sofia 补充" meta="用户反馈证据 · 待处理" />
-      </>
-    );
+    return <RequestsPanel />;
   }
   if (kind === "workflow") {
     return (
@@ -411,5 +403,273 @@ function PanelItem({
         </div>
       )}
     </div>
+  );
+}
+
+// ---- Live panels (Wave 4) ----------------------------------------
+//
+// Each panel below replaces its prototype mock data with a real fetch
+// from the corresponding BE endpoint. When there's no active project
+// context (general agent / DM / no stream) the panel renders an
+// empty-state with a hint so users understand WHY it's empty.
+
+function TasksPanel({ activeProjectId }: { activeProjectId: string | null }) {
+  const t = useTranslations("shellVNext");
+  const [tasks, setTasks] = useState<PersonalTask[] | null>(null);
+  const [scope, setScope] = useState<"mine" | "team">("mine");
+  // Inline "+ new task" affordance — matches legacy /projects/[id]/team
+  // workbench panel that exposed createPersonalTask. Posts as a personal
+  // (private) task; user can promote to plan from the task page.
+  const [creating, setCreating] = useState(false);
+  const [draft, setDraft] = useState("");
+
+  const refresh = () => {
+    if (!activeProjectId) {
+      setTasks(null);
+      return;
+    }
+    fetchPersonalTasks(activeProjectId)
+      .then((res) => setTasks(res.tasks))
+      .catch(() => setTasks([]));
+  };
+  useEffect(() => {
+    refresh();
+    // refresh fn captures activeProjectId via closure each render — OK.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeProjectId]);
+
+  async function submit() {
+    const title = draft.trim();
+    if (!title || !activeProjectId || creating) return;
+    setCreating(true);
+    try {
+      await createPersonalTask(activeProjectId, { title });
+      setDraft("");
+      refresh();
+    } catch {
+      // surface failure inline; non-fatal
+    } finally {
+      setCreating(false);
+    }
+  }
+
+  if (!activeProjectId) {
+    return (
+      <p className={styles.emptyHint}>{t("wb.tasks.noProject")}</p>
+    );
+  }
+
+  const list = (tasks ?? []).filter((task) =>
+    scope === "mine" ? task.scope === "personal" : task.scope === "plan",
+  );
+
+  return (
+    <>
+      <div className={styles.scopeRow}>
+        <button
+          type="button"
+          className={`${styles.scopePill} ${
+            scope === "mine" ? styles.scopePillActive : ""
+          }`}
+          onClick={() => setScope("mine")}
+          data-testid="vnext-wb-tasks-mine"
+        >
+          {t("wb.tasks.mine")}
+        </button>
+        <button
+          type="button"
+          className={`${styles.scopePill} ${
+            scope === "team" ? styles.scopePillActive : ""
+          }`}
+          onClick={() => setScope("team")}
+          data-testid="vnext-wb-tasks-team"
+        >
+          {t("wb.tasks.team")}
+        </button>
+      </div>
+      {scope === "mine" && (
+        <div className={styles.taskComposer}>
+          <input
+            className={styles.panelInput}
+            placeholder={t("wb.tasks.newPlaceholder")}
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                void submit();
+              }
+            }}
+            disabled={creating}
+            data-testid="vnext-wb-tasks-new-input"
+          />
+          <button
+            type="button"
+            className={styles.taskComposerBtn}
+            onClick={() => void submit()}
+            disabled={!draft.trim() || creating}
+            data-testid="vnext-wb-tasks-new-submit"
+          >
+            ＋
+          </button>
+        </div>
+      )}
+      {tasks === null ? (
+        <p className={styles.emptyHint}>{t("wb.loading")}</p>
+      ) : list.length === 0 ? (
+        <p className={styles.emptyHint}>
+          {scope === "mine"
+            ? t("wb.tasks.emptyMine")
+            : t("wb.tasks.emptyTeam")}
+        </p>
+      ) : (
+        list.map((task) => (
+          <PanelItem
+            key={task.id}
+            title={task.title}
+            meta={
+              (task.assignee_role ? `${task.assignee_role} · ` : "") +
+              task.status
+            }
+          />
+        ))
+      )}
+    </>
+  );
+}
+
+function KnowledgePanel({
+  activeProjectId,
+}: {
+  activeProjectId: string | null;
+}) {
+  const t = useTranslations("shellVNext");
+  const [items, setItems] = useState<KbNote[] | null>(null);
+  const [query, setQuery] = useState("");
+
+  useEffect(() => {
+    if (!activeProjectId) {
+      setItems(null);
+      return;
+    }
+    listKbNotes(activeProjectId)
+      .then((res) => setItems(res.items))
+      .catch(() => setItems([]));
+  }, [activeProjectId]);
+
+  if (!activeProjectId) {
+    return <p className={styles.emptyHint}>{t("wb.knowledge.noProject")}</p>;
+  }
+
+  const filtered = (items ?? []).filter((it) => {
+    if (!query.trim()) return true;
+    const q = query.toLowerCase();
+    return (
+      it.title.toLowerCase().includes(q) ||
+      it.content_md.toLowerCase().includes(q)
+    );
+  });
+
+  return (
+    <>
+      <input
+        className={styles.panelInput}
+        placeholder={t("wb.knowledge.searchPlaceholder")}
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        data-testid="vnext-wb-knowledge-search"
+      />
+      {items === null ? (
+        <p className={styles.emptyHint}>{t("wb.loading")}</p>
+      ) : filtered.length === 0 ? (
+        <p className={styles.emptyHint}>{t("wb.knowledge.empty")}</p>
+      ) : (
+        filtered
+          .slice(0, 12)
+          .map((it) => (
+            <PanelItem
+              key={it.id}
+              title={it.title}
+              meta={`${it.scope} · ${it.status}`}
+            />
+          ))
+      )}
+    </>
+  );
+}
+
+function SkillsPanel({ activeProjectId }: { activeProjectId: string | null }) {
+  const t = useTranslations("shellVNext");
+  const [members, setMembers] = useState<ProjectMember[] | null>(null);
+
+  useEffect(() => {
+    if (!activeProjectId) {
+      setMembers(null);
+      return;
+    }
+    fetchProjectMembers(activeProjectId)
+      .then((res) => setMembers(res))
+      .catch(() => setMembers([]));
+  }, [activeProjectId]);
+
+  return (
+    <>
+      <div className={styles.graphBox} aria-hidden />
+      {!activeProjectId ? (
+        <p className={styles.emptyHint}>{t("wb.skills.noProject")}</p>
+      ) : members === null ? (
+        <p className={styles.emptyHint}>{t("wb.loading")}</p>
+      ) : members.length === 0 ? (
+        <p className={styles.emptyHint}>{t("wb.skills.empty")}</p>
+      ) : (
+        members.slice(0, 8).map((m) => (
+          <PanelItem
+            key={m.user_id}
+            title={m.display_name ?? m.username ?? m.user_id.slice(0, 8)}
+            meta={
+              (m.skill_tags && m.skill_tags.length > 0
+                ? m.skill_tags.join(", ")
+                : m.role ?? "member")
+            }
+          />
+        ))
+      )}
+    </>
+  );
+}
+
+function RequestsPanel() {
+  const t = useTranslations("shellVNext");
+  const [signals, setSignals] = useState<RoutingSignal[] | null>(null);
+
+  useEffect(() => {
+    listRoutedInbox({ status: "pending", limit: 12 })
+      .then((res) => setSignals(res.signals))
+      .catch(() => setSignals([]));
+  }, []);
+
+  if (signals === null) {
+    return <p className={styles.emptyHint}>{t("wb.loading")}</p>;
+  }
+  if (signals.length === 0) {
+    return <p className={styles.emptyHint}>{t("wb.requests.empty")}</p>;
+  }
+  return (
+    <>
+      {signals.map((s) => {
+        // Pick a one-line summary from the framing or the first option.
+        const summary = s.framing.trim().split(/\n/)[0]?.slice(0, 80) ?? "";
+        const created = s.created_at
+          ? new Date(s.created_at).toLocaleString()
+          : "";
+        return (
+          <PanelItem
+            key={s.id}
+            title={summary || t("wb.requests.untitled")}
+            meta={`${s.status} · ${created}`}
+          />
+        );
+      })}
+    </>
   );
 }

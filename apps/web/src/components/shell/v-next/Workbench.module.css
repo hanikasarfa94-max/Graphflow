@@ -283,6 +283,46 @@
   margin-bottom: 8px;
 }
 
+/* "+ new task" inline composer — input on the left, submit on the right.
+   Lives at the top of the Tasks panel under the Mine/Team scope pills. */
+.taskComposer {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.taskComposer .panelInput {
+  margin-bottom: 0;
+  flex: 1 1 auto;
+}
+.taskComposerBtn {
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--wg-line, #e4eaf3);
+  background: var(--wg-accent-soft, #eef4ff);
+  color: var(--wg-blue, #2563eb);
+  border-radius: 10px;
+  font-weight: 800;
+  font-size: 14px;
+  cursor: pointer;
+}
+.taskComposerBtn:hover {
+  background: var(--wg-accent, #2563eb);
+  color: #fff;
+}
+.taskComposerBtn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* Empty-state inside a panel body — small italic hint, fits all kinds. */
+.emptyHint {
+  font-size: 12px;
+  color: var(--wg-muted, #8b9ab0);
+  font-style: italic;
+  margin: 4px 0;
+}
+
 .graphBox {
   height: 132px;
   border: 1px dashed #cbd5e1;

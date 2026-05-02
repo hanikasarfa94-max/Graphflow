@@ -28,6 +28,7 @@ import { useTranslations } from "next-intl";
 import {
   ApiError,
   listStreamMessages,
+  proposeDecisionFromMessage,
   type PersonalMessage,
   type StreamMessage,
   type User,
@@ -51,6 +52,12 @@ import styles from "./AgentTimeline.module.css";
 interface Props {
   streamId: string;
   user: User;
+  // Group/room streams expose the 💎 Crystallize affordance on every
+  // text bubble — the membrane gateway from chat to graph (calls
+  // proposeDecisionFromMessage). Personal agent streams + DMs don't
+  // get the button because crystallization is a group-level action
+  // (decisions are scoped to a stream's member quorum).
+  enableCrystallize?: boolean;
 }
 
 // Shape adapter — StreamMessage already has every field the cards
@@ -62,7 +69,11 @@ function toPersonal(m: StreamMessage): PersonalMessage {
   return m as unknown as PersonalMessage;
 }
 
-export function AgentTimeline({ streamId, user }: Props) {
+export function AgentTimeline({
+  streamId,
+  user,
+  enableCrystallize = false,
+}: Props) {
   const t = useTranslations("shellVNext");
   const [messages, setMessages] = useState<StreamMessage[]>([]);
   const [loading, setLoading] = useState(true);
@@ -202,6 +213,7 @@ export function AgentTimeline({ streamId, user }: Props) {
           message={m}
           currentUserId={user.id}
           memberById={memberById}
+          enableCrystallize={enableCrystallize}
           onRefresh={refresh}
         />
       ))}
@@ -213,11 +225,13 @@ function Row({
   message,
   currentUserId,
   memberById,
+  enableCrystallize,
   onRefresh,
 }: {
   message: StreamMessage;
   currentUserId: string;
   memberById: Map<string, StreamMember>;
+  enableCrystallize: boolean;
   onRefresh: () => void;
 }) {
   const projectId = message.project_id;
@@ -241,7 +255,13 @@ function Row({
       // global / DM streams this kind shouldn't appear; if it does,
       // fall back to the bubble.
       if (!projectId) {
-        return <Bubble message={message} currentUserId={currentUserId} />;
+        return (
+        <Bubble
+          message={message}
+          currentUserId={currentUserId}
+          enableCrystallize={enableCrystallize}
+        />
+      );
       }
       return (
         <RouteProposalCard
@@ -303,7 +323,13 @@ function Row({
     case "silent-consensus-proposal":
       // Project-only — same fallback as edge-route-proposal.
       if (!projectId) {
-        return <Bubble message={message} currentUserId={currentUserId} />;
+        return (
+        <Bubble
+          message={message}
+          currentUserId={currentUserId}
+          enableCrystallize={enableCrystallize}
+        />
+      );
       }
       return (
         <SilentConsensusCard
@@ -328,19 +354,61 @@ function Row({
       // Forward-compat: unknown kinds render as plain text. Matches
       // PersonalStream's default branch — a new backend kind never
       // crashes the surface.
-      return <Bubble message={message} currentUserId={currentUserId} />;
+      return (
+        <Bubble
+          message={message}
+          currentUserId={currentUserId}
+          enableCrystallize={enableCrystallize}
+        />
+      );
   }
 }
 
 function Bubble({
   message,
   currentUserId,
+  enableCrystallize,
 }: {
   message: StreamMessage;
   currentUserId: string;
+  enableCrystallize: boolean;
 }) {
   const isMine = message.author_id === currentUserId;
   const time = formatTime(message.created_at);
+  const [crystallizing, setCrystallizing] = useState(false);
+  const [crystallized, setCrystallized] = useState(false);
+
+  async function onCrystallize() {
+    if (crystallizing || crystallized) return;
+    setCrystallizing(true);
+    try {
+      await proposeDecisionFromMessage(message.id, {});
+      setCrystallized(true);
+    } catch {
+      // surface failure inline by leaving the button enabled — backend
+      // is idempotent so retry is safe
+    } finally {
+      setCrystallizing(false);
+    }
+  }
+
+  // Crystallize affordance — left side of the bubble (next to avatar)
+  // for other-user messages only. Membrane gateway from chat: clicking
+  // proposes the message as a decision/blocker/tag and routes it
+  // through MembraneService.review(). Idempotent backend.
+  const crystallizeBtn =
+    enableCrystallize && !isMine ? (
+      <button
+        type="button"
+        onClick={onCrystallize}
+        disabled={crystallizing || crystallized}
+        className={styles.crystallizeBtn}
+        title="Crystallize as decision / blocker / tag"
+        data-testid="vnext-message-crystallize"
+      >
+        {crystallized ? "✓" : "💎"}
+      </button>
+    ) : null;
 
   if (isMine) {
     return (
@@ -363,7 +431,10 @@ function Bubble({
       </div>
       <div>
         <div className={styles.bubble}>
-          <div className={styles.name}>{message.author_username ?? "?"}</div>
+          <div className={styles.name}>
+            {message.author_username ?? "?"}
+            {crystallizeBtn}
+          </div>
           {message.body}
         </div>
         <div className={styles.time}>{time}</div>

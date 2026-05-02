@@ -31,6 +31,7 @@ import {
 } from "@/lib/api";
 
 import { TeamRoomRecap } from "@/components/stream/TeamRoomRecap";
+import { SkillDeclarationBanner } from "@/components/onboarding/SkillDeclarationBanner";
 
 import { AgentComposer } from "./AgentComposer";
 import { AgentTimeline } from "./AgentTimeline";
@@ -145,8 +146,23 @@ export function AgentFlow({
       </header>
 
       <div className={styles.scrollBody}>
+        {/* Skill declaration onboarding — self-hides if user already
+            declared abilities or dismissed. Only meaningful on a
+            project agent stream where there's a project context to
+            anchor the welcome line. */}
+        {active.tag === "agent" && projectId && active.projectName && (
+          <SkillDeclarationBanner
+            projectId={projectId}
+            projectTitle={active.projectName}
+            userId={user.id}
+          />
+        )}
         <AnalysisCard streamId={activeStreamId} hasProject={projectId !== null} />
-        <AgentTimeline streamId={activeStreamId} user={user} />
+        <AgentTimeline
+          streamId={activeStreamId}
+          user={user}
+          enableCrystallize={active.tag === "group"}
+        />
       </div>
 
       <TeamRoomRecapMount
@@ -287,6 +303,10 @@ interface ActiveStream {
   face: string;
   tag: "agent" | "group" | "dm";
   projectId?: string | null;
+  // Bare project name (without "的 Agent" suffix) — fed to chrome that
+  // wants the project label, not the stream label (e.g. the
+  // SkillDeclarationBanner welcome line).
+  projectName?: string | null;
 }
 
 function resolveActive(
@@ -316,6 +336,7 @@ function resolveActive(
       face: "🤖",
       tag: "agent",
       projectId: pa.project_id,
+      projectName: pa.anchor_name,
     };
   }
 

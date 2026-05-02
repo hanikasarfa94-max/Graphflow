@@ -94,3 +94,27 @@
   color: var(--wg-ok, #2f8f4f);
   margin-left: 42px;
 }
+
+/* 💎 Crystallize button — sits next to the author name on group/room
+   messages. Membrane gateway from chat to graph (proposeDecisionFromMessage). */
+.crystallizeBtn {
+  margin-left: 8px;
+  padding: 0 6px;
+  font-size: 11px;
+  border: 1px solid var(--wg-line, #e4eaf3);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--wg-ink-soft, #58687d);
+  cursor: pointer;
+  font-weight: 700;
+  font-family: var(--wg-font-mono);
+}
+.crystallizeBtn:hover {
+  background: var(--wg-accent-soft, #eef4ff);
+  border-color: var(--wg-accent-ring, #cfe0ff);
+  color: var(--wg-blue, #2563eb);
+}
+.crystallizeBtn:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}

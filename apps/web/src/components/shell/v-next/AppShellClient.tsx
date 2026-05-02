@@ -358,6 +358,7 @@ export function AppShellVNextClient({
           <Workbench
             onClose={() => setToolsOpen(false)}
             streamKind={activeStreamKind}
+            activeProjectId={activeProjectId}
           />
         )}
       </div>
