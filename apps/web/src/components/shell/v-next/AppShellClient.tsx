@@ -69,7 +69,10 @@ export function AppShellVNextClient({
   // hijacked the homepage and showed an empty timeline instead of
   // HomeHero — bad UX for first-time users.
   const [activeStreamId, setActiveStreamId] = useState<string | null>(null);
-  const [toolsOpen, setToolsOpen] = useState(false);
+  // Workbench is open by default per prototype — the right column is a
+  // primary affordance, not a hidden tray. Users toggle off via the ▦
+  // button in the Rail.
+  const [toolsOpen, setToolsOpen] = useState(true);
   const [immersive, setImmersive] = useState(false);
   const [cellPillOn, setCellPillOn] = useState(false);
 

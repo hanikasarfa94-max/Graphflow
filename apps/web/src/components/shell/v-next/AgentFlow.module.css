@@ -4,8 +4,21 @@
 .flow {
   height: 100%;
   display: grid;
-  grid-template-rows: 54px auto 1fr 66px;
+  /* Three rows: head | scroll body (analysisCard + timeline share this
+     row, in their own div so the grid track count matches the JSX
+     child count exactly — earlier the AnalysisCard had its own auto
+     row but rendered null on no-project streams, so CSS Grid auto-
+     flowed the composer into the 1fr row and made it 348px tall) |
+     composer. */
+  grid-template-rows: 54px minmax(0, 1fr) 66px;
   min-height: 0;
+}
+
+.scrollBody {
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 .routedSlot {

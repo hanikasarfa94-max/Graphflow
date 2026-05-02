@@ -136,9 +136,10 @@ export function AgentFlow({
         </div>
       </header>
 
-      <AnalysisCard streamId={activeStreamId} hasProject={projectId !== null} />
-
-      <AgentTimeline streamId={activeStreamId} user={user} />
+      <div className={styles.scrollBody}>
+        <AnalysisCard streamId={activeStreamId} hasProject={projectId !== null} />
+        <AgentTimeline streamId={activeStreamId} user={user} />
+      </div>
 
       <AgentComposer
         streamId={activeStreamId}
