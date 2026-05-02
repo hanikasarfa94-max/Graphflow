@@ -158,7 +158,11 @@ export function Topbar() {
         alignItems: "center",
         justifyContent: "space-between",
         gap: 12,
-        padding: "16px 28px 14px",
+        // Compact padding — prototype legacy-standalone-v6.html line
+        // 31 sets the top row to ~44px. The earlier 16/14 vertical
+        // padding pushed Topbar to 66px, overflowing the v-next
+        // grid's first row and visually piling onto the ProjectBar.
+        padding: "6px 16px",
         borderBottom: "1px solid var(--wg-line-soft)",
         // Subtle frosted band — sits above the page content but below
         // any modal / drawer.
@@ -205,7 +209,7 @@ export function Topbar() {
             alignItems: "center",
             gap: 8,
             padding: "0 14px",
-            height: 36,
+            height: 32,
             borderRadius: 999,
             border: "1px solid var(--wg-line)",
             background: "rgba(255,255,255,0.84)",
@@ -237,7 +241,7 @@ export function Topbar() {
             display: "inline-flex",
             alignItems: "center",
             gap: 6,
-            height: 36,
+            height: 32,
             padding: "0 14px",
             borderRadius: 12,
             border: "1px solid var(--wg-line)",
@@ -276,7 +280,7 @@ export function Topbar() {
               display: "inline-flex",
               alignItems: "center",
               gap: 6,
-              height: 36,
+              height: 32,
               padding: "0 14px",
               borderRadius: 12,
               border: "1px solid var(--wg-line)",
@@ -373,7 +377,7 @@ export function Topbar() {
               display: "inline-flex",
               alignItems: "center",
               gap: 6,
-              height: 36,
+              height: 32,
               padding: "0 16px",
               borderRadius: 12,
               background: "var(--wg-accent)",

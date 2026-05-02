@@ -113,18 +113,23 @@
 
 .panelGrid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  /* minmax(0, 1fr) — without the explicit 0 min, grid auto-sizes
+     columns to fit min-content of the largest child, which causes
+     panel cards to refuse to shrink below their inner widest line
+     and visibly overflow the workbench when the user resizes the
+     column narrower. */
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   grid-auto-rows: minmax(202px, auto);
   gap: 9px;
   align-content: start;
 }
 
 .gridVertical {
-  grid-template-columns: 1fr;
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .gridFocus {
-  grid-template-columns: 1fr;
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .panel {
@@ -210,9 +215,13 @@
 .panelItem strong {
   display: block;
   font-size: 13px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  /* Wrap long titles instead of truncating with ellipsis — at narrow
+     workbench widths the truncation chopped most of the title; users
+     prefer a wrapped 2-line title to a single-character ellipsis.
+     overflow-wrap: anywhere also handles unbroken Chinese text /
+     long URLs / IDs without bursting the panel width. */
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .panelItem small {
