@@ -9,9 +9,22 @@
 //
 // Recency sort within each section happens server-side in AppShell.
 // Section collapsibility matches prototype's NavSection (App.tsx:176-187).
+//
+// Wave 1 ports: + 创建群组 in the 群组 header opens NewRoomModal scoped
+// to the active project; + 发起单聊 in the 私聊 header expands the
+// existing NewDMPicker dropdown. Both reuse the legacy components
+// verbatim — we're changing UX, not features.
 
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { useTranslations } from "next-intl";
+
+import { fetchProjectMembers } from "@/lib/api";
+import {
+  NewRoomModal,
+  type ProjectMemberLite,
+} from "@/components/rooms/NewRoomModal";
+import { NewDMPicker } from "../NewDMPicker";
+import type { ShellProject } from "../AppShellClient";
 
 import type {
   ShellPersonalAgent,
@@ -27,6 +40,12 @@ interface Props {
   groups: ShellGroupItem[];
   dms: ShellDMItem[];
   activeStreamId: string | null;
+  // Project to scope NewRoomModal to. Comes from the focused stream;
+  // null when on the global agent / a DM / no stream — in which case
+  // the "+ 创建群组" affordance falls back to the user's first project,
+  // or disables itself if the user has no projects.
+  activeProjectId: string | null;
+  currentUserId: string;
   onSelectStream: (streamId: string) => void;
 }
 
@@ -36,6 +55,8 @@ export function ImNav({
   groups,
   dms,
   activeStreamId,
+  activeProjectId,
+  currentUserId,
   onSelectStream,
 }: Props) {
   const t = useTranslations("shellVNext");
@@ -46,12 +67,72 @@ export function ImNav({
   const generalLabel = t("generalAgent");
   const generalSub = t("generalAgentSubtitle");
 
+  // NewRoomModal state. Scoped to the active project (or first
+  // project agent as a fallback) so the affordance stays one-click.
+  const fallbackProjectId =
+    activeProjectId ?? projectAgents[0]?.project_id ?? null;
+  const [roomModalOpen, setRoomModalOpen] = useState(false);
+  const [roomMembers, setRoomMembers] = useState<ProjectMemberLite[] | null>(
+    null,
+  );
+  const [roomMembersLoading, setRoomMembersLoading] = useState(false);
+  const [roomScopeProjectId, setRoomScopeProjectId] = useState<string | null>(
+    null,
+  );
+
+  const openRoomModal = useCallback(async () => {
+    if (!fallbackProjectId) return;
+    setRoomScopeProjectId(fallbackProjectId);
+    setRoomMembersLoading(true);
+    setRoomMembers(null);
+    setRoomModalOpen(true);
+    try {
+      const list = await fetchProjectMembers(fallbackProjectId);
+      // ProjectMemberLite expects {user_id, username, display_name}.
+      setRoomMembers(
+        list.map((m) => ({
+          user_id: m.user_id,
+          username: m.username ?? "",
+          display_name: m.display_name ?? m.username ?? "",
+        })),
+      );
+    } catch {
+      // Modal stays open with an empty member list; NewRoomModal already
+      // handles the "no members fetched" path with its own error UI.
+      setRoomMembers([]);
+    } finally {
+      setRoomMembersLoading(false);
+    }
+  }, [fallbackProjectId]);
+
+  // NewDMPicker takes a ShellProject[] but only reads `id` from each
+  // entry. Build a minimal-shape projection from projectAgents so we
+  // don't need to refetch /api/projects.
+  const dmPickerProjects: ShellProject[] = projectAgents
+    .filter((p): p is ShellPersonalAgent & { project_id: string } =>
+      p.project_id !== null,
+    )
+    .map((p) => ({
+      id: p.project_id,
+      title: p.anchor_name,
+      unread_count: p.unread_count,
+      last_activity_at: p.last_activity_at,
+    }));
+
   return (
-    <aside className={styles.im} aria-label="Stream navigation" data-testid="vnext-imnav">
+    <aside
+      className={styles.im}
+      aria-label="Stream navigation"
+      data-testid="vnext-imnav"
+    >
       <div className={styles.imTop}>
         <strong>{t("personalAgentSection")}</strong>
         <div className={styles.imTopActions}>
-          <button type="button" className={styles.miniBtn} aria-label="settings">
+          <button
+            type="button"
+            className={styles.miniBtn}
+            aria-label="settings"
+          >
             ⚙
           </button>
           <button type="button" className={styles.miniBtn} aria-label="new">
@@ -109,6 +190,28 @@ export function ImNav({
         title={t("groups")}
         open={groupsOpen}
         onToggle={() => setGroupsOpen((v) => !v)}
+        action={
+          <button
+            type="button"
+            className={styles.miniBtn}
+            onClick={(e) => {
+              // Don't bubble — clicking + must not also collapse the
+              // section (the surrounding sectionHead has its own toggle).
+              e.stopPropagation();
+              void openRoomModal();
+            }}
+            disabled={!fallbackProjectId}
+            title={
+              fallbackProjectId
+                ? t("newGroupTip")
+                : t("newGroupNoProjectTip")
+            }
+            aria-label={t("newGroup")}
+            data-testid="vnext-imnav-new-group"
+          >
+            ＋
+          </button>
+        }
       >
         {groups.length === 0 ? (
           <p className={styles.emptyHint}>{t("noGroups")}</p>
@@ -132,6 +235,18 @@ export function ImNav({
         title={t("dms")}
         open={dmsOpen}
         onToggle={() => setDmsOpen((v) => !v)}
+        // NewDMPicker is itself a small expandable list, so we render it
+        // as the section's prefix content rather than a header button.
+        prefix={
+          dmPickerProjects.length > 0 ? (
+            <div className={styles.dmPicker}>
+              <NewDMPicker
+                projects={dmPickerProjects}
+                currentUserId={currentUserId}
+              />
+            </div>
+          ) : null
+        }
       >
         {dms.length === 0 ? (
           <p className={styles.emptyHint}>{t("noDMs")}</p>
@@ -149,6 +264,16 @@ export function ImNav({
           ))
         )}
       </Section>
+
+      {roomScopeProjectId && (
+        <NewRoomModal
+          projectId={roomScopeProjectId}
+          members={roomMembers ?? []}
+          currentUserId={currentUserId}
+          open={roomModalOpen && !roomMembersLoading}
+          onClose={() => setRoomModalOpen(false)}
+        />
+      )}
     </aside>
   );
 }
@@ -157,27 +282,42 @@ function Section({
   title,
   open,
   onToggle,
+  action,
+  prefix,
   children,
 }: {
   title: string;
   open: boolean;
   onToggle: () => void;
+  // Small button rendered inline in the section header (e.g. "+ 创建群组").
+  action?: React.ReactNode;
+  // Content rendered above the items list when the section is open
+  // (e.g. inline NewDMPicker).
+  prefix?: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
     <div className={`${styles.section} ${open ? styles.open : ""}`}>
       <div className={styles.sectionHead}>
         <span>{title}</span>
-        <button
-          type="button"
-          className={styles.miniBtn}
-          onClick={onToggle}
-          aria-label={open ? "collapse" : "expand"}
-        >
-          {open ? "⌃" : "⌄"}
-        </button>
+        <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+          {action}
+          <button
+            type="button"
+            className={styles.miniBtn}
+            onClick={onToggle}
+            aria-label={open ? "collapse" : "expand"}
+          >
+            {open ? "⌃" : "⌄"}
+          </button>
+        </div>
       </div>
-      {open && <div className={styles.items}>{children}</div>}
+      {open && (
+        <div className={styles.items}>
+          {prefix}
+          {children}
+        </div>
+      )}
     </div>
   );
 }

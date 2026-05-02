@@ -96,3 +96,51 @@
   flex-direction: column;
   gap: 6px;
 }
+
+/* Profile + sign-out at the bottom of the Rail. The profile link uses
+   a colored avatar disc instead of the .item glyph treatment so it
+   stands apart from the navigation glyphs above. Sign-out is a
+   bare-form button below. */
+.avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--wg-accent-soft, #e8f1ff);
+  color: var(--wg-blue, #2563eb);
+  font-weight: 700;
+  font-size: 12px;
+  border: 0;
+  cursor: pointer;
+  position: relative;
+  text-decoration: none;
+}
+.avatar:hover {
+  filter: brightness(1.05);
+}
+.avatar:hover .tip {
+  opacity: 1;
+}
+
+.signoutForm {
+  display: inline;
+}
+.signoutBtn {
+  width: 36px;
+  height: 28px;
+  border: 0;
+  background: transparent;
+  color: var(--wg-muted, #7b8aa0);
+  cursor: pointer;
+  font-size: 14px;
+  border-radius: 10px;
+  position: relative;
+}
+.signoutBtn:hover {
+  background: #fdecec;
+  color: var(--wg-red, #dc2626);
+}
+.signoutBtn:hover .tip {
+  opacity: 1;
+}

@@ -1768,6 +1768,9 @@
     "groups": "群组",
     "dms": "私聊",
     "noGroups": "暂无群组。",
+    "newGroup": "新建群组",
+    "newGroupTip": "在当前项目内新建一个群组。",
+    "newGroupNoProjectTip": "请先切换到某个项目 Agent，再在其中创建群组。",
     "noDMs": "暂无私聊。",
     "unnamedGroup": "未命名群组",
     "tag": {

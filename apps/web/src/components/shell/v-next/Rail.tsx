@@ -2,11 +2,14 @@
 
 // v-next Rail — far-left icon strip per docs/shell-v-next.txt §4.
 //
-// Six items + tools toggle + help. Glyphs match prototype data.ts:3-10
-// exactly. Selecting any item OTHER than ⌂ (agentView) sets moduleMode
-// on the parent, which hides ImNav and routes Main to the corresponding
-// /detail/* page. Phase 1 wires the visual + state; navigation (next
-// router push for module views) lands in Phase 2 alongside ModuleView.
+// Items: agentView ⌂ | graphView ⊛ | projectView ▣ | taskView ✓ |
+// knowledgeView ◇ | orgView ◎ | auditView ⌕ | tools ▦ (toggle).
+// Bottom: profile avatar + sign-out (Wave 1 port from legacy
+// AppSidebar footer — these were the most visible features lost in
+// the v-next migration). Help "?" sits below them.
+
+import Link from "next/link";
+import type { User } from "@/lib/api";
 
 import type { ActiveView } from "./AppShellClient";
 
@@ -34,11 +37,20 @@ export function Rail({
   activeView,
   onChange,
   onToggleTools,
+  user,
 }: {
   activeView: ActiveView;
   onChange: (view: ActiveView) => void;
   onToggleTools: () => void;
+  // Drives the avatar initial + tooltip. Optional — when missing the
+  // profile/sign-out chunk is hidden (e.g. defensive against unauthed
+  // edge cases, even though AppShellVNext bails out before this point).
+  user?: User | null;
 }) {
+  const initial = ((user?.display_name || user?.username || "?")
+    .trim()
+    .charAt(0)
+    .toUpperCase() || "?");
   return (
     <nav
       className={styles.rail}
@@ -76,6 +88,38 @@ export function Rail({
         <span className={styles.tip}>工具栏</span>
       </button>
       <div className={styles.bottom}>
+        {user && (
+          <>
+            <Link
+              href="/settings/profile"
+              className={styles.avatar}
+              title={user.display_name || user.username}
+              aria-label="Profile"
+              data-testid="vnext-rail-profile"
+            >
+              <span aria-hidden>{initial}</span>
+              <span className={styles.tip}>
+                {user.display_name || user.username}
+              </span>
+            </Link>
+            <form
+              action="/api/auth/logout?redirect=/"
+              method="POST"
+              className={styles.signoutForm}
+            >
+              <button
+                type="submit"
+                className={styles.signoutBtn}
+                title="Sign out"
+                aria-label="Sign out"
+                data-testid="vnext-rail-signout"
+              >
+                <span aria-hidden>⎋</span>
+                <span className={styles.tip}>Sign out</span>
+              </button>
+            </form>
+          </>
+        )}
         <button
           type="button"
           className={styles.item}

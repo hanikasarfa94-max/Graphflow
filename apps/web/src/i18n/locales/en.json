@@ -1770,6 +1770,9 @@
     "noGroups": "No groups yet.",
     "noDMs": "No direct messages yet.",
     "unnamedGroup": "Unnamed group",
+    "newGroup": "Create a new group",
+    "newGroupTip": "Create a new group inside the current project.",
+    "newGroupNoProjectTip": "Switch to a project agent first to create a group inside it.",
     "tag": {
       "agent": "Agent",
       "group": "Group",

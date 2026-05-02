@@ -54,17 +54,20 @@ export interface ShellWorkspace {
   role: string;
 }
 
-type ShellCtx = {
+// Exported so the v-next AppShellClient can mount the same Provider
+// without duplicating the React Context object — Topbar + RoutedInboundCard
+// + every other consumer of useAppShell work in both shells unchanged.
+export type ShellCtx = {
   inboxCount: number;
   setInboxCount: (n: number | ((prev: number) => number)) => void;
   openInbox: () => void;
   closeInbox: () => void;
 };
 
-const Ctx = createContext<ShellCtx | null>(null);
+export const ShellContext = createContext<ShellCtx | null>(null);
 
 export function useAppShell(): ShellCtx {
-  const v = useContext(Ctx);
+  const v = useContext(ShellContext);
   if (!v) {
     // Components outside AppShell (e.g. /login surfaces) still import
     // this. Return a no-op so render doesn't crash.
@@ -105,7 +108,7 @@ export function AppShellClient({
   );
 
   return (
-    <Ctx.Provider value={ctx}>
+    <ShellContext.Provider value={ctx}>
       <div
         style={{
           display: "flex",
@@ -146,6 +149,6 @@ export function AppShellClient({
           onCountChange={setInboxCount}
         />
       </div>
-    </Ctx.Provider>
+    </ShellContext.Provider>
   );
 }

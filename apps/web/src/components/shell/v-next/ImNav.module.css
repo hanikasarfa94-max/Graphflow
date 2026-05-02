@@ -36,6 +36,21 @@
   background: #f1f6ff;
   color: var(--wg-blue, #2563eb);
 }
+.miniBtn:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+.miniBtn:disabled:hover {
+  background: transparent;
+  color: var(--wg-muted, #7a889c);
+}
+
+/* NewDMPicker wrapper — sits above the DM list as the section's
+   prefix slot. Padding mimics navItem indent so the toggle row aligns
+   visually with the DM rows below. */
+.dmPicker {
+  padding: 2px 4px 4px;
+}
 
 .section {
   border-bottom: 1px solid var(--wg-line, #e4eaf3);

@@ -13,10 +13,22 @@
 // hidden). leftNarrow not yet wired in v1; comes with the splitter
 // resize affordance in a follow-up.
 
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 
 import type { User } from "@/lib/api";
 
+import {
+  ShellContext,
+  type ShellCtx,
+} from "../AppShellClient";
+import { RoutedInboundDrawer } from "../RoutedInboundDrawer";
 import { Topbar } from "../Topbar";
 
 import { AgentFlow } from "./AgentFlow";
@@ -60,6 +72,7 @@ export function AppShellVNextClient({
   projectAgents,
   groups,
   dms,
+  initialInboxCount,
   children,
 }: AppShellVNextClientProps) {
   const [activeView, setActiveView] = useState<ActiveView>("agentView");
@@ -76,6 +89,19 @@ export function AppShellVNextClient({
   const [toolsOpen, setToolsOpen] = useState(true);
   const [immersive, setImmersive] = useState(false);
   const [cellPillOn, setCellPillOn] = useState(false);
+
+  // Routed-inbox drawer state. Same pattern as legacy AppShellClient —
+  // co-owned here so Topbar's Notifications button + signal-card "open"
+  // affordances both flow through the shared Context. Without this v-next
+  // shows count=0 always and the Notifications click no-ops.
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [inboxCount, setInboxCount] = useState(initialInboxCount);
+  const openInbox = useCallback(() => setDrawerOpen(true), []);
+  const closeInbox = useCallback(() => setDrawerOpen(false), []);
+  const shellCtx = useMemo<ShellCtx>(
+    () => ({ inboxCount, setInboxCount, openInbox, closeInbox }),
+    [inboxCount, openInbox, closeInbox],
+  );
 
   const moduleMode = activeView !== "agentView";
 
@@ -190,16 +216,17 @@ export function AppShellVNextClient({
   }, [activeStreamId, generalAgent, projectAgents, groups, dms]);
 
   return (
-    <div
-      ref={appRef}
-      className={[
-        styles.app,
-        moduleMode ? styles.moduleMode : "",
-        toolsOpen ? "" : styles.toolsClosed,
-        immersive ? styles.immersive : "",
-      ].join(" ")}
-      data-testid="vnext-app-shell"
-    >
+    <ShellContext.Provider value={shellCtx}>
+      <div
+        ref={appRef}
+        className={[
+          styles.app,
+          moduleMode ? styles.moduleMode : "",
+          toolsOpen ? "" : styles.toolsClosed,
+          immersive ? styles.immersive : "",
+        ].join(" ")}
+        data-testid="vnext-app-shell"
+      >
       <div className={styles.top}>
         <Topbar />
       </div>
@@ -219,6 +246,7 @@ export function AppShellVNextClient({
             activeView={activeView}
             onChange={setActiveView}
             onToggleTools={() => setToolsOpen((v) => !v)}
+            user={user}
           />
         )}
 
@@ -229,6 +257,8 @@ export function AppShellVNextClient({
             groups={groups}
             dms={dms}
             activeStreamId={activeStreamId}
+            activeProjectId={activeProjectId}
+            currentUserId={user.id}
             onSelectStream={(id) => {
               setActiveStreamId(id);
               setActiveView("agentView");
@@ -289,6 +319,13 @@ export function AppShellVNextClient({
           />
         )}
       </div>
+
+      <RoutedInboundDrawer
+        open={drawerOpen}
+        onClose={closeInbox}
+        onCountChange={setInboxCount}
+      />
     </div>
+    </ShellContext.Provider>
   );
 }
