@@ -173,20 +173,33 @@ class StreamService:
     # ---- Phase L ---------------------------------------------------------
 
     async def ensure_personal_stream(
-        self, *, user_id: str, project_id: str
+        self, *, user_id: str, project_id: str | None = None
     ) -> dict[str, Any]:
-        """Idempotently create the (user, project) personal stream with
-        owner + edge-agent as members. Returns the stream id.
+        """Idempotently create a personal stream with owner + edge-agent
+        as members. Returns the stream id.
 
-        Caller must verify the user is a project member — this service
-        does not enforce membership (the backfill creates for all members
-        unconditionally; RoutingService checks on dispatch).
+        Two modes (v-Next per docs/shell-v-next.txt §11 E-1):
+          * project_id=<X>  — the (user, project) "项目 Agent" stream.
+            Existing Phase-L behavior, preserved for all current call
+            sites (drift, gated proposals, membrane, route proposals).
+          * project_id=None — the user's "通用 Agent" stream. Single
+            row per user across all projects, project_id=NULL on the
+            StreamRow. Created lazily on first 通用 Agent access.
+
+        Caller must verify the user is a project member when
+        project_id is set; the global mode has no membership gate
+        (a user always has access to their own global agent).
         """
         async with session_scope(self._sessionmaker) as session:
             stream_repo = StreamRepository(session)
-            existing = await stream_repo.get_personal_for_user_in_project(
-                user_id=user_id, project_id=project_id
-            )
+            if project_id is None:
+                existing = await stream_repo.get_personal_global_for_user(
+                    user_id=user_id
+                )
+            else:
+                existing = await stream_repo.get_personal_for_user_in_project(
+                    user_id=user_id, project_id=project_id
+                )
             created = False
             if existing is None:
                 existing = await stream_repo.create(
@@ -451,7 +464,20 @@ async def _shape_stream(
 ) -> dict[str, Any]:
     """Shared shaping for stream payloads returned by /api/streams and
     POST /api/streams/dm. Includes id, type, project_id, members with
-    display names, last_activity_at, and unread_count for the viewer.
+    display names, last_activity_at, unread_count, and a resolved
+    `display_name` anchor for the FE per docs/shell-v-next.txt §11 E-3.
+
+    display_name resolution (Q-E lock 2026-05-01):
+      * room with persisted name → stream.name
+      * room without name → owning project's title (fallback)
+      * project → owning project's title
+      * personal per-project → owning project's title (FE will format
+        "{title} 的 Agent" or equivalent localized string)
+      * personal global (project_id=NULL) → None (FE i18n: "通用 Agent")
+      * dm → None (FE derives from the partner member)
+
+    Returning the bare anchor (project title) instead of a formatted
+    string keeps i18n on the FE.
     """
     member_repo = StreamMemberRepository(session)
     user_repo = UserRepository(session)
@@ -473,6 +499,18 @@ async def _shape_stream(
     unread = await member_repo.unread_count(
         stream_id=stream.id, user_id=viewer_id
     )
+
+    # Resolve display_name anchor. Lazy ProjectRow load only if needed.
+    display_name: str | None = None
+    if stream.type == "room" and stream.name:
+        display_name = stream.name
+    elif stream.project_id is not None and stream.type in ("room", "project", "personal"):
+        from workgraph_persistence import ProjectRow
+
+        project = await session.get(ProjectRow, stream.project_id)
+        if project is not None:
+            display_name = project.title
+
     return {
         "id": stream.id,
         "type": stream.type,
@@ -482,6 +520,11 @@ async def _shape_stream(
         # Null for project/personal/dm — caller derives display from
         # project / owner / DM partner instead.
         "name": stream.name,
+        # Resolved canonical anchor — see docstring for resolution rules.
+        # FE uses this with kind-aware formatting (e.g. "{display_name}
+        # 的 Agent" for type=personal+project_id, raw for project/room,
+        # i18n constant for type=personal+!project_id).
+        "display_name": display_name,
         "members": members,
         "last_activity_at": stream.last_activity_at.isoformat()
         if stream.last_activity_at

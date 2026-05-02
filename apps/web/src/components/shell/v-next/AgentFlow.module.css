@@ -1,0 +1,127 @@
+/* AgentFlow main column. flowHead 54px / messages 1fr / composer 66px.
+   Adapted from prototype legacy CSS lines 76-83. */
+
+.flow {
+  height: 100%;
+  display: grid;
+  grid-template-rows: 54px 1fr 66px;
+  min-height: 0;
+}
+
+.routedSlot {
+  height: 100%;
+  overflow: auto;
+}
+
+.flowHead {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 0 18px;
+  border-bottom: 1px solid var(--wg-line, #e4eaf3);
+  background: rgba(255, 255, 255, 0.66);
+  min-width: 0;
+}
+
+.face {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: #e8f1ff;
+  color: #2563eb;
+  display: grid;
+  place-items: center;
+  font-size: 16px;
+  flex: 0 0 auto;
+}
+
+.flowTitle {
+  min-width: 0;
+}
+
+.flowTitle h2 {
+  font-size: 16px;
+  margin: 0;
+  letter-spacing: -0.02em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.flowTitle small {
+  display: block;
+  color: #6b7a90;
+  font-size: 12px;
+  margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.flowActions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.tag {
+  height: 23px;
+  border: 1px solid #cfe0ff;
+  border-radius: 999px;
+  background: #eef4ff;
+  padding: 0 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: #1d4ed8;
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.pill {
+  height: 23px;
+  border: 1px solid var(--wg-line, #e4eaf3);
+  border-radius: 999px;
+  background: #fff;
+  padding: 0 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--wg-text, #58687d);
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.pill:hover {
+  background: #f6f9ff;
+}
+
+.iconBtn {
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--wg-line, #e4eaf3);
+  background: #fff;
+  border-radius: 11px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--wg-text, #40516a);
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.iconBtn[aria-pressed="true"] {
+  background: #eef4ff;
+  border-color: #cfe0ff;
+  color: var(--wg-blue, #1d4ed8);
+}
+
+@media (max-width: 980px) {
+  .pill {
+    display: none;
+  }
+}

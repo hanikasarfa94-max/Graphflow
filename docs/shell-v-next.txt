@@ -1,0 +1,925 @@
+================================================================
+  SHELL v-NEXT — APP SHELL SPEC FOR THE PROTOTYPE-FAITHFUL UI
+================================================================
+
+Author      : SWQY + Claude Opus 4.7 working session
+Written     : 2026-05-01
+Status      : SPEC — implementation deferred to a follow-up plan
+Supersedes  : the per-project shell pattern in apps/web/src/components/shell/
+              AppSidebar.tsx + apps/web/src/app/projects/[id]/layout.tsx
+              (those stay as a fallback during transition; do NOT delete)
+
+This document is the single source of truth for how the new app shell
+must look and behave. It is grounded in:
+
+  • workgraph-ts-prototype/src/App.tsx  (canonical layout)
+  • workgraph-ts-prototype/legacy-standalone-v6.html  (CSS source)
+  • docs/north-star.md                  (one-stream-per-project — refined below)
+  • memory/project_workgraph_next_design_20260428.md  (multi-room refinement)
+  • memory/project_surface_chat_centered.md  (chat-centered ≠ chat-only)
+  • memory/project_positioning_group_not_individual.md  (group as subject)
+  • memory/feedback_5_layer_architecture.md  (Projection/Attention layer)
+  • graphify-out/GRAPH_REPORT.md §Hyperedges  (stream + vote primitives)
+  • packages/persistence/src/workgraph_persistence/orm.py:1076  (StreamRow.kind)
+  • apps/api/src/workgraph_api/services/decision_votes.py:251-279  (vote scope)
+
+
+--------------------------------------------------------------
+  0. THE MACRO PRINCIPLE (READ THIS BEFORE ANY PIXEL DECISION)
+--------------------------------------------------------------
+
+The group is the subject. Projects are containers. A user belongs to many
+groups; many groups nest inside many projects; production scale is up to
+~100 groups per user. Therefore:
+
+  • The MAIN VIEW is NOT a project page. It is the user's personal stream
+    with their sub-agent. (Aligns with north-star "one input box, like
+    Claude Code"; aligns with 04-28 memo "Home page dropped — land in the
+    general-agent stream".)
+
+  • The PRIMARY NAV is NOT a project list. It is a stream list — the
+    groups + DMs the user is in. Projects are NOT a navigation rung; they
+    are a soft scope hint surfaced via ProjectBar pills.
+
+  • The DETAIL pages (项目管理 / 任务 / 知识库 / 组织 / 审计) are
+    demoted to a far-left icon RAIL. They REPLACE the main column when
+    selected; they are not peers of the stream nav.
+
+  • The WORKBENCH (right side) is a user-composed shortcut tray for
+    tasks / knowledge / requests / skills next to the active stream. It
+    is opt-in and panels are shortcut-views into the underlying detail
+    pages — never the only place a piece of state lives.
+
+
+--------------------------------------------------------------
+  1. THE LAYOUT — FOUR COLUMNS + TOP + BAR
+--------------------------------------------------------------
+
+The shell is a single global root. It does NOT branch per-project.
+
+  ┌──────────────────────────────────────────────────────────────────┐
+  │ TopBar          --top: 44px                                       │
+  │   logo · search · 切换项目 · 协同请求 · 新建 ▾ · 🔔 · ⚙ · avatar    │
+  ├──────────────────────────────────────────────────────────────────┤
+  │ ProjectBar      --bar: 34px                                       │
+  │   current project crumb · scope-tier pills (Personal/Cell/Dept/Ent)│
+  ├──────┬──────────────┬──────────────────────────┬─────────────────┤
+  │      │              │                          │                 │
+  │ Rail │   ImNav      │   Main                   │   Workbench     │
+  │ 50px │   254/76px   │   minmax(0,1fr)          │   420/360px     │
+  │      │              │                          │                 │
+  │ icons│  我的 Agent  │   AgentFlow OR Module    │   panels grid   │
+  │      │  群组         │   (one or the other)     │   (tasks / kb / │
+  │      │  私聊         │                          │    requests /   │
+  │      │              │                          │    skills)      │
+  └──────┴──────────────┴──────────────────────────┴─────────────────┘
+
+  CSS grid (from legacy-standalone-v6.html lines 50, 96-105):
+
+    .app    { grid-template-rows: var(--top) var(--bar) 1fr }
+    .layout { grid-template-columns:
+                var(--rail) var(--im) 6px minmax(0,1fr) 6px var(--tools) }
+
+    --rail: 50px   --im: 254px (76px when leftNarrow)
+    --top:  44px   --bar: 34px   --tools: 420px (360px <1320px)
+    Splitters between im|main and main|tools are 6px draggable cols.
+
+  Responsive (legacy line 104-105):
+    < 1320px  : --im 230px, --tools 360px, search hides, brand min-width auto
+    < 980px   : forced 50/76/0/1fr/0/330; ImNav goes leftNarrow; auto-agent
+                label + select hide in composer.
+
+
+--------------------------------------------------------------
+  2. THE IMNAV — STREAM TAXONOMY (Q2 LOCK-IN)
+--------------------------------------------------------------
+
+ImNav is the PRIMARY nav. It mirrors the prototype's three-section
+shape (App.tsx:121-174) — agentPrimary card + collapsible NavSections.
+
+  ┌──────────────────────────────────────┐
+  │  [个人 Agent]  [⚙] [+]               │ ← imTop header
+  ├──────────────────────────────────────┤
+  │  ╔══════════════════════════════╗    │
+  │  ║ 🤖 通用 Agent      [在线]    ║    │ ← agentPrimary big card,
+  │  ║ 整合全平台信息，跨项目咨询    ║    │   always present.
+  │  ╚══════════════════════════════╝    │   project_id=NULL stream.
+  │                                       │
+  │  项目 Agent ▾                         │ ← header replaces "专门 Agent"
+  │    · 星际漂流 — 第1季的 Agent         │   one entry per project the
+  │    · CRM 2.0 重构 的 Agent            │   user is in.
+  │    · GraphFlow 原型 的 Agent          │   project_id=<X> streams.
+  ├──────────────────────────────────────┤
+  │  群组 ▾                               │
+  │    · <group A>      <unread count>   │ ← kind IN ('project','room')
+  │    · <group B>      <unread count>   │   flat list, sorted by
+  │    · ... up to ~100                   │   last_activity_at desc
+  ├──────────────────────────────────────┤
+  │  私聊 ▾                               │
+  │    · <user X>                         │ ← kind='dm'
+  │    · <user Y>                         │
+  └──────────────────────────────────────┘
+
+  Backend mapping (StreamRow.kind, orm.py:1076-1106):
+
+    我的 Agent   →  ONE 通用 (global) agent + N 项目 (per-project)
+                    agents. Q-A revised 2026-05-01 → hybrid model.
+
+                    Section structure (matches prototype's agentPrimary +
+                    specialistAgents shape exactly, but substituting
+                    project-scoped agents for the deleted specialists):
+
+                      [agentPrimary big card]
+                      通用 Agent
+                      "整合全平台信息，跨项目咨询。"
+                      [小 navItem entries below]
+                      <Project A> 的 Agent
+                      <Project B> 的 Agent
+                      ... one per project the user is in
+
+                    Backend mapping:
+
+                      通用 Agent  →  StreamRow kind='personal',
+                                     owner_user_id=me, project_id=NULL.
+                                     ONE row per user. The schema already
+                                     permits this (orm.py:1108 — column
+                                     is nullable). No data migration.
+
+                      项目 Agent  →  StreamRow kind='personal',
+                                     owner_user_id=me, project_id=<X>.
+                                     One row per (user, project) pair —
+                                     this is the existing shipped
+                                     behavior, untouched.
+
+                    Why hybrid (user direction 2026-05-01):
+                    "main agent + project-scoped agents make work more
+                    clear." Cross-cutting / strategic talk goes in 通用;
+                    project-bound talk goes in that project's agent.
+                    User picks the venue, no inference needed.
+
+                    Optional enhancement (defer to a separate plan):
+                    when posting in 通用 Agent, the edge agent MAY
+                    infer project context from evidence and surface a
+                    soft suggestion ("this looks like Project A — open
+                    in Project A's agent?"). NOT required for v1.
+
+                    System signals (drift, gated, membrane, route
+                    proposals) keep posting to the per-(user, project)
+                    personal stream as today. The 通用 Agent stream
+                    starts empty and grows from user-initiated turns.
+
+    群组         →  StreamRow where kind IN ('project', 'room')
+                    FLAT LIST. We do NOT visually distinguish "project
+                    main room" from "sub-room". To the user, they are
+                    all groups. Sort by stream.last_activity_at desc
+                    (Q-D answer 2026-05-01 — recency only, no search
+                    input as primary affordance). Section header
+                    collapse remains available per the prototype's
+                    NavSection pattern.
+
+                    Display name resolution (Q-E answer 2026-05-01):
+                      1. StreamRow.name if set
+                      2. else ProjectRow.name of the project the
+                         creator of the stream belongs to
+                      3. else "未命名群组" or stream id suffix
+                    Resolved server-side on the streams list endpoint.
+
+                    Why flat: groups are the unit. The project boundary
+                    is for scope/permission/quorum; it does not need to
+                    be a visual hierarchy in the nav. The 04-28 memo's
+                    "multiple team-rooms per project" decision combined
+                    with the user's 05-01 directive ("don't check group
+                    types into project or room") collapses the visual.
+
+                    The ONLY place the project/room distinction surfaces:
+                    – Vote scope (handled automatically by BE via
+                       scope_stream_id, see §3 below).
+                    – ProjectBar crumb (which project the active group
+                       belongs to).
+
+    私聊         →  StreamRow where kind='dm'
+                    No project anchor. List by last_activity_at.
+
+  EXPLICITLY NOT IN THE IMNAV (deviations from prototype, all per
+  04-28 memo lock-ins):
+
+    × Specialist-Agent picker (研究分析师 / 方案生成器 / 技术顾问).
+      The prototype shows them at data.ts:12-37; the memo deletes
+      them. Project-scoped agents take their place in the same
+      visual slot. Specialists, if they ever return, appear as
+      attributed sub-turns INSIDE the user's stream, not as nav
+      entries.
+    × 主频道 as a separate section. Prototype shows it (data.ts:39-44);
+      we collapse 主频道 + sub-rooms into one flat 群组 list per the
+      04-28 multi-team-rooms decision and the user's 05-01
+      "don't check group types into project or room" directive.
+    × 临时会话 as a separate section. Prototype shows it
+      (data.ts:46-75) with countdown chips (D-3, 23h). Deferred:
+      no schema support today (orm.py reserves 'group' and
+      'rehearsal' for v2; no 'temp' kind). When schema lands, can
+      revisit as a fourth ImNav section.
+    × "+ 新建 Agent" in TopBar's 新建 ▾ menu (App.tsx:79). Drop
+      per memo — no manual agent creation; one sub-agent per user
+      globally + project-scoped instances are derived, not
+      created.
+
+  ImNav header actions (App.tsx:130-133):
+    [⚙]  group/dm settings (deferred, can be inert in v1)
+    [+]  opens TopBar 新建 ▾ menu
+
+
+--------------------------------------------------------------
+  3. VOTES UNDER GROUP-COLLAPSE — NO BACKEND CHANGE
+--------------------------------------------------------------
+
+The smallest-relevant-vote rule is already implemented in
+DecisionVoteService._compute_tally (decision_votes.py:251-279):
+
+    if scope_stream_id is not None:
+        members = StreamMemberRepository.list_for_stream(scope_stream_id)
+        scope_kind = "room"          # ← display label only
+    else:
+        members = ProjectMemberRepository.list_for_project(project_id)
+        scope_kind = "project"       # ← display label only
+
+The vote scope = members of the stream where the decision was crystallized.
+"Group" in our UX maps cleanly:
+
+    Group is project-main stream  →  scope_stream_id = <main_stream_id>
+                                     quorum = all project members
+    Group is sub-room             →  scope_stream_id = <room_stream_id>
+                                     quorum = room members (subset)
+    Decision floats project-wide  →  scope_stream_id = null
+                                     quorum = all project members
+
+The "room" / "project" string in the tally payload is a DISPLAY LABEL,
+not a control flow distinction. We MAY keep both labels in the API tally
+even though the UX shows them uniformly as "群组"; the FE's
+DecisionCard scope-explainer line should read "Voting with this group's
+N members" regardless of scope_kind value.
+
+INVARIANT THE BE STILL RELIES ON:
+  StreamMemberRepository.list_for_stream(project_main_stream_id)
+    must equal
+  ProjectMemberRepository.list_for_project(project_id)
+This is enforced by the streams primitive auto-create + dedup contract
+(GRAPH_REPORT.md HE 764, 782, 807). If this invariant is ever broken
+by future code, votes will silently diverge from project membership.
+Worth a regression test if not already present.
+
+
+--------------------------------------------------------------
+  4. THE RAIL — DEMOTED DETAIL-PAGE NAV
+--------------------------------------------------------------
+
+Far-left vertical icon strip (50px). Switches activeView between
+agentView (chat) and module views. Module views REPLACE the main
+column (and hide ImNav, per legacy-standalone-v6.html lines 95-97).
+
+  Icons — exact glyphs from prototype data.ts:3-10. Six items
+  (NOT five): the FIRST is the chat surface itself, used to return
+  to agentView from a module view.
+
+    ⌂   个人 Agent  (agentView)  →  the ImNav + AgentFlow surface
+                                     (returns from any module view)
+    ▣   项目管理   (projectView) →  module view, projectCards data
+    ✓   任务视图   (taskView)    →  module view, taskCards data
+    ◇   知识库     (knowledgeView)→  module view, knowledgeCards data
+                                     (renders in 2-col `.two` grid)
+    ◎   组织管理   (orgView)     →  module view, orgCards data
+    ⌕   审计视图   (auditView)   →  module view, auditCards data
+
+    [separator]
+    ▦   工具栏 toggle (toggles toolsOpen, persists in localStorage)
+    ?   帮助       (deferred, can route to /docs or be inert)
+
+  Selecting any Rail item OTHER than ⌂ (agentView) sets
+  className="moduleMode" on .app, which (legacy CSS lines 95-97):
+    • hides .im (ImNav)
+    • shrinks layout to: var(--rail) minmax(0,1fr) 6px var(--tools)
+    • the module view's content (cards) renders in .main
+
+  Returning to ⌂ removes moduleMode and restores ImNav + AgentFlow.
+
+  ProjectBar stays visible in module mode (the user is still scoped to
+  a project). Per Q-B answer (§10), the Cell pill is opt-in: detail
+  pages show all items the user's license/auth permits, with project
+  filter as one optional toggle, not a hard scope.
+
+
+--------------------------------------------------------------
+  4b. AGENTFLOW — DETAILS FROM PROTOTYPE (App.tsx:202-290)
+--------------------------------------------------------------
+
+When activeView === 'agentView', .main renders <AgentFlow>. Three
+rows: flowHead (54px) | messages (1fr) | composer (66px).
+
+  flowHead (App.tsx:227-240):
+    [Face]  <h2>{title}</h2>            [pill blue {tag}]
+            <small>{subtitle}</small>   [pill 资料] [pill 记忆] [pill 技能] [iconBtn ⛶]
+
+    tag values by stream kind:
+      personal → "Agent"   (when looking at 通用 or 项目 agent)
+      room     → "频道"
+      dm       → "单聊"
+      (prototype also has "临时" for tempSessions; deferred per §2)
+
+    The 资料 / 记忆 / 技能 pills are SHORTCUTS into Rail detail views
+    scoped to the conversation partner / project context. v1: render
+    them but treat as inert (or link to /detail/* with the relevant
+    scope filter). Real wiring deferred — needs a "info for this
+    stream" lookup endpoint that doesn't exist today (BE enhancement
+    candidate).
+
+    iconBtn ⛶ toggles immersive mode (§6).
+
+  messages area (App.tsx:242-252):
+    Standard message list (existing renderer in PersonalStreamTimeline
+    / RoomStreamTimeline reused here). Plus an analysisCard at the
+    bottom of the message stream:
+
+      analysisCard:
+        h4 = "关联任务"
+        ul = list of related tasks/decisions/risks derived from
+             the current conversation context
+
+    Real impl needs a "graph slice for current conversation" query —
+    not shipped. v1 can render the analysisCard as a static placeholder
+    OR omit until BE enhancement lands. Recommend: omit in v1 to avoid
+    stale fake data; reintroduce when the related-entity query exists.
+    (BE enhancement candidate.)
+
+  composer (App.tsx:254-287):
+    [+] [plusMenu] [input ............................] [autoAgent toggle] [select 深度思考] [Send]
+
+    [+]  plusMenu (already shipped in commit 9f7a8d7):
+         📎 上传文件 / 🧩 调整上下文 / 📨 请相关人判断 / ✅ 提交团队计划
+
+    autoAgent toggle (NEW, App.tsx:266-269):
+      label "自动委派 Agent" + on/off pill. ON = the edge agent may
+      auto-route signals to other members based on inference. OFF =
+      everything stays in this stream until user explicitly routes.
+      v1: render the toggle, persist client-side; backend no-op
+      (default ON, matches today's behavior). Real wiring needs a
+      per-user or per-stream auto_dispatch_enabled flag — BE
+      enhancement candidate, defer to follow-up plan.
+
+    Thinking select (NEW, App.tsx:270-273):
+      [深度思考 / 快速回答]. Maps conceptually to model temperature
+      or model tier (Opus vs Haiku). v1: render the select, store
+      client-side; backend currently uses a fixed model per
+      LLMClient. Real wiring needs the post-message route to accept
+      a thinking_mode hint — BE enhancement candidate, defer.
+
+    Send button: gradient blue, primary action.
+
+
+--------------------------------------------------------------
+  4c. WORKBENCH — DETAILS FROM PROTOTYPE (App.tsx:349-433)
+--------------------------------------------------------------
+
+  toolsHead (App.tsx:395-408, 40px):
+    <strong>工具栏</strong>  <small>Agent 常用工具</small>  [pill blue 私有]
+    [spacer]
+    [modeGroup: 分屏 / 纵向 / 聚焦]  [closeBtn ×]
+
+    The "私有" pill signals the workbench is personal — the panel
+    composition is THIS user's, not shared. Visual only in v1.
+
+    Mode group (3 buttons, ToolMode = "grid" | "vertical" | "focus"):
+      grid     →  panelGrid 1fr 1fr (2-col)
+      vertical →  panelGrid 1fr (1-col stack)
+      focus    →  panelGrid 1fr; panel without focus=true is hidden
+
+    Mode switch is client-side state. Already shipped in
+    RoomWorkbench (commit f5c1637) per current 04-30 state.
+
+  toolsBody (App.tsx:409-431):
+    [toolShelf]: dashed-border container with 5 chips:
+      ＋任务中心   →  add panel kind="tasks"
+      ＋知识记忆   →  add panel kind="knowledge"
+      ＋协同请求   →  add panel kind="requests"
+      ＋技能图谱   →  add panel kind="skills"
+      ＋工作流     →  add panel kind="workflow"
+
+    Clicking a chip prepends a new panel to the panelGrid (focus=true,
+    others demoted to focus=false). If a panel of the same kind
+    already exists, focus it instead of adding a duplicate (App.tsx
+    addRequestPanel pattern, 385-392).
+
+    [panelGrid]: rendered panels via <ToolPanelCard> (panel.focus,
+    panel.wide). Drag-reorder via drag handle ⋮⋮ (already shipped).
+    Each panel: panelHead [⋮⋮ drag · strong title · ⌖ focus · × close]
+    + panelBody (kind-specific renderer).
+
+  Panel kinds (App.tsx:476-528, types.ts:13-19):
+    "tasks"     →  pill 我的 / 团队 toggle + task PanelItems
+    "knowledge" →  panelInput "搜索知识库" + KB PanelItems
+    "skills"    →  graphBox placeholder + member PanelItems
+    "requests"  →  request PanelItems (协同请求 — wait/sent/pending)
+    "workflow"  →  4-stage horizontal DAG (done/active/pending) ⚠
+                   per 04-28 memo this is DEPRECATED; spec keeps it
+                   inert for now since stages are derived from graph
+                   on demand (north-star). Visible but no real data.
+    "workpack"  →  prototype types declares but no renderer; ignore.
+
+  Initial panels (data.ts:195-200): tasks (focus), knowledge, skills,
+  workflow (wide=true → spans full panelGrid row).
+
+
+--------------------------------------------------------------
+  4d. MODULEVIEW — RAIL DETAIL PAGES (App.tsx:312-347)
+--------------------------------------------------------------
+
+When activeView is one of {projectView, taskView, knowledgeView,
+orgView, auditView}, .main renders <ModuleView> with the matching
+data. Layout is a moduleHeader (h2 + p + optional action button)
+above a moduleGrid (3-col default; 2-col when card.two=true).
+
+The prototype's seed content (data.ts:120-193) defines the v1
+information shape. Each card is a heading + either body prose or
+list rows of (title, meta).
+
+  projectView  (3-col, action "+ 新建里程碑"):
+    "当前目标"   rows: Q3 launch %, 首次方案 status
+    "开放风险"   rows: severity-tagged risk list
+    "项目资源"   body: prose summary
+
+  taskView  (3-col, action "+ 新建任务"):
+    "L0 个人计划"   rows of personal tasks
+    "L2 容量确认"   rows of assigned-pending tasks
+    "L3 正式承诺"   rows of in-progress committed tasks
+
+  knowledgeView  (2-col, action "+ 添加来源"):
+    "最近调用"      rows of recent KB items with relative time
+    "上下文策略"    body: prose policy
+
+  orgView  (3-col, action "+ 邀请成员"):
+    "技能图谱"      rows of member-skill scores
+    "权限控制"      rows of context-tier mappings
+    "成员负载"      body: load summary
+
+  auditView  (3-col, action "导出记录"):
+    "审计记录"      rows of state transitions
+
+The actual data sources for these are existing detail/* pages and
+APIs (project_state, /api/projects/{id}/state, perf, kb, audit
+endpoints). v1 wiring just glues existing detail data into the
+module-view card layout — no new BE endpoints needed for this slice.
+
+
+--------------------------------------------------------------
+  5. PROJECTBAR — SCOPE HINT, NOT NAVIGATION
+--------------------------------------------------------------
+
+ProjectBar (34px) is global, lives between TopBar and the layout grid.
+It surfaces:
+
+    [●] 当前项目: <project name>                       ← left crumb (read-only)
+    [当前工作台: <derived from active stream>]        ← optional sub-crumb
+    [Personal*] [Cell] [Department] [Enterprise]       ← scope tier pills
+                  (* = default-on; others opt-in)
+
+The pills are the user-facing projection of LicenseContextService scope
+decisions (per 04-28 memo — Personal / Cell / Department / Enterprise
+tiers). PROJECT (= Cell tier) IS AN OPTION SCOPE, NOT DEFAULT. Default
+in 我的 Agent stream: Personal ON; Cell/Department/Enterprise OFF.
+User toggles Cell on to broaden context to the active project per turn /
+per stream. (Q-B answer 2026-05-01.) This is a correction from earlier
+drafts that assumed Personal+Cell were both default-on.
+
+Project switching happens via TopBar 切换项目 dropdown, NOT by clicking
+the crumb. The crumb is read-only context.
+
+
+--------------------------------------------------------------
+  6. STATE MODES — FOUR ORTHOGONAL TOGGLES
+--------------------------------------------------------------
+
+Lifted from App.tsx:617-625 + legacy CSS lines 95-103.
+
+  moduleMode    = activeView !== 'agentView'
+                  → hides ImNav, shrinks grid to 4 cols (rail|main|tools)
+                  → triggered by Rail icon click
+
+  toolsClosed   = !toolsOpen
+                  → hides Workbench, shrinks grid right column
+                  → triggered by Rail ▦ toggle, persists in localStorage
+
+  leftNarrow    = imWidth < 120 (set by drag splitter)
+                  → ImNav becomes icon-only column (76px)
+                  → labels, sublabels, sectionHead text, counts hide
+                  → matches the auto-collapse pattern we already shipped
+                    in commit 87456f0 for AppSidebar — REUSE that pattern
+
+  immersive     = user toggled ⛶ in flowHead
+                  → hides ProjectBar, Rail, ImNav, splitters, Workbench
+                  → grid collapses to: top | 1fr (just AgentFlow)
+                  → already shipped per-room in commit 613ad69; lift to
+                    global shell when this spec lands
+
+
+--------------------------------------------------------------
+  7. WHAT STAYS FROM THE CURRENT CODEBASE (TRANSITION STRATEGY)
+--------------------------------------------------------------
+
+DO NOT DELETE during the v-Next-shell migration:
+
+    apps/web/src/components/shell/AppSidebar.tsx
+        — keep as fallback for routes not yet migrated to the new shell
+    apps/web/src/components/projects/ProjectModuleRail.tsx
+        — keep for /projects/<id>/* routes during transition; the new
+          shell's Rail covers the same module-switching role globally,
+          so this becomes redundant once migration completes
+    apps/web/src/components/projects/ProjectBar.tsx
+        — UPDATE in place to live at the global shell layer; same role,
+          new mount point. Remove from per-project layouts after mount
+          relocates.
+
+REUSE WITHOUT REWRITE:
+
+    apps/web/src/components/rooms/RoomShell.tsx
+        — its 4-col-thin layout is the right shape; the new shell
+          generalizes it. Migration can reuse RoomShell's grid CSS as
+          the v-Next-shell base.
+    apps/web/src/components/rooms/RoomWorkbench.tsx
+        — the right-side panel grid + drag-rearrange + chip shelf is
+          exactly the prototype Workbench. Lift it from rooms/ into a
+          shell-level component shared by main + group views.
+    apps/web/src/hooks/useRoomTimeline.ts
+        — the single-switch RoomTimelineEvent reducer is reusable for
+          the personal stream too; only the entity kinds renderer
+          dispatch table changes.
+
+NEW COMPONENTS NEEDED:
+
+    apps/web/src/components/shell/v-next/AppShell.tsx
+        — top-level grid; mounts TopBar, ProjectBar, Rail, ImNav, Main,
+          Workbench
+    apps/web/src/components/shell/v-next/Rail.tsx
+        — far-left icon strip (50px)
+    apps/web/src/components/shell/v-next/ImNav.tsx
+        — 我的Agent / 群组 / 私聊 stream nav (254/76px)
+    apps/web/src/components/shell/v-next/AgentFlow.tsx
+        — main column when activeView==='agentView'; renders the active
+          stream's polymorphic timeline + composer
+    apps/web/src/hooks/useStreamList.ts
+        — fetches the user's streams across all projects, partitions
+          into personal/groups/dms, sorts by last_activity_at
+
+  Routing decision (separate task — defer concrete plan):
+    The new shell wants to be the root of /. The current root (HomeHero
+    + project list dashboard) is incompatible with the prototype's
+    "land in your stream" framing. Options:
+      A) Replace / with the new shell entirely; HomeHero's resume CTA
+         remains accessible from within the personal stream as a card
+         or via an onboarding-empty-state.
+      B) Keep / as a transitional fork — feature-flagged switch between
+         old shell and new shell.
+    Recommendation: B during build, A on cutover. Decide in the
+    follow-up implementation plan.
+
+
+--------------------------------------------------------------
+  8. EXPLICITLY OUT OF THIS SPEC (DEFERRED TO FOLLOW-UP)
+--------------------------------------------------------------
+
+The following are downstream of this spec, NOT covered here:
+
+  • Concrete file-by-file implementation plan + commit sequence
+  • i18n string updates for new section labels
+  • Empty states for users with 0 groups, 0 DMs, no active project
+  • Drag-rearrange persistence for Workbench panel order
+  • Manual "+ 新建协作室" / "+ 新建项目" → membrane review wiring
+    (per 04-28 memo, manual creates flow through Membrane as
+    candidates; needs CandidateKind extension — separate plan)
+  • Skill atlas + workflow panel renderer upgrades (current stubs
+    are sufficient for shell-shape work)
+  • Pre-commit rehearsal preview in the personal-stream composer
+    (north-star primitive; orthogonal to shell layout)
+
+
+--------------------------------------------------------------
+  9. ACCEPTANCE CRITERIA (HOW WE KNOW THE SHELL IS DONE)
+--------------------------------------------------------------
+
+A user with 3 projects, 12 groups across them, 4 DMs sees:
+
+  1. On login, lands in their personal stream of the most recent
+     project (no dashboard, no project list page as primary).
+  2. ImNav shows: 我的Agent (1 entry) · 群组 (12 flat) · 私聊 (4).
+     No "项目" section. No specialist-agent picker.
+  3. ProjectBar shows the active project's name + tier pills. Clicking
+     it does nothing (read-only crumb).
+  4. TopBar 切换项目 dropdown lists the 3 projects; selecting one
+     swaps the personal stream + ProjectBar context, ImNav unchanged.
+  5. Clicking a group in 群组 — whether it's a project main stream or
+     a sub-room — opens it in Main. The user CANNOT tell from the UX
+     which underlying kind it is.
+  6. Crystallizing a decision in any group: the vote tally line reads
+     "Voting with this group's N members" where N is the group's
+     member count, regardless of underlying kind. (BE already correct
+     per §3; FE just needs uniform copy.)
+  7. Rail 📋/📌/📚/🏛/🔍 swaps Main to the corresponding /detail/* page
+     and hides ImNav. Workbench stays. Returning to chat (Rail logo W
+     or first icon) restores ImNav.
+  8. Workbench ▦ toggle hides/shows Workbench column; preference
+     persists.
+  9. Splitters between ImNav|Main and Main|Workbench drag-resize.
+ 10. ⛶ in chat header enters immersive mode (only TopBar + Main
+     remain visible).
+
+If all 10 hold, the shell is prototype-faithful and the user's
+05-01 frustration is resolved.
+
+
+--------------------------------------------------------------
+  10. OPEN QUESTIONS — ANSWERED 2026-05-01 (with Q-A still pending)
+--------------------------------------------------------------
+
+  Q-A. Personal-stream-per-project vs one-global-personal-stream.
+       REVISED 2026-05-01 → HYBRID (one 通用 + N 项目 agents).
+
+       Earlier this session I locked Q-A as A1 (one global stream,
+       agent infers project). User then refined: "well, i just
+       think, maybe one main agent, and several agents scopes to
+       projects is better, make work more clear." That replaces A1.
+
+       SHAPE LOCKED:
+         • ONE 通用 Agent stream per user. StreamRow kind='personal',
+           owner_user_id=me, project_id=NULL. Schema already permits
+           this (orm.py:1108 — column is nullable). New row created
+           on first 通用 Agent open per user; nothing else needed.
+         • N 项目 Agent streams per user, one per project they're a
+           member of. StreamRow kind='personal', owner_user_id=me,
+           project_id=<X>. Existing shipped behavior, untouched.
+           Created lazily on first project-agent open (this is what
+           ensure_personal_stream(user_id, project_id) already does).
+         • ImNav 我的 Agent section renders both: agentPrimary big
+           card for 通用 + small navItem rows for each 项目 Agent.
+         • User chooses the venue. Cross-cutting / strategic talk
+           → 通用. Project-bound talk → that project's agent.
+         • Optional later: an inference-based "should this be in
+           Project X's agent?" suggestion when posting in 通用.
+           NOT v1, can ship as a polish slice after the shell.
+         • System signals (drift, gated, membrane, route) keep
+           posting to the per-(user, project) personal stream as
+           today — they're project-scoped by definition. The 通用
+           Agent stream stays empty until user-initiated turns
+           land.
+
+       BE COST — see §11 below. Much smaller than the A1 plan it
+       replaces: just enable ensure_personal_stream(user_id, None)
+       to create/return the project_id=NULL row, and surface all of
+       a user's personal streams in the streams-list endpoint. No
+       data migration. No service rewrites.
+
+  Q-B. ProjectBar — project as OPTION scope, not default.
+       USER ANSWER (2026-05-01): "project also should be a option
+       scope, not default. detail shows stuffs accoding to the user's
+       auth or license allow them to see. so still project is an
+       option to adjust scopes."
+
+       APPLIES: the four scope-tier pills [Personal] [Cell] [Department]
+       [Enterprise] are toggleable. Default state in 我的 Agent stream
+       is Personal ON, Cell/Department/Enterprise OFF. User can OPT IN
+       to Cell (current project) for context broadening per turn / per
+       stream. Detail pages (Rail icons) filter by user's
+       license/auth set; project is one OPTIONAL scope filter on top.
+
+       Implication for ProjectBar mount: it's still global (top of
+       shell), still shows the active project as a crumb (so the user
+       knows which Cell scope WOULD be applied if they toggle it on),
+       but the Cell pill is OFF by default. This is a behavior change
+       from the prior assumption that Personal+Cell were both default-
+       on; previous draft of this spec is corrected here.
+
+  Q-C. (Folded into Q-B answer.) Rail detail pages scope by user's
+       license/auth set; project is one optional filter, not a
+       hard scope. Implementation note: when a user enters a Rail
+       detail page (e.g. 知识库), the page renders ALL items their
+       license tier permits, with a project filter chip the user can
+       toggle on to narrow to the current project.
+
+  Q-D. ImNav scaling for ~100 groups.
+       USER ANSWER (2026-05-01): "by recency."
+
+       APPLIES: 群组 section sorts by stream.last_activity_at desc.
+       No search input as a primary affordance. If list grows beyond
+       what fits in the viewport, the section scrolls within ImNav.
+       Section header collapse remains available for users who want
+       to hide the list. Revisit only if the user reports
+       scrolling-fatigue in production.
+
+  Q-E. Group default name.
+       USER ANSWER (2026-05-01): "maybe default use the project name
+       the creater of the group is in."
+
+       APPLIES: when StreamRow.name is NULL and the stream needs a
+       display label in ImNav / DecisionCard / etc., resolve as:
+
+         1. StreamRow.name if set (ad-hoc rooms named at creation)
+         2. Else, ProjectRow.name of the project the creator of the
+            stream belongs to. For kind='project' main streams that's
+            unambiguous (project_id is set on the stream itself); for
+            kind='room' streams whose project anchor is set, it's also
+            project_id; for kind='dm' streams it's the partner's name.
+         3. Else, fallback to "未命名群组" or stream id suffix.
+
+       Server-side: GET /api/streams (or whatever the new ImNav hook
+       calls) should resolve display_name in this order and return it
+       on each row, so the FE doesn't have to join.
+
+
+--------------------------------------------------------------
+  11. BACKEND ENHANCEMENTS NEEDED (USER 2026-05-01: "if BE not
+      suitable yet, enhance BE")
+--------------------------------------------------------------
+
+This section catalogues every BE gap the prototype-faithful shell
+opens up. Items marked REQUIRED block the v1 shell; items marked
+OPTIONAL can ship later as polish slices.
+
+  REQUIRED FOR v1 SHELL:
+
+  E-1. Allow project_id=None in ensure_personal_stream.
+       File: apps/api/src/workgraph_api/services/streams.py (or
+       wherever StreamService lives — confirm in code).
+       Behavior: when called with project_id=None, return-or-create
+       the user's single global personal stream (kind='personal',
+       owner_user_id=user_id, project_id=NULL). Idempotent.
+       Schema already permits this (orm.py:1108) — pure code change,
+       no alembic.
+       Test: add test_streams_global_personal_stream_singleton —
+       calling twice for the same user returns the same row.
+
+  E-2. Streams listing endpoint returns user's full set of personal
+       streams (1 global + N per-project) plus rooms + DMs.
+       Likely route: GET /api/streams (or whatever the FE is going
+       to call from useStreamList — confirm in apps/web/src/lib/api).
+       Response shape per row:
+         { id, kind, project_id, owner_user_id, name (resolved),
+           last_activity_at, member_count, unread_count }
+       Resolution rule for `name` (Q-E lock):
+         StreamRow.name → ProjectRow.name of stream's project →
+         fallback "未命名群组" / partner name for DMs.
+       For 项目 Agent rows, name = "<project name> 的 Agent" (or
+       similar — FE can format from project_id + project name).
+
+  E-3. Group display name resolution server-side. Same as E-2's
+       `name` field but also surfaced wherever a stream is
+       referenced (DecisionCard scope-explainer, room timeline,
+       etc.). Keeps the FE from needing to join project rows
+       client-side.
+
+  OPTIONAL POLISH (defer to follow-up plans):
+
+  E-4. AgentFlow flowHead [资料][记忆][技能] pill targets.
+       The pills should link to detail/* pages scoped to the
+       conversation context (which project, which agent). Needs a
+       "stream context" lookup endpoint that returns the active
+       project + relevant entity slice. v1 can render the pills
+       inert and label the gap.
+
+  E-5. analysisCard "关联任务" data source.
+       Needs a "graph slice for current conversation" query —
+       returns related tasks/decisions/risks given a stream id and
+       optional anchor message. v1 omits the card entirely (better
+       than fake static data). Reintroduce when this query exists.
+
+  E-6. autoAgent toggle persistence.
+       Needs a per-user (or per-stream) auto_dispatch_enabled flag.
+       v1 ships the toggle as client-side state only; backend
+       respects current default behavior regardless of toggle.
+
+  E-7. Thinking-mode hint plumbing.
+       POST /api/messages and PersonalStreamService.respond should
+       accept a thinking_mode (深度思考 | 快速回答) hint that maps
+       to model temperature or model tier. v1 ships the select
+       as client-side state only; backend uses fixed model.
+
+  E-8. Inference-based "open in Project X's agent" suggestion.
+       When user posts in 通用 Agent and the edge LLM detects
+       project context with high confidence, surface an inline
+       suggestion card in the stream. v1 explicitly out of scope;
+       deferred until shell + 通用 Agent + 项目 Agent are all
+       working.
+
+  E-9. Workbench panel composition persistence.
+       Today panel order + presence is in-memory only. Persist per
+       (user, stream_kind) so the user's workbench composition
+       survives reload. v1 in-memory is acceptable per existing
+       defer call (memory project_state_20260430).
+
+  Items E-1, E-2, E-3 are REQUIRED for the shell to feel right.
+  E-4 through E-9 are OPTIONAL — ship the shell first, layer in
+  these as separate slices.
+
+  NO DATA MIGRATION — none of E-1 through E-9 require touching
+  existing rows. Existing per-(user, project) personal streams
+  stay exactly as they are. Adding the 通用 Agent stream is
+  additive.
+
+
+--------------------------------------------------------------
+  12. PROTOTYPE AUDIT — WHAT WE HONOR / DEVIATE / DEFER
+--------------------------------------------------------------
+
+User directive 2026-05-01: "make sure every spec meets the prototype.
+and if BE not suitable yet, enhance BE." This table reconciles every
+prototype feature with the spec, with explicit reasons for any
+deviation.
+
+  HONOR (port faithfully):
+
+    Prototype feature              | Spec section
+    -------------------------------|---------------
+    4-column grid (rail|im|main|tools) + top + bar    §1
+    Rail glyphs ⌂▣✓◇◎⌕ (data.ts:3-10)                  §4
+    moduleMode hides ImNav, layout shrinks            §4 + §6
+    ImNav agentPrimary big card pattern               §2 (we use 通用 Agent)
+    ImNav NavSection collapse pattern                  §2
+    AgentFlow flowHead with face + title + pills + ⛶  §4b
+    Composer plus-menu (📎🧩📨✅)                       §4b (already shipped)
+    Composer autoAgent toggle + thinking select       §4b (E-6 / E-7 BE)
+    Workbench head [工具栏 + 私有 + modeGroup + ×]      §4c
+    Workbench toolShelf 5 chips                        §4c
+    Workbench panel kinds tasks/knowledge/skills/requests §4c
+    Panel grid modes grid/vertical/focus               §4c (already shipped)
+    Panel drag-reorder via ⋮⋮ handle                   §4c (already shipped)
+    ModuleView header + grid + .two layout            §4d
+    ModuleView 5 page contents from data.ts            §4d
+    ProjectBar dot + crumb + sub-crumb + pills         §5
+    State modes: moduleMode/leftNarrow/immersive/toolsClosed §6
+    TopBar layout (logo + search + buttons + avatar)   §1 (existing FE)
+    TopBar dropdowns 切换项目 + 新建 ▾                  §1 (already shipped)
+
+  DEVIATE FROM PROTOTYPE (with explicit reasons):
+
+    Specialist Agents (research/solution/tech) — DROP
+      Prototype data.ts:12-37 lists three. 04-28 memo deletes them
+      (one sub-agent per user globally; specialists, if needed,
+      appear as attributed sub-turns in-stream). The visual slot
+      they occupied in ImNav is reused for 项目 Agent rows.
+
+    "+ 新建 Agent" in TopBar 新建 ▾ menu — DROP
+      Prototype App.tsx:79. 04-28 memo: no manual agent creation.
+      Other dropdown items (新建项目 / 新建频道 / 新建任务) keep.
+
+    "工作流" panel as a real renderer — DEFERRED (kept inert)
+      Prototype App.tsx:514-525 + data.ts:199 ship a 4-stage DAG.
+      04-28 memo: "Workflow stages are derived from the graph on
+      demand; do not render as a fixed pipeline." North-star: graph
+      IS the status. Spec: keep the chip + panel kind in the
+      toolShelf so the layout matches prototype, render a static
+      placeholder or "stages derived on demand" inert state.
+
+    分析卡 (analysisCard "关联任务") — DEFERRED
+      Prototype App.tsx:244-251. Real impl needs the related-entity
+      query (E-5 in §11). Better to omit the card in v1 than render
+      stale fake data; reintroduce when the query exists.
+
+    "频道" / "主频道" as a separate ImNav section — COLLAPSED
+      Prototype data.ts:39-44 has 4 channels. We collapse 频道
+      (project main rooms) + sub-rooms into one flat 群组 section
+      per the 04-28 multi-team-rooms decision and the user's
+      05-01 "don't check group types" directive. Visual difference
+      from prototype is justified by the 100-group production
+      target.
+
+    "临时会话" (tempSessions) — DEFERRED
+      Prototype data.ts:46-75 has 3. Schema doesn't support a
+      'temp' kind today (orm.py reserves 'group' + 'rehearsal' for
+      v2). Revisit when schema lands; could become a fourth ImNav
+      section or a chip filter on 群组.
+
+    Hardcoded prototype names ("星际漂流 — 第1季发布", "Raj")
+      Replace with real auth.user + real project rows. Trivial.
+
+    Default ProjectBar pills both ON (Personal + Cell)
+      Prototype shows both as static pills with no toggle hint;
+      spec is stricter per Q-B (only Personal default; Cell is
+      opt-in). Visual unchanged; behavior tightened.
+
+  ADD BEYOND PROTOTYPE (justified extensions):
+
+    项目 Agent navItems in 我的 Agent section
+      Prototype shows specialist agents in this slot. Q-A locks
+      them as project-scoped agents instead. Same visual shape,
+      different semantic.
+
+    Group display name resolution chain (Q-E)
+      Prototype hardcodes names. We resolve server-side:
+      StreamRow.name → ProjectRow.name → fallback. Required because
+      kind='project' streams may have null name (alembic 0029
+      added the column 2026-04-30).
+
+    100-group recency-sort + collapse
+      Prototype has ~10 hardcoded entries. Production scales to
+      ~100; sort + collapsibility are required, not optional. No
+      search input as primary affordance per Q-D.
+
+
+================================================================
+  END OF SPEC. Update this file in place if decisions change.
+================================================================

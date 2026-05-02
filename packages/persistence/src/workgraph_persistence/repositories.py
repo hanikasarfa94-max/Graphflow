@@ -2164,6 +2164,28 @@ class StreamRepository:
         )
         return (await self._session.execute(stmt)).scalars().first()
 
+    async def get_personal_global_for_user(
+        self, *, user_id: str
+    ) -> StreamRow | None:
+        """v-Next — the user's single 通用 (global) personal stream.
+
+        StreamRow with type='personal', owner_user_id=user, project_id=NULL.
+        Distinct from per-project personal streams; the user's
+        cross-project agent surface. Same '.first() prefers oldest' guard
+        as get_personal_for_user_in_project for race-condition tolerance.
+        """
+        stmt = (
+            select(StreamRow)
+            .where(
+                StreamRow.project_id.is_(None),
+                StreamRow.owner_user_id == user_id,
+                StreamRow.type == "personal",
+            )
+            .order_by(StreamRow.created_at)
+            .limit(1)
+        )
+        return (await self._session.execute(stmt)).scalars().first()
+
     async def find_dm_between(
         self, user_a: str, user_b: str
     ) -> StreamRow | None:

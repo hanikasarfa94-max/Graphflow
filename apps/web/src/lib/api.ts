@@ -917,8 +917,19 @@ export interface StreamSummary {
   // for type='room'.
   type: "project" | "dm" | "room" | "personal";
   project_id: string | null;
+  // owner_user_id is set for type='personal' (the user who owns the
+  // sub-agent conversation). Null for project / dm / room.
+  owner_user_id?: string | null;
   // Persisted display name (alembic 0029) — null for non-room types.
   name?: string | null;
+  // Resolved canonical anchor (v-Next E-3 / Q-E):
+  //   room with name      → stream.name
+  //   project / room      → owning project's title
+  //   personal (project)  → owning project's title (FE formats
+  //                         "{display_name} 的 Agent" via i18n)
+  //   personal (global)   → null (FE i18n: "通用 Agent" / "General Agent")
+  //   dm                  → null (FE picks partner from members)
+  display_name?: string | null;
   members: StreamMemberSummary[];
   last_activity_at: string | null;
   created_at: string | null;
@@ -931,6 +942,43 @@ export function listStreams(baseUrl?: string): Promise<{ streams: StreamSummary[
 
 export function markStreamRead(streamId: string): Promise<unknown> {
   return api(`/api/streams/${streamId}/read`, { method: "POST" });
+}
+
+// v-next AgentFlow uses these directly. Existing PersonalStream /
+// RoomStreamTimeline code paths still go through their own dedicated
+// endpoints (/api/personal/{id}/* etc.) — these are the generic
+// stream-id-driven ones that don't require project context.
+
+export interface StreamMessage {
+  id: string;
+  stream_id: string;
+  project_id: string | null;
+  author_id: string;
+  author_username: string | null;
+  body: string;
+  kind: string;
+  linked_id: string | null;
+  created_at: string;
+}
+
+export function listStreamMessages(
+  streamId: string,
+  opts: { limit?: number } = {},
+): Promise<{ messages: StreamMessage[] }> {
+  const q = opts.limit ? `?limit=${opts.limit}` : "";
+  return api<{ messages: StreamMessage[] }>(
+    `/api/streams/${streamId}/messages${q}`,
+  );
+}
+
+export function postStreamMessage(
+  streamId: string,
+  body: string,
+): Promise<{ ok: boolean } & StreamMessage> {
+  return api(`/api/streams/${streamId}/messages`, {
+    method: "POST",
+    body: { body },
+  });
 }
 
 // ---------- Room timeline (room-stream slice) ----------

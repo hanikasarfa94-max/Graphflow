@@ -1,0 +1,112 @@
+/* ModuleView — adapted from prototype legacy CSS lines 85-86. */
+
+.module {
+  height: 100%;
+  overflow: auto;
+  padding: 18px 22px;
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.62),
+    rgba(247, 249, 252, 0.76)
+  );
+}
+
+.moduleHeader {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 14px;
+}
+
+.moduleHeader h2 {
+  font-size: 20px;
+  margin: 0;
+}
+
+.moduleHeader p {
+  font-size: 13px;
+  color: var(--wg-text, #68768a);
+  margin: 4px 0 0;
+  max-width: 720px;
+}
+
+.actionBtn {
+  height: 32px;
+  border: 0;
+  color: #fff;
+  background: linear-gradient(135deg, #2563eb, #06b6d4);
+  border-radius: 11px;
+  padding: 0 10px;
+  font-weight: 800;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.placeholderHint {
+  font-size: 11px;
+  color: var(--wg-muted, #9aa8ba);
+  font-style: italic;
+  margin: 0 0 12px;
+}
+
+.moduleGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.gridTwo {
+  grid-template-columns: 1.2fr 0.8fr;
+}
+
+.moduleCard {
+  background: #fff;
+  border: 1px solid var(--wg-line, #e4eaf3);
+  border-radius: 16px;
+  box-shadow: 0 10px 26px rgba(23, 32, 51, 0.055);
+  padding: 14px;
+  min-width: 0;
+}
+
+.moduleCard h3 {
+  font-size: 15px;
+  margin: 0 0 9px;
+}
+
+.moduleCard p {
+  color: var(--wg-text, #68768a);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.moduleRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border: 1px solid var(--wg-line, #e4eaf3);
+  border-radius: 13px;
+  padding: 10px 11px;
+  margin-bottom: 8px;
+}
+
+.moduleRow strong {
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.moduleRow span {
+  font-size: 12px;
+  color: var(--wg-text, #68768a);
+  flex: 0 0 auto;
+}
+
+@media (max-width: 1320px) {
+  .moduleGrid,
+  .gridTwo {
+    grid-template-columns: 1fr;
+  }
+}

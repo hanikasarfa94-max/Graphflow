@@ -1758,5 +1758,103 @@
         "viewer": "Viewer"
       }
     }
+  },
+  "shellVNext": {
+    "personalAgentSection": "Personal Agent",
+    "generalAgent": "General Agent",
+    "generalAgentSubtitle": "Cross-project synthesis and consultation.",
+    "projectAgents": "Project Agents",
+    "projectAgentLabel": "{project} · Agent",
+    "groups": "Groups",
+    "dms": "Direct Messages",
+    "noGroups": "No groups yet.",
+    "noDMs": "No direct messages yet.",
+    "unnamedGroup": "Unnamed group",
+    "tag": {
+      "agent": "Agent",
+      "group": "Group",
+      "dm": "DM"
+    },
+    "flowPill": {
+      "info": "Info",
+      "infoTip": "Reference materials for this stream (deferred — needs E-4 backend).",
+      "memory": "Memory",
+      "memoryTip": "Long-term memory of this stream (deferred — needs E-4 backend).",
+      "skills": "Skills",
+      "skillsTip": "Skills surfaced for this stream (deferred — needs E-4 backend)."
+    },
+    "immersiveToggle": "Toggle immersive mode",
+    "timelineLoading": "Loading messages…",
+    "timelineEmpty": "No messages yet. Say something below.",
+    "composerPlaceholder": "Send a message to your agent…",
+    "composerSend": "Send",
+    "composerSending": "Sending…",
+    "composerError": "Couldn't send",
+    "autoAgent": "Auto-dispatch",
+    "thinkingMode": "Thinking mode",
+    "thinking": {
+      "deep": "Deep thinking",
+      "fast": "Fast answer"
+    },
+    "plus": {
+      "upload": "Upload file",
+      "context": "Adjust context",
+      "routePerson": "Ask a person",
+      "submitTask": "Submit as task",
+      "hint": "Inert in v1 — backend wiring per spec §11."
+    },
+    "projectBar": {
+      "project": "Project:",
+      "surface": "Surface:",
+      "noProject": "No project context — talking to your global agent.",
+      "cellTip": "Toggle to broaden context to this project's cell scope. Default off per Q-B.",
+      "tier": {
+        "personal": "Personal",
+        "cell": "Cell",
+        "department": "Department",
+        "enterprise": "Enterprise"
+      }
+    },
+    "wb": {
+      "head": {
+        "title": "Workbench",
+        "subtitle": "Agent shortcut tray",
+        "privatePill": "Private",
+        "close": "Close workbench"
+      },
+      "mode": {
+        "grid": "Grid",
+        "vertical": "Vertical",
+        "focus": "Focus"
+      },
+      "chip": {
+        "tasks": "Tasks",
+        "knowledge": "Knowledge",
+        "requests": "Requests",
+        "skills": "Skills",
+        "workflow": "Workflow"
+      },
+      "title": {
+        "tasks": "Tasks",
+        "knowledge": "Knowledge & Memory",
+        "skills": "Skill Atlas",
+        "requests": "Collaboration Requests",
+        "workflow": "Workflow / Schedule"
+      },
+      "tasks": {
+        "mine": "Mine",
+        "team": "Team"
+      },
+      "knowledge": {
+        "searchPlaceholder": "Search knowledge"
+      },
+      "workflow": {
+        "hint": "Stages render live from the graph in production — this is a placeholder shape."
+      },
+      "unknownKind": "Unknown panel"
+    },
+    "module": {
+      "placeholderHint": "Phase 2 shell — Rail detail pages render the prototype's seed cards. Real data wiring per page lands in Phase 3."
+    }
   }
 }

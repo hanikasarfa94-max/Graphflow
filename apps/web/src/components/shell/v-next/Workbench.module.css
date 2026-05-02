@@ -1,0 +1,334 @@
+/* Workbench — adapted from prototype legacy CSS lines 87-92. */
+
+.tools {
+  background: rgba(255, 255, 255, 0.72);
+  border-left: 1px solid var(--wg-line, #e4eaf3);
+  min-width: 0;
+  display: grid;
+  grid-template-rows: 40px 1fr;
+  overflow: hidden;
+}
+
+.toolsHead {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 10px;
+  border-bottom: 1px solid var(--wg-line, #e4eaf3);
+  background: rgba(255, 255, 255, 0.86);
+  min-width: 0;
+}
+.toolsHead strong {
+  font-size: 14px;
+}
+.toolsHead small {
+  font-size: 12px;
+  color: var(--wg-muted, #8b9ab0);
+}
+
+.privatePill {
+  height: 22px;
+  border-radius: 999px;
+  border: 1px solid #cfe0ff;
+  background: #eef4ff;
+  color: #1d4ed8;
+  font-size: 11px;
+  font-weight: 800;
+  padding: 0 8px;
+  display: inline-flex;
+  align-items: center;
+}
+
+.spacer {
+  margin-left: auto;
+}
+
+.modeGroup {
+  display: flex;
+  gap: 4px;
+}
+
+.mode {
+  height: 27px;
+  border: 1px solid var(--wg-line, #e4eaf3);
+  background: #fff;
+  border-radius: 9px;
+  padding: 0 8px;
+  color: var(--wg-text, #536276);
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.modeActive {
+  background: #eef4ff;
+  color: #1d4ed8;
+  border-color: #cfe0ff;
+}
+
+.closeBtn {
+  width: 25px;
+  height: 25px;
+  border: 0;
+  background: transparent;
+  border-radius: 8px;
+  color: var(--wg-muted, #6b7a90);
+  cursor: pointer;
+  font-size: 18px;
+}
+
+.toolsBody {
+  padding: 10px;
+  overflow: auto;
+  display: grid;
+  grid-template-rows: auto 1fr;
+  gap: 9px;
+}
+
+.toolShelf {
+  display: flex;
+  gap: 7px;
+  flex-wrap: wrap;
+  border: 1px dashed #d4deeb;
+  background: #fbfdff;
+  border-radius: 13px;
+  padding: 7px;
+}
+
+.toolChip {
+  height: 29px;
+  border: 1px solid var(--wg-line, #e4eaf3);
+  background: #fff;
+  border-radius: 9px;
+  padding: 0 9px;
+  color: var(--wg-text, #536276);
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.toolChip:hover {
+  background: #f6f9ff;
+}
+
+.panelGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-auto-rows: minmax(202px, auto);
+  gap: 9px;
+  align-content: start;
+}
+
+.gridVertical {
+  grid-template-columns: 1fr;
+}
+
+.gridFocus {
+  grid-template-columns: 1fr;
+}
+
+.panel {
+  background: #fff;
+  border: 1px solid var(--wg-line, #e4eaf3);
+  border-radius: 15px;
+  box-shadow: 0 6px 16px rgba(23, 32, 51, 0.035);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 202px;
+}
+
+.panelWide {
+  grid-column: 1 / -1;
+  min-height: 138px;
+}
+
+.panelFocus {
+  /* Visual marker; hard hide for non-focus is handled in PanelCard */
+}
+
+.panelHead {
+  height: 38px;
+  border-bottom: 1px solid var(--wg-line, #e4eaf3);
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 10px;
+  cursor: grab;
+  min-width: 0;
+}
+
+.panelHead strong {
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dragHandle {
+  color: var(--wg-muted, #8b9ab0);
+  font-size: 12px;
+}
+
+.panelActions {
+  margin-left: auto;
+  display: flex;
+  gap: 4px;
+}
+
+.panelBtn {
+  width: 24px;
+  height: 24px;
+  border: 0;
+  background: transparent;
+  border-radius: 8px;
+  color: var(--wg-muted, #6b7a90);
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.panelBtn:hover {
+  background: #f3f7fb;
+}
+
+.panelBody {
+  padding: 10px;
+  overflow: auto;
+  flex: 1;
+}
+
+.panelItem {
+  border: 1px solid var(--wg-line, #e4eaf3);
+  border-radius: 12px;
+  background: #fff;
+  padding: 9px;
+  margin-bottom: 7px;
+  min-width: 0;
+}
+
+.panelItem strong {
+  display: block;
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.panelItem small {
+  display: block;
+  color: var(--wg-muted, #7b8aa0);
+  font-size: 12px;
+  margin-top: 3px;
+  overflow-wrap: anywhere;
+}
+
+.progress {
+  height: 6px;
+  background: #e5e7eb;
+  border-radius: 999px;
+  overflow: hidden;
+  margin-top: 7px;
+}
+
+.progress i {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, #2563eb, #06b6d4);
+}
+
+.scopeRow {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.scopePill {
+  height: 22px;
+  border: 1px solid var(--wg-line, #e4eaf3);
+  border-radius: 999px;
+  background: #fff;
+  padding: 0 8px;
+  display: inline-flex;
+  align-items: center;
+  font-size: 11px;
+  color: var(--wg-text, #58687d);
+  font-weight: 800;
+}
+
+.scopePillActive {
+  background: #ecfdf5;
+  border-color: #bbf7d0;
+  color: #047857;
+}
+
+.panelInput {
+  width: 100%;
+  height: 32px;
+  border: 1px solid var(--wg-line, #e4eaf3);
+  border-radius: 10px;
+  background: #fff;
+  padding: 0 10px;
+  font: inherit;
+  font-size: 12px;
+  margin-bottom: 8px;
+}
+
+.graphBox {
+  height: 132px;
+  border: 1px dashed #cbd5e1;
+  border-radius: 13px;
+  background:
+    radial-gradient(circle at 50% 48%, #bbf7d0 0 14px, transparent 15px),
+    radial-gradient(circle at 23% 25%, #dbeafe 0 9px, transparent 10px),
+    radial-gradient(circle at 72% 24%, #ede9fe 0 9px, transparent 10px),
+    radial-gradient(circle at 28% 78%, #e0f2fe 0 9px, transparent 10px),
+    radial-gradient(circle at 76% 75%, #dcfce7 0 9px, transparent 10px),
+    linear-gradient(#fff, #fbfdff);
+  margin-bottom: 8px;
+}
+
+.workflow {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  overflow: auto;
+  padding-bottom: 3px;
+}
+
+.wfNode {
+  min-width: 86px;
+  border: 1px solid var(--wg-line, #e4eaf3);
+  border-radius: 12px;
+  padding: 9px;
+  text-align: center;
+  background: #fff;
+  font-size: 12px;
+}
+
+.wfNode span {
+  display: block;
+  margin-top: 4px;
+  color: var(--wg-muted, #8b9ab0);
+  font-size: 11px;
+}
+
+.wfDone {
+  background: #ecfdf5;
+  border-color: #bbf7d0;
+}
+
+.wfActive {
+  background: #eef4ff;
+  border-color: #cfe0ff;
+}
+
+.wfArrow {
+  color: var(--wg-muted, #9aa8ba);
+}
+
+.workflowHint {
+  margin-top: 8px;
+  font-size: 11px;
+  color: var(--wg-muted, #8b9ab0);
+}

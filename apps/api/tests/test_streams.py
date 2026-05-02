@@ -287,3 +287,101 @@ async def test_observer_cannot_post_message(api_env):
         json={"body": "observer trying to post — this must be rejected"},
     )
     assert r.status_code == 403
+
+
+# ---------- v-Next: 通用 (global) personal stream ------------------------
+
+
+@pytest.mark.asyncio
+async def test_global_personal_stream_singleton_per_user(api_env):
+    """Calling ensure_personal_stream(project_id=None) twice for the same
+    user returns the same row. project_id=NULL is the canonical 通用
+    Agent stream per docs/shell-v-next.txt §2.
+    """
+    client, _, _, _, _, _ = api_env
+    await _register(client, "global_agent_user")
+    me = (await client.get("/api/auth/me")).json()
+
+    service = app.state.stream_service
+
+    first = await service.ensure_personal_stream(user_id=me["id"])
+    assert first["ok"] is True
+    assert first["created"] is True
+    assert first["project_id"] is None
+    stream_id_1 = first["stream_id"]
+
+    second = await service.ensure_personal_stream(user_id=me["id"])
+    assert second["ok"] is True
+    assert second["created"] is False
+    assert second["stream_id"] == stream_id_1
+
+
+@pytest.mark.asyncio
+async def test_global_personal_stream_distinct_from_project_personal(api_env):
+    """Per-project personal stream and the 通用 (global) personal stream
+    are distinct rows even for the same user.
+    """
+    client, _, _, _, _, _ = api_env
+    await _register(client, "two_agents_user")
+    me = (await client.get("/api/auth/me")).json()
+    project_id = await _intake(client, "two-agents-evt")
+
+    service = app.state.stream_service
+
+    global_stream = await service.ensure_personal_stream(user_id=me["id"])
+    project_stream = await service.ensure_personal_stream(
+        user_id=me["id"], project_id=project_id
+    )
+
+    assert global_stream["stream_id"] != project_stream["stream_id"]
+    assert global_stream["project_id"] is None
+    assert project_stream["project_id"] == project_id
+
+
+@pytest.mark.asyncio
+async def test_streams_list_includes_global_personal(api_env):
+    """GET /api/streams returns the 通用 Agent stream once it exists,
+    surfacing alongside per-project personal + project + dm streams.
+    """
+    client, _, _, _, _, _ = api_env
+    await _register(client, "list_global_user")
+    me = (await client.get("/api/auth/me")).json()
+
+    # Pre-create the global stream — no UI route lives yet, but the
+    # service is the source of truth FE will call indirectly.
+    service = app.state.stream_service
+    g = await service.ensure_personal_stream(user_id=me["id"])
+
+    r = await client.get("/api/streams")
+    assert r.status_code == 200, r.text
+    streams = r.json()["streams"]
+    matched = [s for s in streams if s["id"] == g["stream_id"]]
+    assert len(matched) == 1
+    row = matched[0]
+    assert row["type"] == "personal"
+    assert row["project_id"] is None
+    assert row["owner_user_id"] == me["id"]
+    # display_name is None for the global stream — FE supplies the
+    # localized "通用 Agent" / "General Agent" string from i18n.
+    assert row["display_name"] is None
+
+
+@pytest.mark.asyncio
+async def test_shape_stream_display_name_for_project_stream(api_env):
+    """Project main stream gets display_name = ProjectRow.title via the
+    Q-E resolution chain in _shape_stream.
+    """
+    client, _, _, _, _, _ = api_env
+    await _register(client, "name_resolve_user")
+    project_id = await _intake(client, "name-resolve-evt")
+
+    r = await client.get("/api/streams")
+    assert r.status_code == 200, r.text
+    streams = r.json()["streams"]
+    project_streams = [
+        s for s in streams if s["type"] == "project" and s["project_id"] == project_id
+    ]
+    assert len(project_streams) == 1
+    # display_name should be the project title (whatever intake derived).
+    assert project_streams[0]["display_name"] is not None
+    assert project_streams[0]["display_name"] != ""

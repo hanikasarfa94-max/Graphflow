@@ -1758,5 +1758,103 @@
         "viewer": "查看者"
       }
     }
+  },
+  "shellVNext": {
+    "personalAgentSection": "个人 Agent",
+    "generalAgent": "通用 Agent",
+    "generalAgentSubtitle": "整合全平台信息，跨项目咨询。",
+    "projectAgents": "项目 Agent",
+    "projectAgentLabel": "{project} · Agent",
+    "groups": "群组",
+    "dms": "私聊",
+    "noGroups": "暂无群组。",
+    "noDMs": "暂无私聊。",
+    "unnamedGroup": "未命名群组",
+    "tag": {
+      "agent": "Agent",
+      "group": "频道",
+      "dm": "单聊"
+    },
+    "flowPill": {
+      "info": "资料",
+      "infoTip": "此 stream 的资料（待接入 —— 见 §11 E-4）。",
+      "memory": "记忆",
+      "memoryTip": "此 stream 的长期记忆（待接入 —— 见 §11 E-4）。",
+      "skills": "技能",
+      "skillsTip": "此 stream 相关的技能（待接入 —— 见 §11 E-4）。"
+    },
+    "immersiveToggle": "切换沉浸模式",
+    "timelineLoading": "正在加载消息…",
+    "timelineEmpty": "暂无消息。在下方说点什么吧。",
+    "composerPlaceholder": "给 Agent 发送消息…",
+    "composerSend": "发送",
+    "composerSending": "发送中…",
+    "composerError": "发送失败",
+    "autoAgent": "自动委派",
+    "thinkingMode": "思考模式",
+    "thinking": {
+      "deep": "深度思考",
+      "fast": "快速回答"
+    },
+    "plus": {
+      "upload": "📎 上传文件",
+      "context": "🧩 调整上下文",
+      "routePerson": "📨 请相关人判断",
+      "submitTask": "✅ 提交团队计划",
+      "hint": "v1 仅展示，待后端接入（见 §11）。"
+    },
+    "projectBar": {
+      "project": "当前项目：",
+      "surface": "当前工作台：",
+      "noProject": "无项目上下文 —— 与通用 Agent 对话中。",
+      "cellTip": "切换以将上下文扩展到此项目的 Cell 作用域。默认关闭（Q-B）。",
+      "tier": {
+        "personal": "Personal",
+        "cell": "Cell",
+        "department": "Department",
+        "enterprise": "Enterprise"
+      }
+    },
+    "wb": {
+      "head": {
+        "title": "工具栏",
+        "subtitle": "Agent 常用工具",
+        "privatePill": "私有",
+        "close": "关闭工具栏"
+      },
+      "mode": {
+        "grid": "分屏",
+        "vertical": "纵向",
+        "focus": "聚焦"
+      },
+      "chip": {
+        "tasks": "任务中心",
+        "knowledge": "知识记忆",
+        "requests": "协同请求",
+        "skills": "技能图谱",
+        "workflow": "工作流"
+      },
+      "title": {
+        "tasks": "任务中心",
+        "knowledge": "知识与记忆",
+        "skills": "技能图谱",
+        "requests": "协同请求",
+        "workflow": "工作流 / 日程"
+      },
+      "tasks": {
+        "mine": "我的",
+        "team": "团队"
+      },
+      "knowledge": {
+        "searchPlaceholder": "搜索知识库"
+      },
+      "workflow": {
+        "hint": "实际生产中阶段从图谱实时派生，此处为占位形状。"
+      },
+      "unknownKind": "未知面板"
+    },
+    "module": {
+      "placeholderHint": "Phase 2 外壳 —— Rail 详情页渲染原型种子卡片。每个详情页的真实数据接入将在 Phase 3 进行。"
+    }
   }
 }

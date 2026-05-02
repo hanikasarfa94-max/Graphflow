@@ -1,0 +1,100 @@
+/* ProjectBar — adapted from prototype legacy CSS lines 44-48. */
+
+.bar {
+  height: 34px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 14px;
+  background: rgba(255, 255, 255, 0.72);
+  border-bottom: 1px solid var(--wg-line, #e4eaf3);
+  backdrop-filter: blur(16px);
+  min-width: 0;
+  font-size: 12px;
+}
+
+.crumb {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-weight: 800;
+  color: #4c5e75;
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.crumbMuted {
+  color: var(--wg-muted, #8b9ab0);
+  font-style: italic;
+  font-size: 12px;
+}
+
+.crumbLabel {
+  color: var(--wg-muted, #8b9ab0);
+  font-weight: 600;
+}
+
+.crumbValue {
+  color: var(--wg-text, #2f4056);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #06b6d4;
+  box-shadow: 0 0 0 4px rgba(6, 182, 212, 0.12);
+  flex: 0 0 auto;
+}
+
+.sep {
+  color: var(--wg-line, #d7dfec);
+}
+
+.spacer {
+  flex: 1;
+}
+
+.pill {
+  height: 23px;
+  border: 1px solid var(--wg-line, #e4eaf3);
+  border-radius: 999px;
+  background: #fff;
+  padding: 0 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--wg-text, #58687d);
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.pill:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.pillOn {
+  background: #ecfdf5;
+  border-color: #bbf7d0;
+  color: #047857;
+}
+
+.pillStub {
+  height: 23px;
+  border: 1px dashed var(--wg-line, #d7dfec);
+  border-radius: 999px;
+  background: #fafbfd;
+  padding: 0 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--wg-muted, #9aa8ba);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
