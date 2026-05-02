@@ -47,6 +47,7 @@ export interface AppShellVNextClientProps {
 
 export type ActiveView =
   | "agentView"
+  | "graphView"
   | "projectView"
   | "taskView"
   | "knowledgeView"
@@ -155,6 +156,19 @@ export function AppShellVNextClient({
     return { projectTitle: null, surfaceLabel: null };
   }, [activeStreamId, generalAgent, projectAgents, groups, dms]);
 
+  // Active project derived from the focused stream (when any). Powers
+  // the GraphView's fetch + the ModuleView's project-scoped detail
+  // pages. Falls back to null when on global agent / DM / no stream;
+  // GraphView then renders an empty-state placeholder.
+  const activeProjectId: string | null = useMemo(() => {
+    if (!activeStreamId) return null;
+    const pa = projectAgents.find((p) => p.stream_id === activeStreamId);
+    if (pa) return pa.project_id;
+    const g = groups.find((x) => x.stream_id === activeStreamId);
+    if (g) return g.project_id;
+    return null;
+  }, [activeStreamId, projectAgents, groups]);
+
   // Stream-kind for E-9 workbench-layout lookup. Personal streams
   // (global + per-project agents) share one composition; rooms / DMs
   // get their own.
@@ -251,7 +265,10 @@ export function AppShellVNextClient({
               {children}
             </AgentFlow>
           ) : (
-            <ModuleView view={activeView} />
+            <ModuleView
+              view={activeView}
+              activeProjectId={activeProjectId}
+            />
           )}
         </main>
 

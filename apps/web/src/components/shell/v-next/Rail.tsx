@@ -20,6 +20,9 @@ interface RailItem {
 
 const RAIL_ITEMS: RailItem[] = [
   { id: "agentView", glyph: "⌂", label: "个人 Agent" },
+  // The graph IS the product (north-star §"graph is what the product
+  // actually is"). One Rail click into the project knowledge graph.
+  { id: "graphView", glyph: "⊛", label: "项目图谱" },
   { id: "projectView", glyph: "▣", label: "项目管理" },
   { id: "taskView", glyph: "✓", label: "任务视图" },
   { id: "knowledgeView", glyph: "◇", label: "知识库" },

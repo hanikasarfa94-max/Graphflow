@@ -1913,6 +1913,13 @@
         "action": "Export",
         "pendingCard": "Audit feed",
         "pendingBody": "The audit-feed endpoint isn't wired yet — this slice ships when the audit-stream slice lands."
+      },
+      "graph": {
+        "title": "Project graph",
+        "subtitle": "The graph IS the project — every task, decision, risk, and dependency as a node.",
+        "subtitleAnchored": "{project} — the graph IS the project.",
+        "noProjectCard": "No project to graph",
+        "noProjectBody": "Pick a project agent or room from the left, or create a new project, to see its graph."
       }
     }
   }

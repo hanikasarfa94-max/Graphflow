@@ -14,6 +14,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 
 import {
+  api,
   fetchMyProjects,
   fetchPersonalTasks,
   fetchProjectMembers,
@@ -21,8 +22,11 @@ import {
   type KbNote,
   type PersonalTask,
   type ProjectMember,
+  type ProjectState,
   type ProjectSummary,
 } from "@/lib/api";
+
+import { GraphCanvas } from "@/app/projects/[id]/detail/graph/GraphCanvas";
 
 import type { ActiveView } from "./AppShellClient";
 
@@ -53,11 +57,18 @@ interface ModuleViewSpec {
 
 interface Props {
   view: ActiveView;
+  // Project derived from the active stream — null when on global
+  // agent / DM / no stream. GraphView uses it to fetch the right
+  // project state; other views ignore it for now (they pick the
+  // most-recently-active project themselves).
+  activeProjectId?: string | null;
 }
 
-export function ModuleView({ view }: Props) {
+export function ModuleView({ view, activeProjectId = null }: Props) {
   if (view === "agentView") return null;
   switch (view) {
+    case "graphView":
+      return <GraphView activeProjectId={activeProjectId} />;
     case "projectView":
       return <ProjectsView />;
     case "taskView":
@@ -462,6 +473,143 @@ function OrgView() {
   }, [anchor, members, error, t]);
 
   return <ModuleShell view="orgView" spec={spec} />;
+}
+
+// Project knowledge graph — the v-Next surface for the product's core
+// concept (north-star §"the graph is what the product actually is").
+// Reuses the same GraphCanvas that powers /projects/[id]/detail/graph
+// so the v-next shell renders the canonical view, not a re-implementation.
+//
+// Project resolution:
+//   * If a project agent / room is the active stream → use its project_id
+//   * Else fall back to the user's most-recently-active project so the
+//     ⊛ Rail click never lands on an empty state when the user has any
+//     project at all.
+function GraphView({ activeProjectId }: { activeProjectId: string | null }) {
+  const t = useTranslations("shellVNext");
+  const [projectId, setProjectId] = useState<string | null>(activeProjectId);
+  const [state, setState] = useState<ProjectState | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  // Resolve a fallback project when no active stream context.
+  useEffect(() => {
+    if (activeProjectId) {
+      setProjectId(activeProjectId);
+      return;
+    }
+    let cancelled = false;
+    fetchMyProjects()
+      .then((ps) => {
+        if (cancelled) return;
+        const anchor = pickAnchorProject(ps);
+        setProjectId(anchor?.id ?? null);
+      })
+      .catch(() => {
+        // Non-fatal — empty state covers it.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeProjectId]);
+
+  // Fetch the project state whenever the resolved id changes.
+  useEffect(() => {
+    if (!projectId) {
+      setState(null);
+      setError(null);
+      return;
+    }
+    let cancelled = false;
+    setState(null);
+    setError(null);
+    api<ProjectState>(`/api/projects/${projectId}/state`)
+      .then((s) => {
+        if (cancelled) return;
+        setState(s);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setError(t("module.loadError"));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId, t]);
+
+  if (!projectId) {
+    return (
+      <ModuleShell
+        view="graphView"
+        spec={{
+          title: t("module.graph.title"),
+          subtitle: t("module.graph.subtitle"),
+          cards: [
+            {
+              title: t("module.graph.noProjectCard"),
+              body: t("module.graph.noProjectBody"),
+            },
+          ],
+        }}
+      />
+    );
+  }
+
+  if (error) {
+    return (
+      <ModuleShell
+        view="graphView"
+        spec={{
+          title: t("module.graph.title"),
+          subtitle: t("module.graph.subtitle"),
+          error,
+          cards: [],
+        }}
+      />
+    );
+  }
+
+  if (!state) {
+    return (
+      <ModuleShell
+        view="graphView"
+        spec={{
+          title: t("module.graph.title"),
+          subtitle: t("module.graph.subtitle"),
+          cards: [
+            {
+              title: t("module.loading"),
+              body: t("module.loadingHint"),
+            },
+          ],
+        }}
+      />
+    );
+  }
+
+  // Full canvas mount — header + bottomless GraphCanvas. The Canvas
+  // owns its own toolbar, legend, and intent strip, so the wrapper
+  // only contributes the page chrome.
+  return (
+    <section
+      className={styles.module}
+      data-testid="vnext-module-graphView"
+      style={{ display: "flex", flexDirection: "column", padding: 0 }}
+    >
+      <div className={styles.moduleHeader} style={{ padding: "18px 22px 8px" }}>
+        <div>
+          <h2>{t("module.graph.title")}</h2>
+          <p>
+            {t("module.graph.subtitleAnchored", {
+              project: state.project.title,
+            })}
+          </p>
+        </div>
+      </div>
+      <div style={{ flex: "1 1 auto", minHeight: 0 }}>
+        <GraphCanvas projectId={projectId} state={state} />
+      </div>
+    </section>
+  );
 }
 
 function AuditView() {

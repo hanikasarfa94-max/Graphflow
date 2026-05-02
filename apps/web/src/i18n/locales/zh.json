@@ -1913,6 +1913,13 @@
         "action": "导出",
         "pendingCard": "审计流",
         "pendingBody": "审计流接口尚未接入 —— 待 audit-stream slice 上线。"
+      },
+      "graph": {
+        "title": "项目图谱",
+        "subtitle": "图谱就是项目本身 —— 任务、决策、风险、依赖都是图上的节点。",
+        "subtitleAnchored": "{project} —— 图谱就是项目本身。",
+        "noProjectCard": "暂无可视化的项目",
+        "noProjectBody": "从左侧选择一个项目 Agent 或群组，或新建项目以查看图谱。"
       }
     }
   }
