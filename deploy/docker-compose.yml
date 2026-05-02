@@ -51,6 +51,11 @@ services:
       # The web container talks to the api container over the compose
       # network. The browser never sees this URL — it hits nginx on 80/443.
       WORKGRAPH_API_BASE: http://api:8000
+      # Shell v-Next gate (docs/shell-v-next.txt §7). When "true", the
+      # prototype-faithful 4-column shell mounts globally instead of the
+      # legacy AppSidebar shell. Read at request time inside layout.tsx
+      # (async server component → process.env evaluated per request).
+      SHELL_VNEXT: ${SHELL_VNEXT:-false}
     depends_on:
       - api
     expose:
