@@ -98,3 +98,66 @@
   font-weight: 700;
   white-space: nowrap;
 }
+
+/* Overflow menu — settings/meetings/renders/composition/team-perf.
+   Wave 2 surface for project sub-routes that don't deserve a Rail
+   glyph. */
+.overflowWrap {
+  position: relative;
+  display: inline-flex;
+}
+
+.overflowBtn {
+  width: 26px;
+  height: 23px;
+  border: 1px solid var(--wg-line, #e4eaf3);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--wg-text, #58687d);
+  font-weight: 900;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+.overflowBtn:hover {
+  background: #f1f6ff;
+  color: var(--wg-blue, #2563eb);
+  border-color: #cfe0ff;
+}
+.overflowBtn[aria-expanded="true"] {
+  background: var(--wg-accent-soft, #eef4ff);
+  border-color: #cfe0ff;
+}
+
+.overflowMenu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  min-width: 180px;
+  padding: 6px;
+  background: #fff;
+  border: 1px solid var(--wg-line, #e4eaf3);
+  border-radius: 10px;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.1);
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.overflowItem {
+  display: flex;
+  align-items: center;
+  padding: 8px 10px;
+  border-radius: 6px;
+  font-size: 13px;
+  color: var(--wg-ink, #1c2230);
+  text-decoration: none;
+}
+.overflowItem:hover {
+  background: var(--wg-accent-soft, #f1f6ff);
+}

@@ -93,6 +93,9 @@
   text-align: left;
   min-width: 0;
   cursor: pointer;
+  /* When rendered as <a> (e.g. Workspaces section) keep the underline
+     off so it visually matches the <button> rows in the same list. */
+  text-decoration: none;
 }
 
 .navItem:hover {

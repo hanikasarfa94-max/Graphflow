@@ -22,6 +22,8 @@ import {
   type ReactNode,
 } from "react";
 
+import { useRouter } from "next/navigation";
+
 import type { User } from "@/lib/api";
 
 import {
@@ -73,8 +75,10 @@ export function AppShellVNextClient({
   groups,
   dms,
   initialInboxCount,
+  workspaces,
   children,
 }: AppShellVNextClientProps) {
+  const router = useRouter();
   const [activeView, setActiveView] = useState<ActiveView>("agentView");
   // Default to NO active stream so routed pages (homepage HomeHero,
   // /projects/[id], etc.) render through AgentFlow's routedSlot. Users
@@ -237,6 +241,7 @@ export function AppShellVNextClient({
           surfaceLabel={surfaceLabel}
           cellPillOn={cellPillOn}
           onToggleCellPill={() => setCellPillOn((v) => !v)}
+          activeProjectId={activeProjectId}
         />
       </div>
 
@@ -244,7 +249,19 @@ export function AppShellVNextClient({
         {!immersive && (
           <Rail
             activeView={activeView}
-            onChange={setActiveView}
+            onChange={(next) => {
+              // Audit view defers to the detail/* pages which already
+              // ship the canonical AuditTabBar (graph/plan/tasks/risks/
+              // decisions). When the user has an active project, route
+              // there so the full subview tab set is reachable; only
+              // fall back to the in-shell placeholder when there's no
+              // project context to anchor on.
+              if (next === "auditView" && activeProjectId) {
+                router.push(`/projects/${activeProjectId}/detail/graph`);
+                return;
+              }
+              setActiveView(next);
+            }}
             onToggleTools={() => setToolsOpen((v) => !v)}
             user={user}
           />
@@ -256,6 +273,7 @@ export function AppShellVNextClient({
             projectAgents={projectAgents}
             groups={groups}
             dms={dms}
+            workspaces={workspaces}
             activeStreamId={activeStreamId}
             activeProjectId={activeProjectId}
             currentUserId={user.id}

@@ -1773,6 +1773,7 @@
     "newGroup": "Create a new group",
     "newGroupTip": "Create a new group inside the current project.",
     "newGroupNoProjectTip": "Switch to a project agent first to create a group inside it.",
+    "workspaces": "Workspaces",
     "tag": {
       "agent": "Agent",
       "group": "Group",
@@ -1827,6 +1828,14 @@
         "cell": "Cell",
         "department": "Department",
         "enterprise": "Enterprise"
+      },
+      "overflow": {
+        "title": "More project surfaces",
+        "settings": "Project settings",
+        "meetings": "Meetings",
+        "renders": "Rendered docs",
+        "composition": "Composition",
+        "teamPerf": "Team performance"
       }
     },
     "wb": {

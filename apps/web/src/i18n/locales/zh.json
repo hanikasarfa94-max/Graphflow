@@ -1771,6 +1771,7 @@
     "newGroup": "新建群组",
     "newGroupTip": "在当前项目内新建一个群组。",
     "newGroupNoProjectTip": "请先切换到某个项目 Agent，再在其中创建群组。",
+    "workspaces": "团队",
     "noDMs": "暂无私聊。",
     "unnamedGroup": "未命名群组",
     "tag": {
@@ -1827,6 +1828,14 @@
         "cell": "Cell",
         "department": "Department",
         "enterprise": "Enterprise"
+      },
+      "overflow": {
+        "title": "更多项目页面",
+        "settings": "项目设置",
+        "meetings": "会议",
+        "renders": "成稿文档",
+        "composition": "组合",
+        "teamPerf": "团队表现"
       }
     },
     "wb": {

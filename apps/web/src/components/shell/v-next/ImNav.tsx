@@ -15,6 +15,7 @@
 // existing NewDMPicker dropdown. Both reuse the legacy components
 // verbatim — we're changing UX, not features.
 
+import Link from "next/link";
 import { useCallback, useState } from "react";
 import { useTranslations } from "next-intl";
 
@@ -30,6 +31,7 @@ import type {
   ShellPersonalAgent,
   ShellGroupItem,
   ShellDMItem,
+  ShellWorkspace,
 } from "./types";
 
 import styles from "./ImNav.module.css";
@@ -39,6 +41,9 @@ interface Props {
   projectAgents: ShellPersonalAgent[];
   groups: ShellGroupItem[];
   dms: ShellDMItem[];
+  // Phase T workspaces tier — empty array hides the section. Same data
+  // legacy AppSidebar already received.
+  workspaces?: ShellWorkspace[];
   activeStreamId: string | null;
   // Project to scope NewRoomModal to. Comes from the focused stream;
   // null when on the global agent / a DM / no stream — in which case
@@ -54,12 +59,14 @@ export function ImNav({
   projectAgents,
   groups,
   dms,
+  workspaces = [],
   activeStreamId,
   activeProjectId,
   currentUserId,
   onSelectStream,
 }: Props) {
   const t = useTranslations("shellVNext");
+  const [workspacesOpen, setWorkspacesOpen] = useState(true);
   const [projectAgentsOpen, setProjectAgentsOpen] = useState(true);
   const [groupsOpen, setGroupsOpen] = useState(true);
   const [dmsOpen, setDmsOpen] = useState(true);
@@ -140,6 +147,34 @@ export function ImNav({
           </button>
         </div>
       </div>
+
+      {/* Workspaces — Phase T tier above projects. Hidden when the user
+          belongs to none, so users without a workspace see the existing
+          layout unchanged. Each row → /workspaces/{slug}. */}
+      {workspaces.length > 0 && (
+        <Section
+          title={t("workspaces")}
+          open={workspacesOpen}
+          onToggle={() => setWorkspacesOpen((v) => !v)}
+        >
+          {workspaces.map((w) => (
+            <Link
+              key={w.id}
+              href={`/workspaces/${w.slug}`}
+              className={styles.navItem}
+              data-testid={`vnext-imnav-workspace-${w.slug}`}
+              title={w.name}
+            >
+              <span className={styles.face} aria-hidden>
+                ⊞
+              </span>
+              <span className={styles.navText}>
+                <span className={styles.label}>{w.name}</span>
+              </span>
+            </Link>
+          ))}
+        </Section>
+      )}
 
       {/* agentPrimary — 通用 Agent (always visible if it exists) */}
       {generalAgent && (

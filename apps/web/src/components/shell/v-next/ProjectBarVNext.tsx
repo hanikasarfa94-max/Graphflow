@@ -8,11 +8,12 @@
 //      from ImNav selection / ProjectBar context, not from the URL.
 //   2. Cell pill defaults OFF — user opts in to broaden context (§5).
 //
-// Phase 2 scope: render a static crumb derived from the active stream.
-// "Active project" detection lives in the parent (AppShellClient) and
-// passes down. Real project switching wires through TopBar's 切换项目
-// dropdown (already shipped).
+// Wave 2: + ⋯ overflow menu listing the project sub-routes that don't
+// rate a Rail glyph (settings, meetings, renders, composition,
+// team-perf). Disabled when no active project. Click-outside dismiss.
 
+import Link from "next/link";
+import { useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 
 import styles from "./ProjectBarVNext.module.css";
@@ -26,15 +27,68 @@ interface Props {
   // Cell pill toggle state. Default OFF per Q-B.
   cellPillOn: boolean;
   onToggleCellPill: () => void;
+  // Active project id — drives the overflow menu links. null hides the
+  // overflow button (we'd have nowhere to navigate).
+  activeProjectId?: string | null;
 }
+
+interface OverflowItem {
+  key: string;
+  href: (id: string) => string;
+  i18nKey: string;
+}
+
+const OVERFLOW_ITEMS: OverflowItem[] = [
+  {
+    key: "settings",
+    href: (id) => `/projects/${id}/settings`,
+    i18nKey: "projectBar.overflow.settings",
+  },
+  {
+    key: "meetings",
+    href: (id) => `/projects/${id}/meetings`,
+    i18nKey: "projectBar.overflow.meetings",
+  },
+  {
+    key: "renders",
+    href: (id) => `/projects/${id}/renders`,
+    i18nKey: "projectBar.overflow.renders",
+  },
+  {
+    key: "composition",
+    href: (id) => `/projects/${id}/composition`,
+    i18nKey: "projectBar.overflow.composition",
+  },
+  {
+    key: "teamperf",
+    href: (id) => `/projects/${id}/team/perf`,
+    i18nKey: "projectBar.overflow.teamPerf",
+  },
+];
 
 export function ProjectBarVNext({
   projectTitle,
   surfaceLabel,
   cellPillOn,
   onToggleCellPill,
+  activeProjectId,
 }: Props) {
   const t = useTranslations("shellVNext");
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  // Click-outside dismiss.
+  useEffect(() => {
+    if (!menuOpen) return;
+    function onDoc(e: MouseEvent) {
+      if (!menuRef.current) return;
+      if (!menuRef.current.contains(e.target as Node)) {
+        setMenuOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [menuOpen]);
 
   return (
     <div className={styles.bar} data-testid="vnext-project-bar">
@@ -84,6 +138,44 @@ export function ProjectBarVNext({
       </button>
       <span className={styles.pillStub}>{t("projectBar.tier.department")}</span>
       <span className={styles.pillStub}>{t("projectBar.tier.enterprise")}</span>
+
+      {/* Overflow — settings / meetings / renders / composition /
+          team-perf. Hidden when there's no project to scope to. */}
+      {activeProjectId && (
+        <div className={styles.overflowWrap} ref={menuRef}>
+          <button
+            type="button"
+            className={styles.overflowBtn}
+            onClick={() => setMenuOpen((v) => !v)}
+            aria-expanded={menuOpen}
+            aria-haspopup="menu"
+            title={t("projectBar.overflow.title")}
+            data-testid="vnext-project-bar-overflow"
+          >
+            ⋯
+          </button>
+          {menuOpen && (
+            <div
+              className={styles.overflowMenu}
+              role="menu"
+              data-testid="vnext-project-bar-overflow-menu"
+            >
+              {OVERFLOW_ITEMS.map((item) => (
+                <Link
+                  key={item.key}
+                  href={item.href(activeProjectId)}
+                  role="menuitem"
+                  className={styles.overflowItem}
+                  onClick={() => setMenuOpen(false)}
+                  data-testid={`vnext-project-bar-overflow-${item.key}`}
+                >
+                  {t(item.i18nKey)}
+                </Link>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
