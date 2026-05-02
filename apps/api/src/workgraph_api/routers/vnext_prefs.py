@@ -89,8 +89,14 @@ def _defaults() -> dict:
         "auto_dispatch_streams": {},
         "thinking_mode": "deep",
         "workbench_layout": {
-            "personal": ["tasks", "knowledge", "skills"],
-            "room": ["tasks", "knowledge", "requests", "skills"],
+            "personal": ["tasks", "knowledge", "skills", "workflow"],
+            "room": [
+                "tasks",
+                "knowledge",
+                "requests",
+                "skills",
+                "workflow",
+            ],
             "dm": [],
         },
     }

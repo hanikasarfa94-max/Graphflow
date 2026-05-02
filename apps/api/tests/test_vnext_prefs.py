@@ -36,8 +36,14 @@ async def test_get_returns_defaults_when_unset(api_env):
     assert body["thinking_mode"] == "deep"
     assert body["auto_dispatch_streams"] == {}
     layout = body["workbench_layout"]
-    assert layout["personal"] == ["tasks", "knowledge", "skills"]
-    assert layout["room"] == ["tasks", "knowledge", "requests", "skills"]
+    assert layout["personal"] == ["tasks", "knowledge", "skills", "workflow"]
+    assert layout["room"] == [
+        "tasks",
+        "knowledge",
+        "requests",
+        "skills",
+        "workflow",
+    ]
     assert layout["dm"] == []
 
 
@@ -127,6 +133,7 @@ async def test_put_workbench_layout_replace_and_clear(api_env):
         "knowledge",
         "requests",
         "skills",
+        "workflow",
     ]
 
     # Empty list clears the override → default returns.
@@ -138,6 +145,7 @@ async def test_put_workbench_layout_replace_and_clear(api_env):
         "tasks",
         "knowledge",
         "skills",
+        "workflow",
     ]
 
 

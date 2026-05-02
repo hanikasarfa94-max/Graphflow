@@ -38,8 +38,16 @@ type PanelKind = VNextPanelKind;
 type PanelMode = "grid" | "vertical" | "focus";
 
 // Fallback when prefs haven't hydrated yet — the prototype's default
-// for personal-stream surfaces. Matches Phase 2's hardcoded list.
-const DEFAULT_PANELS: PanelKind[] = ["tasks", "knowledge", "skills"];
+// includes the workflow status DAG (the original project status graph
+// from legacy-standalone-v6.html line 223). Personal-stream surfaces
+// keep the same shape; rooms add 'requests' and skip 'workflow'-only
+// modes via the BE defaults.
+const DEFAULT_PANELS: PanelKind[] = [
+  "tasks",
+  "knowledge",
+  "skills",
+  "workflow",
+];
 
 interface Panel {
   id: string;
