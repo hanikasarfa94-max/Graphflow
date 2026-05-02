@@ -116,8 +116,27 @@
   }
 }
 
+/* Narrow viewports — the prototype's compact mode collapses ImNav to
+   a 76px icon strip and shrinks the (open) tools column. We respect
+   the same modal flags as the desktop rules so toolsClosed / moduleMode
+   still hide what they should — earlier the unconditional !important
+   forced a 6-track grid even when toolsOpen=false, leaving a 330px
+   blank column on the right that covered most of the page on small
+   screens. */
 @media (max-width: 980px) {
   .layout {
-    grid-template-columns: 50px 76px 0 minmax(0, 1fr) 0 330px !important;
+    grid-template-columns: 50px 76px 0 minmax(0, 1fr) 0 330px;
+  }
+  .app.toolsClosed .layout {
+    grid-template-columns: 50px 76px 0 minmax(0, 1fr);
+  }
+  .app.moduleMode .layout {
+    grid-template-columns: 50px minmax(0, 1fr) 0 330px;
+  }
+  .app.moduleMode.toolsClosed .layout {
+    grid-template-columns: 50px minmax(0, 1fr);
+  }
+  .app.immersive .layout {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
