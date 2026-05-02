@@ -22,7 +22,15 @@
 import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
 
-import { fetchVNextRelated, type User, type VNextRelated } from "@/lib/api";
+import {
+  api,
+  fetchVNextRelated,
+  type ProjectState,
+  type User,
+  type VNextRelated,
+} from "@/lib/api";
+
+import { TeamRoomRecap } from "@/components/stream/TeamRoomRecap";
 
 import { AgentComposer } from "./AgentComposer";
 import { AgentTimeline } from "./AgentTimeline";
@@ -141,9 +149,16 @@ export function AgentFlow({
         <AgentTimeline streamId={activeStreamId} user={user} />
       </div>
 
+      <TeamRoomRecapMount
+        projectId={projectId}
+        activeStreamId={activeStreamId}
+        kind={active.tag}
+      />
+
       <AgentComposer
         streamId={activeStreamId}
         isGeneralAgent={isGeneralAgent}
+        activeProjectId={projectId}
         projectAgents={projectAgents
           .filter(
             (p): p is ShellPersonalAgent & { project_id: string } =>
@@ -329,4 +344,44 @@ function resolveActive(
   }
 
   return null;
+}
+
+// TeamRoomRecap mount — bottom-right "current focus" panel from the
+// legacy team-room page (Batch F.12). Lifts here so v-next surfaces
+// the same room-context summary when the active stream is a group/room
+// with project context. Skipped on personal agents (single-user
+// surface — no recap needed) and on DMs (no project to derive from).
+function TeamRoomRecapMount({
+  projectId,
+  activeStreamId,
+  kind,
+}: {
+  projectId: string | null;
+  activeStreamId: string;
+  kind: "agent" | "group" | "dm";
+}) {
+  const [state, setState] = useState<ProjectState | null>(null);
+
+  useEffect(() => {
+    if (!projectId || kind !== "group") {
+      setState(null);
+      return;
+    }
+    let cancelled = false;
+    api<ProjectState>(`/api/projects/${projectId}/state`)
+      .then((s) => {
+        if (cancelled) return;
+        setState(s);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setState(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId, kind]);
+
+  if (!projectId || kind !== "group" || !state) return null;
+  return <TeamRoomRecap state={state} streamKey={`vnext:${activeStreamId}`} />;
 }

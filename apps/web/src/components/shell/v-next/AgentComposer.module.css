@@ -169,6 +169,14 @@
   color: var(--wg-red, #e11d48);
 }
 
+/* Pre-commit rehearsal slot — same max-width as the inner composer
+   so the card aligns with the textarea below. */
+.rehearsalSlot {
+  max-width: 950px;
+  width: 100%;
+  margin: 0 auto 6px;
+}
+
 /* E-8 — keyword-match suggestion strip above the composer.
    Soft accent panel; clickable accept turns the active stream over to
    the matched project agent. */

@@ -28,12 +28,21 @@ import {
   fetchMyProjects,
   fetchVNextPrefs,
   postStreamMessage,
+  previewPersonalMessage,
   updateVNextPrefs,
   type ProjectSummary,
+  type RehearsalPreview as RehearsalPreviewType,
   type VNextThinkingMode,
 } from "@/lib/api";
 
+import { RehearsalPreview } from "@/components/stream/RehearsalPreview";
+
 import styles from "./AgentComposer.module.css";
+
+// Preview pipeline tuning — match PersonalStream so the rehearsal
+// behaves consistently across surfaces.
+const PREVIEW_DEBOUNCE_MS = 380;
+const PREVIEW_MIN_BODY_LENGTH = 12;
 
 interface ProjectAgentForSuggestion {
   project_id: string;
@@ -50,6 +59,11 @@ interface Props {
   // project-title match to the destination stream. Pass an empty list
   // when there are no project agents (the suggestion stays inert).
   projectAgents?: ProjectAgentForSuggestion[];
+  // Active project — when set, the composer fires the pre-commit
+  // rehearsal preview pipeline (debounced /api/personal/{id}/preview)
+  // and renders RehearsalPreview above the textarea. Without an active
+  // project context the preview API has no scope, so we hide the card.
+  activeProjectId?: string | null;
   // Switch the active stream to this id. Wired by AppShellClient.
   onSuggestionAccept?: (streamId: string) => void;
   onSent?: () => void;
@@ -91,6 +105,7 @@ export function AgentComposer({
   streamId,
   isGeneralAgent = false,
   projectAgents = [],
+  activeProjectId = null,
   onSuggestionAccept,
   onSent,
 }: Props) {
@@ -111,6 +126,96 @@ export function AgentComposer({
   >([]);
 
   const taRef = useRef<HTMLTextAreaElement>(null);
+
+  // Pre-commit rehearsal — debounced /api/personal/{id}/preview as the
+  // user types (≥ PREVIEW_MIN_BODY_LENGTH chars). Only fires when an
+  // active project context exists; on global / DM / room streams the
+  // preview endpoint has no project scope, so we leave the card hidden.
+  const [preview, setPreview] = useState<RehearsalPreviewType | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewRateLimited, setPreviewRateLimited] = useState(false);
+  const previewTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const previewAbortRef = useRef<AbortController | null>(null);
+  const previewTokenRef = useRef(0);
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (previewTimerRef.current) {
+      clearTimeout(previewTimerRef.current);
+      previewTimerRef.current = null;
+    }
+    if (previewAbortRef.current) {
+      previewAbortRef.current.abort();
+      previewAbortRef.current = null;
+    }
+
+    // Hide the rehearsal entirely when there's no project to scope
+    // against — the API rejects empty project ids and surfaces no
+    // useful answer for general / DM / room streams in v1.
+    if (!activeProjectId) {
+      if (preview !== null) setPreview(null);
+      if (previewLoading) setPreviewLoading(false);
+      if (previewRateLimited) setPreviewRateLimited(false);
+      return;
+    }
+
+    const trimmed = body.trim();
+    if (trimmed.length < PREVIEW_MIN_BODY_LENGTH) {
+      if (preview !== null) setPreview(null);
+      if (previewLoading) setPreviewLoading(false);
+      if (previewRateLimited) setPreviewRateLimited(false);
+      return;
+    }
+
+    previewTimerRef.current = setTimeout(async () => {
+      const myToken = ++previewTokenRef.current;
+      const controller = new AbortController();
+      previewAbortRef.current = controller;
+      setPreviewLoading(true);
+      setPreviewRateLimited(false);
+      try {
+        const res = await previewPersonalMessage(
+          activeProjectId,
+          trimmed,
+          controller.signal,
+        );
+        if (!mountedRef.current) return;
+        if (myToken !== previewTokenRef.current) return;
+        setPreview(res.preview ?? null);
+      } catch (e) {
+        if (!mountedRef.current) return;
+        if (myToken !== previewTokenRef.current) return;
+        if (e instanceof ApiError && e.status === 429) {
+          setPreviewRateLimited(true);
+        } else {
+          // Any other error: clear preview silently. Composer send
+          // is not blocked.
+          setPreview(null);
+        }
+      } finally {
+        if (!mountedRef.current) return;
+        if (myToken === previewTokenRef.current) {
+          setPreviewLoading(false);
+        }
+      }
+    }, PREVIEW_DEBOUNCE_MS);
+
+    return () => {
+      if (previewTimerRef.current) {
+        clearTimeout(previewTimerRef.current);
+        previewTimerRef.current = null;
+      }
+    };
+    // preview/loading/rateLimited intentionally excluded — only refire
+    // on draft + projectId changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [body, activeProjectId]);
 
   // Hydrate from /api/vnext/prefs on mount and whenever the active
   // stream changes (autoAgent is per-stream).
@@ -230,6 +335,21 @@ export function AgentComposer({
 
   return (
     <div className={styles.composer} data-testid="vnext-composer">
+      {/* Pre-commit rehearsal — shows "edge would route to X" /
+          "edge would clarify" / etc. before the user sends. Card
+          self-hides on silent kinds, on missing project context, and
+          while body length < min. Wired directly to /api/personal/
+          {id}/preview so the rehearsal carries the same provenance
+          chips the personal stream surface shows. */}
+      {activeProjectId && (
+        <div className={styles.rehearsalSlot}>
+          <RehearsalPreview
+            preview={preview}
+            loading={previewLoading}
+            rateLimited={previewRateLimited}
+          />
+        </div>
+      )}
       {suggestion && onSuggestionAccept && (
         <div
           className={styles.suggestion}
