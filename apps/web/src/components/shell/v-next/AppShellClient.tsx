@@ -62,9 +62,13 @@ export function AppShellVNextClient({
   children,
 }: AppShellVNextClientProps) {
   const [activeView, setActiveView] = useState<ActiveView>("agentView");
-  const [activeStreamId, setActiveStreamId] = useState<string | null>(
-    generalAgent?.stream_id ?? null,
-  );
+  // Default to NO active stream so routed pages (homepage HomeHero,
+  // /projects/[id], etc.) render through AgentFlow's routedSlot. Users
+  // pick a stream by clicking the agentPrimary / project / room / DM
+  // card in ImNav. Earlier auto-selection of the global agent on mount
+  // hijacked the homepage and showed an empty timeline instead of
+  // HomeHero — bad UX for first-time users.
+  const [activeStreamId, setActiveStreamId] = useState<string | null>(null);
   const [toolsOpen, setToolsOpen] = useState(false);
   const [immersive, setImmersive] = useState(false);
   const [cellPillOn, setCellPillOn] = useState(false);
