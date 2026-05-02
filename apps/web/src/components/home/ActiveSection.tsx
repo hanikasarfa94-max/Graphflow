@@ -5,6 +5,7 @@ import { useTranslations } from "next-intl";
 import { useState } from "react";
 
 import { relativeTime } from "@/components/stream/types";
+import { RelTime } from "@/components/stream/RelTime";
 import { Button, Card, Heading, Text } from "@/components/ui";
 
 import type { ActiveContext } from "./data";
@@ -87,7 +88,7 @@ function ActiveTaskCard({
               <span style={{ color: "var(--wg-ink-faint)" }}>
                 {t("home.active.age")}
               </span>{" "}
-              {relativeTime(active.updated_at)}
+              <RelTime iso={active.updated_at} />
             </Text>
           ) : null}
         </div>
@@ -183,12 +184,18 @@ function LastDecisionCard({
           padding: 20,
         }}
       >
+        {/* relativeTime is interpolated into a translation string here,
+            so we can't swap to <RelTime>. suppressHydrationWarning on
+            an inner span silences the brief mismatch from server's
+            Date.now() differing from client's by ~100ms. */}
         <Text variant="body">
-          {t("home.active.lastDecisionFallback", {
-            project: active.project_title,
-            summary: active.summary,
-            time: active.created_at ? relativeTime(active.created_at) : "",
-          })}
+          <span suppressHydrationWarning>
+            {t("home.active.lastDecisionFallback", {
+              project: active.project_title,
+              summary: active.summary,
+              time: active.created_at ? relativeTime(active.created_at) : "",
+            })}
+          </span>
         </Text>
         <Link
           href={`/projects/${active.project_id}/nodes/${active.decision_id}`}
@@ -225,11 +232,13 @@ function CaughtUpCard({
       >
         <Heading level={2}>{t("home.active.caughtUp")}</Heading>
         <Text variant="body" muted>
-          {active.last_crystallization_at
-            ? t("home.active.caughtUpLastCrystallization", {
-                time: relativeTime(active.last_crystallization_at),
-              })
-            : t("home.active.caughtUpNoHistory")}
+          <span suppressHydrationWarning>
+            {active.last_crystallization_at
+              ? t("home.active.caughtUpLastCrystallization", {
+                  time: relativeTime(active.last_crystallization_at),
+                })
+              : t("home.active.caughtUpNoHistory")}
+          </span>
         </Text>
       </div>
     </Card>

@@ -6,7 +6,7 @@ import { useState } from "react";
 
 import type { PendingSignal } from "@/lib/api";
 
-import { relativeTime } from "@/components/stream/types";
+import { RelTime } from "@/components/stream/RelTime";
 import { Button, EmptyState, Text } from "@/components/ui";
 
 import { SectionHeader } from "./SectionHeader";
@@ -133,7 +133,7 @@ function PendingRow({
           muted
           style={{ marginTop: 2, color: "var(--wg-ink-faint)" }}
         >
-          {fromLabel} · {relativeTime(p.created_at)}
+          {fromLabel} · <RelTime iso={p.created_at} />
         </Text>
       </div>
       <Text

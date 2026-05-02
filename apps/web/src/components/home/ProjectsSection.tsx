@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
 
-import { relativeTime } from "@/components/stream/types";
+import { RelTime } from "@/components/stream/RelTime";
 import { Button, EmptyState, Text } from "@/components/ui";
 
 import type { HomeProjectCard } from "./data";
@@ -86,9 +86,12 @@ export function ProjectsSection({
                     }}
                   >
                     {p.role}
-                    {p.last_activity_at
-                      ? ` · ${relativeTime(p.last_activity_at)}`
-                      : ""}
+                    {p.last_activity_at && (
+                      <>
+                        {" · "}
+                        <RelTime iso={p.last_activity_at} />
+                      </>
+                    )}
                   </Text>
                 </div>
                 {p.unread_count > 0 ? (
