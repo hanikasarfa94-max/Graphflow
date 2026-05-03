@@ -108,7 +108,11 @@ export function AppShellVNextClient({
   const openInbox = useCallback(() => setDrawerOpen(true), []);
   const closeInbox = useCallback(() => setDrawerOpen(false), []);
   const shellCtx = useMemo<ShellCtx>(
-    () => ({ inboxCount, setInboxCount, openInbox, closeInbox }),
+    // v-next models projects as `groups` + `projectAgents`; the legacy
+    // ShellProject[] shape isn't a 1:1 match, so we pass an empty list
+    // for now. Topbar's breadcrumb resolver falls back to "·" when the
+    // lookup misses, which matches today's v-next behavior.
+    () => ({ inboxCount, setInboxCount, openInbox, closeInbox, projects: [] }),
     [inboxCount, openInbox, closeInbox],
   );
 

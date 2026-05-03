@@ -68,11 +68,25 @@ function isOpaqueId(seg: string): boolean {
   return seg.length >= 16 && /[a-f0-9-]{16,}/i.test(seg);
 }
 
-function buildCrumbs(pathname: string): string {
-  const segs = pathname
-    .split("/")
-    .filter(Boolean)
-    .map((s) => (isOpaqueId(s) ? "·" : SEGMENT_LABELS[s] ?? s));
+function buildCrumbs(
+  pathname: string,
+  projectTitleById: Map<string, string>,
+): string {
+  const parts = pathname.split("/").filter(Boolean);
+  const segs = parts.map((s, i) => {
+    if (isOpaqueId(s)) {
+      // The segment right after `/projects/` is a project ID — try to
+      // resolve it to a real title from the sidebar's project list so
+      // the breadcrumb reads "WORKGRAPH / PROJECTS / Welcome to graphflow"
+      // instead of the orphan "·" placeholder.
+      if (i > 0 && parts[i - 1] === "projects") {
+        const title = projectTitleById.get(s);
+        if (title) return title;
+      }
+      return "·";
+    }
+    return SEGMENT_LABELS[s] ?? s;
+  });
   if (segs.length === 0) return "WORKGRAPH / HOME";
   return ["WORKGRAPH", ...segs.map((s) => s.toUpperCase())].join(" / ");
 }
@@ -81,9 +95,15 @@ export function Topbar() {
   const t = useTranslations("topbar");
   const router = useRouter();
   const pathname = usePathname() ?? "/";
-  const { inboxCount, openInbox } = useAppShell();
+  const { inboxCount, openInbox, projects: shellProjects } = useAppShell();
 
-  const crumbs = buildCrumbs(pathname);
+  const projectTitleById = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const p of shellProjects) m.set(p.id, p.title);
+    return m;
+  }, [shellProjects]);
+
+  const crumbs = buildCrumbs(pathname, projectTitleById);
 
   // Lazy-fetched project list for the switcher dropdown. Single
   // request shared across opens (cached on the component for the

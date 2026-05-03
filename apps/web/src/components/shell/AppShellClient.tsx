@@ -62,6 +62,11 @@ export type ShellCtx = {
   setInboxCount: (n: number | ((prev: number) => number)) => void;
   openInbox: () => void;
   closeInbox: () => void;
+  // Project list mounted in the sidebar — also exposed here so the
+  // Topbar can resolve a UUID-shaped breadcrumb segment to a real
+  // project title. Without this the breadcrumb collapses to "·" on
+  // every project page.
+  projects: ShellProject[];
 };
 
 export const ShellContext = createContext<ShellCtx | null>(null);
@@ -76,6 +81,7 @@ export function useAppShell(): ShellCtx {
       setInboxCount: () => {},
       openInbox: () => {},
       closeInbox: () => {},
+      projects: [],
     };
   }
   return v;
@@ -103,8 +109,8 @@ export function AppShellClient({
   const closeInbox = useCallback(() => setDrawerOpen(false), []);
 
   const ctx = useMemo<ShellCtx>(
-    () => ({ inboxCount, setInboxCount, openInbox, closeInbox }),
-    [inboxCount, openInbox, closeInbox],
+    () => ({ inboxCount, setInboxCount, openInbox, closeInbox, projects }),
+    [inboxCount, openInbox, closeInbox, projects],
   );
 
   return (
