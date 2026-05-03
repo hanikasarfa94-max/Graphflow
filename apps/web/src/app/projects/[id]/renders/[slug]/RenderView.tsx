@@ -32,6 +32,7 @@ import {
   EditSignalModal,
   type EditSignalResult,
 } from "@/components/rendered/EditSignalModal";
+import { formatIso } from "@/lib/time";
 
 type AnyRender = PostmortemRender | HandoffRender;
 
@@ -142,7 +143,7 @@ export function RenderView({
   }
 
   const doc = render.doc;
-  const generatedAt = new Date(render.generated_at).toLocaleString();
+  const generatedAt = formatIso(render.generated_at);
 
   return (
     <main

@@ -18,6 +18,7 @@ export const MESSAGE_BODY_MAX_LENGTH = 4000;
 // is additive.
 
 import type { Decision, IMMessage, IMSuggestion } from "@/lib/api";
+import { formatDate, formatTime, gmt8DayKey } from "@/lib/time";
 
 export type StreamMember = {
   user_id: string;
@@ -88,7 +89,8 @@ export function attributionFor(sug: IMSuggestion): {
 }
 
 // Relative timestamp — "2 min ago" style. Plain-text only; callers decide
-// how to frame it (e.g. tooltip the absolute time on top).
+// how to frame it (e.g. tooltip the absolute time on top). Falls back
+// to GMT+8 ISO date when the message is older than a week.
 export function relativeTime(iso: string, now: number = Date.now()): string {
   const t = new Date(iso).getTime();
   if (!Number.isFinite(t)) return "";
@@ -101,7 +103,7 @@ export function relativeTime(iso: string, now: number = Date.now()): string {
   if (hr < 24) return `${hr} hr ago`;
   const day = Math.round(hr / 24);
   if (day < 7) return `${day}d ago`;
-  return new Date(iso).toLocaleDateString();
+  return formatDate(iso);
 }
 
 // Message-row timestamp — absolute clock time always inline, with the
@@ -112,32 +114,36 @@ export function relativeTime(iso: string, now: number = Date.now()): string {
 // caller via `title={...}` so callers retain access to the full
 // absolute string for screen-reader / power users.
 //
+// All times rendered in Asia/Shanghai (GMT+8) — see lib/time.ts for
+// the timezone-pinning rationale.
+//
 // Output by message age:
 //   < today       → "14:30"
 //   yesterday     → "Yesterday 14:30"
 //   < 7 days      → "Mon 14:30"
-//   older         → "Apr 22 14:30"
+//   older         → "2026-04-22 14:30"
 export function formatMessageTime(
   iso: string,
   now: number = Date.now(),
 ): string {
   const t = new Date(iso);
   if (!Number.isFinite(t.getTime())) return "";
-  const hh = String(t.getHours()).padStart(2, "0");
-  const mm = String(t.getMinutes()).padStart(2, "0");
-  const time = `${hh}:${mm}`;
-  const today = new Date(now);
-  const sameDay = t.toDateString() === today.toDateString();
-  if (sameDay) return time;
-  const yesterday = new Date(today.getTime() - 86_400_000);
-  if (t.toDateString() === yesterday.toDateString()) {
-    return `Yesterday ${time}`;
-  }
+  const time = formatTime(t);
+  const todayKey = gmt8DayKey(now);
+  const tKey = gmt8DayKey(t);
+  if (tKey === todayKey) return time;
+  const yesterdayKey = gmt8DayKey(now - 86_400_000);
+  if (tKey === yesterdayKey) return `Yesterday ${time}`;
   const daysDiff = (now - t.getTime()) / 86_400_000;
   if (daysDiff < 7) {
-    return `${t.toLocaleDateString(undefined, { weekday: "short" })} ${time}`;
+    // Weekday name in GMT+8.
+    const wd = new Intl.DateTimeFormat("en-US", {
+      timeZone: "Asia/Shanghai",
+      weekday: "short",
+    }).format(t);
+    return `${wd} ${time}`;
   }
-  return `${t.toLocaleDateString(undefined, { month: "short", day: "numeric" })} ${time}`;
+  return `${formatDate(t)} ${time}`;
 }
 
 export function presenceDotColor(p?: StreamMember["presence"]): string {

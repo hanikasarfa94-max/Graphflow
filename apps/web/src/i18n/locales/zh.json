@@ -535,10 +535,18 @@
       "skillsGraphAlt": "技能图谱占位",
       "skillsGraphHint": "技能图谱（预览）",
       "workflowStage": {
-        "requirements": { "label": "需求收集" },
-        "design": { "label": "方案设计" },
-        "review": { "label": "评审确认" },
-        "build": { "label": "开发实现" }
+        "requirements": {
+          "label": "需求收集"
+        },
+        "design": {
+          "label": "方案设计"
+        },
+        "review": {
+          "label": "评审确认"
+        },
+        "build": {
+          "label": "开发实现"
+        }
       },
       "workflowStatus": {
         "done": "已完成",
@@ -815,7 +823,7 @@
     "loading": "加载你的会话中…",
     "empty": "向你的 Edge 智能体提问 —— 它了解这个项目的图谱、近期决策,以及该转给谁。",
     "tabs": {
-      "myThread": "🧠 我的会话",
+      "myThread": "🤖 我的会话",
       "teamRoom": "👥 团队会议室",
       "dms": "💬 私信"
     },
@@ -838,7 +846,7 @@
       "unknown": "边缘"
     },
     "routeProposal": {
-      "header": "🧠 Edge —— 路由建议",
+      "header": "🤖 Edge —— 路由建议",
       "ask": "询问 {name}",
       "asking": "正在询问 {name}…",
       "bFacingLabel": "{name} 看到的内容",
@@ -918,7 +926,7 @@
       "loadFailed": "路由信号加载失败"
     },
     "reply": {
-      "header": "🧠 Edge —— {name} 已回复",
+      "header": "🤖 Edge —— {name} 已回复",
       "acceptAction": "接受",
       "counterBackAction": "反提回去",
       "escalateAction": "上报",
@@ -1762,199 +1770,6 @@
         "member": "成员",
         "admin": "管理员",
         "viewer": "查看者"
-      }
-    }
-  },
-  "shellVNext": {
-    "personalAgentSection": "个人 Agent",
-    "generalAgent": "通用 Agent",
-    "generalAgentSubtitle": "整合全平台信息，跨项目咨询。",
-    "projectAgents": "项目 Agent",
-    "projectAgentLabel": "{project} · Agent",
-    "groups": "群组",
-    "dms": "私聊",
-    "noGroups": "暂无群组。",
-    "newGroup": "新建群组",
-    "newGroupTip": "在当前项目内新建一个群组。",
-    "newGroupNoProjectTip": "请先切换到某个项目 Agent，再在其中创建群组。",
-    "workspaces": "团队",
-    "collapseNav": "收起导航",
-    "expandNav": "展开导航",
-    "noDMs": "暂无私聊。",
-    "unnamedGroup": "未命名群组",
-    "tag": {
-      "agent": "Agent",
-      "group": "频道",
-      "dm": "单聊"
-    },
-    "flowPill": {
-      "info": "资料",
-      "infoTip": "无项目上下文 —— 切换到项目 Agent 后可查看其知识库。",
-      "infoTipProject": "查看该项目的知识库。",
-      "memory": "记忆",
-      "memoryTip": "无项目上下文 —— 切换到项目 Agent 后可查看其记忆。",
-      "memoryTipProject": "查看该项目的表现 / 记忆页。",
-      "skills": "技能",
-      "skillsTip": "无项目上下文 —— 切换到项目 Agent 后可查看技能图谱。",
-      "skillsTipProject": "查看该项目的技能图谱。"
-    },
-    "analysis": {
-      "title": "关联任务",
-      "summary": "{tasks} 任务 · {decisions} 决策 · {risks} 风险"
-    },
-    "suggestion": {
-      "label": "看起来与「{project}」相关 —— 切到该项目 Agent？",
-      "accept": "切换"
-    },
-    "immersiveToggle": "切换沉浸模式",
-    "timelineLoading": "正在加载消息…",
-    "timelineEmpty": "暂无消息。在下方说点什么吧。",
-    "composerPlaceholder": "给 Agent 发送消息…",
-    "composerSend": "发送",
-    "composerSending": "发送中…",
-    "composerError": "发送失败",
-    "autoAgent": "自动委派",
-    "thinkingMode": "思考模式",
-    "thinking": {
-      "deep": "深度思考",
-      "fast": "快速回答"
-    },
-    "plus": {
-      "upload": "📎 上传文件",
-      "context": "🧩 调整上下文",
-      "routePerson": "📨 请相关人判断",
-      "submitTask": "✅ 提交团队计划",
-      "hint": "v1 仅展示，待后端接入（见 §11）。"
-    },
-    "projectBar": {
-      "project": "当前项目：",
-      "surface": "当前工作台：",
-      "noProject": "无项目上下文 —— 与通用 Agent 对话中。",
-      "cellTip": "切换以将上下文扩展到此项目的 Cell 作用域。默认关闭（Q-B）。",
-      "tier": {
-        "personal": "个人",
-        "cell": "小组",
-        "department": "部门",
-        "enterprise": "全公司"
-      },
-      "overflow": {
-        "title": "更多项目页面",
-        "settings": "项目设置",
-        "meetings": "会议",
-        "renders": "成稿文档",
-        "composition": "组合",
-        "teamPerf": "团队表现"
-      }
-    },
-    "wb": {
-      "head": {
-        "title": "工具栏",
-        "subtitle": "Agent 常用工具",
-        "privatePill": "私有",
-        "close": "关闭工具栏"
-      },
-      "mode": {
-        "grid": "分屏",
-        "vertical": "纵向",
-        "focus": "聚焦"
-      },
-      "chip": {
-        "tasks": "任务中心",
-        "knowledge": "知识记忆",
-        "requests": "协同请求",
-        "skills": "技能图谱",
-        "workflow": "工作流"
-      },
-      "title": {
-        "tasks": "任务中心",
-        "knowledge": "知识与记忆",
-        "skills": "技能图谱",
-        "requests": "协同请求",
-        "workflow": "工作流 / 日程"
-      },
-      "loading": "加载中…",
-      "tasks": {
-        "mine": "我的",
-        "team": "团队",
-        "noProject": "请先切换到某个项目 Agent，再查看其任务。",
-        "newPlaceholder": "+ 新建个人任务",
-        "emptyMine": "暂无个人草稿。在上方输入新增。",
-        "emptyTeam": "暂无团队计划任务。"
-      },
-      "knowledge": {
-        "searchPlaceholder": "搜索知识库",
-        "noProject": "请先切换到某个项目 Agent，再查看其知识库。",
-        "empty": "暂无知识条目。"
-      },
-      "skills": {
-        "noProject": "请先切换到某个项目 Agent，查看成员与技能标签。",
-        "empty": "暂无成员。"
-      },
-      "requests": {
-        "empty": "暂无待处理的协同请求。",
-        "untitled": "(无 framing)"
-      },
-      "workflow": {
-        "hint": "实际生产中阶段从图谱实时派生，此处为占位形状。"
-      },
-      "unknownKind": "未知面板"
-    },
-    "module": {
-      "loading": "加载中…",
-      "loadingHint": "正在从服务端拉取数据。",
-      "loadError": "加载失败。",
-      "projects": {
-        "title": "项目",
-        "subtitle": "你所在的 Cell（项目）列表。点击进入对应 Agent。",
-        "action": "+ 新建项目",
-        "activeCard": "活跃项目",
-        "summaryCard": "概览",
-        "summaryBody": "{count, plural, =0 {暂无项目，先新建一个。} other {你目前参与了 # 个项目。}}",
-        "empty": "暂无项目 —— 新建一个开始。"
-      },
-      "tasks": {
-        "title": "任务",
-        "subtitle": "个人草稿与团队正式计划。",
-        "subtitleWithAnchor": "锚定项目：{project}。",
-        "action": "+ 新建任务",
-        "personalCard": "我的草稿",
-        "personalEmpty": "暂无个人草稿。",
-        "planCard": "团队计划",
-        "planEmpty": "该项目暂无计划任务。"
-      },
-      "knowledge": {
-        "title": "知识库",
-        "subtitle": "Cell 共享知识与个人笔记。",
-        "subtitleWithAnchor": "锚定项目：{project}。",
-        "action": "+ 新建笔记",
-        "groupCard": "团队知识",
-        "groupEmpty": "暂无团队知识。",
-        "personalCard": "个人笔记",
-        "personalEmpty": "暂无个人笔记。"
-      },
-      "org": {
-        "title": "组织",
-        "subtitle": "活跃项目的成员与技能标签。",
-        "subtitleWithAnchor": "锚定项目：{project}。",
-        "action": "+ 邀请成员",
-        "membersCard": "成员",
-        "membersEmpty": "暂无成员。",
-        "summaryCard": "概览",
-        "summaryBody": "{count, plural, =0 {暂无成员。} other {共 # 位成员。}}"
-      },
-      "audit": {
-        "title": "审计",
-        "subtitle": "高影响动作与图谱写入。",
-        "action": "导出",
-        "pendingCard": "审计流",
-        "pendingBody": "审计流接口尚未接入 —— 待 audit-stream slice 上线。"
-      },
-      "graph": {
-        "title": "项目图谱",
-        "subtitle": "图谱就是项目本身 —— 任务、决策、风险、依赖都是图上的节点。",
-        "subtitleAnchored": "{project} —— 图谱就是项目本身。",
-        "noProjectCard": "暂无可视化的项目",
-        "noProjectBody": "从左侧选择一个项目 Agent 或群组，或新建项目以查看图谱。"
       }
     }
   },

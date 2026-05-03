@@ -17,6 +17,7 @@ import type {
   RoutingSignal,
 } from "@/lib/api";
 import { requireUser, serverFetch } from "@/lib/auth";
+import { formatDate, formatIso } from "@/lib/time";
 
 export const dynamic = "force-dynamic";
 
@@ -115,7 +116,7 @@ function RoutedRow({
         <Tag tone="accent">{t("routedTag")}</Tag>
         <Text variant="caption" muted>
           {signal.created_at
-            ? new Date(signal.created_at).toLocaleString()
+            ? formatIso(signal.created_at)
             : ""}
         </Text>
       </div>
@@ -198,7 +199,7 @@ function GatedRow({
         <Tag tone="amber">{t("gatedTag", { cls: p.decision_class })}</Tag>
         <Text variant="caption" muted>
           {item.created_at
-            ? new Date(item.created_at).toLocaleDateString()
+            ? formatDate(item.created_at)
             : ""}
         </Text>
       </div>

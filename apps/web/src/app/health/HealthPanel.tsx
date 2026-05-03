@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { api } from "@/lib/api";
+import { formatIso, formatTime } from "@/lib/time";
 
 export interface AgentSummary {
   count: number;
@@ -104,7 +105,7 @@ export function HealthPanel({ initial }: { initial: HealthSummary }) {
           >
             Rolling window · {summary.totals.count} runs · since{" "}
             <code style={{ fontFamily: "var(--wg-font-mono)" }}>
-              {new Date(summary.since).toLocaleString()}
+              {formatIso(summary.since)}
             </code>
           </p>
         </div>
@@ -304,7 +305,7 @@ function AgentCard({ name, summary }: { name: string; summary: AgentSummary }) {
         />
         <Row
           k="last seen"
-          v={summary.last_seen ? new Date(summary.last_seen).toLocaleTimeString() : "—"}
+          v={summary.last_seen ? formatTime(summary.last_seen) : "—"}
         />
       </dl>
     </article>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { formatIso } from "@/lib/time";
 
 type Notification = {
   id: string;
@@ -223,7 +224,7 @@ export function NotificationBell({ projectId }: { projectId: string }) {
                       color: "var(--wg-ink-soft)",
                     }}
                   >
-                    {new Date(n.created_at).toLocaleString()} · {n.kind}
+                    {formatIso(n.created_at)} · {n.kind}
                   </div>
                 </li>
               ))}

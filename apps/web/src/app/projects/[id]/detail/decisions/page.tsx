@@ -6,6 +6,7 @@ import { getTranslations } from "next-intl/server";
 import { RecordDissentButton } from "@/components/decision/RecordDissentButton";
 import type { ProjectState } from "@/lib/api";
 import { requireUser, serverFetch } from "@/lib/auth";
+import { formatIso } from "@/lib/time";
 
 export const dynamic = "force-dynamic";
 
@@ -95,7 +96,7 @@ export default async function DecisionsPage({
                   }}
                 >
                   {d.created_at
-                    ? new Date(d.created_at).toLocaleString()
+                    ? formatIso(d.created_at)
                     : "—"}
                 </div>
               </div>

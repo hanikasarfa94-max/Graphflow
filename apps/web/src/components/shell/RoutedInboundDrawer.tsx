@@ -28,6 +28,7 @@ import {
 import { relativeTime } from "@/components/stream/types";
 import { RoutedInboundBody } from "@/components/stream/RoutedInboundCard";
 import { GatedInboxItem } from "./GatedInboxItem";
+import { formatIso } from "@/lib/time";
 
 const DRAWER_WIDTH = 480;
 
@@ -379,7 +380,7 @@ export function RoutedInboundDrawer({
                         }}
                         title={
                           s.created_at
-                            ? new Date(s.created_at).toLocaleString()
+                            ? formatIso(s.created_at)
                             : ""
                         }
                       >

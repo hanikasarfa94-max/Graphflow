@@ -31,6 +31,7 @@ import {
 import { CommitModal } from "./CommitModal";
 import { OrgView } from "./OrgView";
 import { TimelineStrip } from "./TimelineStrip";
+import { formatDate, formatIso, formatShortDate } from "@/lib/time";
 
 // Graph v2 Wave 1 — live, differentiated, searchable.
 //
@@ -856,10 +857,7 @@ export function GraphCanvas({
       if (cm.target_date) {
         try {
           subtitleParts.push(
-            new Date(cm.target_date).toLocaleDateString(undefined, {
-              month: "short",
-              day: "numeric",
-            }),
+            formatShortDate(cm.target_date),
           );
         } catch {
           // fall through — no date on subtitle
@@ -1534,7 +1532,7 @@ export function GraphCanvas({
             }}
           />
           {t("timeline.viewingAsOf", {
-            when: new Date(cursorTs).toLocaleString(),
+            when: formatIso(cursorTs),
           })}
           <span style={{ opacity: 0.7, marginLeft: 6 }}>
             · {t("timeline.backToLive")}
@@ -2436,7 +2434,7 @@ function resolveEntity(
     if (cm.target_date) {
       try {
         descParts.push(
-          `Target: ${new Date(cm.target_date).toLocaleDateString()}`,
+          `Target: ${formatDate(cm.target_date)}`,
         );
       } catch {
         // skip

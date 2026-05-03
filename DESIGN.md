@@ -187,7 +187,7 @@ Tiny indicator (8px dot) in the sidebar footer that pulses at ~60 BPM (1000ms cy
 - **Color:** `currentColor` always. Icons inherit from context, never declare their own hue.
 - **Critical icons keep a consistent role:**
   - ⚡ (built-in glyph, not lucide) — decision crystallization, only
-  - 🧠 — edge agent (kept minimal, the brain stays in the chip, not decorative)
+  - 🤖 — edge agent (one robot in the chip, not decorative — the agent's voice, not its brand)
   - ❓ — clarifier sub-agent turn
   - ⚖ — conflict / scrimmage
   - ⚠ — escalation / drift / amber states

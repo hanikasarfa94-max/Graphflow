@@ -23,6 +23,7 @@ import {
   type DissentRecord,
   type DissentValidatedOutcome,
 } from "@/lib/api";
+import { formatIso } from "@/lib/time";
 
 const MAX_STANCE_CHARS = 500;
 
@@ -345,7 +346,7 @@ function chipStyle(
 
 function formatWhen(iso: string): string {
   try {
-    return new Date(iso).toLocaleString();
+    return formatIso(iso);
   } catch {
     return iso;
   }

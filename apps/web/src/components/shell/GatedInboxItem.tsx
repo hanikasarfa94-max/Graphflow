@@ -31,6 +31,7 @@ import {
   type TallySnapshot,
   type VoteVerdict,
 } from "@/lib/api";
+import { formatIso } from "@/lib/time";
 
 const CLASS_LABELS: Record<string, { en: string; zh: string }> = {
   budget: { en: "Budget", zh: "预算" },
@@ -448,7 +449,7 @@ function Header({
       </span>
       {createdAt ? (
         <span
-          title={new Date(createdAt).toLocaleString()}
+          title={formatIso(createdAt)}
           style={{
             color: "var(--wg-ink-soft)",
             textTransform: "none",

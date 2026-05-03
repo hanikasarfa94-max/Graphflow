@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { formatTime } from "@/lib/time";
 
 type SSEEvent = {
   id: string;
@@ -114,7 +115,7 @@ export function EventStream({ projectId }: { projectId: string }) {
               }}
             >
               <div style={{ color: "var(--wg-ink-soft)" }}>
-                {new Date(e.created_at).toLocaleTimeString()} ·{" "}
+                {formatTime(e.created_at)} ·{" "}
                 <span style={{ color: "var(--wg-ink)" }}>{e.name}</span>
                 {e.trace_id ? ` · ${e.trace_id.slice(0, 8)}` : ""}
               </div>

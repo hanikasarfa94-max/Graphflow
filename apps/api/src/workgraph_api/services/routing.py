@@ -29,7 +29,7 @@ Reply side-effects
 
 The edge-agent system user is the one from
 `workgraph_persistence.ensure_edge_agent_system_user`. Messages it posts
-render as a 🧠 Edge card on the frontend.
+render as a 🤖 Edge card on the frontend.
 """
 from __future__ import annotations
 
@@ -176,7 +176,7 @@ class RoutingService:
         # fallback; frontend uses `kind` + `linked_id` to render the rich
         # card by fetching the signal.
         inbound_body = (
-            f"🧠 {source_display} routed a decision to you: {framing}"
+            f"🤖 {source_display} routed a decision to you: {framing}"
         )
         await self._stream_service.post_system_message(
             stream_id=target_stream_id,
@@ -191,7 +191,7 @@ class RoutingService:
         # We post the framing as a `routed-prompt` message authored by
         # the SOURCE human so the DM reads like a real conversation A
         # initiated. Previously we ALSO posted a `routed-dm-log` audit
-        # line ("🧠 X → Y via edge: {framing}") — but that contained
+        # line ("🤖 X → Y via edge: {framing}") — but that contained
         # the same framing text and showed as a visual duplicate next
         # to routed-prompt. The routing fact (it went through edge) is
         # already on the RoutedSignalRow itself, so the audit is not
@@ -355,7 +355,7 @@ class RoutingService:
         else:
             reply_summary = f'replied: "{(custom_text or "").strip()[:160]}"'
         if not skip_source_post:
-            reply_body = f"🧠 {target_display} {reply_summary}"
+            reply_body = f"🤖 {target_display} {reply_summary}"
             await self._stream_service.post_system_message(
                 stream_id=signal.source_stream_id,
                 author_id=EDGE_AGENT_SYSTEM_USER_ID,
@@ -370,7 +370,7 @@ class RoutingService:
         )
         if dm_result.get("ok"):
             dm_stream_id = dm_result["stream"]["id"]
-            dm_body = f"🧠 {target_display} → {source_display}: {reply_summary}"
+            dm_body = f"🤖 {target_display} → {source_display}: {reply_summary}"
             await self._stream_service.post_system_message(
                 stream_id=dm_stream_id,
                 author_id=EDGE_AGENT_SYSTEM_USER_ID,

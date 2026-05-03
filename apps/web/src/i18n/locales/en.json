@@ -535,10 +535,18 @@
       "skillsGraphAlt": "Skill atlas placeholder",
       "skillsGraphHint": "skill atlas (preview)",
       "workflowStage": {
-        "requirements": { "label": "Requirements" },
-        "design": { "label": "Design" },
-        "review": { "label": "Review" },
-        "build": { "label": "Build" }
+        "requirements": {
+          "label": "Requirements"
+        },
+        "design": {
+          "label": "Design"
+        },
+        "review": {
+          "label": "Review"
+        },
+        "build": {
+          "label": "Build"
+        }
       },
       "workflowStatus": {
         "done": "Done",
@@ -815,7 +823,7 @@
     "loading": "Loading your thread…",
     "empty": "Ask your edge agent anything — it knows this project's graph, recent decisions, and who to route to.",
     "tabs": {
-      "myThread": "🧠 My thread",
+      "myThread": "🤖 My thread",
       "teamRoom": "👥 Team room",
       "dms": "💬 DMs"
     },
@@ -838,7 +846,7 @@
       "unknown": "edge"
     },
     "routeProposal": {
-      "header": "🧠 Edge — routing proposal",
+      "header": "🤖 Edge — routing proposal",
       "ask": "Ask {name}",
       "asking": "Asking {name}…",
       "bFacingLabel": "What {name} will see",
@@ -918,7 +926,7 @@
       "loadFailed": "Couldn't load routed signal"
     },
     "reply": {
-      "header": "🧠 Edge — {name} replied",
+      "header": "🤖 Edge — {name} replied",
       "acceptAction": "Accept",
       "counterBackAction": "Counter back",
       "escalateAction": "Escalate",
@@ -1762,199 +1770,6 @@
         "member": "Member",
         "admin": "Admin",
         "viewer": "Viewer"
-      }
-    }
-  },
-  "shellVNext": {
-    "personalAgentSection": "Personal Agent",
-    "generalAgent": "General Agent",
-    "generalAgentSubtitle": "Cross-project synthesis and consultation.",
-    "projectAgents": "Project Agents",
-    "projectAgentLabel": "{project} · Agent",
-    "groups": "Groups",
-    "dms": "Direct Messages",
-    "noGroups": "No groups yet.",
-    "noDMs": "No direct messages yet.",
-    "unnamedGroup": "Unnamed group",
-    "newGroup": "Create a new group",
-    "newGroupTip": "Create a new group inside the current project.",
-    "newGroupNoProjectTip": "Switch to a project agent first to create a group inside it.",
-    "workspaces": "Workspaces",
-    "collapseNav": "Collapse navigation",
-    "expandNav": "Expand navigation",
-    "tag": {
-      "agent": "Agent",
-      "group": "Group",
-      "dm": "DM"
-    },
-    "flowPill": {
-      "info": "Info",
-      "infoTip": "No project context — switch to a project agent to browse its knowledge.",
-      "infoTipProject": "Open this project's knowledge base.",
-      "memory": "Memory",
-      "memoryTip": "No project context — switch to a project agent to see its memory.",
-      "memoryTipProject": "Open this project's performance / memory page.",
-      "skills": "Skills",
-      "skillsTip": "No project context — switch to a project agent for the skill atlas.",
-      "skillsTipProject": "Open this project's skill atlas."
-    },
-    "analysis": {
-      "title": "Related",
-      "summary": "{tasks} task(s) · {decisions} decision(s) · {risks} risk(s)"
-    },
-    "suggestion": {
-      "label": "Looks like \"{project}\" — open in that project's agent?",
-      "accept": "Switch"
-    },
-    "immersiveToggle": "Toggle immersive mode",
-    "timelineLoading": "Loading messages…",
-    "timelineEmpty": "No messages yet. Say something below.",
-    "composerPlaceholder": "Send a message to your agent…",
-    "composerSend": "Send",
-    "composerSending": "Sending…",
-    "composerError": "Couldn't send",
-    "autoAgent": "Auto-dispatch",
-    "thinkingMode": "Thinking mode",
-    "thinking": {
-      "deep": "Deep thinking",
-      "fast": "Fast answer"
-    },
-    "plus": {
-      "upload": "Upload file",
-      "context": "Adjust context",
-      "routePerson": "Ask a person",
-      "submitTask": "Submit as task",
-      "hint": "Inert in v1 — backend wiring per spec §11."
-    },
-    "projectBar": {
-      "project": "Project:",
-      "surface": "Surface:",
-      "noProject": "No project context — talking to your global agent.",
-      "cellTip": "Toggle to broaden context to this project's cell scope. Default off per Q-B.",
-      "tier": {
-        "personal": "Personal",
-        "cell": "Cell",
-        "department": "Department",
-        "enterprise": "Enterprise"
-      },
-      "overflow": {
-        "title": "More project surfaces",
-        "settings": "Project settings",
-        "meetings": "Meetings",
-        "renders": "Rendered docs",
-        "composition": "Composition",
-        "teamPerf": "Team performance"
-      }
-    },
-    "wb": {
-      "head": {
-        "title": "Workbench",
-        "subtitle": "Agent shortcut tray",
-        "privatePill": "Private",
-        "close": "Close workbench"
-      },
-      "mode": {
-        "grid": "Grid",
-        "vertical": "Vertical",
-        "focus": "Focus"
-      },
-      "chip": {
-        "tasks": "Tasks",
-        "knowledge": "Knowledge",
-        "requests": "Requests",
-        "skills": "Skills",
-        "workflow": "Workflow"
-      },
-      "title": {
-        "tasks": "Tasks",
-        "knowledge": "Knowledge & Memory",
-        "skills": "Skill Atlas",
-        "requests": "Collaboration Requests",
-        "workflow": "Workflow / Schedule"
-      },
-      "loading": "Loading…",
-      "tasks": {
-        "mine": "Mine",
-        "team": "Team",
-        "noProject": "Pick a project agent to see this project's tasks.",
-        "newPlaceholder": "+ Add a personal task",
-        "emptyMine": "No personal drafts yet. Add one above.",
-        "emptyTeam": "No team plan tasks yet."
-      },
-      "knowledge": {
-        "searchPlaceholder": "Search knowledge",
-        "noProject": "Pick a project agent to see this project's knowledge.",
-        "empty": "No knowledge items yet."
-      },
-      "skills": {
-        "noProject": "Pick a project agent to see its members + skill tags.",
-        "empty": "No members visible."
-      },
-      "requests": {
-        "empty": "No pending routed signals.",
-        "untitled": "(no framing)"
-      },
-      "workflow": {
-        "hint": "Stages render live from the graph in production — this is a placeholder shape."
-      },
-      "unknownKind": "Unknown panel"
-    },
-    "module": {
-      "loading": "Loading…",
-      "loadingHint": "Fetching from the server.",
-      "loadError": "Couldn't load this view.",
-      "projects": {
-        "title": "Projects",
-        "subtitle": "Cells you belong to. Click one to drop into its agent.",
-        "action": "+ New project",
-        "activeCard": "Active projects",
-        "summaryCard": "Summary",
-        "summaryBody": "{count, plural, =0 {No projects yet — start one above.} =1 {You're in 1 project.} other {You're in # projects.}}",
-        "empty": "Nothing to show — create a project to begin."
-      },
-      "tasks": {
-        "title": "Tasks",
-        "subtitle": "Personal drafts and the canonical group plan.",
-        "subtitleWithAnchor": "Anchored on {project}.",
-        "action": "+ New task",
-        "personalCard": "My drafts",
-        "personalEmpty": "No personal drafts yet.",
-        "planCard": "Group plan",
-        "planEmpty": "No plan tasks yet for this project."
-      },
-      "knowledge": {
-        "title": "Knowledge",
-        "subtitle": "Cell knowledge and personal notes.",
-        "subtitleWithAnchor": "Anchored on {project}.",
-        "action": "+ New note",
-        "groupCard": "Group knowledge",
-        "groupEmpty": "No group notes yet.",
-        "personalCard": "Personal notes",
-        "personalEmpty": "No personal notes yet."
-      },
-      "org": {
-        "title": "Organization",
-        "subtitle": "Members + skill tags from your active project.",
-        "subtitleWithAnchor": "Anchored on {project}.",
-        "action": "+ Invite member",
-        "membersCard": "Members",
-        "membersEmpty": "No members visible.",
-        "summaryCard": "Summary",
-        "summaryBody": "{count, plural, =0 {No members yet.} =1 {1 member.} other {# members.}}"
-      },
-      "audit": {
-        "title": "Audit",
-        "subtitle": "High-impact actions and graph writes.",
-        "action": "Export",
-        "pendingCard": "Audit feed",
-        "pendingBody": "The audit-feed endpoint isn't wired yet — this slice ships when the audit-stream slice lands."
-      },
-      "graph": {
-        "title": "Project graph",
-        "subtitle": "The graph IS the project — every task, decision, risk, and dependency as a node.",
-        "subtitleAnchored": "{project} — the graph IS the project.",
-        "noProjectCard": "No project to graph",
-        "noProjectBody": "Pick a project agent or room from the left, or create a new project, to see its graph."
       }
     }
   },

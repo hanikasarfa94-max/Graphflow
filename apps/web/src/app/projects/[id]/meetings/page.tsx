@@ -12,6 +12,7 @@ import { UploadForm } from "@/components/meetings/UploadForm";
 import { Card, EmptyState, Heading, Text } from "@/components/ui";
 import { ApiError } from "@/lib/api";
 import { requireUser, serverFetch } from "@/lib/auth";
+import { formatIso } from "@/lib/time";
 
 export const dynamic = "force-dynamic";
 
@@ -126,7 +127,7 @@ export default async function MeetingsPage({
                         </Text>
                         <Text variant="caption" muted>
                           {item.uploaded_at
-                            ? new Date(item.uploaded_at).toLocaleString()
+                            ? formatIso(item.uploaded_at)
                             : ""}{" "}
                           · {item.transcript_length} {t("chars")}
                         </Text>

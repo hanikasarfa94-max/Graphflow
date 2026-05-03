@@ -4,6 +4,7 @@ import { useTranslations } from "next-intl";
 import { useState } from "react";
 
 import type { Delivery, ProjectState } from "@/lib/api";
+import { formatIso } from "@/lib/time";
 
 export function DeliveryCanvas({
   projectId,
@@ -184,7 +185,7 @@ function DeliveryDoc({ delivery }: { delivery: Delivery }) {
         }}
       >
         {delivery.created_at
-          ? new Date(delivery.created_at).toLocaleString()
+          ? formatIso(delivery.created_at)
           : ""}
         {delivery.prompt_version
           ? ` · prompt ${delivery.prompt_version}`
@@ -478,7 +479,7 @@ function HistoryStrip({
               }}
             >
               {d.created_at
-                ? new Date(d.created_at).toLocaleString()
+                ? formatIso(d.created_at)
                 : d.id.slice(0, 8)}
             </span>
             <span style={{ flex: 1 }}>{d.content.headline}</span>

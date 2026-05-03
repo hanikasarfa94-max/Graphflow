@@ -147,7 +147,7 @@ export function RehearsalPreview({
             animation: "wg-spin 0.8s linear infinite",
           }}
         />
-        <span>🧠 {t("thinking")}</span>
+        <span>🤖 {t("thinking")}</span>
         <style>{`@keyframes wg-spin { to { transform: rotate(360deg); } }`}</style>
       </div>,
     );
@@ -208,7 +208,7 @@ export function RehearsalPreview({
         }}
       >
         <div>
-          🧠 {t("answer")}{" "}
+          🤖 {t("answer")}{" "}
           <em style={{ color: "var(--wg-ink)" }}>
             {truncate(preview.body)}
           </em>

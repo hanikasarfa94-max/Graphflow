@@ -24,6 +24,7 @@ import type { PersonalMessage } from "@/lib/api";
 
 import { relativeTime,
   formatMessageTime } from "./types";
+import { formatIso } from "@/lib/time";
 
 type Props = {
   message: PersonalMessage;
@@ -139,7 +140,7 @@ export function MembraneCard({ message }: Props) {
           {" · "}
           <span>{sourceBadge(sourceKind)}</span>
         </span>
-        <span title={new Date(message.created_at).toLocaleString()}>
+        <span title={formatIso(message.created_at)}>
           {formatMessageTime(message.created_at)}
         </span>
       </div>

@@ -4,6 +4,7 @@ import { useTranslations } from "next-intl";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import type { Delivery, ProjectState } from "@/lib/api";
+import { formatIso } from "@/lib/time";
 
 type WsFrame = { type: string; payload: Record<string, unknown> };
 
@@ -262,7 +263,7 @@ function LatestSummary({
             }}
           >
             {delivery.created_at
-              ? new Date(delivery.created_at).toLocaleString()
+              ? formatIso(delivery.created_at)
               : ""}
             {delivery.prompt_version
               ? ` · prompt ${delivery.prompt_version}`
@@ -539,7 +540,7 @@ function HistoryList({
               }}
             >
               {d.created_at
-                ? new Date(d.created_at).toLocaleString()
+                ? formatIso(d.created_at)
                 : d.id.slice(0, 8)}
             </span>
             <span style={{ flex: 1, marginLeft: 12 }}>

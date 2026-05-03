@@ -4,6 +4,7 @@ import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import type { ProjectState } from "@/lib/api";
+import { formatIso } from "@/lib/time";
 
 type Task = ProjectState["plan"]["tasks"][number];
 type Member = ProjectState["members"][number];
@@ -410,7 +411,7 @@ function CommentsThread({
                 }}
               >
                 {c.author_display_name ?? c.author_username ?? c.author_id.slice(0, 8)}{" "}
-                · {new Date(c.created_at).toLocaleString()}
+                · {formatIso(c.created_at)}
               </div>
               <div style={{ whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
                 {c.body}

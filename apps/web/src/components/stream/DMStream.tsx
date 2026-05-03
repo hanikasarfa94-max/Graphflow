@@ -24,6 +24,7 @@ import type { StreamMember } from "./types";
 import { relativeTime,
   formatMessageTime,
   MESSAGE_BODY_MAX_LENGTH } from "./types";
+import { formatIso } from "@/lib/time";
 
 type Props = {
   streamId: string;
@@ -389,7 +390,7 @@ export function DMStream({ streamId, currentUserId, members }: Props) {
                     {name}
                   </strong>
                   <span
-                    title={new Date(m.created_at).toLocaleString()}
+                    title={formatIso(m.created_at)}
                     style={{
                       fontSize: 11,
                       fontFamily: "var(--wg-font-mono)",

@@ -24,6 +24,7 @@ import type { PersonalMessage } from "@/lib/api";
 import { CitedClaimList } from "./CitedClaimList";
 import { relativeTime,
   formatMessageTime } from "./types";
+import { formatIso } from "@/lib/time";
 
 type Props = {
   message: PersonalMessage;
@@ -52,7 +53,7 @@ function chipColor(kind: PersonalMessage["kind"]): string {
 
 function chipIcon(kind: PersonalMessage["kind"]): string {
   if (kind === "edge-clarify") return "❓";
-  return "🧠";
+  return "🤖";
 }
 
 export function EdgeReplyCard({
@@ -112,7 +113,7 @@ export function EdgeReplyCard({
             <span>{subLabel}</span>
           </span>
           <span
-            title={new Date(message.created_at).toLocaleString()}
+            title={formatIso(message.created_at)}
             style={{ color: "var(--wg-ink-faint)" }}
           >
             {formatMessageTime(message.created_at)}

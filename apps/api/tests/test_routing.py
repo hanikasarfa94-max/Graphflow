@@ -96,7 +96,7 @@ async def test_edge_agent_system_user_exists(api_env):
 
     assert row is not None
     assert row.username == "edge"
-    assert row.display_name == "🧠 Edge"
+    assert row.display_name == "🤖 Edge"
 
 
 # ---------- personal stream backfill ------------------------------------

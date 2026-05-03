@@ -3,6 +3,7 @@
 import { useState } from "react";
 
 import type { ProjectState } from "@/lib/api";
+import { formatIso } from "@/lib/time";
 
 type Tab = "tasks" | "risks" | "decisions" | "conflicts";
 
@@ -242,7 +243,7 @@ function DecisionsTable({ state }: { state: ProjectState }) {
   const headers = ["When", "Rationale", "Outcome"];
   const rows = state.decisions.map((d) => [
     <Mono key="w">
-      {d.created_at ? new Date(d.created_at).toLocaleString() : "—"}
+      {d.created_at ? formatIso(d.created_at) : "—"}
     </Mono>,
     <span key="r">{d.rationale || d.custom_text || "—"}</span>,
     <OutcomeChip key="o" outcome={d.apply_outcome ?? "pending"} />,

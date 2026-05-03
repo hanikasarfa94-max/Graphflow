@@ -34,6 +34,7 @@ import type {
   TimelineResponse,
   TimelineTransition,
 } from "@/lib/api";
+import { formatIso } from "@/lib/time";
 
 // Color tokens — match the existing severity palette on the canvas so
 // markers and node tints speak the same visual language.
@@ -187,8 +188,8 @@ export function TimelineStrip({
   };
 
   const formatted = cursorTs
-    ? new Date(cursorTs).toLocaleString()
-    : new Date(endMs).toLocaleString();
+    ? formatIso(cursorTs)
+    : formatIso(endMs);
 
   return (
     <div
@@ -285,7 +286,7 @@ export function TimelineStrip({
           <button
             key={m.id}
             type="button"
-            title={`${m.label} — ${new Date(m.ts).toLocaleString()}`}
+            title={`${m.label} — ${formatIso(m.ts)}`}
             onClick={(ev) => {
               ev.stopPropagation();
               onChange(m.ts);

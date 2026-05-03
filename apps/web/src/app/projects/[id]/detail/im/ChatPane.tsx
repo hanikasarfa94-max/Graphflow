@@ -7,6 +7,7 @@ import {
   ApiError,
   type Decision,
 } from "@/lib/api";
+import { formatTime } from "@/lib/time";
 
 type Suggestion = {
   id: string;
@@ -387,7 +388,7 @@ function MessageRow({
             message.author_id.slice(0, 8)}
         </strong>
         <span style={{ marginLeft: 6 }}>
-          {new Date(message.created_at).toLocaleTimeString()}
+          {formatTime(message.created_at)}
         </span>
       </div>
       {/* Above-body counter-of note */}

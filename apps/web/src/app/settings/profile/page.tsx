@@ -11,6 +11,7 @@ import {
   pickLocale,
   profileMessages,
 } from "@/lib/profile";
+import { formatIso } from "@/lib/time";
 
 export const dynamic = "force-dynamic";
 
@@ -25,7 +26,7 @@ function formatTimestamp(value: string | null, locale: string): string | null {
   try {
     // Locale-aware; stable for server rendering because we pass an explicit
     // locale rather than letting the runtime pick "system default".
-    return new Date(value).toLocaleString(locale === "zh" ? "zh-CN" : "en-US");
+    return formatIso(value);
   } catch {
     return value;
   }

@@ -18,6 +18,7 @@ import { getTranslations } from "next-intl/server";
 import type { MembraneNotesResponse } from "@/lib/api";
 
 import { EmptyState, Panel } from "./Panel";
+import { formatDate } from "@/lib/time";
 
 export async function MembraneNotesPanel({
   projectId,
@@ -193,7 +194,7 @@ function NoteRow({
               color: "var(--wg-ink-faint)",
             }}
           >
-            {new Date(createdAt).toLocaleDateString()}
+            {formatDate(createdAt)}
           </span>
         ) : null}
       </div>

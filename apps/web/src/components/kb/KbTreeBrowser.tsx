@@ -54,6 +54,7 @@ import {
   type ScopeTier,
   type ScopeTierState,
 } from "@/components/stream/ScopeTierPills";
+import { formatDate } from "@/lib/time";
 
 type Role = "owner" | "member" | "observer";
 type Tier = "full" | "task_scoped" | "observer";
@@ -1216,5 +1217,5 @@ function relativeTime(iso: string | null): string {
   if (delta < 3600) return `${Math.floor(delta / 60)}m`;
   if (delta < 86400) return `${Math.floor(delta / 3600)}h`;
   if (delta < 86400 * 30) return `${Math.floor(delta / 86400)}d`;
-  return new Date(tv).toLocaleDateString();
+  return formatDate(tv);
 }

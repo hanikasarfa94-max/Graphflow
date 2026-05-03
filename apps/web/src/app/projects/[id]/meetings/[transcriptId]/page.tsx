@@ -16,6 +16,7 @@ import { TranscriptBody } from "@/components/meetings/TranscriptBody";
 import { Card, Heading, Text } from "@/components/ui";
 import { ApiError } from "@/lib/api";
 import { requireUser, serverFetch } from "@/lib/auth";
+import { formatIso } from "@/lib/time";
 
 export const dynamic = "force-dynamic";
 
@@ -83,7 +84,7 @@ export default async function MeetingDetailPage({
         <Heading level={2}>{detail.title || t("untitled")}</Heading>
         <Text variant="caption" muted>
           {detail.uploaded_at
-            ? new Date(detail.uploaded_at).toLocaleString()
+            ? formatIso(detail.uploaded_at)
             : ""}{" "}
           · {detail.transcript_length} {t("chars")} · {detail.metabolism_status}
         </Text>

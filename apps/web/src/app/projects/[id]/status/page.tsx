@@ -16,6 +16,7 @@ import type {
   ProjectState,
 } from "@/lib/api";
 import { requireUser, serverFetch } from "@/lib/auth";
+import { formatIso } from "@/lib/time";
 
 export const dynamic = "force-dynamic";
 
@@ -71,7 +72,7 @@ export default async function ProjectStatusPage({
     /* non-fatal */
   }
 
-  const refreshedAt = new Date().toLocaleString();
+  const refreshedAt = formatIso();
 
   return (
     <main>

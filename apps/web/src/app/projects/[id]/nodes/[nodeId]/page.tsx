@@ -6,6 +6,7 @@ import { DissentList } from "@/components/decision/DissentList";
 import { Heading } from "@/components/ui";
 import type { DissentRecord, ProjectState, User } from "@/lib/api";
 import { optionalUser, serverFetch } from "@/lib/auth";
+import { formatDate, formatIso } from "@/lib/time";
 
 export const dynamic = "force-dynamic";
 
@@ -686,7 +687,7 @@ function DecisionSection({
           <Row k={t("rows.status")} v={dec.apply_outcome} />
         ) : null}
         {dec.created_at ? (
-          <Row k={t("rows.when")} v={new Date(dec.created_at).toLocaleString()} />
+          <Row k={t("rows.when")} v={formatIso(dec.created_at)} />
         ) : null}
       </Section>
       {dec.rationale ? (
@@ -753,7 +754,7 @@ function CommitmentSection({
         {cm.target_date ? (
           <Row
             k={t("rows.target")}
-            v={new Date(cm.target_date).toLocaleDateString()}
+            v={formatDate(cm.target_date)}
           />
         ) : null}
         {cm.sla_window_seconds ? (

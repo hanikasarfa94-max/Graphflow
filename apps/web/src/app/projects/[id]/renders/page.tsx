@@ -25,6 +25,7 @@ import {
   type ProjectState,
 } from "@/lib/api";
 import { requireUser, serverFetch } from "@/lib/auth";
+import { formatIso } from "@/lib/time";
 
 export const dynamic = "force-dynamic";
 
@@ -99,7 +100,7 @@ export default async function RendersIndexPage({
                 style={{ fontFamily: "var(--wg-font-mono)" }}
               >
                 {t("postmortem.generatedAt", {
-                  time: new Date(postmortem.generated_at).toLocaleString(),
+                  time: formatIso(postmortem.generated_at),
                 })}
                 {postmortem.outcome !== "ok"
                   ? ` · ${postmortem.outcome}`

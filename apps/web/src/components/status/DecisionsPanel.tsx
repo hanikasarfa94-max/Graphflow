@@ -4,6 +4,7 @@ import Link from "next/link";
 import type { Decision } from "@/lib/api";
 
 import { EmptyState, Panel } from "./Panel";
+import { formatIso } from "@/lib/time";
 
 // Newest-first list, capped at 10. "from IM" badge when the decision
 // crystallized off an IM suggestion (source_suggestion_id set).
@@ -97,7 +98,7 @@ export async function DecisionsPanel({
                   ) : null}
                   <span>
                     {d.created_at
-                      ? new Date(d.created_at).toLocaleString()
+                      ? formatIso(d.created_at)
                       : ""}
                   </span>
                   {/* Provenance — show one badge for whichever source

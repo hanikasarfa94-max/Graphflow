@@ -44,6 +44,7 @@ import {
   formatMessageTime,
   type StreamMember,
 } from "./types";
+import { formatIso } from "@/lib/time";
 
 // Button styling lives in `@/components/ui/Button` now — primary/ghost/
 // amber variants replace the three hand-rolled CSSProperties objects
@@ -125,7 +126,7 @@ function AuthorHeader({
           {name}
         </strong>
         <span
-          title={new Date(timestamp).toLocaleString()}
+          title={formatIso(timestamp)}
           style={{
             fontSize: 11,
             fontFamily: "var(--wg-font-mono)",
@@ -435,7 +436,7 @@ export function EdgeLLMTurnCard({
         <span>
           <span aria-hidden>☁</span> {t("attribution.edge")}
         </span>
-        <span title={new Date(message.created_at).toLocaleString()}>
+        <span title={formatIso(message.created_at)}>
           {formatMessageTime(message.created_at)}
         </span>
       </div>
@@ -618,7 +619,7 @@ export function SubAgentTurnCard({
         ? "🚧"
         : attrKind === "decision"
           ? "⚖"
-          : "🧠";
+          : "🤖";
 
   const escalationRequested = suggestion.escalation_state === "requested";
   const statusIsResolved = suggestion.status !== "pending";
@@ -940,7 +941,7 @@ export function AmbientSignalCard({
         · {label}
         {detail ? ` — ${detail}` : ""}
       </span>
-      <span title={new Date(timestamp).toLocaleString()}>
+      <span title={formatIso(timestamp)}>
         {formatMessageTime(timestamp)}
       </span>
     </div>

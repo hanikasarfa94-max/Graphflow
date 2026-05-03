@@ -24,6 +24,7 @@ import {
 
 import { relativeTime,
   formatMessageTime, type StreamMember } from "./types";
+import { formatIso } from "@/lib/time";
 
 type Props = {
   message: PersonalMessage;
@@ -183,7 +184,7 @@ export function GatedProposalPendingCard({ message, memberById }: Props) {
           {classChip}
         </span>
         <span
-          title={new Date(message.created_at).toLocaleString()}
+          title={formatIso(message.created_at)}
           style={{
             color: "var(--wg-ink-soft)",
             textTransform: "none",

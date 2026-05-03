@@ -26,6 +26,7 @@ import type { CitedClaim, PersonalMessage } from "@/lib/api";
 import { CitedClaimList } from "./CitedClaimList";
 import { relativeTime,
   formatMessageTime } from "./types";
+import { formatIso } from "@/lib/time";
 
 type Props = {
   message: PersonalMessage;
@@ -205,7 +206,7 @@ export function DriftCard({ message, onDiscuss }: Props) {
           <span>
             <strong>{t("alertTitle")}</strong>
           </span>
-          <span title={new Date(message.created_at).toLocaleString()}>
+          <span title={formatIso(message.created_at)}>
             {formatMessageTime(message.created_at)}
           </span>
         </div>
@@ -248,7 +249,7 @@ export function DriftCard({ message, onDiscuss }: Props) {
             {t(`severity.${parsed.severity}`)}
           </span>
         </span>
-        <span title={new Date(message.created_at).toLocaleString()}>
+        <span title={formatIso(message.created_at)}>
           {formatMessageTime(message.created_at)}
         </span>
       </div>

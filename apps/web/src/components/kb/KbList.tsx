@@ -17,6 +17,7 @@ import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { ApiError, listProjectKb, type KbItem } from "@/lib/api";
+import { formatDate } from "@/lib/time";
 
 const FILTERS = ["all", "git", "steam", "rss", "user-drop"] as const;
 type FilterKey = (typeof FILTERS)[number];
@@ -332,5 +333,5 @@ function relativeTime(iso: string): string {
   if (delta < 3600) return `${Math.floor(delta / 60)}m ago`;
   if (delta < 86400) return `${Math.floor(delta / 3600)}h ago`;
   if (delta < 86400 * 30) return `${Math.floor(delta / 86400)}d ago`;
-  return new Date(t).toLocaleDateString();
+  return formatDate(t);
 }

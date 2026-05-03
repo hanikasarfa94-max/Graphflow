@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { formatTime } from "@/lib/time";
 
 type SSEEvent = {
   id: string;
@@ -99,7 +100,7 @@ export function AgentLogDrawer({
             >
               <span style={{ color: "var(--wg-ink-faint)" }}>
                 {e.created_at
-                  ? new Date(e.created_at).toLocaleTimeString()
+                  ? formatTime(e.created_at)
                   : "—"}
               </span>
               <span style={{ color: "var(--wg-accent)" }}>{e.name}</span>

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { getTranslations } from "next-intl/server";
 
 import type { KbItemDetail as KbItemDetailT } from "@/lib/api";
+import { formatIso } from "@/lib/time";
 
 // Detail view for a single KB item. Server component — nothing to
 // interact with except the "back" link, so no client JS.
@@ -231,7 +232,7 @@ export async function KbItemDetail({
                 marginTop: 4,
               }}
             >
-              {new Date(item.created_at).toLocaleString()}
+              {formatIso(item.created_at)}
             </div>
           </MetaPanel>
 

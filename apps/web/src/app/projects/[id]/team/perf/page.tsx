@@ -4,6 +4,7 @@ import { getTranslations } from "next-intl/server";
 import { Card, Heading, Text } from "@/components/ui";
 import { ApiError } from "@/lib/api";
 import { requireUser, serverFetch } from "@/lib/auth";
+import { formatIso } from "@/lib/time";
 
 // /projects/[id]/team/perf — observable performance management (§10.5).
 //
@@ -446,7 +447,7 @@ function formatLastActive(
 ): string {
   if (!iso) return t("lastActiveNever");
   try {
-    return new Date(iso).toLocaleString();
+    return formatIso(iso);
   } catch {
     return iso;
   }

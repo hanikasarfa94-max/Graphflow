@@ -31,6 +31,7 @@ import {
 } from "@/lib/api";
 
 import { Panel } from "./Panel";
+import { formatIso } from "@/lib/time";
 
 type Member = ProjectState["members"][number];
 
@@ -169,7 +170,7 @@ export function RenderTriggers({
               }}
             >
               {t("status.renderTriggers.postmortem.lastGenerated", {
-                time: new Date(existing.generated_at).toLocaleString(),
+                time: formatIso(existing.generated_at),
               })}
             </div>
           ) : null}
