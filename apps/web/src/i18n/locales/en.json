@@ -406,6 +406,8 @@
     "counterNote": "↳ counter to earlier suggestion",
     "composer": {
       "placeholder": "Message the team…",
+      "charCount": "{count} / {max}",
+      "tooLong": "Message too long — keep under {max} characters.",
       "plusMenu": {
         "openLabel": "Open compose actions",
         "uploadFile": "Upload file",
@@ -824,7 +826,9 @@
     },
     "composer": {
       "placeholder": "Talk to your edge agent…",
-      "send": "Send"
+      "send": "Send",
+      "charCount": "{count} / {max}",
+      "tooLong": "Message too long — keep under {max} characters."
     },
     "edge": {
       "attribution": "Edge",

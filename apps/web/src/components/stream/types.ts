@@ -1,5 +1,12 @@
 // Phase E — stream renderer types.
 //
+// MESSAGE_BODY_MAX_LENGTH must match the BE Pydantic constraint on
+// MessageRequest.body. The FE uses it to set <textarea maxLength>, render
+// the character counter, and show a friendly error when a 422 still slips
+// through (e.g. paste of a >4000-char block in some browsers). If the BE
+// limit changes, update here too.
+export const MESSAGE_BODY_MAX_LENGTH = 4000;
+
 // The team stream is a single timeline of polymorphic cards (north-star
 // §"What the v2 surface actually is"). All cards share a timestamp and an
 // id so the view can merge + sort them deterministically; the `kind`

@@ -77,7 +77,8 @@ import { ToolCallCard } from "./ToolCallCard";
 import { ToolResultCard } from "./ToolResultCard";
 import type { StreamMember } from "./types";
 import { relativeTime,
-  formatMessageTime } from "./types";
+  formatMessageTime,
+  MESSAGE_BODY_MAX_LENGTH } from "./types";
 
 type Props = {
   projectId: string;
@@ -575,11 +576,23 @@ export function PersonalStream({
       setMessages((prev) => prev.filter((m) => m.id !== optimisticId));
       setDraft(body);
       if (e instanceof ApiError) {
-        const detail =
-          typeof e.body === "object" && e.body && "detail" in e.body
-            ? String((e.body as { detail?: unknown }).detail ?? `error ${e.status}`)
-            : `error ${e.status}`;
-        setError(detail);
+        if (e.status === 422 && body.length > MESSAGE_BODY_MAX_LENGTH) {
+          setError(t("composer.tooLong", { max: MESSAGE_BODY_MAX_LENGTH }));
+        } else {
+          // FastAPI 422 returns detail as an array of {loc,msg,type}; pick
+          // the first msg instead of stringifying [object Object].
+          const raw = (e.body as { detail?: unknown } | undefined)?.detail;
+          const detail =
+            typeof raw === "string"
+              ? raw
+              : Array.isArray(raw) &&
+                  raw[0] &&
+                  typeof raw[0] === "object" &&
+                  "msg" in raw[0]
+                ? String((raw[0] as { msg?: unknown }).msg ?? "")
+                : `error ${e.status}`;
+          setError(detail);
+        }
       } else {
         setError("send failed");
       }
@@ -970,6 +983,7 @@ export function PersonalStream({
             }}
             placeholder={t("composer.placeholder")}
             rows={1}
+            maxLength={MESSAGE_BODY_MAX_LENGTH}
             data-testid="personal-composer"
             style={{
               flex: 1,
@@ -986,6 +1000,27 @@ export function PersonalStream({
               overflowY: "auto",
             }}
           />
+          {draft.length >= MESSAGE_BODY_MAX_LENGTH * 0.9 && (
+            <span
+              data-testid="personal-composer-char-count"
+              style={{
+                alignSelf: "flex-end",
+                marginBottom: 8,
+                fontSize: 11,
+                fontFamily: "var(--wg-font-mono)",
+                color:
+                  draft.length >= MESSAGE_BODY_MAX_LENGTH
+                    ? "var(--wg-accent)"
+                    : "var(--wg-ink-faint)",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {t("composer.charCount", {
+                count: draft.length,
+                max: MESSAGE_BODY_MAX_LENGTH,
+              })}
+            </span>
+          )}
           <Button
             variant="primary"
             onClick={() => void send()}

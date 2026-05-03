@@ -425,6 +425,21 @@ body::before {
   will-change: transform, box-shadow;
 }
 
+/* Brief outline pulse used after a click-to-scroll lands the user on a
+   target card (e.g. VoteGroupCard → matching proposal). Tells the eye
+   "this is what you just jumped to" without being a load-bearing motion. */
+@keyframes wg-flash-focus-kf {
+  0%   { box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.55); }
+  40%  { box-shadow: 0 0 0 6px rgba(37, 99, 235, 0.20); }
+  100% { box-shadow: 0 0 0 0 rgba(37, 99, 235, 0); }
+}
+.wg-flash-focus {
+  animation: wg-flash-focus-kf 1.6s var(--wg-ease-enter, ease-out) both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .wg-flash-focus { animation: none; }
+}
+
 /* 2 — Drift emergence. Float up from the affected node: subtle translate
    + opacity + shadow expansion. Feels like the organism noticing. One
    shot, on mount. */

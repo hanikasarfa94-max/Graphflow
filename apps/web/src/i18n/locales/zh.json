@@ -406,6 +406,8 @@
     "counterNote": "↳ 反提较早的建议",
     "composer": {
       "placeholder": "向团队发消息…",
+      "charCount": "{count} / {max}",
+      "tooLong": "消息过长 —— 请控制在 {max} 字以内。",
       "plusMenu": {
         "openLabel": "打开输入操作",
         "uploadFile": "上传文件",
@@ -824,7 +826,9 @@
     },
     "composer": {
       "placeholder": "与你的 Edge 智能体交谈…",
-      "send": "发送"
+      "send": "发送",
+      "charCount": "{count} / {max}",
+      "tooLong": "消息过长 —— 请控制在 {max} 字以内。"
     },
     "edge": {
       "attribution": "边缘代理",

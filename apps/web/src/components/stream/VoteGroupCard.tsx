@@ -50,12 +50,58 @@ export function VoteGroupCard({ message }: Props) {
   const text = stripLeadingIcon(body);
 
   const palette = paletteFor(status);
+  const linkedProposalId = message.linked_id ?? null;
+  // When the vote is still open, the card becomes a click affordance:
+  //   1. Try scroll-to-proposal-card in the same stream (works for the
+  //      personal stream where GatedProposalPendingCard renders inline).
+  //   2. Fall through to /inbox (the team-room case — votes live there
+  //      via GatedInboxItem with Approve/Deny). The team stream by design
+  //      does NOT carry vote-action buttons; the locus of authority is
+  //      the inbox.
+  // Resolved cards aren't interactive — there's nothing to act on.
+  const interactive = status === "opened" && linkedProposalId !== null;
+  const handleClick = interactive
+    ? () => {
+        if (typeof document !== "undefined" && linkedProposalId) {
+          const target = document.querySelector<HTMLElement>(
+            `[data-proposal-id="${linkedProposalId}"]:not([data-testid="group-vote-card"])`,
+          );
+          if (target) {
+            target.scrollIntoView({ behavior: "smooth", block: "center" });
+            target.classList.add("wg-flash-focus");
+            window.setTimeout(
+              () => target.classList.remove("wg-flash-focus"),
+              1600,
+            );
+            return;
+          }
+        }
+        // No in-stream proposal card → take the user to the inbox where
+        // gated proposals carry the Approve/Deny/Withdraw actions.
+        if (typeof window !== "undefined") {
+          window.location.href = "/inbox";
+        }
+      }
+    : undefined;
 
   return (
     <div
       data-testid="group-vote-card"
       data-kind={kind}
       data-proposal-id={message.linked_id ?? undefined}
+      role={interactive ? "button" : undefined}
+      tabIndex={interactive ? 0 : undefined}
+      onClick={handleClick}
+      onKeyDown={
+        interactive
+          ? (e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                handleClick?.();
+              }
+            }
+          : undefined
+      }
       className={
         status === "approved" ? "wg-motion-crystallize" : undefined
       }
@@ -69,6 +115,7 @@ export function VoteGroupCard({ message }: Props) {
         border: `1px solid ${palette.border}`,
         borderLeft: `3px solid ${palette.accent}`,
         borderRadius: "var(--wg-radius)",
+        cursor: interactive ? "pointer" : "default",
       }}
     >
       <span

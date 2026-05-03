@@ -38,6 +38,7 @@ import { ApiError, api, type IMMessage } from "@/lib/api";
 
 import { getScopeTiers } from "./ScopeTierPills";
 import { getStreamScope } from "./StreamContextPanel";
+import { MESSAGE_BODY_MAX_LENGTH } from "./types";
 
 // 500ms matches north-star §pre-commit rehearsal: long enough that typing
 // bursts don't thrash the edge endpoint, short enough that users feel the
@@ -276,10 +277,16 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
       if (e instanceof ApiError) {
         if (e.status === 429) {
           onError("slow down — rate limited");
+        } else if (e.status === 422 && body.length > MESSAGE_BODY_MAX_LENGTH) {
+          // Belt-and-suspenders: the textarea has maxLength, but pasted
+          // content can sometimes exceed it (browser inconsistency). Show
+          // the friendly limit message instead of raw "error 422".
+          onError(t("composer.tooLong", { max: MESSAGE_BODY_MAX_LENGTH }));
         } else {
           const detail =
             typeof e.body === "object" && e.body && "detail" in e.body
-              ? String((e.body as { detail?: unknown }).detail ?? e.message)
+              ? extractDetail((e.body as { detail?: unknown }).detail) ??
+                e.message
               : `error ${e.status}`;
           onError(detail);
         }
@@ -291,6 +298,19 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
     } finally {
       setPosting(false);
     }
+  }
+
+  // FastAPI returns 422 detail as an array of {loc,msg,type} objects.
+  // Stringify the first error's `msg` instead of dumping `[object Object]`.
+  function extractDetail(d: unknown): string | null {
+    if (typeof d === "string") return d;
+    if (Array.isArray(d) && d.length > 0) {
+      const first = d[0];
+      if (first && typeof first === "object" && "msg" in first) {
+        return String((first as { msg?: unknown }).msg ?? "");
+      }
+    }
+    return null;
   }
 
   // Expose sendNow to parents — "Send as-is" on the rehearsal card flushes
@@ -467,6 +487,7 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
         onPaste={onPaste}
         placeholder={t("composer.placeholder")}
         rows={1}
+        maxLength={MESSAGE_BODY_MAX_LENGTH}
         data-testid="stream-composer"
         style={{
           flex: 1,
@@ -483,6 +504,30 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
           overflowY: "auto",
         }}
       />
+      {/* Char counter only appears once the user is in the last 10% of the
+          budget — silent until it matters. Mono font + ink-faint color so
+          it doesn't compete with the message text. */}
+      {value.length >= MESSAGE_BODY_MAX_LENGTH * 0.9 && (
+        <span
+          data-testid="composer-char-count"
+          style={{
+            alignSelf: "flex-end",
+            marginBottom: 8,
+            fontSize: 11,
+            fontFamily: "var(--wg-font-mono)",
+            color:
+              value.length >= MESSAGE_BODY_MAX_LENGTH
+                ? "var(--wg-accent)"
+                : "var(--wg-ink-faint)",
+            whiteSpace: "nowrap",
+          }}
+        >
+          {t("composer.charCount", {
+            count: value.length,
+            max: MESSAGE_BODY_MAX_LENGTH,
+          })}
+        </span>
+      )}
       <button
         type="button"
         onClick={() => void send()}
