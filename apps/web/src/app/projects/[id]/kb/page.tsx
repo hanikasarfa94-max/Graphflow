@@ -8,7 +8,6 @@
 
 import { PageHeader } from "@/components/ui";
 import { KbTreeBrowser } from "@/components/kb/KbTreeBrowser";
-import { ScopeTierPills } from "@/components/stream/ScopeTierPills";
 import {
   ApiError,
   getKbTree,
@@ -83,9 +82,9 @@ export default async function KbPage({
         }}
       >
         <PageHeader title={t("kb.title")} subtitle={t("kb.subtitle")} />
-        <div style={{ paddingTop: 8 }}>
-          <ScopeTierPills projectKey={`project:${id}`} />
-        </div>
+        {/* Scope-tier pills moved to ProjectBar — single rail per
+            project shell. The previous per-page render here caused a
+            duplicate row directly below ProjectBar's. */}
       </div>
       {/* Notes are KB items now. The tree returns scope='personal' and
           scope='group' rows in one payload (kb_hierarchy.get_tree
