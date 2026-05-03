@@ -71,6 +71,9 @@ _SEVERITY_ORDER = {"low": 0, "medium": 1, "high": 2}
 # Cap responses so a runaway LLM loop can't accidentally pull megabytes.
 _KB_SEARCH_MAX_LIMIT = 20
 _RECENT_DECISIONS_MAX_LIMIT = 20
+_ACTIVE_TASKS_MAX_LIMIT = 50
+_PROPOSE_TASK_MAX_TITLE = 500
+_PROPOSE_TASK_MAX_DESCRIPTION = 4000
 _WHY_CHAIN_SCAN_LIMIT = 100  # how many recent decisions to score against a query
 _WHY_CHAIN_MAX_RESULTS = 5
 
@@ -159,6 +162,18 @@ class SkillsService:
                 )
             elif skill_name == "propose_wiki_entry":
                 result = await self._propose_wiki_entry(
+                    project_id=project_id,
+                    caller_user_id=caller_user_id,
+                    **args,
+                )
+            elif skill_name == "active_tasks":
+                result = await self._active_tasks(
+                    project_id=project_id,
+                    caller_user_id=caller_user_id,
+                    **args,
+                )
+            elif skill_name == "propose_task":
+                result = await self._propose_task(
                     project_id=project_id,
                     caller_user_id=caller_user_id,
                     **args,
@@ -879,6 +894,139 @@ class SkillsService:
             code = getattr(e, "code", None) or "create_failed"
             return {"ok": False, "error": code}
         return {"item_id": item.get("id"), "title": item.get("title")}
+
+    async def _active_tasks(
+        self,
+        *,
+        project_id: str,
+        caller_user_id: str | None = None,
+        limit: int = 20,
+    ) -> dict[str, list[dict[str, Any]]]:
+        """Read-only view of the project's active tasks.
+
+        Returns two buckets:
+          group   — scope='plan' tasks attached to the latest requirement
+                    (visible to all members, the canonical task list)
+          personal — caller's own scope='personal' tasks in this project
+                    (drafts the caller hasn't promoted yet)
+
+        The agent answers "what are my tasks?" by combining both. We
+        keep them separate in the envelope so the prompt can phrase
+        "you have N personal drafts plus M shared tasks" without the
+        agent guessing scope.
+        """
+        try:
+            limit_val = max(1, min(int(limit), _ACTIVE_TASKS_MAX_LIMIT))
+        except (TypeError, ValueError):
+            limit_val = 20
+
+        async with session_scope(self._sessionmaker) as session:
+            req_repo = RequirementRepository(session)
+            plan_repo = PlanRepository(session)
+            latest = await req_repo.latest_for_project(project_id)
+            group_tasks: list[Any] = []
+            if latest is not None:
+                group_tasks = await plan_repo.list_tasks(latest.id)
+            personal_tasks: list[Any] = []
+            if caller_user_id:
+                personal_tasks = await plan_repo.list_personal_for_owner(
+                    project_id=project_id,
+                    owner_user_id=caller_user_id,
+                    limit=limit_val,
+                )
+
+        def _shape(t: Any) -> dict[str, Any]:
+            return {
+                "id": t.id,
+                "title": t.title or "",
+                "description": (t.description or "")[:500],
+                "status": t.status or "open",
+                "scope": t.scope or "plan",
+                "assignee_role": t.assignee_role or "unknown",
+                "estimate_hours": t.estimate_hours,
+                "owner_user_id": t.owner_user_id,
+                "deliverable_id": t.deliverable_id,
+                "created_at": (
+                    t.created_at.isoformat() if t.created_at else None
+                ),
+            }
+
+        # Hide tasks the human already closed; the agent should reason
+        # about what's open.
+        def _is_active(t: Any) -> bool:
+            s = (t.status or "").lower()
+            return s not in {"closed", "done", "completed", "cancelled", "dismissed"}
+
+        return {
+            "group": [_shape(t) for t in group_tasks if _is_active(t)][:limit_val],
+            "personal": [_shape(t) for t in personal_tasks if _is_active(t)][:limit_val],
+        }
+
+    async def _propose_task(
+        self,
+        *,
+        project_id: str,
+        caller_user_id: str | None = None,
+        title: str = "",
+        description: str = "",
+        estimate_hours: int | None = None,
+        assignee_role: str = "unknown",
+        source_message_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Stage a personal-scope TaskRow for the caller. Mirrors
+        propose_wiki_entry: write is always personal-scope (never skips
+        group review). Caller can promote-to-group via the existing
+        /api/tasks/{id}/promote which routes through MembraneService.
+
+        Returns {task_id, title, scope: 'personal'} on success or
+        {ok: False, error} on validation failure.
+        """
+        if not caller_user_id:
+            return {"ok": False, "error": "caller_user_id_required"}
+        title_clean = (title or "").strip()
+        description_clean = (description or "").strip()
+        if not title_clean and not description_clean:
+            return {"ok": False, "error": "empty_proposal"}
+        if not title_clean:
+            # First non-empty line of the description, capped — same
+            # convention as save-as-kb.
+            first_line = description_clean.splitlines()[0] if description_clean else ""
+            title_clean = (first_line or description_clean)[:_PROPOSE_TASK_MAX_TITLE].strip() or "Untitled"
+        title_clean = title_clean[:_PROPOSE_TASK_MAX_TITLE]
+        description_clean = description_clean[:_PROPOSE_TASK_MAX_DESCRIPTION]
+        try:
+            est = int(estimate_hours) if estimate_hours is not None else None
+            if est is not None and (est < 0 or est > 10_000):
+                est = None
+        except (TypeError, ValueError):
+            est = None
+        role = (assignee_role or "unknown").strip() or "unknown"
+
+        async with session_scope(self._sessionmaker) as session:
+            if not await ProjectMemberRepository(session).is_member(
+                project_id, caller_user_id
+            ):
+                return {"ok": False, "error": "not_a_project_member"}
+            try:
+                row = await PlanRepository(session).create_personal_task(
+                    project_id=project_id,
+                    owner_user_id=caller_user_id,
+                    title=title_clean,
+                    description=description_clean,
+                    source_message_id=source_message_id,
+                    estimate_hours=est,
+                    assignee_role=role,
+                )
+            except Exception as e:  # noqa: BLE001
+                code = getattr(e, "code", None) or "create_failed"
+                return {"ok": False, "error": code}
+
+        return {
+            "task_id": row.id,
+            "title": row.title,
+            "scope": row.scope,
+            "estimate_hours": row.estimate_hours,
+        }
 
 
 __all__ = ["SkillsService"]

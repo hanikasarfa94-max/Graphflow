@@ -71,6 +71,17 @@ ALLOWED_SKILLS = frozenset(
         # The dispatcher creates the row as status='draft' so the
         # owner approves before it joins the canonical group context.
         "propose_wiki_entry",
+        # `active_tasks` returns the union of group-scope plan tasks
+        # (latest requirement) + the caller's own personal-scope tasks
+        # so the agent can answer "what are my tasks?" without making
+        # things up. Read-only.
+        "active_tasks",
+        # `propose_task` is the task analog of propose_wiki_entry. It
+        # writes a personal-scope TaskRow owned by the caller so the
+        # user can review + promote-to-group via the existing
+        # /api/tasks/{id}/promote (MembraneService.review). Always
+        # personal-scope: never skips group review.
+        "propose_task",
     }
 )
 
@@ -93,6 +104,8 @@ SkillName = Literal[
     "member_profile",
     "why_chain",
     "routing_suggest",
+    "active_tasks",
+    "propose_task",
 ]
 # Phase v4 — Scene 2 routing taxonomy. Only two kinds in v0:
 #   'discovery' — graph-signal-grounded candidate surfacing (Scene 1)
