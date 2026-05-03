@@ -1660,7 +1660,7 @@
   },
   "skillDeclarationBanner": {
     "label": "Welcome",
-    "heading": "Welcome to {project} — before you start, add 2–3 skills so the group knows where you fit.",
+    "heading": "You're now in {project} — before you start, add 2–3 skills so the group knows where you fit.",
     "placeholder": "e.g. product design, copywriting, Python",
     "save": "Save",
     "saving": "Saving…",
