@@ -1,6 +1,8 @@
 {
   "topbar": {
     "searchPlaceholder": "搜索项目、决策、任务或知识",
+    "searchSoonBadge": "敬请期待",
+    "searchComingSoon": "搜索功能即将上线 —— 暂时请从侧边栏浏览。",
     "notifications": "通知",
     "newCta": "新建",
     "switchProject": "切换项目",

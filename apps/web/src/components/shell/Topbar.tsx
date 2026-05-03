@@ -204,6 +204,7 @@ export function Topbar() {
       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
         <div
           aria-hidden
+          title={t("searchComingSoon")}
           style={{
             display: "flex",
             alignItems: "center",
@@ -211,28 +212,27 @@ export function Topbar() {
             padding: "0 14px",
             height: 32,
             borderRadius: 999,
-            border: "1px solid var(--wg-line)",
-            background: "rgba(255,255,255,0.84)",
-            color: "var(--wg-ink-soft)",
+            border: "1px dashed var(--wg-line)",
+            background: "rgba(255,255,255,0.5)",
+            color: "var(--wg-ink-faint)",
             fontSize: 12,
             minWidth: 220,
+            cursor: "not-allowed",
           }}
         >
           <span style={{ fontFamily: "var(--wg-font-mono)" }}>⌕</span>
           <span style={{ flex: 1 }}>{t("searchPlaceholder")}</span>
-          <kbd
+          <span
             style={{
               fontSize: 10,
               fontFamily: "var(--wg-font-mono)",
-              background: "var(--wg-surface-sunk)",
-              border: "1px solid var(--wg-line)",
-              borderRadius: 4,
-              padding: "1px 5px",
               color: "var(--wg-ink-faint)",
+              letterSpacing: "0.08em",
+              textTransform: "uppercase",
             }}
           >
-            ⌘K
-          </kbd>
+            {t("searchSoonBadge")}
+          </span>
         </div>
         <button
           type="button"

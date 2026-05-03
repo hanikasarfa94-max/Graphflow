@@ -1,6 +1,8 @@
 {
   "topbar": {
     "searchPlaceholder": "Search projects, decisions, tasks or knowledge",
+    "searchSoonBadge": "soon",
+    "searchComingSoon": "Search is coming soon — for now, browse from the sidebar.",
     "notifications": "Notifications",
     "newCta": "New",
     "switchProject": "Switch project",
