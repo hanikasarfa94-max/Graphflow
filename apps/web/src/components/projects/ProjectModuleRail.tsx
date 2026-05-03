@@ -68,12 +68,27 @@ export function ProjectModuleRail({ projectId }: Props) {
       matches: (p) => p.startsWith(`${base}/kb`),
     },
     {
+      // Tasks gets a top-level rail entry so users have a one-click
+      // path to "what do I need to do today?". The same view is also
+      // reachable as the Tasks sub-tab inside Audit, but the QA
+      // feedback "task view was missing" was about discoverability —
+      // hiding tasks one tab deep behind Audit was a real bug.
+      key: "tasks",
+      href: `${base}/detail/tasks`,
+      icon: "✓",
+      matches: (p) => p.startsWith(`${base}/detail/tasks`),
+    },
+    {
       key: "audit",
       // Audit lands on the graph view as the canonical entry — same
-      // convention the prototype's auditView uses.
+      // convention the prototype's auditView uses. The Tasks sub-tab
+      // here is unchanged; the new top-level Tasks entry above is an
+      // additional shortcut, not a redirect.
       href: `${base}/detail/graph`,
       icon: "📊",
-      matches: (p) => p.startsWith(`${base}/detail`),
+      matches: (p) =>
+        p.startsWith(`${base}/detail`) &&
+        !p.startsWith(`${base}/detail/tasks`),
     },
     {
       key: "skills",
