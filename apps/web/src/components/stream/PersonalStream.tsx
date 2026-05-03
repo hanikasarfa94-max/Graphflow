@@ -52,6 +52,7 @@ import { Button } from "@/components/ui";
 import {
   ApiError,
   edgeKindToMessageKind,
+  extractApiErrorDetail,
   listPersonalMessages,
   postPersonalMessage,
   previewPersonalMessage,
@@ -579,19 +580,7 @@ export function PersonalStream({
         if (e.status === 422 && body.length > MESSAGE_BODY_MAX_LENGTH) {
           setError(t("composer.tooLong", { max: MESSAGE_BODY_MAX_LENGTH }));
         } else {
-          // FastAPI 422 returns detail as an array of {loc,msg,type}; pick
-          // the first msg instead of stringifying [object Object].
-          const raw = (e.body as { detail?: unknown } | undefined)?.detail;
-          const detail =
-            typeof raw === "string"
-              ? raw
-              : Array.isArray(raw) &&
-                  raw[0] &&
-                  typeof raw[0] === "object" &&
-                  "msg" in raw[0]
-                ? String((raw[0] as { msg?: unknown }).msg ?? "")
-                : `error ${e.status}`;
-          setError(detail);
+          setError(extractApiErrorDetail(e.body) ?? `error ${e.status}`);
         }
       } else {
         setError("send failed");

@@ -13,6 +13,45 @@ export class ApiError extends Error {
   }
 }
 
+// Pull a human-readable message out of an ApiError body. Handles three
+// shapes the BE returns:
+//   1. plain FastAPI:     { detail: "string" }
+//   2. plain FastAPI 422: { detail: [{ msg, loc, type, … }, …] }
+//   3. WG custom envelope:{ code, message, details: { errors: [{ msg, … }] } }
+// Falls back to `null` when nothing useful is found so the caller can
+// decide between a friendly local string and a generic "error N".
+export function extractApiErrorDetail(body: unknown): string | null {
+  if (!body || typeof body !== "object") return null;
+  const b = body as Record<string, unknown>;
+
+  // Shape 3 — custom envelope. Prefer the structured per-field msg, fall
+  // back to the top-level `message` only if no structured error is set.
+  const details = b["details"];
+  if (details && typeof details === "object") {
+    const errors = (details as Record<string, unknown>)["errors"];
+    if (Array.isArray(errors) && errors.length > 0) {
+      const first = errors[0];
+      if (first && typeof first === "object" && "msg" in first) {
+        return String((first as { msg?: unknown }).msg ?? "") || null;
+      }
+    }
+  }
+  const message = b["message"];
+  if (typeof message === "string" && message) return message;
+
+  // Shape 1 / 2 — vanilla FastAPI `detail`.
+  const detail = b["detail"];
+  if (typeof detail === "string") return detail;
+  if (Array.isArray(detail) && detail.length > 0) {
+    const first = detail[0];
+    if (first && typeof first === "object" && "msg" in first) {
+      return String((first as { msg?: unknown }).msg ?? "") || null;
+    }
+  }
+
+  return null;
+}
+
 type JsonValue =
   | string
   | number

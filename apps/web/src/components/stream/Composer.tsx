@@ -34,7 +34,7 @@ import {
 } from "react";
 import { useTranslations } from "next-intl";
 
-import { ApiError, api, type IMMessage } from "@/lib/api";
+import { ApiError, api, extractApiErrorDetail, type IMMessage } from "@/lib/api";
 
 import { getScopeTiers } from "./ScopeTierPills";
 import { getStreamScope } from "./StreamContextPanel";
@@ -283,12 +283,7 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
           // the friendly limit message instead of raw "error 422".
           onError(t("composer.tooLong", { max: MESSAGE_BODY_MAX_LENGTH }));
         } else {
-          const detail =
-            typeof e.body === "object" && e.body && "detail" in e.body
-              ? extractDetail((e.body as { detail?: unknown }).detail) ??
-                e.message
-              : `error ${e.status}`;
-          onError(detail);
+          onError(extractApiErrorDetail(e.body) ?? `error ${e.status}`);
         }
       } else {
         onError("send failed");
@@ -298,19 +293,6 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
     } finally {
       setPosting(false);
     }
-  }
-
-  // FastAPI returns 422 detail as an array of {loc,msg,type} objects.
-  // Stringify the first error's `msg` instead of dumping `[object Object]`.
-  function extractDetail(d: unknown): string | null {
-    if (typeof d === "string") return d;
-    if (Array.isArray(d) && d.length > 0) {
-      const first = d[0];
-      if (first && typeof first === "object" && "msg" in first) {
-        return String((first as { msg?: unknown }).msg ?? "");
-      }
-    }
-    return null;
   }
 
   // Expose sendNow to parents — "Send as-is" on the rehearsal card flushes

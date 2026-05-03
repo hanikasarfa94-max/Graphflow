@@ -18,11 +18,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 
-import type { IMMessage } from "@/lib/api";
+import { extractApiErrorDetail, type IMMessage } from "@/lib/api";
 
 import type { StreamMember } from "./types";
 import { relativeTime,
-  formatMessageTime } from "./types";
+  formatMessageTime,
+  MESSAGE_BODY_MAX_LENGTH } from "./types";
 
 type Props = {
   streamId: string;
@@ -67,6 +68,7 @@ export function DMStream({ streamId, currentUserId, members }: Props) {
   const [messages, setMessages] = useState<IMMessage[]>([]);
   const [draft, setDraft] = useState("");
   const [posting, setPosting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const scrollerRef = useRef<HTMLDivElement | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
@@ -222,6 +224,7 @@ export function DMStream({ streamId, currentUserId, members }: Props) {
     const body = draft.trim();
     if (!body || posting) return;
     setPosting(true);
+    setError(null);
     const optimisticId = `local-${crypto.randomUUID()}`;
     const optimistic: IMMessage = {
       id: optimisticId,
@@ -251,13 +254,28 @@ export function DMStream({ streamId, currentUserId, members }: Props) {
           ),
         );
       } else {
-        // roll back optimistic on failure
+        // Roll back optimistic + tell the user what happened. Previously
+        // the failure was silent — message vanished, no signal to retry.
         setMessages((prev) => prev.filter((m) => m.id !== optimisticId));
         setDraft(body);
+        let parsedBody: unknown = null;
+        try {
+          parsedBody = await r.json();
+        } catch {
+          /* non-JSON body */
+        }
+        if (r.status === 422 && body.length > MESSAGE_BODY_MAX_LENGTH) {
+          setError(
+            tStream("composer.tooLong", { max: MESSAGE_BODY_MAX_LENGTH }),
+          );
+        } else {
+          setError(extractApiErrorDetail(parsedBody) ?? `error ${r.status}`);
+        }
       }
     } catch {
       setMessages((prev) => prev.filter((m) => m.id !== optimisticId));
       setDraft(body);
+      setError("send failed");
     } finally {
       setPosting(false);
     }
@@ -402,7 +420,23 @@ export function DMStream({ streamId, currentUserId, members }: Props) {
         <div ref={bottomRef} />
       </div>
 
-      {/* Composer — wired local-only; no backend persist target yet. */}
+      {error && (
+        <div
+          role="alert"
+          data-testid="dm-error"
+          style={{
+            padding: "6px 12px",
+            margin: "0 10px",
+            fontSize: 12,
+            fontFamily: "var(--wg-font-mono)",
+            color: "var(--wg-accent)",
+            borderTop: "1px solid var(--wg-line)",
+          }}
+        >
+          {error}
+        </div>
+      )}
+      {/* Composer */}
       <div
         style={{
           borderTop: "1px solid var(--wg-line)",
@@ -431,6 +465,7 @@ export function DMStream({ streamId, currentUserId, members }: Props) {
               : tStream("composer.placeholder")
           }
           rows={1}
+          maxLength={MESSAGE_BODY_MAX_LENGTH}
           data-testid="dm-composer"
           style={{
             flex: 1,
@@ -447,6 +482,27 @@ export function DMStream({ streamId, currentUserId, members }: Props) {
             overflowY: "auto",
           }}
         />
+        {draft.length >= MESSAGE_BODY_MAX_LENGTH * 0.9 && (
+          <span
+            data-testid="dm-composer-char-count"
+            style={{
+              alignSelf: "flex-end",
+              marginBottom: 8,
+              fontSize: 11,
+              fontFamily: "var(--wg-font-mono)",
+              color:
+                draft.length >= MESSAGE_BODY_MAX_LENGTH
+                  ? "var(--wg-accent)"
+                  : "var(--wg-ink-faint)",
+              whiteSpace: "nowrap",
+            }}
+          >
+            {tStream("composer.charCount", {
+              count: draft.length,
+              max: MESSAGE_BODY_MAX_LENGTH,
+            })}
+          </span>
+        )}
         <button
           type="button"
           onClick={() => void send()}
