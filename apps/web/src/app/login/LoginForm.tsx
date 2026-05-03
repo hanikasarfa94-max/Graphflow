@@ -61,6 +61,8 @@ export function LoginForm() {
   return (
     <>
       <form
+        method="post"
+        action="/api/auth/login"
         onSubmit={handleSubmit}
         style={{
           width: 360,
@@ -97,6 +99,8 @@ export function LoginForm() {
 
         <Field
           label={t("placeholders.username")}
+          name="username"
+          autoComplete="username"
           value={username}
           onChange={setUsername}
           required
@@ -107,12 +111,16 @@ export function LoginForm() {
         {mode === "register" && (
           <Field
             label={t("placeholders.displayName")}
+            name="displayName"
+            autoComplete="nickname"
             value={displayName}
             onChange={setDisplayName}
           />
         )}
         <Field
           label={t("placeholders.password")}
+          name="password"
+          autoComplete={mode === "login" ? "current-password" : "new-password"}
           type="password"
           value={password}
           onChange={setPassword}
@@ -186,6 +194,8 @@ export function LoginForm() {
 
 function Field({
   label,
+  name,
+  autoComplete,
   value,
   onChange,
   type = "text",
@@ -195,6 +205,8 @@ function Field({
   autoFocus,
 }: {
   label: string;
+  name?: string;
+  autoComplete?: string;
   value: string;
   onChange: (v: string) => void;
   type?: string;
@@ -217,6 +229,8 @@ function Field({
       </div>
       <input
         type={type}
+        name={name}
+        autoComplete={autoComplete}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         required={required}
