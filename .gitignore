@@ -101,3 +101,9 @@ workgraph_home_redesign_html2.html
 # fresh clone has no report yet, run /graphify before relying on it.
 graphify-out/
 .graphify_*
+
+# DeepSeek call cache — per-machine speed-up for the seed-content
+# generators (per feedback_use_deepseek_for_mocks.md). The curated
+# generator output (e.g. _double11_content.json) is committed; the
+# shared cache is not.
+scripts/demo/_deepseek_cache.json
