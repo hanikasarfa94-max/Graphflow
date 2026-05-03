@@ -29,6 +29,7 @@ import type { User } from "@/lib/api";
 import {
   ShellContext,
   type ShellCtx,
+  type ShellProject,
 } from "../AppShellClient";
 import { RoutedInboundDrawer } from "../RoutedInboundDrawer";
 import { Topbar } from "../Topbar";
@@ -107,13 +108,42 @@ export function AppShellVNextClient({
   const [inboxCount, setInboxCount] = useState(initialInboxCount);
   const openInbox = useCallback(() => setDrawerOpen(true), []);
   const closeInbox = useCallback(() => setDrawerOpen(false), []);
+  // Project list synthesized from the two v-next sources that carry
+  // project_id + a display name: `groups` of kind 'project' and
+  // `projectAgents` (per-project edge agents). Topbar uses this to
+  // resolve a project UUID in the URL to a real title in the breadcrumb.
+  const shellProjects = useMemo<ShellProject[]>(() => {
+    const byId = new Map<string, ShellProject>();
+    for (const g of groups) {
+      if (g.kind !== "project" || !g.project_id || !g.display_name) continue;
+      byId.set(g.project_id, {
+        id: g.project_id,
+        title: g.display_name,
+        unread_count: g.unread_count,
+        last_activity_at: g.last_activity_at,
+      });
+    }
+    for (const a of projectAgents) {
+      if (!a.project_id || byId.has(a.project_id)) continue;
+      byId.set(a.project_id, {
+        id: a.project_id,
+        title: a.anchor_name,
+        unread_count: a.unread_count,
+        last_activity_at: a.last_activity_at,
+      });
+    }
+    return Array.from(byId.values());
+  }, [groups, projectAgents]);
+
   const shellCtx = useMemo<ShellCtx>(
-    // v-next models projects as `groups` + `projectAgents`; the legacy
-    // ShellProject[] shape isn't a 1:1 match, so we pass an empty list
-    // for now. Topbar's breadcrumb resolver falls back to "·" when the
-    // lookup misses, which matches today's v-next behavior.
-    () => ({ inboxCount, setInboxCount, openInbox, closeInbox, projects: [] }),
-    [inboxCount, openInbox, closeInbox],
+    () => ({
+      inboxCount,
+      setInboxCount,
+      openInbox,
+      closeInbox,
+      projects: shellProjects,
+    }),
+    [inboxCount, openInbox, closeInbox, shellProjects],
   );
 
   const moduleMode = activeView !== "agentView";
