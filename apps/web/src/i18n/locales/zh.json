@@ -183,7 +183,7 @@
       "surface": {
         "personal": "个人 Agent 工作台",
         "team": "团队会议室",
-        "room": "团队房间",
+        "room": "团队群组",
         "kb": "知识库",
         "status": "状态",
         "detail": "详情",
@@ -358,7 +358,7 @@
       "hint": "选择 Edge 在此会话中可读取的上下文源",
       "kicker": "会话上下文",
       "title": "Agent 在这里可以看哪些?",
-      "subtitle": "决定 Edge 在此会话中应答时会引用哪些来源。默认设置兼顾可信度,同时避免私信权限跨房间泄露。",
+      "subtitle": "决定 Edge 在此会话中应答时会引用哪些来源。默认设置兼顾可信度,同时避免私信权限跨群组泄露。",
       "source": {
         "graph": {
           "label": "项目图谱",
@@ -439,7 +439,7 @@
     },
     "decision": {
       "recorded": "⚡ 已生成决策",
-      "voteScopeRoom": "由 {name} 房间的 {count} 名成员表决。",
+      "voteScopeRoom": "由 {name} 群组的 {count} 名成员表决。",
       "voteScopeProject": "项目级表决。",
       "voteApproveLabel": "赞成",
       "voteDenyLabel": "反对",
@@ -462,7 +462,7 @@
     "rooms": {
       "loading": "正在加载时间线…",
       "emptyTimeline": "还没有消息 — 来发起对话吧。",
-      "untitledRoom": "未命名房间",
+      "untitledRoom": "未命名群组",
       "memberCount": "{count} 名成员",
       "workbenchOpen": "评审",
       "suggestionLabel": "Agent 建议（{kind}）",
@@ -473,19 +473,19 @@
         "countered": "被反提",
         "escalated": "已上报"
       },
-      "emptyList": "还没有房间 — 创建一个吧。",
+      "emptyList": "还没有群组 — 创建一个吧。",
       "newRoom": {
-        "openButton": "新建房间",
-        "title": "创建新房间",
+        "openButton": "新建群组",
+        "title": "创建新群组",
         "subtitle": "子团队、专题或临时讨论",
-        "nameLabel": "房间名",
+        "nameLabel": "群组名",
         "namePlaceholder": "例如：design-sync",
         "membersLabel": "成员（{count}）",
         "youLabel": "你",
         "creatorBadge": "创建者（自动加入）",
         "youAlwaysIncluded": "作为创建者，你会自动加入。",
         "noOtherMembers": "还没有其他项目成员。",
-        "create": "创建房间",
+        "create": "创建群组",
         "creating": "创建中…",
         "cancel": "取消",
         "genericError": "创建失败，请重试。"
@@ -968,7 +968,7 @@
     "project": {
       "myThread": "我的会话",
       "teamRoom": "团队会议室",
-      "rooms": "房间",
+      "rooms": "群组",
       "status": "状态",
       "composition": "组构",
       "kb": "知识库",
