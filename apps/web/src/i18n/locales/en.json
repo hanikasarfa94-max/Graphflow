@@ -148,11 +148,11 @@
       "deliverHint": "summary + handoff"
     },
     "demo": {
-      "bubble1": "Ship Stellar Drift by Apr 28.",
+      "bubble1": "Ship Stellar Drift by Friday.",
       "bubble2": "Legal flagged compliance review.",
       "extraNode": "Compliance",
-      "slaBefore": "Apr 28",
-      "slaAfter": "Apr 30",
+      "slaBefore": "Fri",
+      "slaAfter": "Sun",
       "caption": "Chat changes the graph. The graph changes the plan.",
       "captionZoomed": "Every plan is a node in the org graph.",
       "selfLabel": "Stellar Drift",

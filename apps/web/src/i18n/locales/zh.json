@@ -148,11 +148,11 @@
       "deliverHint": "总结 + 交接"
     },
     "demo": {
-      "bubble1": "星际漂移 4月28日上线。",
+      "bubble1": "星际漂移 周五上线。",
       "bubble2": "法务要加合规审查。",
       "extraNode": "合规",
-      "slaBefore": "4月28日",
-      "slaAfter": "4月30日",
+      "slaBefore": "周五",
+      "slaAfter": "周日",
       "caption": "聊天改图谱,图谱改计划。",
       "captionZoomed": "每个计划,都是更大图里的一个节点。",
       "selfLabel": "星际漂移",
