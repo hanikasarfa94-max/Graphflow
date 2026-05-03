@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import type { Delivery, ProjectState } from "@/lib/api";
@@ -37,6 +38,7 @@ export function DeliveryPane({
   initialHistory: Delivery[];
   initialTasks: Task[];
 }) {
+  const t = useTranslations("qaSweep");
   const [latest, setLatest] = useState<Delivery | null>(initialLatest);
   const [history, setHistory] = useState<Delivery[]>(initialHistory);
   const [tasks] = useState<Task[]>(initialTasks);
@@ -125,7 +127,7 @@ export function DeliveryPane({
         }}
       >
         <div>
-          <h2 style={{ margin: 0, fontSize: 20 }}>Delivery summary</h2>
+          <h2 style={{ margin: 0, fontSize: 20 }}>{t("deliverySummary")}</h2>
           <p
             style={{
               margin: "4px 0 0",

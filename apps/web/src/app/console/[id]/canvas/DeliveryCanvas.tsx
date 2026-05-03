@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useState } from "react";
 
 import type { Delivery, ProjectState } from "@/lib/api";
@@ -19,6 +20,7 @@ export function DeliveryCanvas({
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const t = useTranslations("qaSweep.consoleLegacy");
 
   const latest = state.delivery;
 
@@ -93,7 +95,7 @@ export function DeliveryCanvas({
             cursor: busy ? "wait" : "pointer",
           }}
         >
-          {busy ? "Generating…" : latest ? "Regenerate" : "Generate"}
+          {busy ? t("generating") : latest ? t("regenerate") : t("generate")}
         </button>
       </header>
 
@@ -202,7 +204,7 @@ function DeliveryDoc({ delivery }: { delivery: Delivery }) {
             color: "var(--wg-ink)",
           }}
         >
-          <strong>Checkpoint:</strong> {qa.uncovered.length} scope item
+          <strong>{t("checkpoint")}</strong> {qa.uncovered.length} scope item
           {qa.uncovered.length === 1 ? "" : "s"} uncovered
           {qa.uncovered.length > 0 ? ` — ${qa.uncovered.join(", ")}` : ""}
         </div>

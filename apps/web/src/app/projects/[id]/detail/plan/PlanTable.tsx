@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import type { ProjectState } from "@/lib/api";
@@ -25,6 +26,7 @@ type Comment = {
 };
 
 export function PlanTable({ state }: { state: ProjectState }) {
+  const t = useTranslations("qaSweep.planTable");
   const members = state.members;
   const deliverableTitle = useMemo(
     () => new Map(state.graph.deliverables.map((d) => [d.id, d.title])),
@@ -136,11 +138,11 @@ export function PlanTable({ state }: { state: ProjectState }) {
                 borderBottom: "1px solid var(--wg-line)",
               }}
             >
-              <Th>Task</Th>
-              <Th>Deliverable</Th>
-              <Th>Assignee</Th>
-              <Th style={{ textAlign: "right" }}>Est (h)</Th>
-              <Th>Status</Th>
+              <Th>{t("task")}</Th>
+              <Th>{t("deliverable")}</Th>
+              <Th>{t("assignee")}</Th>
+              <Th style={{ textAlign: "right" }}>{t("estHours")}</Th>
+              <Th>{t("status")}</Th>
               <Th style={{ width: 80 }}></Th>
             </tr>
           </thead>

@@ -64,6 +64,7 @@ export function Rail({
   // the entire v1 set so a toggle is enough.
   const currentLocale = useLocale() as Locale;
   const tLang = useTranslations("language");
+  const tShell = useTranslations("shell");
   const langRouter = useRouter();
   const [langPending, langStartTransition] = useTransition();
   const otherLocale: Locale = currentLocale === "en" ? "zh" : "en";
@@ -152,11 +153,11 @@ export function Rail({
                 type="submit"
                 className={styles.signoutBtn}
                 title="Sign out"
-                aria-label="Sign out"
+                aria-label={tShell("signOut")}
                 data-testid="vnext-rail-signout"
               >
                 <span aria-hidden>⎋</span>
-                <span className={styles.tip}>Sign out</span>
+                <span className={styles.tip}>{tShell("signOut")}</span>
               </button>
             </form>
           </>

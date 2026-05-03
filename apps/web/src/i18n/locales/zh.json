@@ -1828,10 +1828,10 @@
       "noProject": "无项目上下文 —— 与通用 Agent 对话中。",
       "cellTip": "切换以将上下文扩展到此项目的 Cell 作用域。默认关闭（Q-B）。",
       "tier": {
-        "personal": "Personal",
-        "cell": "Cell",
-        "department": "Department",
-        "enterprise": "Enterprise"
+        "personal": "个人",
+        "cell": "小组",
+        "department": "部门",
+        "enterprise": "全公司"
       },
       "overflow": {
         "title": "更多项目页面",
@@ -1952,6 +1952,25 @@
         "noProjectCard": "暂无可视化的项目",
         "noProjectBody": "从左侧选择一个项目 Agent 或群组，或新建项目以查看图谱。"
       }
+    }
+  },
+  "qaSweep": {
+    "settingsTitle": "设置",
+    "deliverySummary": "交付概览",
+    "planTable": {
+      "task": "任务",
+      "deliverable": "交付物",
+      "assignee": "负责人",
+      "estHours": "预估（小时）",
+      "status": "状态"
+    },
+    "consoleLegacy": {
+      "intake": "立项",
+      "clarifications": "澄清",
+      "checkpoint": "检查点：",
+      "generate": "生成",
+      "regenerate": "重新生成",
+      "generating": "生成中…"
     }
   }
 }

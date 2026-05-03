@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useState } from "react";
 
 import type { ProjectState } from "@/lib/api";
@@ -11,6 +12,7 @@ export function MessagesCanvas({
   projectId: string;
   state: ProjectState;
 }) {
+  const t = useTranslations("qaSweep.consoleLegacy");
   const [answering, setAnswering] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [planning, setPlanning] = useState(false);
@@ -51,10 +53,10 @@ export function MessagesCanvas({
       data-testid="canvas-messages"
       style={{ maxWidth: 760, margin: "0 auto", padding: "28px 32px" }}
     >
-      <SectionHeading>Intake</SectionHeading>
+      <SectionHeading>{t("intake")}</SectionHeading>
       <RequirementSummary state={state} />
 
-      <SectionHeading>Clarifications</SectionHeading>
+      <SectionHeading>{t("clarifications")}</SectionHeading>
 
       {answered.map((c) => (
         <Message

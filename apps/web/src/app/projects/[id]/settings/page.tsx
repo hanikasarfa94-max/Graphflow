@@ -37,6 +37,7 @@ export default function ProjectSettingsPage({
 }) {
   const { id } = use(params);
   const tMembrane = useTranslations("membrane");
+  const tSweep = useTranslations("qaSweep");
   const [subs, setSubs] = useState<Subscription[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -131,7 +132,7 @@ export default function ProjectSettingsPage({
 
   return (
     <main style={{ padding: 32, maxWidth: 800 }}>
-      <h1 style={{ marginBottom: 24 }}>Settings</h1>
+      <h1 style={{ marginBottom: 24 }}>{tSweep("settingsTitle")}</h1>
 
       <InviteMemberSection projectId={id} />
 

@@ -1953,5 +1953,24 @@
         "noProjectBody": "Pick a project agent or room from the left, or create a new project, to see its graph."
       }
     }
+  },
+  "qaSweep": {
+    "settingsTitle": "Settings",
+    "deliverySummary": "Delivery summary",
+    "planTable": {
+      "task": "Task",
+      "deliverable": "Deliverable",
+      "assignee": "Assignee",
+      "estHours": "Est (h)",
+      "status": "Status"
+    },
+    "consoleLegacy": {
+      "intake": "Intake",
+      "clarifications": "Clarifications",
+      "checkpoint": "Checkpoint:",
+      "generate": "Generate",
+      "regenerate": "Regenerate",
+      "generating": "Generating…"
+    }
   }
 }
