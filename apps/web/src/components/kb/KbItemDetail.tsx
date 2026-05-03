@@ -83,22 +83,58 @@ export async function KbItemDetail({
           >
             {item.source_kind || "kb"}
           </h2>
-          <pre
-            style={{
-              margin: 0,
-              whiteSpace: "pre-wrap",
-              wordBreak: "break-word",
-              fontFamily:
-                "var(--wg-font-serif, Georgia, serif)",
-              fontSize: 15,
-              lineHeight: 1.55,
-              color: "var(--wg-ink)",
-              // Reset the default <pre> dark monospace look.
-              background: "transparent",
-            }}
-          >
-            {item.raw_content || item.summary || ""}
-          </pre>
+          {/* Title row — surfaces the most useful identifier even when
+              raw_content is empty (drafts created via save-as-kb start
+              that way until the source-message body is materialized).
+              Falls through summary → source_identifier → "(untitled)"
+              so the detail page never renders as a blank slate. */}
+          {(item.summary || item.source_identifier) && (
+            <h3
+              style={{
+                margin: "0 0 12px 0",
+                fontSize: 22,
+                fontWeight: 600,
+                lineHeight: 1.3,
+                color: "var(--wg-ink)",
+                fontFamily: "var(--wg-font-serif, Georgia, serif)",
+              }}
+            >
+              {item.summary || item.source_identifier}
+            </h3>
+          )}
+          {item.raw_content ? (
+            <pre
+              style={{
+                margin: 0,
+                whiteSpace: "pre-wrap",
+                wordBreak: "break-word",
+                fontFamily:
+                  "var(--wg-font-serif, Georgia, serif)",
+                fontSize: 15,
+                lineHeight: 1.55,
+                color: "var(--wg-ink)",
+                // Reset the default <pre> dark monospace look.
+                background: "transparent",
+              }}
+            >
+              {item.raw_content}
+            </pre>
+          ) : (
+            <div
+              data-testid="kb-item-empty-body"
+              style={{
+                fontSize: 13,
+                color: "var(--wg-ink-soft)",
+                padding: "20px 12px",
+                border: "1px dashed var(--wg-line)",
+                borderRadius: "var(--wg-radius)",
+                textAlign: "center",
+                fontStyle: "italic",
+              }}
+            >
+              {t("kb.item.emptyBody")}
+            </div>
+          )}
         </section>
 
         <aside

@@ -202,6 +202,7 @@
         "team": "团队",
         "status": "状态",
         "kb": "知识库",
+        "tasks": "任务",
         "audit": "审计",
         "skills": "技能",
         "meetings": "会议",
@@ -770,7 +771,8 @@
       "source": "来源",
       "ingestedBy": "录入者",
       "classification": "分类",
-      "status": "状态"
+      "status": "状态",
+      "emptyBody": "此条目暂无正文。Save-to-wiki 创建的草稿需要 Owner 通过膜审核后才会回填内容。"
     },
     "folder": {
       "treeTitle": "文件夹",

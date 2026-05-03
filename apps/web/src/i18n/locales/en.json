@@ -202,6 +202,7 @@
         "team": "Team room",
         "status": "Status",
         "kb": "KB",
+        "tasks": "Tasks",
         "audit": "Audit",
         "skills": "Skills",
         "meetings": "Meetings",
@@ -770,7 +771,8 @@
       "source": "Source",
       "ingestedBy": "Ingested by",
       "classification": "Classification",
-      "status": "Status"
+      "status": "Status",
+      "emptyBody": "This item has no content yet. Drafts created via Save-to-wiki materialize once an owner promotes them through Membrane review."
     },
     "folder": {
       "treeTitle": "Folders",
