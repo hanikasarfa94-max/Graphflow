@@ -153,6 +153,7 @@ function EmptyDelivery() {
 }
 
 function DeliveryDoc({ delivery }: { delivery: Delivery }) {
+  const t = useTranslations("qaSweep.consoleLegacy");
   const c = delivery.content;
   const qa = delivery.qa_report;
   const showWarning =
