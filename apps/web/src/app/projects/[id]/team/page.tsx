@@ -75,7 +75,10 @@ export default async function ProjectTeamPage({
     <>
       <StreamCompactToolbar
         title={tShell("personal.tabs.teamRoom")}
-        meta={state?.project?.title}
+        // Project title is already in the Topbar breadcrumb +
+        // ProjectBar above; the third copy in the toolbar was visual
+        // noise before the team stream.
+        meta={null}
         actions={
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             {/* Scope-tier pills moved to ProjectBar — single rail per
