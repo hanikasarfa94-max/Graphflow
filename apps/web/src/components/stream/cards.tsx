@@ -281,6 +281,7 @@ export function HumanTurnCard({
   mine,
   author,
   crystallized,
+  decisionId,
   counterNote,
   projectId,
 }: {
@@ -288,6 +289,12 @@ export function HumanTurnCard({
   mine: boolean;
   author: StreamMember | undefined;
   crystallized: boolean;
+  // Optional decision id linked from the message's suggestion. When
+  // provided alongside `crystallized`, the recorded chip becomes a
+  // Link to the decision-detail node page so a reader can jump to
+  // scope_stream_id / quorum / lineage in one click. Without it, the
+  // chip is a plain status label.
+  decisionId?: string | null;
   counterNote: boolean;
   // Optional — when provided, shows a "Save to wiki" action that
   // promotes the message into a group-scope KbItemRow draft.
@@ -374,26 +381,46 @@ export function HumanTurnCard({
             failedLabel={t("actions.saveToWikiFailed")}
           />
         ) : null}
-        {crystallized && (
-          <span
-            data-testid="decision-recorded"
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 4,
-              padding: "2px 8px",
-              fontSize: 12,
-              fontFamily: "var(--wg-font-mono)",
-              color: "var(--wg-accent)",
-              background: "var(--wg-accent-soft)",
-              border: "1px solid var(--wg-accent-ring)",
-              borderRadius: "var(--wg-radius-sm)",
-              fontWeight: 600,
-            }}
-          >
-            <span aria-hidden>⚡</span> {t("decision.recorded")}
-          </span>
-        )}
+        {crystallized && (() => {
+          const chipStyle = {
+            display: "inline-flex" as const,
+            alignItems: "center" as const,
+            gap: 4,
+            padding: "2px 8px",
+            fontSize: 12,
+            fontFamily: "var(--wg-font-mono)",
+            color: "var(--wg-accent)",
+            background: "var(--wg-accent-soft)",
+            border: "1px solid var(--wg-accent-ring)",
+            borderRadius: "var(--wg-radius-sm)",
+            fontWeight: 600,
+            textDecoration: "none" as const,
+          };
+          const inner = (
+            <>
+              <span aria-hidden>⚡</span> {t("decision.recorded")}
+            </>
+          );
+          // When we know the decision id and project id, the chip
+          // navigates to /nodes/{decisionId} so the reader can see
+          // the scope_stream_id, quorum, and lineage that turned the
+          // message into a decision. Otherwise it stays a plain
+          // status label (e.g. when decision id wasn't passed in).
+          return projectId && decisionId ? (
+            <Link
+              data-testid="decision-recorded"
+              href={`/projects/${projectId}/nodes/${decisionId}`}
+              title={t("decision.recordedTooltip")}
+              style={chipStyle}
+            >
+              {inner}
+            </Link>
+          ) : (
+            <span data-testid="decision-recorded" style={chipStyle}>
+              {inner}
+            </span>
+          );
+        })()}
       </div>
     </div>
   );

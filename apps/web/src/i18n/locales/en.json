@@ -433,6 +433,7 @@
     },
     "decision": {
       "recorded": "⚡ Decision recorded",
+      "recordedTooltip": "Open decision: scope, quorum, lineage",
       "voteScopeRoom": "Voting with {name}'s {count} members.",
       "voteScopeProject": "Project-wide vote.",
       "voteApproveLabel": "Approve",

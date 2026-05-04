@@ -557,6 +557,7 @@ export function StreamView({ projectId, currentUserId, members, streamId, stream
                 mine={mine}
                 author={author}
                 crystallized={crystallized}
+                decisionId={sug?.decision_id ?? null}
                 counterNote={counterNote}
                 projectId={projectId}
               />

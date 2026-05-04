@@ -433,6 +433,7 @@
     },
     "decision": {
       "recorded": "⚡ 已生成决策",
+      "recordedTooltip": "查看决策详情:范围、quorum、来龙去脉",
       "voteScopeRoom": "由 {name} 群组的 {count} 名成员表决。",
       "voteScopeProject": "项目级表决。",
       "voteApproveLabel": "赞成",
