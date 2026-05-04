@@ -431,37 +431,23 @@ export function StreamView({ projectId, currentUserId, members, streamId, stream
     <div
       style={{
         display: "grid",
-        gridTemplateRows: hasMemberStrip
-          ? "auto auto 1fr auto"
-          : "auto 1fr auto",
-        height: "calc(100vh - 100px)",
-        minHeight: 520,
+        gridTemplateRows: hasMemberStrip ? "auto 1fr auto" : "1fr auto",
+        height: "calc(100vh - 160px)",
+        minHeight: 480,
         background: "#fff",
         border: "1px solid var(--wg-line)",
         borderRadius: "var(--wg-radius)",
       }}
     >
-      {/* Header strip — connection state + message count */}
-      <div
-        style={{
-          padding: "10px 14px",
-          borderBottom: "1px solid var(--wg-line)",
-          background: "var(--wg-surface)",
-          fontFamily: "var(--wg-font-mono)",
-          fontSize: 12,
-          color: "var(--wg-ink-soft)",
-          display: "flex",
-          justifyContent: "space-between",
-        }}
-      >
-        <span>
-          <StatusDot state={wsState} />{" "}
-          <span data-testid="ws-status">{wsState}</span>
-        </span>
-        <span>
-          {messages.length} {t("messageCount")}
-        </span>
-      </div>
+      {/* Connection-state + message-count strip lived here. Removed:
+          ws-status was debug noise, message count is implicit (you can
+          see how full the timeline is). The composer was getting
+          pushed below the fold to make room for chrome no user reads.
+          The wsState dot still feeds e2e tests via data-testid below
+          (rendered inside the timeline shell). */}
+      <span data-testid="ws-status" style={{ display: "none" }}>
+        {wsState}
+      </span>
 
       {/* Members strip — compact Phase H affordance. Each non-self member
           exposes a "Message" button that opens (or reuses) the 1:1 DM
@@ -695,27 +681,6 @@ export function StreamView({ projectId, currentUserId, members, streamId, stream
   );
 }
 
-function StatusDot({ state }: { state: "connecting" | "open" | "closed" }) {
-  const color =
-    state === "open"
-      ? "var(--wg-ok)"
-      : state === "connecting"
-        ? "var(--wg-amber)"
-        : "var(--wg-accent)";
-  return (
-    <span
-      style={{
-        display: "inline-block",
-        width: 8,
-        height: 8,
-        borderRadius: "50%",
-        background: color,
-        marginRight: 6,
-        verticalAlign: "middle",
-      }}
-    />
-  );
-}
 
 function apiErrText(e: unknown, fallback: string): string {
   if (e instanceof ApiError) {

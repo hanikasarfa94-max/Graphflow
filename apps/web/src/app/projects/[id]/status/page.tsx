@@ -75,7 +75,13 @@ export default async function ProjectStatusPage({
   const refreshedAt = formatIso();
 
   return (
-    <main>
+    <main
+      style={{
+        padding: "20px clamp(16px, 4vw, 32px) 48px",
+        maxWidth: 1280,
+        margin: "0 auto",
+      }}
+    >
       <PageHeader
         title={t("status.title")}
         subtitle={t("status.subtitle")}

@@ -68,7 +68,13 @@ export default async function KbPage({
   }
 
   return (
-    <main>
+    <main
+      style={{
+        padding: "20px clamp(16px, 4vw, 32px) 48px",
+        maxWidth: 1280,
+        margin: "0 auto",
+      }}
+    >
       {/* F.16 prod-density: kicker dropped — was a literal duplicate of
           title (both rendered "Knowledge base" / "知识库"). The sidebar
           nav already labels this page; one heading is enough. */}

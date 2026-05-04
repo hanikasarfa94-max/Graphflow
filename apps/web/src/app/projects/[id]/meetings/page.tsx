@@ -59,7 +59,16 @@ export default async function MeetingsPage({
   }
 
   return (
-    <main style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+    <main
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        gap: 20,
+        padding: "20px clamp(16px, 4vw, 32px) 48px",
+        maxWidth: 1280,
+        margin: "0 auto",
+      }}
+    >
       <header
         style={{
           display: "flex",

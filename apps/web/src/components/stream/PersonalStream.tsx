@@ -872,8 +872,8 @@ export function PersonalStream({
       style={{
         display: "grid",
         gridTemplateRows: "1fr auto",
-        height: "calc(100vh - 100px)",
-        minHeight: 520,
+        height: "calc(100vh - 160px)",
+        minHeight: 480,
         background: "var(--wg-surface-raised)",
         border: "1px solid var(--wg-line)",
         borderRadius: "var(--wg-radius)",
@@ -881,7 +881,10 @@ export function PersonalStream({
     >
       {/* Phase Q — removed inline stream header. Sidebar + project strip
           already identify the context; count is visible as scrollbar +
-          empty-state. Reclaims ~45px of vertical chrome. */}
+          empty-state. Reclaims ~45px of vertical chrome. The 160px
+          subtract budgets for: Topbar (44) + ProjectModuleRail (~40) +
+          StreamCompactToolbar margin+padding (~60) + small breathing
+          room — keeps the composer above the fold. */}
 
       {/* Timeline */}
       <div

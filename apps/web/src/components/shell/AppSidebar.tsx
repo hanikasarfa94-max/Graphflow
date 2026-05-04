@@ -286,6 +286,18 @@ function ProjectNode({
               <span aria-hidden>♟</span> {t("shell.project.teamRoom")}
             </Link>
           </li>
+          {/* 群组 (sub-rooms) sits directly under the team room because
+              that's its semantic parent — sub-group chats branching off
+              the main team conversation. Putting it at the bottom of
+              the project list (its old home) made it feel like a
+              peer of /status / /kb / /audit, which it isn't. */}
+          <ProjectRoomsSection
+            projectId={project.id}
+            currentUserId={currentUserId}
+            pathname={pathname}
+            subItem={subItem}
+            subItemActive={subItemActive}
+          />
           <li>
             <Link
               href={status}
@@ -352,13 +364,6 @@ function ProjectNode({
               <span aria-hidden>⌕</span> {t("shell.project.audit")}
             </Link>
           </li>
-          <ProjectRoomsSection
-            projectId={project.id}
-            currentUserId={currentUserId}
-            pathname={pathname}
-            subItem={subItem}
-            subItemActive={subItemActive}
-          />
         </ul>
       )}
     </li>
