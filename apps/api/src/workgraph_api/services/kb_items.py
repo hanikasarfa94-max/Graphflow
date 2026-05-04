@@ -235,30 +235,59 @@ class KbItemService:
             item_payload = _serialize(row)
             kb_item_id = row.id
 
-            # Stage 4: when membrane staged this as a draft via
-            # request_review, create an IMSuggestion in the team-room
-            # inbox so an owner can one-click approve.
+            # Stage 4: any group-scope KB entry that lands in 'draft'
+            # status needs a membrane-review surface so an owner can
+            # one-click approve. Two paths produce drafts:
             #
-            # Stage 5 (request_clarification) takes a different path —
+            #   (a) Membrane request_review (duplicate-title etc.) —
+            #       review is non-None, review.action == "request_review".
+            #   (b) An LLM caller (Edge agent's `propose_wiki_entry`)
+            #       passes status='draft' explicitly. Membrane returns
+            #       auto_merge (no conflicts), but the row is still a
+            #       draft and still needs human approval — the LLM has
+            #       no authority to publish.
+            #
+            # Before this widening, only (a) got an IMSuggestion, which
+            # left (b) drafts orphaned: visible in the KB tree with a
+            # "needs review" chip, but with no inbox entry to act on.
+            # That violated the architectural invariant that every
+            # group-scope candidate flows through a single membrane
+            # boundary (CLAUDE.md / "Membrane is one boundary").
+            #
+            # Stage 5 (request_clarification) is mutually exclusive —
             # the question goes back to the PROPOSER's personal stream,
-            # not the team room. The team owner doesn't decide; the
-            # proposer answers and re-submits. Handled below the inbox
-            # block via membrane_service.notify_clarification.
-            if (
-                review is not None
-                and review.action == "request_review"
+            # not the team room. Skip this block on that path; the
+            # clarify-notify call below handles it.
+            needs_team_review = (
+                status == "draft"
                 and scope == "group"
-            ):
+                and not (
+                    review is not None
+                    and review.action == "request_clarification"
+                )
+            )
+            if needs_team_review:
                 team_stream = await StreamRepository(session).get_for_project(
                     project_id
                 )
                 if team_stream is not None:
-                    body = (
-                        f"📥 Membrane staged a group KB entry for review: "
-                        f"'{title}'. Reason: {review.reason}."
+                    review_reason = review.reason if review is not None else "llm_proposed_draft"
+                    review_diff = review.diff_summary if review is not None else None
+                    review_conflicts = (
+                        list(review.conflict_with) if review is not None else []
                     )
-                    if review.diff_summary:
-                        body = f"{body}\n{review.diff_summary}"
+                    if review is not None and review.action == "request_review":
+                        body = (
+                            f"📥 Membrane staged a group KB entry for review: "
+                            f"'{title}'. Reason: {review_reason}."
+                        )
+                    else:
+                        body = (
+                            f"📥 Edge agent proposed a group KB entry for review: "
+                            f"'{title}'. Owner can approve or dismiss."
+                        )
+                    if review_diff:
+                        body = f"{body}\n{review_diff}"
                     msg = await MessageRepository(session).append(
                         project_id=project_id,
                         author_id=EDGE_AGENT_SYSTEM_USER_ID,
@@ -272,21 +301,21 @@ class KbItemService:
                         message_id=msg.id,
                         kind="membrane_review",
                         confidence=1.0,
-                        targets=list(review.conflict_with),
+                        targets=review_conflicts,
                         proposal={
                             "action": "approve_membrane_candidate",
                             "summary": (
-                                review.diff_summary
+                                review_diff
                                 or f"Approve '{title}' for the group wiki"
                             ),
                             "detail": {
                                 "candidate_kind": "kb_item_group",
                                 "kb_item_id": kb_item_id,
-                                "diff_summary": review.diff_summary,
-                                "conflict_with": list(review.conflict_with),
+                                "diff_summary": review_diff,
+                                "conflict_with": review_conflicts,
                             },
                         },
-                        reasoning=review.reason or "membrane request_review",
+                        reasoning=review_reason,
                         prompt_version=None,
                         outcome="ok",
                         attempts=1,
@@ -465,6 +494,55 @@ class KbItemService:
                 updated = await KbItemRepository(session).update(
                     item_id=item_id, status="draft"
                 )
+                # Symmetric with the direct-group-write path: any
+                # group-scope draft needs a membrane review surface.
+                # Promote-to-group with request_review needs the
+                # same inbox plumbing as a fresh draft creation.
+                # request_clarification still routes to the proposer's
+                # personal stream, not the team room.
+                if review is not None and review.action == "request_review":
+                    team_stream = await StreamRepository(session).get_for_project(
+                        project_id
+                    )
+                    if team_stream is not None:
+                        body = (
+                            f"📥 Membrane staged a personal→group promote for review: "
+                            f"'{title}'. Reason: {review.reason}."
+                        )
+                        if review.diff_summary:
+                            body = f"{body}\n{review.diff_summary}"
+                        msg = await MessageRepository(session).append(
+                            project_id=project_id,
+                            author_id=EDGE_AGENT_SYSTEM_USER_ID,
+                            body=body,
+                            stream_id=team_stream.id,
+                            kind="membrane-review",
+                            linked_id=item_id,
+                        )
+                        await IMSuggestionRepository(session).append(
+                            project_id=project_id,
+                            message_id=msg.id,
+                            kind="membrane_review",
+                            confidence=1.0,
+                            targets=list(review.conflict_with),
+                            proposal={
+                                "action": "approve_membrane_candidate",
+                                "summary": (
+                                    review.diff_summary
+                                    or f"Approve '{title}' for the group wiki"
+                                ),
+                                "detail": {
+                                    "candidate_kind": "kb_item_group",
+                                    "kb_item_id": item_id,
+                                    "diff_summary": review.diff_summary,
+                                    "conflict_with": list(review.conflict_with),
+                                },
+                            },
+                            reasoning=review.reason or "membrane request_review",
+                            prompt_version=None,
+                            outcome="ok",
+                            attempts=1,
+                        )
             return _serialize(updated)
 
     async def upload(
