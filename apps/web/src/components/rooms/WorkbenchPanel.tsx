@@ -12,6 +12,7 @@
 // derive-from-state without coupling to the workbench shell.
 
 import type { CSSProperties } from "react";
+import { useTranslations } from "next-intl";
 
 export type PanelKind =
   | "requests"
@@ -77,6 +78,7 @@ export function WorkbenchPanel({
   onDrop,
   children,
 }: Props) {
+  const tAria = useTranslations("aria.workbenchPanel");
   if (hidden) return null;
   return (
     <section
@@ -111,7 +113,7 @@ export function WorkbenchPanel({
           <button
             className="panelBtn"
             onClick={onFocus}
-            aria-label="Focus panel"
+            aria-label={tAria("focus")}
             style={actionBtnStyle}
           >
             ⌖
@@ -119,7 +121,7 @@ export function WorkbenchPanel({
           <button
             className="panelBtn"
             onClick={onClose}
-            aria-label="Close panel"
+            aria-label={tAria("close")}
             style={actionBtnStyle}
           >
             ×

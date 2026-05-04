@@ -93,6 +93,7 @@ export function RouteProposalCard({
   onConfirmed,
 }: Props) {
   const t = useTranslations("personal");
+  const tErr = useTranslations("errors");
 
   // Prefer pre-parsed backend metadata; fall back to embedded marker if
   // the payload wasn't shaped (e.g. older API build).
@@ -299,13 +300,14 @@ export function RouteProposalCard({
     } catch (e) {
       setPendingTargetId(null);
       if (e instanceof ApiError) {
+        const fallback = tErr("genericStatus", { status: e.status });
         const detail =
           typeof e.body === "object" && e.body && "detail" in e.body
             ? String((e.body as { detail?: unknown }).detail ?? "")
-            : `error ${e.status}`;
-        setError(detail || `error ${e.status}`);
+            : fallback;
+        setError(detail || fallback);
       } else {
-        setError("ask failed");
+        setError(tErr("askFailed"));
       }
     }
   }
@@ -933,6 +935,7 @@ function GatedProposalCard({
   onConfirmed?: (signalId: string) => void;
 }) {
   const t = useTranslations("personal");
+  const tErr = useTranslations("errors");
   const [pending, setPending] = useState(false);
   const [dismissed, setDismissed] = useState(false);
   const [sentProposalId, setSentProposalId] = useState<string | null>(null);
@@ -1021,10 +1024,10 @@ function GatedProposalCard({
         const msg =
           (body && typeof body.message === "string" && body.message) ||
           (body && typeof body.detail === "string" && body.detail) ||
-          `error ${e.status}`;
+          tErr("genericStatus", { status: e.status });
         setError(String(msg));
       } else {
-        setError("open-to-vote failed");
+        setError(tErr("voteFailed"));
       }
     } finally {
       setPending(false);

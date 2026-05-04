@@ -1041,9 +1041,15 @@ function ItemRow({
         </Link>
         {item.status === "draft" || item.status === "pending-review" ? (
           // Membrane staging signal — the row is in the cell's
-          // membrane, not the cell proper. Lets readers see "this
-          // is queued for owner review" without opening the detail.
-          <DraftChip status={item.status} t={t} />
+          // membrane, not the cell proper. The chip links to the IM
+          // membrane review pane (single canonical place to act on
+          // candidates per the architectural invariant). Without the
+          // link users saw "needs review" with no path to do it.
+          <DraftChip
+            status={item.status}
+            projectId={projectId}
+            t={t}
+          />
         ) : null}
         {canPromote ? (
           <button
@@ -1090,19 +1096,29 @@ function ItemRow({
 
 function DraftChip({
   status,
+  projectId,
   t,
 }: {
   status: string;
+  projectId: string;
   t: ReturnType<typeof useTranslations>;
 }) {
   // pending-review (signals) and draft (group KB writes deferred by
   // membrane) both surface as the same "not yet canonical" chip —
   // user-facing intent is identical. Different colors keep the
   // ingest path distinguishable from the user-write path.
+  //
+  // The chip is a Link, not a span: clicking takes the reader to
+  // /detail/im, the membrane review pane (Accept/Dismiss/Counter/
+  // Escalate). That's the architectural invariant — all candidate
+  // decisions go through MembraneService.review(), surfaced via the
+  // IM pane. Inline approve buttons here would duplicate the path.
   const isPending = status === "pending-review";
   return (
-    <span
+    <Link
       data-testid="kb-draft-chip"
+      href={`/projects/${projectId}/detail/im`}
+      title={t("kb.statusChip.tooltip")}
       style={{
         marginLeft: 8,
         fontSize: 9,
@@ -1114,12 +1130,13 @@ function DraftChip({
         letterSpacing: "0.04em",
         textTransform: "uppercase",
         verticalAlign: "middle",
+        textDecoration: "none",
       }}
     >
       {isPending
         ? t("kb.statusChip.pendingReview")
         : t("kb.statusChip.draft")}
-    </span>
+    </Link>
   );
 }
 

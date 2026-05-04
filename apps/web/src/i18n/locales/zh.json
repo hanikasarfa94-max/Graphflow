@@ -35,7 +35,7 @@
     "openInTeamRoom": "去团队会议室回应"
   },
   "brand": {
-    "name": "WorkGraph",
+    "name": "GraphFlow",
     "tagline": "协作是一张图,而不是一份文档。",
     "shortTagline": "AI 原生团队记忆"
   },
@@ -111,7 +111,20 @@
     "network": "网络错误 — 请确认后端服务已启动",
     "unknown": "出了点问题",
     "demoFailed": "示例启动失败",
-    "demoNoProject": "示例已启动,但未返回项目 ID"
+    "demoNoProject": "示例已启动,但未返回项目 ID",
+    "loadFailed": "加载失败",
+    "sendFailed": "发送失败",
+    "askFailed": "请求失败",
+    "voteFailed": "发起投票失败",
+    "counterFailed": "反提案失败",
+    "escalateFailed": "升级失败",
+    "recheckFailed": "重新检查失败",
+    "decisionFailed": "决议失败",
+    "dismissFailed": "驳回失败",
+    "generateFailed": "生成失败",
+    "rateLimited": "稍等一下 — 请求过于频繁",
+    "noSummary": "(无摘要)",
+    "genericStatus": "错误 {status}"
   },
   "landing": {
     "title1": "协作是一张图,",
@@ -753,7 +766,8 @@
       "ingestedBy": "录入者",
       "classification": "分类",
       "status": "状态",
-      "emptyBody": "此条目暂无正文。Save-to-wiki 创建的草稿需要 Owner 通过膜审核后才会回填内容。"
+      "emptyBody": "此条目暂无正文。Save-to-wiki 创建的草稿需要 Owner 通过膜审核后才会回填内容。",
+      "reviewLink": "去 IM 审批面板处理 →"
     },
     "folder": {
       "treeTitle": "文件夹",
@@ -796,8 +810,9 @@
       }
     },
     "statusChip": {
-      "draft": "草稿",
-      "pendingReview": "待审"
+      "draft": "草稿 · 去审批 →",
+      "pendingReview": "待审 · 去审批 →",
+      "tooltip": "在 IM 审批面板中接受、否决或反提案"
     }
   },
   "personal": {
@@ -1773,6 +1788,12 @@
       "generate": "生成",
       "regenerate": "重新生成",
       "generating": "生成中…"
+    }
+  },
+  "aria": {
+    "workbenchPanel": {
+      "focus": "聚焦此面板",
+      "close": "关闭面板"
     }
   }
 }

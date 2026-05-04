@@ -207,6 +207,7 @@ export function KbList({
 }
 
 function KbListRow({ item }: { item: KbItem }) {
+  const t = useTranslations();
   return (
     <>
       <div
@@ -252,7 +253,7 @@ function KbListRow({ item }: { item: KbItem }) {
           overflow: "hidden",
         }}
       >
-        {item.summary || "(no summary)"}
+        {item.summary || t("errors.noSummary")}
       </div>
       {item.tags && item.tags.length > 0 ? (
         <div

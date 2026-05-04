@@ -53,7 +53,7 @@ export function AuditTabBar({ projectId }: { projectId: string }) {
         subtitle={t("shell.project.audit_subtitle")}
       />
     <nav
-      aria-label="Audit view"
+      aria-label={t("shell.project.audit")}
       data-testid="audit-tab-bar"
       style={{
         display: "flex",

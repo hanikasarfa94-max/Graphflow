@@ -35,7 +35,7 @@
     "openInTeamRoom": "Answer in team room"
   },
   "brand": {
-    "name": "WorkGraph",
+    "name": "GraphFlow",
     "tagline": "Coordination as a graph, not a document.",
     "shortTagline": "AI-native team memory"
   },
@@ -111,7 +111,20 @@
     "network": "Network error — check the API is running",
     "unknown": "Something went wrong",
     "demoFailed": "Demo start failed",
-    "demoNoProject": "Demo started but no project id returned"
+    "demoNoProject": "Demo started but no project id returned",
+    "loadFailed": "Load failed",
+    "sendFailed": "Send failed",
+    "askFailed": "Request failed",
+    "voteFailed": "Open-to-vote failed",
+    "counterFailed": "Counter failed",
+    "escalateFailed": "Escalate failed",
+    "recheckFailed": "Recheck failed",
+    "decisionFailed": "Decision failed",
+    "dismissFailed": "Dismiss failed",
+    "generateFailed": "Generate failed",
+    "rateLimited": "Slow down — rate limited",
+    "noSummary": "(no summary)",
+    "genericStatus": "Error {status}"
   },
   "landing": {
     "title1": "Coordination as a graph,",
@@ -753,7 +766,8 @@
       "ingestedBy": "Ingested by",
       "classification": "Classification",
       "status": "Status",
-      "emptyBody": "This item has no content yet. Drafts created via Save-to-wiki materialize once an owner promotes them through Membrane review."
+      "emptyBody": "This item has no content yet. Drafts created via Save-to-wiki materialize once an owner promotes them through Membrane review.",
+      "reviewLink": "Open membrane review →"
     },
     "folder": {
       "treeTitle": "Folders",
@@ -796,8 +810,9 @@
       }
     },
     "statusChip": {
-      "draft": "Draft",
-      "pendingReview": "Pending"
+      "draft": "Draft · Review →",
+      "pendingReview": "Pending · Review →",
+      "tooltip": "Accept, dismiss, or counter in the membrane review pane"
     }
   },
   "personal": {
@@ -1773,6 +1788,12 @@
       "generate": "Generate",
       "regenerate": "Regenerate",
       "generating": "Generating…"
+    }
+  },
+  "aria": {
+    "workbenchPanel": {
+      "focus": "Focus panel",
+      "close": "Close panel"
     }
   }
 }

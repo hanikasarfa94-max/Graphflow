@@ -8,15 +8,15 @@ import { ServiceWorkerRegister } from "@/components/pwa/ServiceWorkerRegister";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "WorkGraph",
+  title: "GraphFlow",
   description: "Coordination as a graph, not a document.",
   manifest: "/manifest.json",
-  applicationName: "graphflow",
+  applicationName: "GraphFlow",
   appleWebApp: {
     // iOS doesn't read manifest.json the same way Android does — these meta
     // tags are what give "Add to Home Screen" a proper title + status bar.
     capable: true,
-    title: "graphflow",
+    title: "GraphFlow",
     statusBarStyle: "default",
   },
   icons: {

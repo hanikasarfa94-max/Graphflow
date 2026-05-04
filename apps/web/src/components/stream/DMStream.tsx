@@ -61,6 +61,7 @@ function Avatar({ name }: { name: string }) {
 export function DMStream({ streamId, currentUserId, members }: Props) {
   const tDm = useTranslations("dm");
   const tStream = useTranslations("stream");
+  const tErr = useTranslations("errors");
 
   const other =
     members.find((m) => m.user_id !== currentUserId) ?? members[0] ?? null;
@@ -270,13 +271,16 @@ export function DMStream({ streamId, currentUserId, members }: Props) {
             tStream("composer.tooLong", { max: MESSAGE_BODY_MAX_LENGTH }),
           );
         } else {
-          setError(extractApiErrorDetail(parsedBody) ?? `error ${r.status}`);
+          setError(
+            extractApiErrorDetail(parsedBody) ??
+              tErr("genericStatus", { status: r.status }),
+          );
         }
       }
     } catch {
       setMessages((prev) => prev.filter((m) => m.id !== optimisticId));
       setDraft(body);
-      setError("send failed");
+      setError(tErr("sendFailed"));
     } finally {
       setPosting(false);
     }

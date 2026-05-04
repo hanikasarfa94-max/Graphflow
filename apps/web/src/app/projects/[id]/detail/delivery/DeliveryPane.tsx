@@ -40,6 +40,7 @@ export function DeliveryPane({
   initialTasks: Task[];
 }) {
   const t = useTranslations("qaSweep");
+  const tErr = useTranslations("errors");
   const [latest, setLatest] = useState<Delivery | null>(initialLatest);
   const [history, setHistory] = useState<Delivery[]>(initialHistory);
   const [tasks] = useState<Task[]>(initialTasks);
@@ -99,7 +100,9 @@ export function DeliveryPane({
       });
       if (!res.ok) {
         const j = await res.json().catch(() => ({}));
-        setError(j.detail ?? `generate failed (${res.status})`);
+        setError(
+          j.detail ?? `${tErr("generateFailed")} (${res.status})`,
+        );
         return;
       }
       const body = await res.json();

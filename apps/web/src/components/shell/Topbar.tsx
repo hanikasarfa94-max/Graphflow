@@ -77,7 +77,7 @@ function buildCrumbs(
     if (isOpaqueId(s)) {
       // The segment right after `/projects/` is a project ID — try to
       // resolve it to a real title from the sidebar's project list so
-      // the breadcrumb reads "WORKGRAPH / PROJECTS / Welcome to graphflow"
+      // the breadcrumb reads "GRAPHFLOW / PROJECTS / Welcome to graphflow"
       // instead of the orphan "·" placeholder.
       if (i > 0 && parts[i - 1] === "projects") {
         const title = projectTitleById.get(s);
@@ -87,8 +87,8 @@ function buildCrumbs(
     }
     return SEGMENT_LABELS[s] ?? s;
   });
-  if (segs.length === 0) return "WORKGRAPH / HOME";
-  return ["WORKGRAPH", ...segs.map((s) => s.toUpperCase())].join(" / ");
+  if (segs.length === 0) return "GRAPHFLOW / HOME";
+  return ["GRAPHFLOW", ...segs.map((s) => s.toUpperCase())].join(" / ");
 }
 
 export function Topbar() {

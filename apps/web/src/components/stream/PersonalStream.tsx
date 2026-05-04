@@ -238,6 +238,7 @@ export function PersonalStream({
 }: Props) {
   const t = useTranslations("personal");
   const tStream = useTranslations("stream");
+  const tErr = useTranslations("errors");
 
   const [messages, setMessages] = useState<PersonalMessage[]>([]);
   const [loaded, setLoaded] = useState(false);
@@ -283,9 +284,9 @@ export function PersonalStream({
       // silent to avoid blink-noise when the network hiccups.
       if (!loaded) {
         if (e instanceof ApiError) {
-          setError(`load failed (${e.status})`);
+          setError(`${tErr("loadFailed")} (${e.status})`);
         } else {
-          setError("load failed");
+          setError(tErr("loadFailed"));
         }
       }
     } finally {
@@ -580,10 +581,13 @@ export function PersonalStream({
         if (e.status === 422 && body.length > MESSAGE_BODY_MAX_LENGTH) {
           setError(t("composer.tooLong", { max: MESSAGE_BODY_MAX_LENGTH }));
         } else {
-          setError(extractApiErrorDetail(e.body) ?? `error ${e.status}`);
+          setError(
+            extractApiErrorDetail(e.body) ??
+              tErr("genericStatus", { status: e.status }),
+          );
         }
       } else {
-        setError("send failed");
+        setError(tErr("sendFailed"));
       }
     } finally {
       setPosting(false);

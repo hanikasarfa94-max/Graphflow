@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useTranslations } from "next-intl";
 
 import type {
   Conflict,
@@ -40,6 +41,7 @@ export function ConflictsPane({
   initialDecisions: Decision[];
   initialMembers: Member[];
 }) {
+  const tErr = useTranslations("errors");
   const [conflicts, setConflicts] = useState<Conflict[]>(initialConflicts);
   const [summary, setSummary] = useState<ConflictSummary>(initialSummary);
   const [decisions, setDecisions] = useState<Decision[]>(initialDecisions);
@@ -131,7 +133,9 @@ export function ConflictsPane({
       );
       if (!res.ok) {
         const j = await res.json().catch(() => ({}));
-        setError(j.detail ?? `recheck failed (${res.status})`);
+        setError(
+          j.detail ?? `${tErr("recheckFailed")} (${res.status})`,
+        );
       }
     } finally {
       setRechecking(false);
@@ -166,7 +170,9 @@ export function ConflictsPane({
       });
       if (!res.ok) {
         const j = await res.json().catch(() => ({}));
-        setError(j.detail ?? `decision failed (${res.status})`);
+        setError(
+          j.detail ?? `${tErr("decisionFailed")} (${res.status})`,
+        );
         return;
       }
       const rb = await res.json();
@@ -193,7 +199,9 @@ export function ConflictsPane({
       });
       if (!res.ok) {
         const j = await res.json().catch(() => ({}));
-        setError(j.detail ?? `dismiss failed (${res.status})`);
+        setError(
+          j.detail ?? `${tErr("dismissFailed")} (${res.status})`,
+        );
         return;
       }
       const body = await res.json();

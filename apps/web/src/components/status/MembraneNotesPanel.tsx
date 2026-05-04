@@ -28,6 +28,7 @@ export async function MembraneNotesPanel({
   notes: MembraneNotesResponse | null;
 }) {
   const t = await getTranslations("status.membraneNotes");
+  const tErr = await getTranslations("errors");
 
   const reviews = notes?.pending_reviews ?? [];
   const clarifications = notes?.pending_clarifications ?? [];
@@ -60,7 +61,11 @@ export async function MembraneNotesPanel({
                         ? t("kind.taskPromote")
                         : t("kind.kbItemGroup")
                     }
-                    title={r.proposal?.summary ?? r.reasoning ?? "(no summary)"}
+                    title={
+                      r.proposal?.summary ??
+                      r.reasoning ??
+                      tErr("noSummary")
+                    }
                     diff={detail.diff_summary ?? null}
                     metaText={linkedId ? `→ ${linkedId.slice(0, 8)}` : null}
                     createdAt={r.created_at}

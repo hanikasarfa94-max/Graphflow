@@ -282,6 +282,26 @@ export async function KbItemDetail({
             >
               {item.status}
             </div>
+            {item.status === "draft" || item.status === "pending-review" ? (
+              // The detail page is read-only by design (no inline
+              // approve buttons — that lives in /detail/im, the
+              // single membrane review surface). Surface the link
+              // here so a reader who lands on a draft via the chip
+              // knows where to act.
+              <Link
+                href={`/projects/${projectId}/detail/im`}
+                style={{
+                  display: "inline-block",
+                  marginTop: 6,
+                  fontSize: 11,
+                  fontFamily: "var(--wg-font-mono)",
+                  color: "var(--wg-accent)",
+                  textDecoration: "none",
+                }}
+              >
+                {t("kb.item.reviewLink")}
+              </Link>
+            ) : null}
           </MetaPanel>
 
           {licenseControl}

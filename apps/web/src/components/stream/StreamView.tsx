@@ -78,6 +78,7 @@ function withDefaultPresence(members: StreamMember[]): StreamMember[] {
 
 export function StreamView({ projectId, currentUserId, members, streamId, streamKey }: Props) {
   const t = useTranslations("stream");
+  const tErr = useTranslations("errors");
 
   const [messages, setMessages] = useState<IMMessage[]>([]);
   const [decisions, setDecisions] = useState<Decision[]>([]);
@@ -211,7 +212,7 @@ export function StreamView({ projectId, currentUserId, members, streamId, stream
           // non-fatal
         }
       } catch {
-        if (!cancelled) setError("load failed");
+        if (!cancelled) setError(tErr("loadFailed"));
       } finally {
         if (!cancelled) setLoaded(true);
       }

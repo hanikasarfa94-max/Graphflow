@@ -1,7 +1,7 @@
 {
-  "name": "graphflow",
-  "short_name": "graphflow",
-  "description": "WorkGraph — group-layer collab platform",
+  "name": "GraphFlow",
+  "short_name": "GraphFlow",
+  "description": "GraphFlow — group-layer collab platform",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

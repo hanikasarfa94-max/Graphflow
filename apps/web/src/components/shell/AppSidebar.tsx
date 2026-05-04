@@ -673,7 +673,7 @@ export function AppSidebar({
         [data-testid="app-sidebar"][data-collapsed="true"] .wg-sb-tagline {
           display: none !important;
         }
-        /* Brand link — collapse the column to just the W mark. */
+        /* Brand link — collapse the column to just the G mark. */
         [data-testid="app-sidebar"][data-collapsed="true"] a[href="/"] > span:not([aria-hidden]) {
           display: none !important;
         }
@@ -725,7 +725,7 @@ export function AppSidebar({
       >
         {collapsed ? "›" : "‹"}
       </button>
-      {/* Brand — gradient W mark + name + tagline. The mark is the
+      {/* Brand — gradient G mark + name + tagline. The mark is the
           single most repeated visual; making it a small instrument
           (gradient + soft shadow) is cheap personality. */}
       <Link
@@ -757,7 +757,7 @@ export function AppSidebar({
             boxShadow: "0 8px 18px rgba(37,99,235,0.22)",
           }}
         >
-          W
+          G
         </span>
         <span
           className="wg-sb-label"

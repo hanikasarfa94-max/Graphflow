@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useTranslations } from "next-intl";
 import {
   counterSuggestion,
   escalateSuggestion,
@@ -50,6 +51,7 @@ export function ChatPane({
   projectId: string;
   currentUserId: string;
 }) {
+  const tErr = useTranslations("errors");
   const [messages, setMessages] = useState<Message[]>([]);
   const [composer, setComposer] = useState("");
   const [posting, setPosting] = useState(false);
@@ -148,10 +150,10 @@ export function ChatPane({
       });
       if (!res.ok) {
         if (res.status === 429) {
-          setError("slow down — rate limited");
+          setError(tErr("rateLimited"));
         } else {
           const j = await res.json().catch(() => ({}));
-          setError(j.detail ?? `error ${res.status}`);
+          setError(j.detail ?? tErr("genericStatus", { status: res.status }));
         }
         return;
       }
@@ -170,7 +172,7 @@ export function ChatPane({
       );
       if (!res.ok) {
         const j = await res.json().catch(() => ({}));
-        setError(j.detail ?? `error ${res.status}`);
+        setError(j.detail ?? tErr("genericStatus", { status: res.status }));
         return;
       }
       const nextStatus = action === "accept" ? "accepted" : "dismissed";
@@ -182,7 +184,7 @@ export function ChatPane({
         ),
       );
     },
-    [],
+    [tErr],
   );
 
   const onCounterSubmit = useCallback(
@@ -207,13 +209,13 @@ export function ChatPane({
         if (e instanceof ApiError) {
           setError(typeof e.body === "object" && e.body && "detail" in e.body
             ? String((e.body as { detail?: unknown }).detail ?? e.message)
-            : `error ${e.status}`);
+            : tErr("genericStatus", { status: e.status }));
         } else {
-          setError("counter failed");
+          setError(tErr("counterFailed"));
         }
       }
     },
-    [],
+    [tErr],
   );
 
   const onEscalate = useCallback(async (suggestion: Suggestion) => {
@@ -230,12 +232,12 @@ export function ChatPane({
       if (e instanceof ApiError) {
         setError(typeof e.body === "object" && e.body && "detail" in e.body
           ? String((e.body as { detail?: unknown }).detail ?? e.message)
-          : `error ${e.status}`);
+          : tErr("genericStatus", { status: e.status }));
       } else {
-        setError("escalate failed");
+        setError(tErr("escalateFailed"));
       }
     }
-  }, []);
+  }, [tErr]);
 
   return (
     <div
