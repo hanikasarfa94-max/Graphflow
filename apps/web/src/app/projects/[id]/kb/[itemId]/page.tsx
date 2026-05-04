@@ -34,9 +34,16 @@ export default async function KbItemPage({
   let errorMessage: string | null = null;
   let notFound = false;
   try {
-    item = await serverFetch<KbItemDetailT>(
+    // BE returns `{ok: true, item: KbItemDetailT}` — unwrap before
+    // handing to the component. Without this, all of `item.title`,
+    // `item.content_md`, `item.raw_content` are undefined and the
+    // detail page silently rendered the "empty body" empty-state
+    // even when the row had a 50-char body.
+    const res = await serverFetch<{ ok: boolean; item: KbItemDetailT }>(
       `/api/projects/${id}/kb/${itemId}`,
     );
+    item = res.item ?? null;
+    if (!item) notFound = true;
   } catch (err) {
     if (err instanceof ApiError && err.status === 404) {
       notFound = true;
