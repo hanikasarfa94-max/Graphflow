@@ -57,7 +57,7 @@ export default async function RenderedArtifactPage({
   const parsed = parseSlug(slug);
   if (parsed.kind === "unknown") {
     return (
-      <main style={{ padding: 40, maxWidth: 720, margin: "0 auto" }}>
+      <main style={{ padding: "48px clamp(24px, 5vw, 56px)", maxWidth: 720, margin: "0 auto" }}>
         <p style={{ color: "var(--wg-accent, #c03030)" }}>
           {t("render.unknownSlug")}
         </p>
@@ -91,7 +91,7 @@ export default async function RenderedArtifactPage({
 
   if (!render) {
     return (
-      <main style={{ padding: 40, maxWidth: 720, margin: "0 auto" }}>
+      <main style={{ padding: "48px clamp(24px, 5vw, 56px)", maxWidth: 720, margin: "0 auto" }}>
         <h1 style={{ fontSize: 22 }}>
           {parsed.kind === "postmortem"
             ? t("render.postmortem.title")

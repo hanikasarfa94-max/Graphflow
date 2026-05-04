@@ -147,10 +147,17 @@ export function RenderView({
 
   return (
     <main
+      // Generous horizontal padding (clamp(24px, 5vw, 56px)) so titles
+      // and prose never sit flush against the AppShell main-column
+      // edge, regardless of viewport width. The previous 24px felt
+      // tight on wide screens (the report read as edge-locked) and
+      // collapsed even further when the legacy AppSidebar took its
+      // 240px from a sub-1024px viewport. clamp() keeps it readable
+      // on tablets while letting wide screens breathe.
       style={{
         maxWidth: 760,
         margin: "0 auto",
-        padding: "40px 24px",
+        padding: "48px clamp(24px, 5vw, 56px) 64px",
         fontFamily: "var(--wg-font-serif, Georgia, serif)",
         color: "var(--wg-ink, #0a1a2b)",
         lineHeight: 1.6,
