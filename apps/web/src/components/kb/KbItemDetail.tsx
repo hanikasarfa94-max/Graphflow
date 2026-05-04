@@ -83,12 +83,12 @@ export async function KbItemDetail({
           >
             {item.source_kind || "kb"}
           </h2>
-          {/* Title row — surfaces the most useful identifier even when
-              raw_content is empty (drafts created via save-as-kb start
-              that way until the source-message body is materialized).
-              Falls through summary → source_identifier → "(untitled)"
-              so the detail page never renders as a blank slate. */}
-          {(item.summary || item.source_identifier) && (
+          {/* Title row — kb_items is the unified store; user-authored
+              rows (save-as-kb / paste / upload) populate `title` +
+              `content_md`, while ingest rows populate `raw_content` +
+              `source_*`. Pick the first populated identifier so the
+              page never renders as a blank slate. */}
+          {(item.title || item.summary || item.source_identifier) && (
             <h3
               style={{
                 margin: "0 0 12px 0",
@@ -99,10 +99,10 @@ export async function KbItemDetail({
                 fontFamily: "var(--wg-font-serif, Georgia, serif)",
               }}
             >
-              {item.summary || item.source_identifier}
+              {item.title || item.summary || item.source_identifier}
             </h3>
           )}
-          {item.raw_content ? (
+          {(item.content_md || item.raw_content) ? (
             <pre
               style={{
                 margin: 0,
@@ -117,7 +117,7 @@ export async function KbItemDetail({
                 background: "transparent",
               }}
             >
-              {item.raw_content}
+              {item.content_md || item.raw_content}
             </pre>
           ) : (
             <div

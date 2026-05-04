@@ -108,14 +108,37 @@ def _kb_list_payload(row: KbItemRow) -> dict:
 
 
 def _kb_detail_payload(row: KbItemRow) -> dict:
-    """Full-detail payload for a single KB item."""
+    """Full-detail payload for a single KB item.
+
+    The kb_items table is the unified store post-migration 0022 — both
+    user-authored items (save-as-kb / paste / upload) and ingested
+    membrane signals live here. Two field families:
+
+      ingest-shape: source_kind, source_identifier, raw_content
+      user-shape:   title, content_md, summary, scope, owner_user_id
+
+    User-authored rows have source in {'manual','upload','llm'} and
+    populate the user-shape fields; ingest-shape ones are NULL. The
+    pre-fold detail handler only emitted the ingest-shape, which made
+    every save-as-kb draft render as a blank page (the QA report
+    "every KB is empty for approve"). We emit BOTH families now and
+    let the FE pick based on what's populated.
+    """
     classification = dict(row.classification_json or {})
     return {
         "id": row.id,
         "project_id": row.project_id,
+        # Ingest-shape (membrane signals). Null for user-authored items.
         "source_kind": row.source_kind,
         "source_identifier": row.source_identifier,
         "raw_content": row.raw_content,
+        # User-authored shape (save-as-kb, paste, upload). Null for ingest.
+        "title": row.title,
+        "content_md": row.content_md,
+        "scope": row.scope,
+        "source": row.source,
+        "owner_user_id": row.owner_user_id,
+        # Common metadata.
         "classification": classification,
         "status": row.status,
         "ingested_by_user_id": row.ingested_by_user_id,

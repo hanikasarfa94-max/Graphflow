@@ -2093,6 +2093,15 @@ export interface KbItem {
 export interface KbItemDetail extends KbItem {
   raw_content: string;
   classification_json?: Record<string, unknown> | null;
+  // User-authored shape — populated for save-as-kb / paste / upload
+  // (source in {'manual','upload','llm'}). Null for ingest rows. The
+  // BE _kb_detail_payload emits both shapes from the unified
+  // kb_items table; the FE picks whichever is populated.
+  title?: string | null;
+  content_md?: string | null;
+  scope?: string | null;
+  source?: string | null;
+  owner_user_id?: string | null;
 }
 
 export interface KbListParams {
