@@ -75,15 +75,14 @@ export default async function ProjectTeamPage({
     <>
       <StreamCompactToolbar
         title={tShell("personal.tabs.teamRoom")}
-        // Project title is already in the Topbar breadcrumb +
-        // ProjectBar above; the third copy in the toolbar was visual
-        // noise before the team stream.
+        // Project title is already in the Topbar breadcrumb; the
+        // second copy in the toolbar was visual noise before the
+        // team stream.
         meta={null}
         actions={
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            {/* Scope-tier pills moved to ProjectBar — single rail per
-                project shell. The previous per-page render here caused a
-                duplicate row directly below ProjectBar's. */}
+            {/* Scope-tier pills moved to the project module rail —
+                single canonical place to toggle scope. */}
             <StreamContextPanel streamKey={`project:${id}:team`} />
             {isAdmin ? (
               <Link

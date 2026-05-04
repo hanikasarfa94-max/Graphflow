@@ -597,8 +597,8 @@ export function AppSidebar({
   const projectsActive = isActive(pathname, "/projects", true);
 
   // Auto-collapse default: when the user is inside a project route,
-  // the project's own chrome (ProjectBar + ProjectModuleRail) carries
-  // the navigation weight — collapsing the global sidebar matches the
+  // the project's own chrome (ProjectModuleRail) carries the
+  // navigation weight — collapsing the global sidebar matches the
   // prototype's single-Rail density. Outside project routes (home,
   // /projects index, /streams, /settings, /workspaces), expanded reads
   // better. localStorage override always wins so user choice persists.

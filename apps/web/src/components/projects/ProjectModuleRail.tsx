@@ -3,21 +3,18 @@
 // ProjectModuleRail — port of workgraph-ts-prototype's Rail (App.tsx
 // Rail + railItems) adapted to a horizontal icon strip.
 //
-// Sits below ProjectBar in the global project layout. Lets users jump
-// between project-scoped surfaces (stream / team room / status / KB /
-// audit / skills / meetings / renders / settings) without going up
-// through AppSidebar's global-scope navigation.
-//
-// The prototype renders this as a vertical icon column on the far
-// left. We render horizontally because adding a vertical column
-// would shift every existing page's content width — high regression
-// risk for marginal product win. Horizontal is additive (~32px
-// vertical real estate) and matches the existing ProjectBar
-// layout pattern.
+// Owns surface-nav (left) AND the scope-pill widget (right). Folding
+// the scope pills in here let us delete the separate ProjectBar row —
+// project-name text was redundant with the Topbar breadcrumb, and the
+// surface-crumb was redundant with the active rail tab below it. The
+// pills were the only functional widget that needed a home, so they
+// ride along on this strip now.
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useTranslations } from "next-intl";
+
+import { ScopeTierPills } from "@/components/stream/ScopeTierPills";
 
 interface Props {
   projectId: string;
@@ -124,7 +121,7 @@ export function ProjectModuleRail({ projectId }: Props) {
         display: "flex",
         alignItems: "center",
         gap: 2,
-        padding: "4px 14px",
+        padding: "6px 14px",
         borderBottom: "1px solid var(--wg-line)",
         background: "#fff",
         overflowX: "auto",
@@ -152,6 +149,8 @@ export function ProjectModuleRail({ projectId }: Props) {
           </Link>
         );
       })}
+      <div style={{ flex: 1 }} />
+      <ScopeTierPills projectKey={`project:${projectId}`} />
     </nav>
   );
 }

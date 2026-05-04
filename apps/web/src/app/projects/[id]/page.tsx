@@ -71,14 +71,14 @@ export default async function ProjectPersonalPage({
       <StreamCompactToolbar
         title={t("personal.title")}
         // Project title was here as "Edge · {title}" — but it's already
-        // shown in the Topbar breadcrumb AND the ProjectBar row above
-        // this toolbar, so the third copy adds visual noise before the
-        // actual stream. Show meta only on the empty-state path where
-        // there's no project context.
+        // shown in the Topbar breadcrumb, so the second copy is just
+        // noise. Show meta only on the empty-state path where there's
+        // no project context.
         meta={state?.project?.title ? null : t("personal.subtitle")}
         actions={
-          // Scope pills moved to the global ProjectBar (one canonical
-          // place to toggle scope per memory workgraph_next_design_20260428).
+          // Scope pills moved to the project module rail (one
+          // canonical place to toggle scope per memory
+          // workgraph_next_design_20260428).
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <StreamContextPanel streamKey={`project:${id}:personal`} />
           </div>

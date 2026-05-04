@@ -82,9 +82,8 @@ export default async function KbPage({
         }}
       >
         <PageHeader title={t("kb.title")} subtitle={t("kb.subtitle")} />
-        {/* Scope-tier pills moved to ProjectBar — single rail per
-            project shell. The previous per-page render here caused a
-            duplicate row directly below ProjectBar's. */}
+        {/* Scope-tier pills moved to the project module rail —
+            single canonical place to toggle scope. */}
       </div>
       {/* Notes are KB items now. The tree returns scope='personal' and
           scope='group' rows in one payload (kb_hierarchy.get_tree
