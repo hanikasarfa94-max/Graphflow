@@ -56,15 +56,21 @@ export interface FlowRef {
   href?: string;
 }
 
-// FlowAction — what the viewer can do next on this packet. In Slice B
-// the only kind we render is "open"; mutation kinds appear in Slice C
-// once FlowActionService lands. The `href` is the spec-promised
-// "drawer doesn't bake routing rules" lever.
+// FlowAction — what the viewer can do next on this packet. The kind
+// union is the FE boundary lock on the BE projection's emitted shapes.
+// C.1 source-side mutations are `accept | counter_back |
+// escalate_to_gate | custom_followup`. The `counter | delegate_up |
+// dismiss | publish | request_review` kinds are reserved for later
+// slices (C.2 target-side, KB review, etc.) and stay in the union
+// so the FE compiles against the spec, not just against today's
+// projection. `open` is the read-only link kind (Slice A/B).
 export interface FlowAction {
   id: string;
   label: string;
   kind:
     | "accept"
+    | "counter_back"
+    | "custom_followup"
     | "counter"
     | "delegate_up"
     | "escalate_to_gate"
