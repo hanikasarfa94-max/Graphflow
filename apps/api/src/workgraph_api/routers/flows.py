@@ -76,7 +76,10 @@ async def list_flows(
         raise HTTPException(status_code=403, detail="not_a_project_member")
 
     service: FlowProjectionService = request.app.state.flow_projection_service
-    packets = await service.list_for_project(
+    # D.a: list_for_project now returns the full envelope
+    # `{packets, participants}` so the FE can resolve user_ids without
+    # N+1. Pass through verbatim.
+    return await service.list_for_project(
         project_id=project_id,
         viewer_user_id=user.id,
         status=status,
@@ -84,7 +87,6 @@ async def list_flows(
         recipe=recipe,
         limit=limit,
     )
-    return {"packets": packets}
 
 
 # ---- C.1 — POST /actions -------------------------------------------------

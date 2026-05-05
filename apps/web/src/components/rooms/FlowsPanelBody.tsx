@@ -22,9 +22,11 @@ import {
   listFlows,
   type FlowBucket,
   type FlowPacket,
+  type ParticipantInfo,
 } from "@/lib/flows";
 import { formatIso } from "@/lib/time";
 
+import { EvidenceBlock } from "./EvidenceBlock";
 import { FlowRowActions } from "./FlowRowActions";
 
 interface Props {
@@ -35,9 +37,18 @@ interface BucketState {
   loading: boolean;
   error: string | null;
   packets: FlowPacket[];
+  // Slice D — participants sidecar accompanies each bucket fetch. The
+  // EvidenceBlock reads it for user_id → display_name resolution
+  // without N+1.
+  participants: Record<string, ParticipantInfo>;
 }
 
-const initial: BucketState = { loading: true, error: null, packets: [] };
+const initial: BucketState = {
+  loading: true,
+  error: null,
+  packets: [],
+  participants: {},
+};
 
 export function FlowsPanelBody({ projectId }: Props) {
   const t = useTranslations("flows");
@@ -64,7 +75,12 @@ export function FlowsPanelBody({ projectId }: Props) {
           if (cancelled) return;
           setByBucket((prev) => ({
             ...prev,
-            [bucket]: { loading: false, error: null, packets: res.packets },
+            [bucket]: {
+              loading: false,
+              error: null,
+              packets: res.packets,
+              participants: res.participants ?? {},
+            },
           }));
         } catch (err) {
           if (cancelled) return;
@@ -74,6 +90,7 @@ export function FlowsPanelBody({ projectId }: Props) {
               loading: false,
               error: err instanceof Error ? err.message : "fetch_failed",
               packets: [],
+              participants: {},
             },
           }));
         }
@@ -155,7 +172,12 @@ function BucketSection({
         <Empty text={t(`empty.${labelKey}`)} />
       ) : (
         state.packets.map((p) => (
-          <FlowRow key={p.id} packet={p} onActed={onActed} />
+          <FlowRow
+            key={p.id}
+            packet={p}
+            participants={state.participants}
+            onActed={onActed}
+          />
         ))
       )}
     </section>
@@ -164,9 +186,11 @@ function BucketSection({
 
 function FlowRow({
   packet,
+  participants,
   onActed,
 }: {
   packet: FlowPacket;
+  participants: Record<string, ParticipantInfo>;
   onActed: () => void;
 }) {
   const t = useTranslations("flows");
@@ -183,16 +207,23 @@ function FlowRow({
       data-testid="flow-row"
       data-recipe={packet.recipe_id}
       style={{
-        display: "grid",
-        gridTemplateColumns: "auto 1fr auto",
-        alignItems: "start",
-        gap: 8,
+        display: "flex",
+        flexDirection: "column",
+        gap: 4,
         padding: "8px 10px",
         border: "1px solid var(--wg-line)",
         borderRadius: "var(--wg-radius)",
         background: "#fff",
       }}
     >
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "auto 1fr auto",
+          alignItems: "start",
+          gap: 8,
+        }}
+      >
       <span
         aria-hidden
         style={{ fontSize: 16, lineHeight: "20px", marginTop: 2 }}
@@ -238,6 +269,11 @@ function FlowRow({
           custom_followup expands inline. Read-only Open and unsupported
           recipes both fall through to the FlowRowActions empty state. */}
       <FlowRowActions packet={packet} onActed={onActed} />
+      </div>
+      {/* Slice D — compact evidence: Asked / Replied / Closed. Toggled
+          per-row so default is calm; participants come from the panel
+          state via the bucket's sidecar map. */}
+      <EvidenceBlock packet={packet} participants={participants} />
     </div>
   );
 }

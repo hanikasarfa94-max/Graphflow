@@ -88,7 +88,11 @@ async def test_empty_project_returns_empty_packet_list(api_env):
     await _login(client, "fp_empty_owner")
     r = await _list_flows(client, pid)
     assert r.status_code == 200, r.text
-    assert r.json() == {"packets": []}
+    body = r.json()
+    assert body["packets"] == []
+    # D.a: response now carries a participants sidecar; empty for an
+    # empty packet list.
+    assert body["participants"] == {}
 
 
 # ---- ask_with_context (RoutedSignalRow) ---------------------------------
@@ -671,3 +675,225 @@ async def test_handoff_packet_href_points_to_skills_surface(api_env):
     assert len(packets) == 1
     href = packets[0]["next_actions"][0]["href"]
     assert href == f"/projects/{pid}/skills", href
+
+
+# ---- Slice D — evidence + source_refs + participants -------------------
+
+
+@pytest.mark.asyncio
+async def test_route_packet_source_refs_carry_signal_and_streams(api_env):
+    """D.a: source_refs should reference the routed signal itself + the
+    source/target stream surfaces (with hrefs)."""
+    client, maker, *_ = api_env
+    src_id = await _register(client, "fp_d_refs_src")
+    tgt_id = await _register(client, "fp_d_refs_tgt")
+    pid = await _mk_project_with_members(maker, owner_id=src_id, member_id=tgt_id)
+
+    await _login(client, "fp_d_refs_src")
+    r = await client.post(
+        "/api/routing/dispatch",
+        json={
+            "target_user_id": tgt_id,
+            "project_id": pid,
+            "framing": "Refs test",
+            "background": [],
+            "options": [
+                {"id": "y", "label": "Yes", "kind": "action", "weight": 0.5},
+                {"id": "n", "label": "No", "kind": "action", "weight": 0.5},
+            ],
+        },
+    )
+    sid = r.json()["signal"]["id"]
+
+    r = await _list_flows(client, pid)
+    pkt = next(p for p in r.json()["packets"] if p["id"] == f"route:{sid}")
+    refs = pkt["source_refs"]
+    # Routed signal itself.
+    assert any(
+        ref["kind"] == "agent_run" and ref["id"] == sid for ref in refs
+    ), refs
+    # Both stream refs with hrefs.
+    streams = [ref for ref in refs if ref["kind"] == "stream"]
+    assert len(streams) == 2
+    for s in streams:
+        assert s["href"].startswith("/streams/"), s
+
+
+@pytest.mark.asyncio
+async def test_evidence_human_gates_records_target_reply(api_env):
+    """D.a: when target replies with an option_id, evidence.human_gates
+    records the target's gate event with action='accept' (option pick)
+    or 'counter' (custom_text). Source-side action notes append on top
+    once the source acts."""
+    client, maker, *_ = api_env
+    src_id = await _register(client, "fp_d_gate_src")
+    tgt_id = await _register(client, "fp_d_gate_tgt")
+    pid = await _mk_project_with_members(maker, owner_id=src_id, member_id=tgt_id)
+
+    await _login(client, "fp_d_gate_src")
+    r = await client.post(
+        "/api/routing/dispatch",
+        json={
+            "target_user_id": tgt_id,
+            "project_id": pid,
+            "framing": "Gate test",
+            "background": [],
+            "options": [
+                {"id": "y", "label": "Yes", "kind": "action", "weight": 0.5},
+                {"id": "n", "label": "No", "kind": "action", "weight": 0.5},
+            ],
+        },
+    )
+    sid = r.json()["signal"]["id"]
+    # Target replies via option pick.
+    await _login(client, "fp_d_gate_tgt")
+    r = await client.post(
+        f"/api/routing/{sid}/reply", json={"option_id": "y"}
+    )
+    assert r.status_code == 200, r.text
+
+    await _login(client, "fp_d_gate_src")
+    r = await _list_flows(client, pid)
+    pkt = next(p for p in r.json()["packets"] if p["id"] == f"route:{sid}")
+    gates = pkt["evidence"]["human_gates"]
+    # Just the target's reply — source hasn't acted yet.
+    assert len(gates) == 1
+    assert gates[0]["user_id"] == tgt_id
+    assert gates[0]["action"] == "accept"  # option pick → accept
+
+    # Source accepts via the C.1 endpoint; gates should grow to two.
+    r = await client.post(
+        f"/api/projects/{pid}/flows/route:{sid}/actions",
+        json={"action": "accept", "note": "thanks"},
+    )
+    assert r.status_code == 200, r.text
+
+    r = await _list_flows(client, pid, status="completed")
+    pkt = next(p for p in r.json()["packets"] if p["id"] == f"route:{sid}")
+    gates = pkt["evidence"]["human_gates"]
+    assert len(gates) == 2
+    target_gate = next(g for g in gates if g["user_id"] == tgt_id)
+    source_gate = next(g for g in gates if g["user_id"] == src_id)
+    assert target_gate["action"] == "accept"
+    assert source_gate["action"] == "accept"
+    assert source_gate["note"] == "thanks"
+
+
+@pytest.mark.asyncio
+async def test_custom_followup_skipped_from_human_gates(api_env):
+    """D.a: custom_followup is a continuation, not a gate decision.
+    It should appear in the timeline but NOT in evidence.human_gates."""
+    client, maker, *_ = api_env
+    src_id = await _register(client, "fp_d_fup_src")
+    tgt_id = await _register(client, "fp_d_fup_tgt")
+    pid = await _mk_project_with_members(maker, owner_id=src_id, member_id=tgt_id)
+
+    await _login(client, "fp_d_fup_src")
+    r = await client.post(
+        "/api/routing/dispatch",
+        json={
+            "target_user_id": tgt_id,
+            "project_id": pid,
+            "framing": "Fup test",
+            "background": [],
+            "options": [
+                {"id": "y", "label": "Yes", "kind": "action", "weight": 0.5},
+                {"id": "n", "label": "No", "kind": "action", "weight": 0.5},
+            ],
+        },
+    )
+    sid = r.json()["signal"]["id"]
+    await _login(client, "fp_d_fup_tgt")
+    await client.post(f"/api/routing/{sid}/reply", json={"option_id": "y"})
+    await _login(client, "fp_d_fup_src")
+    await client.post(
+        f"/api/projects/{pid}/flows/route:{sid}/actions",
+        json={"action": "custom_followup", "framing": "follow-up question"},
+    )
+
+    r = await _list_flows(client, pid)
+    pkt = next(p for p in r.json()["packets"] if p["id"] == f"route:{sid}")
+    gates = pkt["evidence"]["human_gates"]
+    # Only the target's reply gate. custom_followup is NOT a gate.
+    assert len(gates) == 1
+    assert gates[0]["user_id"] == tgt_id
+    # But the timeline DOES carry the followup event.
+    timeline_kinds = [ev["kind"] for ev in pkt["timeline"]]
+    assert "source_custom_followup" in timeline_kinds
+
+
+@pytest.mark.asyncio
+async def test_participants_sidecar_resolves_user_ids(api_env):
+    """D.a: response carries a participants map {user_id: {display_name,
+    username}} so the FE renders names without N+1 fetches."""
+    client, maker, *_ = api_env
+    src_id = await _register(client, "fp_d_part_src")
+    tgt_id = await _register(client, "fp_d_part_tgt")
+    pid = await _mk_project_with_members(maker, owner_id=src_id, member_id=tgt_id)
+
+    await _login(client, "fp_d_part_src")
+    await client.post(
+        "/api/routing/dispatch",
+        json={
+            "target_user_id": tgt_id,
+            "project_id": pid,
+            "framing": "Participants test",
+            "background": [],
+            "options": [
+                {"id": "y", "label": "Yes", "kind": "action", "weight": 0.5},
+                {"id": "n", "label": "No", "kind": "action", "weight": 0.5},
+            ],
+        },
+    )
+
+    r = await _list_flows(client, pid)
+    body = r.json()
+    participants = body["participants"]
+    assert src_id in participants
+    assert tgt_id in participants
+    assert participants[src_id]["username"] == "fp_d_part_src"
+    assert participants[tgt_id]["username"] == "fp_d_part_tgt"
+    # display_name falls back to username when not set explicitly.
+    assert isinstance(participants[src_id]["display_name"], str)
+
+
+@pytest.mark.asyncio
+async def test_timeline_carries_source_action_events(api_env):
+    """D.a: timeline appends source-side action events from
+    reply_json["source_action_notes"] so the evidence block can render
+    the closing event."""
+    client, maker, *_ = api_env
+    src_id = await _register(client, "fp_d_tl_src")
+    tgt_id = await _register(client, "fp_d_tl_tgt")
+    pid = await _mk_project_with_members(maker, owner_id=src_id, member_id=tgt_id)
+
+    await _login(client, "fp_d_tl_src")
+    r = await client.post(
+        "/api/routing/dispatch",
+        json={
+            "target_user_id": tgt_id,
+            "project_id": pid,
+            "framing": "Timeline test",
+            "background": [],
+            "options": [
+                {"id": "y", "label": "Yes", "kind": "action", "weight": 0.5},
+                {"id": "n", "label": "No", "kind": "action", "weight": 0.5},
+            ],
+        },
+    )
+    sid = r.json()["signal"]["id"]
+    await _login(client, "fp_d_tl_tgt")
+    await client.post(f"/api/routing/{sid}/reply", json={"option_id": "y"})
+    await _login(client, "fp_d_tl_src")
+    await client.post(
+        f"/api/projects/{pid}/flows/route:{sid}/actions",
+        json={"action": "accept"},
+    )
+
+    r = await _list_flows(client, pid, status="completed")
+    pkt = next(p for p in r.json()["packets"] if p["id"] == f"route:{sid}")
+    kinds = [ev["kind"] for ev in pkt["timeline"]]
+    # Original two events plus the source acceptance.
+    assert "route_dispatched" in kinds
+    assert "route_replied" in kinds
+    assert "source_accept" in kinds

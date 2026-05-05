@@ -10,6 +10,8 @@ import {
   isMutationAction,
   type FlowPacket,
   type FlowRecipeId,
+  type FlowsListResponse,
+  type ParticipantInfo,
 } from "./flows";
 
 // The typed FlowPacket shape is the contract between the BE projection
@@ -207,6 +209,29 @@ describe("C.1.c mutation action client", () => {
   });
 });
 
+describe("Slice D — participants sidecar shape", () => {
+  test("FlowsListResponse carries participants map alongside packets", () => {
+    const sample: FlowsListResponse = {
+      packets: [],
+      participants: {
+        "u-1": { display_name: "Maya", username: "maya_zh" },
+        "u-2": { display_name: "Raj", username: "raj_zh" },
+      },
+    };
+    expect(sample.participants["u-1"].display_name).toBe("Maya");
+    expect(sample.participants["u-2"].username).toBe("raj_zh");
+  });
+
+  test("ParticipantInfo requires both fields", () => {
+    const valid: ParticipantInfo = {
+      display_name: "Aiko",
+      username: "aiko_zh",
+    };
+    expect(valid.display_name).toBe("Aiko");
+    expect(valid.username).toBe("aiko_zh");
+  });
+});
+
 describe("C.1.c i18n contract", () => {
   const en = loadLocale("en.json");
   const zh = loadLocale("zh.json");
@@ -242,6 +267,34 @@ describe("C.1.c i18n contract", () => {
     ]) {
       const enVal = dive(en, ["flows", "form", key]);
       const zhVal = dive(zh, ["flows", "form", key]);
+      expect(typeof enVal).toBe("string");
+      expect(typeof zhVal).toBe("string");
+      expect(zhVal).not.toBe(enVal);
+    }
+  });
+
+  test("evidence block strings (Slice D) are bilingual", () => {
+    // Every key the EvidenceBlock reads must exist in BOTH locales.
+    // The translator falls back to the key string on missing values,
+    // which would render literally in the UI — easy to miss in QA.
+    const keys = [
+      "show",
+      "hide",
+      "asked",
+      "replied",
+      "repliedWithOption",
+      "repliedCustom",
+      "accepted",
+      "countered",
+      "escalated",
+      "followedUp",
+      "you",
+      "unknown",
+      "noEvidence",
+    ];
+    for (const key of keys) {
+      const enVal = dive(en, ["flows", "evidence", key]);
+      const zhVal = dive(zh, ["flows", "evidence", key]);
       expect(typeof enVal).toBe("string");
       expect(typeof zhVal).toBe("string");
       expect(zhVal).not.toBe(enVal);

@@ -50,7 +50,8 @@ export interface FlowRef {
     | "risk"
     | "handoff"
     | "meeting"
-    | "agent_run";
+    | "agent_run"
+    | "stream";
   id: string;
   label: string;
   href?: string;
@@ -170,8 +171,17 @@ export interface FlowPacket {
   updated_at: string | null;
 }
 
+// Slice D — participants sidecar. Maps user_id → display info so the
+// FE evidence block can render names without N+1 fetches. Empty when
+// the packet list itself is empty.
+export interface ParticipantInfo {
+  display_name: string;
+  username: string;
+}
+
 export interface FlowsListResponse {
   packets: FlowPacket[];
+  participants: Record<string, ParticipantInfo>;
 }
 
 export interface FlowsListParams {

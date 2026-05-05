@@ -37,6 +37,7 @@ from workgraph_persistence import (
     KbItemRow,
     ProjectMemberRepository,
     RoutedSignalRow,
+    UserRepository,
     session_scope,
 )
 
@@ -79,10 +80,17 @@ class FlowProjectionService:
         bucket: Bucket | None = None,
         recipe: RecipeId | None = None,
         limit: int = 100,
-    ) -> list[dict[str, Any]]:
-        """Project all derivable packets for `project_id`, filtered as
-        requested. Filtering applied AFTER projection — Slice A is small
-        enough that fan-out queries + python filter beats per-recipe SQL
+    ) -> dict[str, Any]:
+        """Project all derivable packets + a participants sidecar.
+
+        Returns `{"packets": [...], "participants": {user_id: {...}}}`.
+
+        The participants sidecar (D.a addition) lets the FE evidence
+        block resolve user_id → display_name without N+1 fetches. One
+        UserRepository.get_many call per list invocation.
+
+        Filtering applied AFTER projection — Slice A is small enough
+        that fan-out queries + python filter beats per-recipe SQL
         filters. Slice F reverses this if a snapshot table lands.
 
         Two projection-side filters are non-negotiable and apply BEFORE
@@ -114,17 +122,25 @@ class FlowProjectionService:
                     )
                 )
 
-        # Visibility filter first — never let a non-participant member
-        # read past it via a status / bucket / recipe combination.
-        packets = [p for p in packets if _visible_to(p, viewer_user_id, owner_ids)]
+            # Visibility filter first — never let a non-participant member
+            # read past it via a status / bucket / recipe combination.
+            packets = [p for p in packets if _visible_to(p, viewer_user_id, owner_ids)]
 
-        if status is not None:
-            packets = [p for p in packets if p["status"] == status]
-        if bucket is not None:
-            packets = [p for p in packets if _matches_bucket(p, viewer_user_id, bucket)]
+            if status is not None:
+                packets = [p for p in packets if p["status"] == status]
+            if bucket is not None:
+                packets = [
+                    p for p in packets if _matches_bucket(p, viewer_user_id, bucket)
+                ]
 
-        packets.sort(key=lambda p: p["updated_at"] or p["created_at"], reverse=True)
-        return packets[:limit]
+            packets.sort(
+                key=lambda p: p["updated_at"] or p["created_at"], reverse=True
+            )
+            packets = packets[:limit]
+
+            participants = await _resolve_participants(session, packets)
+
+        return {"packets": packets, "participants": participants}
 
     # ------------------------------------------------------------------
     # ask_with_context — RoutedSignalRow
@@ -253,6 +269,10 @@ def _route_packet_from_row(row: RoutedSignalRow) -> dict[str, Any]:
     title = (row.framing or "").strip().splitlines()[0] if row.framing else "(no framing)"
     if len(title) > 120:
         title = title[:117] + "…"
+    # Timeline — chronological audit of who acted when. Slice D fills
+    # source-side action events from reply_json["source_action_notes"]
+    # so the evidence block can render the closing event ("Maya
+    # accepted at 11:02") in addition to the dispatch + reply.
     timeline = [
         {
             "at": _iso(row.created_at),
@@ -263,6 +283,7 @@ def _route_packet_from_row(row: RoutedSignalRow) -> dict[str, Any]:
             "refs": [],
         }
     ]
+    reply_json = row.reply_json if isinstance(row.reply_json, dict) else {}
     if row.responded_at:
         timeline.append(
             {
@@ -271,6 +292,21 @@ def _route_packet_from_row(row: RoutedSignalRow) -> dict[str, Any]:
                 "actor_user_id": row.target_user_id,
                 "kind": "route_replied",
                 "summary": "Target replied.",
+                "refs": [],
+            }
+        )
+    source_action_notes = list(reply_json.get("source_action_notes") or [])
+    for n in source_action_notes:
+        action = n.get("action") or "unknown"
+        timeline.append(
+            {
+                "at": n.get("at"),
+                "actor": "human",
+                "actor_user_id": row.source_user_id,
+                "kind": f"source_{action}",
+                "summary": _SOURCE_ACTION_TIMELINE_SUMMARY.get(
+                    action, "Source acted on reply."
+                ),
                 "refs": [],
             }
         )
@@ -346,6 +382,81 @@ def _route_packet_from_row(row: RoutedSignalRow) -> dict[str, Any]:
     else:
         stage = "completed"
 
+    # Source refs (Slice D): point at the routed signal itself + the
+    # source/target stream surfaces. Streams use a new `stream` kind
+    # — added to the FE FlowRef.kind union so the typed boundary
+    # stays honest.
+    source_refs: list[dict[str, Any]] = [
+        {
+            "kind": "agent_run",
+            "id": row.id,
+            "label": "Routed signal",
+        }
+    ]
+    if row.source_stream_id:
+        source_refs.append(
+            {
+                "kind": "stream",
+                "id": row.source_stream_id,
+                "label": "Source stream",
+                "href": f"/streams/{row.source_stream_id}",
+            }
+        )
+    if row.target_stream_id:
+        source_refs.append(
+            {
+                "kind": "stream",
+                "id": row.target_stream_id,
+                "label": "Target stream",
+                "href": f"/streams/{row.target_stream_id}",
+            }
+        )
+
+    # Evidence (Slice D): human_gates from target reply + source-side
+    # action notes. Per spec §7.6, evidence must surface before
+    # completion; this is the start. custom_followup is intentionally
+    # excluded from human_gates because it's a continuation, not a
+    # gate decision (the original packet stays open in the audit
+    # sense; the new packet has its own gates).
+    human_gates: list[dict[str, Any]] = []
+    if row.responded_at:
+        # Heuristic mapping: option_id picked → 'accept' (target chose
+        # one of source's offered options); custom_text → 'counter'
+        # (target said something else). Imperfect; will tighten when
+        # OptionKind reaches the projection.
+        option_id = reply_json.get("option_id") if reply_json else None
+        custom_text = reply_json.get("custom_text") if reply_json else None
+        gate_action = "counter" if custom_text and not option_id else "accept"
+        human_gates.append(
+            {
+                "user_id": row.target_user_id,
+                "action": gate_action,
+                "at": _iso(row.responded_at),
+                "note": custom_text or None,
+            }
+        )
+    for n in source_action_notes:
+        gate_action = _SOURCE_ACTION_TO_GATE.get(n.get("action") or "")
+        if gate_action is None:
+            continue  # custom_followup or unknown — skip from gates
+        human_gates.append(
+            {
+                "user_id": row.source_user_id,
+                "action": gate_action,
+                "at": n.get("at") or "",
+                "note": n.get("note") or None,
+            }
+        )
+
+    evidence = {
+        "citations": [],
+        "source_messages": [],
+        "artifacts": [],
+        "agent_runs": source_refs[:1],  # the routed signal itself
+        "human_gates": human_gates,
+        "uncertainty": [],
+    }
+
     return {
         "id": f"route:{row.id}",
         "project_id": row.project_id or "",
@@ -359,9 +470,9 @@ def _route_packet_from_row(row: RoutedSignalRow) -> dict[str, Any]:
         "title": title,
         "summary": (row.framing or "")[:240],
         "intent": "Ask another teammate with framed context.",
-        "source_refs": [],
+        "source_refs": source_refs,
         "graph_refs": [],
-        "evidence": _empty_evidence(),
+        "evidence": evidence,
         "routed_signal_id": row.id,
         "timeline": timeline,
         "next_actions": next_actions,
@@ -562,7 +673,10 @@ def _handoff_packet_from_row(
 
 
 def _empty_evidence() -> dict[str, Any]:
-    """Slice A renders an empty evidence packet shell. Slice D fills it."""
+    """KB review and handoff packets still emit empty shells in Slice
+    D. Slice E will fill them when those recipes get their own
+    evidence semantics. Route packets fill the shell directly in
+    `_route_packet_from_row`."""
     return {
         "citations": [],
         "source_messages": [],
@@ -570,6 +684,70 @@ def _empty_evidence() -> dict[str, Any]:
         "agent_runs": [],
         "human_gates": [],
         "uncertainty": [],
+    }
+
+
+# Maps source-side action strings (as persisted in
+# reply_json["source_action_notes"]) onto the EvidencePacket
+# human_gates action vocabulary. custom_followup intentionally has no
+# entry — it's a continuation rather than a gate decision; it surfaces
+# only in the timeline.
+_SOURCE_ACTION_TO_GATE: dict[str, str] = {
+    "accept": "accept",
+    "counter_back": "counter",
+    "escalate_to_gate": "escalate_to_gate",
+}
+
+_SOURCE_ACTION_TIMELINE_SUMMARY: dict[str, str] = {
+    "accept": "Source accepted the reply.",
+    "counter_back": "Source countered the reply.",
+    "escalate_to_gate": "Source escalated to a gate.",
+    "custom_followup": "Source sent a follow-up.",
+}
+
+
+async def _resolve_participants(
+    session, packets: list[dict[str, Any]]
+) -> dict[str, dict[str, Any]]:
+    """Build a `{user_id: {display_name, username}}` sidecar from the
+    set of user_ids referenced across all packets. One UserRepository
+    query per /flows call; the FE looks up locally without N+1.
+
+    Pulls from: source_user_id, target_user_ids, current_target_user_ids,
+    authority_user_ids, evidence.human_gates[*].user_id, and
+    timeline[*].actor_user_id.
+    """
+    ids: set[str] = set()
+    for p in packets:
+        if p.get("source_user_id"):
+            ids.add(str(p["source_user_id"]))
+        for uid in p.get("target_user_ids") or []:
+            if uid:
+                ids.add(str(uid))
+        for uid in p.get("current_target_user_ids") or []:
+            if uid:
+                ids.add(str(uid))
+        for uid in p.get("authority_user_ids") or []:
+            if uid:
+                ids.add(str(uid))
+        evidence = p.get("evidence") or {}
+        for gate in evidence.get("human_gates") or []:
+            uid = gate.get("user_id")
+            if uid:
+                ids.add(str(uid))
+        for ev in p.get("timeline") or []:
+            uid = ev.get("actor_user_id")
+            if uid:
+                ids.add(str(uid))
+    if not ids:
+        return {}
+    rows = await UserRepository(session).get_many(list(ids))
+    return {
+        row.id: {
+            "display_name": row.display_name or row.username,
+            "username": row.username,
+        }
+        for row in rows
     }
 
 

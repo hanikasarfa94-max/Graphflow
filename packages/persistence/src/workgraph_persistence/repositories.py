@@ -762,6 +762,18 @@ class UserRepository:
         stmt = select(UserRow).order_by(UserRow.created_at).limit(limit)
         return list((await self._session.execute(stmt)).scalars().all())
 
+    async def get_many(self, user_ids: list[str]) -> list[UserRow]:
+        """Fetch multiple users in one query. Returns rows in arbitrary
+        order; caller indexes by id. Empty / duplicate input lists are
+        normalised. Used by projections that need participant lookup
+        for a batch of distinct user_ids without N+1.
+        """
+        unique = list({uid for uid in user_ids if uid})
+        if not unique:
+            return []
+        stmt = select(UserRow).where(UserRow.id.in_(unique))
+        return list((await self._session.execute(stmt)).scalars().all())
+
     async def update_profile(
         self,
         user_id: str,

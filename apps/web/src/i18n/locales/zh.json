@@ -1851,6 +1851,21 @@
       "validationError": "输入有误。",
       "domainError": "下游操作失败。"
     },
+    "evidence": {
+      "show": "证据",
+      "hide": "收起证据",
+      "asked": "{who} 在 {when} 发起",
+      "replied": "{who} 在 {when} 回复",
+      "repliedWithOption": "{who} 在 {when} 回复 —— 选择了选项",
+      "repliedCustom": "{who} 在 {when} 回复 —— 自定义回复",
+      "accepted": "{who} 在 {when} 接受",
+      "countered": "{who} 在 {when} 反驳",
+      "escalated": "{who} 在 {when} 升级",
+      "followedUp": "{who} 在 {when} 追问",
+      "you": "你",
+      "unknown": "某人",
+      "noEvidence": "尚无证据记录。"
+    },
     "stage": {
       "awaiting_target": "等待回复",
       "awaiting_membrane": "等待审核",
