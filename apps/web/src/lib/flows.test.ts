@@ -4,7 +4,10 @@ import { join } from "node:path";
 
 import {
   BUCKETS,
+  MUTATION_ACTION_KINDS,
   RECIPE_ICON,
+  actionRequiresFraming,
+  isMutationAction,
   type FlowPacket,
   type FlowRecipeId,
 } from "./flows";
@@ -164,6 +167,103 @@ describe("flows i18n contract (en + zh in lockstep)", () => {
     for (const key of ["title", "subtitle", "open", "loading", "error", "openMissing"]) {
       const enVal = dive(en, ["flows", key]);
       const zhVal = dive(zh, ["flows", key]);
+      expect(typeof enVal).toBe("string");
+      expect(typeof zhVal).toBe("string");
+      expect(zhVal).not.toBe(enVal);
+    }
+  });
+});
+
+// ---- C.1.c additions: mutation action client + i18n contract ----------
+
+describe("C.1.c mutation action client", () => {
+  test("MUTATION_ACTION_KINDS contains exactly the four C.1 source-side actions", () => {
+    expect([...MUTATION_ACTION_KINDS].sort()).toEqual([
+      "accept",
+      "counter_back",
+      "custom_followup",
+      "escalate_to_gate",
+    ]);
+  });
+
+  test("isMutationAction narrows correctly", () => {
+    expect(isMutationAction("accept")).toBe(true);
+    expect(isMutationAction("counter_back")).toBe(true);
+    expect(isMutationAction("escalate_to_gate")).toBe(true);
+    expect(isMutationAction("custom_followup")).toBe(true);
+    // The legacy `open` kind is NOT a mutation — kept as link.
+    expect(isMutationAction("open")).toBe(false);
+    // Target-side delegate_up isn't in C.1; FE must not render it
+    // until C.2 widens the union.
+    expect(isMutationAction("delegate_up")).toBe(false);
+    expect(isMutationAction("nonsense")).toBe(false);
+  });
+
+  test("actionRequiresFraming gates the inline form", () => {
+    expect(actionRequiresFraming("counter_back")).toBe(true);
+    expect(actionRequiresFraming("custom_followup")).toBe(true);
+    expect(actionRequiresFraming("accept")).toBe(false);
+    expect(actionRequiresFraming("escalate_to_gate")).toBe(false);
+  });
+});
+
+describe("C.1.c i18n contract", () => {
+  const en = loadLocale("en.json");
+  const zh = loadLocale("zh.json");
+
+  test("every mutation action label exists in BOTH locales", () => {
+    const labelKeys = [
+      "accept",
+      "counterBack",
+      "escalateToGate",
+      "customFollowup",
+      "more",
+      "moreOpen",
+      "moreClose",
+    ];
+    for (const key of labelKeys) {
+      const enVal = dive(en, ["flows", "actions", key]);
+      const zhVal = dive(zh, ["flows", "actions", key]);
+      expect(typeof enVal).toBe("string");
+      expect(typeof zhVal).toBe("string");
+      expect(zhVal).not.toBe(enVal);
+    }
+  });
+
+  test("inline form chrome strings bilingual", () => {
+    for (const key of [
+      "counterBackPrompt",
+      "customFollowupPrompt",
+      "framingPlaceholder",
+      "notePlaceholder",
+      "send",
+      "sending",
+      "cancel",
+    ]) {
+      const enVal = dive(en, ["flows", "form", key]);
+      const zhVal = dive(zh, ["flows", "form", key]);
+      expect(typeof enVal).toBe("string");
+      expect(typeof zhVal).toBe("string");
+      expect(zhVal).not.toBe(enVal);
+    }
+  });
+
+  test("error message for every C.1 BE error code is bilingual", () => {
+    // FE error mapping must cover every BE error code so a snake_case
+    // payload from the global handler doesn't surface to the user.
+    const errorKeys = [
+      "generic",
+      "flowNotFound",
+      "unsupportedFlowRecipe",
+      "unsupportedAction",
+      "notSourceUser",
+      "notReadyForSourceAction",
+      "validationError",
+      "domainError",
+    ];
+    for (const key of errorKeys) {
+      const enVal = dive(en, ["flows", "errors", key]);
+      const zhVal = dive(zh, ["flows", "errors", key]);
       expect(typeof enVal).toBe("string");
       expect(typeof zhVal).toBe("string");
       expect(zhVal).not.toBe(enVal);

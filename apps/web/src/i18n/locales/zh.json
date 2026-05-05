@@ -1823,6 +1823,34 @@
     "error": "无法加载流转。",
     "open": "打开",
     "openMissing": "（暂无可跳转面板）",
+    "actions": {
+      "accept": "接受",
+      "counterBack": "反驳",
+      "escalateToGate": "升级到 Gate",
+      "customFollowup": "发送追问",
+      "more": "更多",
+      "moreOpen": "展开更多操作",
+      "moreClose": "收起更多操作"
+    },
+    "form": {
+      "counterBackPrompt": "你的反驳框架是？",
+      "customFollowupPrompt": "你的追问内容？",
+      "framingPlaceholder": "输入信息…",
+      "notePlaceholder": "可选备注（仅记录在审计日志）…",
+      "send": "发送",
+      "sending": "发送中…",
+      "cancel": "取消"
+    },
+    "errors": {
+      "generic": "操作失败。",
+      "flowNotFound": "该流转已不存在。",
+      "unsupportedFlowRecipe": "此类型暂不支持该操作。",
+      "unsupportedAction": "暂不支持的操作。",
+      "notSourceUser": "只有发起人能在此操作。",
+      "notReadyForSourceAction": "当前状态无法执行此操作。",
+      "validationError": "输入有误。",
+      "domainError": "下游操作失败。"
+    },
     "stage": {
       "awaiting_target": "等待回复",
       "awaiting_membrane": "等待审核",

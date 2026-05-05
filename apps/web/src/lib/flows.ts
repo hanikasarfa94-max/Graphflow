@@ -201,6 +201,64 @@ export function listFlows(
   );
 }
 
+// ---- C.1 — POST /actions client ----------------------------------------
+
+// Discriminated union mirroring the BE Pydantic body. TS narrows on
+// `action` so missing `framing` on counter_back / custom_followup
+// won't compile.
+export type FlowActionBody =
+  | { action: "accept"; note?: string }
+  | { action: "counter_back"; framing: string; note?: string }
+  | { action: "escalate_to_gate"; note?: string }
+  | { action: "custom_followup"; framing: string; note?: string };
+
+export type FlowActionKind = FlowActionBody["action"];
+
+// The mutation action kinds the FE renders as buttons. `open` is a
+// link, not part of this set. Slice C.2 will widen this when target-
+// side actions land; for C.1 these are source-side only.
+export const MUTATION_ACTION_KINDS: readonly FlowActionKind[] = [
+  "accept",
+  "counter_back",
+  "escalate_to_gate",
+  "custom_followup",
+];
+
+export function isMutationAction(kind: string): kind is FlowActionKind {
+  return (MUTATION_ACTION_KINDS as readonly string[]).includes(kind);
+}
+
+// Actions whose body must include a `framing` string. Used by the FE
+// to know whether to render a textarea form or just a confirm button.
+export function actionRequiresFraming(kind: FlowActionKind): boolean {
+  return kind === "counter_back" || kind === "custom_followup";
+}
+
+export interface FlowActionResponse {
+  ok: boolean;
+  flow_id: string;
+  // Original packet's projected status post-action. Memo §4.4: for
+  // custom_followup this stays `completed` because the underlying
+  // signal stays 'replied' which projects to packet status
+  // 'completed'. The FE refresh logic should NOT assume `active`
+  // means "the original is still alive" — read this status field
+  // directly.
+  status: "active" | "completed" | string;
+  spawned_flow_id: string | null;
+}
+
+export function postFlowAction(
+  projectId: string,
+  flowId: string,
+  body: FlowActionBody,
+  baseUrl?: string,
+): Promise<FlowActionResponse> {
+  return api<FlowActionResponse>(
+    `/api/projects/${projectId}/flows/${encodeURIComponent(flowId)}/actions`,
+    { method: "POST", body, baseUrl },
+  );
+}
+
 // Pretty labels for the three bucket buttons. Caller passes a
 // next-intl translator; we don't import next-intl here so this file
 // stays usable from non-React contexts (tests, scripts, etc.).

@@ -13,8 +13,7 @@
 // to each bucket so an empty workbench reads as quietness, not as
 // "this feature is broken."
 
-import Link from "next/link";
-import { useEffect, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useState, type CSSProperties } from "react";
 import { useTranslations } from "next-intl";
 
 import {
@@ -25,6 +24,8 @@ import {
   type FlowPacket,
 } from "@/lib/flows";
 import { formatIso } from "@/lib/time";
+
+import { FlowRowActions } from "./FlowRowActions";
 
 interface Props {
   projectId: string;
@@ -52,7 +53,9 @@ export function FlowsPanelBody({ projectId }: Props) {
 
   // Three parallel fetches. Each bucket has its own state slot so a
   // slow / failed bucket doesn't block the other two from rendering.
-  useEffect(() => {
+  // Extracted into a refresh callback so action rows can re-trigger
+  // it after a successful mutation (C.1.c).
+  const refresh = useCallback(() => {
     let cancelled = false;
     BUCKETS.forEach((bucket) => {
       void (async () => {
@@ -81,6 +84,10 @@ export function FlowsPanelBody({ projectId }: Props) {
     };
   }, [projectId]);
 
+  useEffect(() => {
+    return refresh();
+  }, [refresh]);
+
   return (
     <div
       data-testid="flows-panel"
@@ -101,6 +108,7 @@ export function FlowsPanelBody({ projectId }: Props) {
           key={bucket}
           bucket={bucket}
           state={byBucket[bucket]}
+          onActed={refresh}
         />
       ))}
     </div>
@@ -110,9 +118,11 @@ export function FlowsPanelBody({ projectId }: Props) {
 function BucketSection({
   bucket,
   state,
+  onActed,
 }: {
   bucket: FlowBucket;
   state: BucketState;
+  onActed: () => void;
 }) {
   const t = useTranslations("flows");
   // i18n key for the bucket header — `needs_me` → `needsMe`. Camel-
@@ -144,13 +154,21 @@ function BucketSection({
       ) : state.packets.length === 0 ? (
         <Empty text={t(`empty.${labelKey}`)} />
       ) : (
-        state.packets.map((p) => <FlowRow key={p.id} packet={p} />)
+        state.packets.map((p) => (
+          <FlowRow key={p.id} packet={p} onActed={onActed} />
+        ))
       )}
     </section>
   );
 }
 
-function FlowRow({ packet }: { packet: FlowPacket }) {
+function FlowRow({
+  packet,
+  onActed,
+}: {
+  packet: FlowPacket;
+  onActed: () => void;
+}) {
   const t = useTranslations("flows");
   // Spec §6: drawer reads `current_target_user_ids` for who is
   // currently blocking, not `target_user_ids`. We surface the count
@@ -160,11 +178,6 @@ function FlowRow({ packet }: { packet: FlowPacket }) {
   const recipeLabel = t(`recipes.${packet.recipe_id}`);
   const stageLabel = stageDisplay(packet.stage, t);
   const updated = packet.updated_at ?? packet.created_at;
-  // Open follows next_actions[0].href verbatim. We do NOT compute
-  // routes from recipe_id — that would re-bake the routing logic the
-  // BE already encoded.
-  const openAction = packet.next_actions.find((a) => a.kind === "open");
-  const href = openAction?.href ?? null;
   return (
     <div
       data-testid="flow-row"
@@ -220,19 +233,11 @@ function FlowRow({ packet }: { packet: FlowPacket }) {
           </span>
         </span>
       </div>
-      {href ? (
-        <Link
-          href={href}
-          data-testid="flow-row-open"
-          style={openLinkStyle}
-        >
-          {t("open")}
-        </Link>
-      ) : (
-        <span style={{ ...openLinkStyle, opacity: 0.5, cursor: "default" }}>
-          {t("openMissing")}
-        </span>
-      )}
+      {/* C.1.c — action surface. Reads packet.next_actions and renders
+          Open + Accept + More-menu compactly. Form for counter_back /
+          custom_followup expands inline. Read-only Open and unsupported
+          recipes both fall through to the FlowRowActions empty state. */}
+      <FlowRowActions packet={packet} onActed={onActed} />
     </div>
   );
 }
@@ -312,15 +317,3 @@ const metaChipStyle: CSSProperties = {
   color: "var(--wg-ink-soft)",
 };
 
-const openLinkStyle: CSSProperties = {
-  alignSelf: "center",
-  padding: "4px 10px",
-  fontSize: 11,
-  fontFamily: "var(--wg-font-mono)",
-  border: "1px solid var(--wg-line)",
-  borderRadius: 3,
-  background: "#fff",
-  color: "var(--wg-accent)",
-  textDecoration: "none",
-  whiteSpace: "nowrap",
-};
