@@ -461,3 +461,151 @@ async def test_packet_ids_are_deterministic_from_source_row(api_env):
     ids2 = {p["id"] for p in r2.json()["packets"]}
     assert ids1 == ids2
     assert all(pid_str.startswith("handoff:") for pid_str in ids1)
+
+
+# ---- A.1 — visibility, owner-needs-me, hrefs ----------------------------
+
+
+async def _add_member(maker, *, project_id: str, user_id: str, role: str = "member"):
+    async with session_scope(maker) as session:
+        await ProjectMemberRepository(session).add(
+            project_id=project_id, user_id=user_id, role=role
+        )
+    await backfill_streams_from_projects(maker)
+
+
+@pytest.mark.asyncio
+async def test_non_participant_member_cannot_see_route_packet(api_env):
+    """A.1 visibility: a project member who is neither source nor target
+    of a routed signal — and not an owner — must NOT see that packet via
+    the /flows projection. Project membership alone was the leak."""
+    client, maker, *_ = api_env
+    owner_id = await _register(client, "fp_v_owner")
+    maya_id = await _register(client, "fp_v_maya")
+    raj_id = await _register(client, "fp_v_raj")
+    bystander_id = await _register(client, "fp_v_bystander")
+    # Project: owner_id is owner; maya/raj/bystander are members.
+    pid = await _mk_project_with_members(maker, owner_id=owner_id, member_id=maya_id)
+    await _add_member(maker, project_id=pid, user_id=raj_id)
+    await _add_member(maker, project_id=pid, user_id=bystander_id)
+
+    # Maya routes a question to Raj.
+    await _login(client, "fp_v_maya")
+    r = await client.post(
+        "/api/routing/dispatch",
+        json={
+            "target_user_id": raj_id,
+            "project_id": pid,
+            "framing": "Private question between Maya and Raj.",
+            "background": [],
+            "options": [
+                {"id": "y", "label": "Yes", "kind": "action", "weight": 0.5},
+                {"id": "n", "label": "No", "kind": "action", "weight": 0.5},
+            ],
+        },
+    )
+    assert r.status_code == 200, r.text
+
+    # Source sees it.
+    r = await _list_flows(client, pid)
+    routes = [p for p in r.json()["packets"] if p["recipe_id"] == "ask_with_context"]
+    assert len(routes) == 1
+
+    # Target sees it.
+    await _login(client, "fp_v_raj")
+    r = await _list_flows(client, pid)
+    routes = [p for p in r.json()["packets"] if p["recipe_id"] == "ask_with_context"]
+    assert len(routes) == 1
+
+    # Project owner sees it (audit).
+    await _login(client, "fp_v_owner")
+    r = await _list_flows(client, pid)
+    routes = [p for p in r.json()["packets"] if p["recipe_id"] == "ask_with_context"]
+    assert len(routes) == 1
+
+    # Bystander member does NOT see it. This is the A.1 fix.
+    await _login(client, "fp_v_bystander")
+    r = await _list_flows(client, pid)
+    assert r.status_code == 200
+    routes = [p for p in r.json()["packets"] if p["recipe_id"] == "ask_with_context"]
+    assert routes == []
+
+
+@pytest.mark.asyncio
+async def test_owner_sees_kb_and_handoff_in_needs_me(api_env):
+    """A.1 owner authority: KB review and handoff packets must populate
+    `current_target_user_ids` with project owners while the underlying
+    row is awaiting Membrane/finalization, so /flows?bucket=needs_me
+    returns them for owners.
+    """
+    client, maker, *_ = api_env
+    owner_id = await _register(client, "fp_om_owner")
+    member_id = await _register(client, "fp_om_member")
+    pid = await _mk_project_with_members(maker, owner_id=owner_id, member_id=member_id)
+
+    # Member drafts a KB item awaiting owner review.
+    await _seed_kb_draft(maker, project_id=pid, owner_id=member_id, title="Owner-needs-me")
+    # Owner prepares a handoff (awaiting finalize).
+    await _login(client, "fp_om_owner")
+    r = await client.post(
+        f"/api/projects/{pid}/handoff/prepare",
+        json={"from_user_id": owner_id, "to_user_id": member_id},
+    )
+    assert r.status_code == 200, r.text
+
+    # Owner queries needs_me — should see BOTH the KB review and the handoff.
+    r = await _list_flows(client, pid, bucket="needs_me")
+    assert r.status_code == 200, r.text
+    recipes = sorted(p["recipe_id"] for p in r.json()["packets"])
+    assert recipes == ["handoff", "promote_to_memory"]
+
+    # Authority + current_target are populated, not empty.
+    for p in r.json()["packets"]:
+        assert owner_id in p["authority_user_ids"]
+        assert owner_id in p["current_target_user_ids"]
+
+
+@pytest.mark.asyncio
+async def test_every_active_next_action_has_href(api_env):
+    """A.1 hrefs: drawer should not have to know routing rules. Every
+    active packet's next_action must carry an href so the FE can render
+    a link without recipe-specific routing logic."""
+    client, maker, *_ = api_env
+    maya_id = await _register(client, "fp_h_maya")
+    raj_id = await _register(client, "fp_h_raj")
+    pid = await _mk_project_with_members(maker, owner_id=maya_id, member_id=raj_id)
+
+    # Create one packet of each recipe.
+    await _login(client, "fp_h_maya")
+    await client.post(
+        "/api/routing/dispatch",
+        json={
+            "target_user_id": raj_id,
+            "project_id": pid,
+            "framing": "Test",
+            "background": [],
+            "options": [
+                {"id": "y", "label": "Yes", "kind": "action", "weight": 0.5},
+                {"id": "n", "label": "No", "kind": "action", "weight": 0.5},
+            ],
+        },
+    )
+    await _seed_kb_draft(maker, project_id=pid, owner_id=maya_id, title="Href test")
+    await client.post(
+        f"/api/projects/{pid}/handoff/prepare",
+        json={"from_user_id": maya_id, "to_user_id": raj_id},
+    )
+
+    r = await _list_flows(client, pid)
+    packets = r.json()["packets"]
+    assert len(packets) == 3
+    for p in packets:
+        assert p["status"] == "active"
+        assert p["next_actions"], f"{p['recipe_id']} has empty next_actions"
+        for action in p["next_actions"]:
+            assert action.get("href"), (
+                f"{p['recipe_id']} action {action['id']} missing href"
+            )
+            assert action["href"].startswith("/"), (
+                f"{p['recipe_id']} href is not absolute: {action['href']}"
+            )

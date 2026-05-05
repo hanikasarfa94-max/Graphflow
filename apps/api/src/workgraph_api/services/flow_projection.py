@@ -35,6 +35,7 @@ from workgraph_persistence import (
     HandoffRow,
     IMSuggestionRow,
     KbItemRow,
+    ProjectMemberRepository,
     RoutedSignalRow,
     session_scope,
 )
@@ -80,19 +81,42 @@ class FlowProjectionService:
         limit: int = 100,
     ) -> list[dict[str, Any]]:
         """Project all derivable packets for `project_id`, filtered as
-        requested. Filtering is applied AFTER projection — Slice A is
-        small enough that fan-out queries + python filter is faster
-        than per-recipe SQL filters. Slice F will reverse this if the
-        snapshot table lands.
+        requested. Filtering applied AFTER projection — Slice A is small
+        enough that fan-out queries + python filter beats per-recipe SQL
+        filters. Slice F reverses this if a snapshot table lands.
+
+        Two projection-side filters are non-negotiable and apply BEFORE
+        the user-facing filters:
+
+        1. Owner enrichment — KB review and handoff packets receive
+           `authority_user_ids = project_owner_ids` so `bucket=needs_me`
+           works for owners (see flow-packets-spec §7.5 / §9.2).
+        2. Viewer visibility — packets carrying personal information
+           (route framings between two members) are filtered to
+           {source, target, owners}. Project membership alone is not
+           enough; that was the leak the v1 endpoint had.
         """
         async with session_scope(self._sessionmaker) as session:
+            owner_ids = await _project_owner_ids(session, project_id)
             packets: list[dict[str, Any]] = []
             if recipe in (None, "ask_with_context"):
                 packets.extend(await self._derive_route_packets(session, project_id))
             if recipe in (None, "promote_to_memory"):
-                packets.extend(await self._derive_kb_review_packets(session, project_id))
+                packets.extend(
+                    await self._derive_kb_review_packets(
+                        session, project_id, owner_ids
+                    )
+                )
             if recipe in (None, "handoff"):
-                packets.extend(await self._derive_handoff_packets(session, project_id))
+                packets.extend(
+                    await self._derive_handoff_packets(
+                        session, project_id, owner_ids
+                    )
+                )
+
+        # Visibility filter first — never let a non-participant member
+        # read past it via a status / bucket / recipe combination.
+        packets = [p for p in packets if _visible_to(p, viewer_user_id, owner_ids)]
 
         if status is not None:
             packets = [p for p in packets if p["status"] == status]
@@ -128,7 +152,7 @@ class FlowProjectionService:
     # ------------------------------------------------------------------
 
     async def _derive_kb_review_packets(
-        self, session, project_id: str
+        self, session, project_id: str, owner_ids: list[str]
     ) -> list[dict[str, Any]]:
         kb_rows = list(
             (
@@ -168,7 +192,9 @@ class FlowProjectionService:
                 continue
             suggestions_by_kb_id.setdefault(kb_id, []).append(sug)
         return [
-            _kb_review_packet_from_row(r, suggestions_by_kb_id.get(r.id, []))
+            _kb_review_packet_from_row(
+                r, suggestions_by_kb_id.get(r.id, []), owner_ids
+            )
             for r in kb_rows
         ]
 
@@ -177,7 +203,7 @@ class FlowProjectionService:
     # ------------------------------------------------------------------
 
     async def _derive_handoff_packets(
-        self, session, project_id: str
+        self, session, project_id: str, owner_ids: list[str]
     ) -> list[dict[str, Any]]:
         rows = list(
             (
@@ -191,7 +217,7 @@ class FlowProjectionService:
             .scalars()
             .all()
         )
-        return [_handoff_packet_from_row(r) for r in rows]
+        return [_handoff_packet_from_row(r, owner_ids) for r in rows]
 
 
 # ----------------------------------------------------------------------
@@ -241,6 +267,8 @@ def _route_packet_from_row(row: RoutedSignalRow) -> dict[str, Any]:
         )
     next_actions: list[dict[str, Any]] = []
     if status_alive:
+        # Target answers from their personal stream / inbox; href deep-
+        # links to /inbox where the routed-inbound card renders.
         next_actions.append(
             {
                 "id": "reply",
@@ -248,6 +276,7 @@ def _route_packet_from_row(row: RoutedSignalRow) -> dict[str, Any]:
                 "kind": "open",
                 "actor_user_id": row.target_user_id,
                 "requires_membrane": False,
+                "href": "/inbox",
             }
         )
     return {
@@ -277,15 +306,15 @@ def _route_packet_from_row(row: RoutedSignalRow) -> dict[str, Any]:
 def _kb_review_packet_from_row(
     row: KbItemRow,
     suggestions: list[IMSuggestionRow],
+    owner_ids: list[str],
 ) -> dict[str, Any]:
     """Map a draft / pending-review KB item to a `promote_to_memory` packet.
 
-    The owner gate is project-owners; we don't inflate `authority_user_ids`
-    with a query at projection time (it'd need ProjectMemberRepository
-    per packet). Slice B's drawer can call /api/projects/{id}/members
-    once and intersect. authority_user_ids stays [] from the projection
-    layer; that's an explicit "not derived here" sentinel, not a missing
-    field.
+    Owner gating: KB drafts going to team memory require owner approval
+    via Membrane. We populate `authority_user_ids` AND
+    `current_target_user_ids` with project owners on awaiting-membrane
+    packets so `bucket=needs_me` works for owners without the FE having
+    to special-case this recipe.
     """
     stage_alive = row.status in ("draft", "pending-review")
     packet_status: PacketStatus = "active" if stage_alive else "completed"
@@ -326,12 +355,14 @@ def _kb_review_packet_from_row(
         )
     next_actions: list[dict[str, Any]] = []
     if stage_alive:
+        # Membrane review surface lives at /projects/{pid}/detail/im.
         next_actions.append(
             {
                 "id": "review",
                 "label": "Open review",
                 "kind": "open",
                 "requires_membrane": True,
+                "href": f"/projects/{row.project_id}/detail/im",
             }
         )
     membrane_candidate = (
@@ -352,11 +383,11 @@ def _kb_review_packet_from_row(
         "status": packet_status,
         "source_user_id": row.ingested_by_user_id or row.owner_user_id,
         "target_user_ids": [],
-        # Membrane review is owner-gated; the projection doesn't enumerate
-        # owners (see docstring above). Drawer/UI can intersect with
-        # project members and surface the right "needs me" badges.
-        "current_target_user_ids": [],
-        "authority_user_ids": [],
+        # Owner gate (Membrane): the project owners are who need to act
+        # on this packet. Populated while alive so `bucket=needs_me`
+        # works for owners; cleared once the row leaves draft state.
+        "current_target_user_ids": list(owner_ids) if stage_alive else [],
+        "authority_user_ids": list(owner_ids),
         "title": title,
         "summary": summary,
         "intent": "Promote a draft into team memory via Membrane review.",
@@ -373,8 +404,16 @@ def _kb_review_packet_from_row(
     }
 
 
-def _handoff_packet_from_row(row: HandoffRow) -> dict[str, Any]:
-    """Map a HandoffRow to a `handoff` packet."""
+def _handoff_packet_from_row(
+    row: HandoffRow, owner_ids: list[str]
+) -> dict[str, Any]:
+    """Map a HandoffRow to a `handoff` packet.
+
+    Owner gating: per HandoffService.finalize, only project owners
+    finalize a handoff. Populate `authority_user_ids` with project
+    owners and use them as `current_target_user_ids` while the packet
+    is still draft, so owners see the packet in `bucket=needs_me`.
+    """
     stage_alive = (row.status or "draft") == "draft"
     packet_status: PacketStatus = "active" if stage_alive else "completed"
     title = (
@@ -404,12 +443,16 @@ def _handoff_packet_from_row(row: HandoffRow) -> dict[str, Any]:
         )
     next_actions: list[dict[str, Any]] = []
     if stage_alive:
+        # Handoff finalize lives in the team / handoff prep surface;
+        # /projects/{pid}/team is the durable entry point for now.
+        # Slice B may swap to a deep-link if a dedicated route lands.
         next_actions.append(
             {
                 "id": "finalize",
                 "label": "Open handoff",
                 "kind": "open",
                 "requires_membrane": False,
+                "href": f"/projects/{row.project_id}/team",
             }
         )
     return {
@@ -420,8 +463,10 @@ def _handoff_packet_from_row(row: HandoffRow) -> dict[str, Any]:
         "status": packet_status,
         "source_user_id": row.from_user_id,
         "target_user_ids": [row.to_user_id],
-        "current_target_user_ids": [],  # owner finalizes; not the to_user
-        "authority_user_ids": [],  # owner — not enumerated at projection
+        # Owner finalizes — not the to_user. Owners populate
+        # current_target_user_ids while draft so bucket=needs_me hits.
+        "current_target_user_ids": list(owner_ids) if stage_alive else [],
+        "authority_user_ids": list(owner_ids),
         "title": title,
         "summary": (row.brief_markdown or "")[:240],
         "intent": "Transfer routines to a successor.",
@@ -451,6 +496,52 @@ def _empty_evidence() -> dict[str, Any]:
         "human_gates": [],
         "uncertainty": [],
     }
+
+
+async def _project_owner_ids(session, project_id: str) -> list[str]:
+    """Fetch project owner user_ids — once per `list_for_project` call.
+
+    Used both for visibility filtering (owners can audit any packet)
+    and for populating `authority_user_ids` on owner-gated recipes
+    (KB review, handoff finalize). Returns [] when the project has no
+    owner row, which prevents authority from leaking to all members
+    on a misconfigured project.
+    """
+    members = await ProjectMemberRepository(session).list_for_project(project_id)
+    return [m.user_id for m in members if m.role == "owner"]
+
+
+def _visible_to(
+    packet: dict[str, Any], viewer_user_id: str, owner_ids: list[str]
+) -> bool:
+    """Per-packet visibility filter.
+
+    Project membership alone is NOT enough — that was Slice A's leak.
+    Visibility rules per recipe:
+
+    - ask_with_context: source / current target / participants /
+      authority owners. Other members do not see Maya↔Raj routes.
+    - promote_to_memory: drafter / current target (the owner pool) /
+      authority owners. Casual members do not see drafts moving
+      through Membrane review.
+    - handoff: from_user / to_user (target_user_ids) / authority
+      owners. Other members don't see the routine transfer until it
+      finalizes.
+
+    Owners always see — they need audit visibility per §10. The
+    drafter / source always sees their own work.
+    """
+    if viewer_user_id in owner_ids:
+        return True
+    if packet.get("source_user_id") == viewer_user_id:
+        return True
+    if viewer_user_id in (packet.get("target_user_ids") or []):
+        return True
+    if viewer_user_id in (packet.get("current_target_user_ids") or []):
+        return True
+    if viewer_user_id in (packet.get("authority_user_ids") or []):
+        return True
+    return False
 
 
 def _iso(value) -> str | None:
