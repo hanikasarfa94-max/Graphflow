@@ -528,3 +528,47 @@ async def test_demote_owner_only(api_env):
     r = await client.post(f"/api/kb-items/{item_id}/demote")
     assert r.status_code == 200
     assert r.json()["scope"] == "personal"
+
+
+# ---- detail payload shape (FE contract) --------------------------------
+
+
+@pytest.mark.asyncio
+async def test_kb_detail_payload_field_names_match_fe_contract(api_env):
+    """The FE KbItemDetail interface (apps/web/src/lib/api.ts) declares
+    `summary`, `tags`, `classification_json` at the top level. The detail
+    payload must emit those exact field names. Earlier the BE returned
+    `classification` (no `_json` suffix) and omitted `summary`/`tags`,
+    which made the KB detail meta panel render blank for every row."""
+    client, maker, *_ = api_env
+    owner_id = await _register_and_login(client, "kb_detail_owner")
+    member_id = await _register_and_login(client, "kb_detail_member")
+    pid = await _mk_project_with_members(
+        maker, owner_id=owner_id, member_id=member_id
+    )
+
+    # User-authored row — synthesized summary/tags must populate.
+    await _login(client, "kb_detail_owner")
+    r = await client.post(
+        f"/api/projects/{pid}/kb-items",
+        json={
+            "title": "auth rewrite plan",
+            "content_md": "Use the new session pool. Cap at 200.",
+            "scope": "group",
+        },
+    )
+    item_id = r.json()["id"]
+
+    r = await client.get(f"/api/projects/{pid}/kb/{item_id}")
+    assert r.status_code == 200, r.text
+    payload = r.json()["item"]
+
+    # Field name FE reads — pre-fix this was named "classification".
+    assert "classification_json" in payload
+    assert "classification" not in payload
+    # Synthesized for user-authored rows so the FE meta panel has
+    # something to show even when the row never went through LLM
+    # classification.
+    assert isinstance(payload["summary"], str)
+    assert "auth rewrite plan" in payload["summary"]
+    assert isinstance(payload["tags"], list)

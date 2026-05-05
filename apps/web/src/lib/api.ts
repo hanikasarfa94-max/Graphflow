@@ -2133,15 +2133,22 @@ export function listProjectKb(
   );
 }
 
-export function getKbItem(
+export async function getKbItem(
   projectId: string,
   itemId: string,
   baseUrl?: string,
 ): Promise<KbItemDetail> {
-  return api<KbItemDetail>(
+  // BE returns `{ok: true, item: KbItemDetail}` — unwrap so callers get
+  // the row directly. (Previously this helper claimed to return
+  // KbItemDetail but actually resolved to the wrapper, leaving every
+  // field undefined; the route page worked around it with a hand-typed
+  // serverFetch. Keeping the helper honest prevents that landmine
+  // recurring in any future caller.)
+  const res = await api<{ ok: boolean; item: KbItemDetail }>(
     `/api/projects/${projectId}/kb/${itemId}`,
     { baseUrl },
   );
+  return res.item;
 }
 
 // ---------- Phase 3.A — hierarchical KB ----------

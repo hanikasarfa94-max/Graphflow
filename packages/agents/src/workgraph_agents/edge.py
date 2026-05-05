@@ -51,7 +51,7 @@ from .llm import LLMClient, LLMResult, ParseFailure
 
 _log = logging.getLogger("workgraph.agents.edge")
 
-PROMPT_VERSION = "2026-04-25.b_facing.v3"
+PROMPT_VERSION = "2026-05-05.discuss_plan.v4"
 OPTIONS_PROMPT_VERSION = "2026-04-18.phaseQ.v1"
 REPLY_FRAME_PROMPT_VERSION = "2026-04-21.phaseM.v2"
 
@@ -104,6 +104,7 @@ SkillName = Literal[
     "member_profile",
     "why_chain",
     "routing_suggest",
+    "propose_wiki_entry",
     "active_tasks",
     "propose_task",
 ]
@@ -448,19 +449,20 @@ class EdgeAgent:
             },
         ]
         try:
-            # F.17 — bumped from the LLMClient default (0.1) to 0.4.
-            # The Edge agent's respond() is the conversational surface;
-            # at 0.1 it locked onto `silence` for any borderline message
-            # (brainstorms, half-finished thoughts, follow-ups). 0.4
-            # gives the model enough variety to engage on substantive
-            # content while complete_structured's parse-retry path keeps
-            # JSON output stable (retries drop to 0.0 on parse fail).
-            # Other EdgeAgent helper paths (options, reply-frame) keep
-            # the cold default — they're more classification than chat.
+            # F.17 / 2026-05-05 — bumped 0.1 → 0.4 → 0.5. Edge respond()
+            # is the conversational surface; at 0.1 it locked onto
+            # `silence`, at 0.4 it still felt mechanical on discussion
+            # / planning turns. The phaseR.v2 prompt explicitly broadens
+            # `answer` to cover discussion + brainstorm + thinking-out-
+            # loud, and 0.5 gives enough variety for substantive
+            # engagement. complete_structured's parse-retry path keeps
+            # JSON stable (retries drop to 0.0 on parse fail). Other
+            # EdgeAgent helper paths (options, reply-frame) keep the
+            # cold default — they're classification, not chat.
             parsed, result, attempts = await self._llm.complete_structured(
                 messages,
                 pydantic_cls=EdgeResponse,
-                temperature=0.4,
+                temperature=0.5,
                 max_attempts=3,
             )
         except ParseFailure as e:

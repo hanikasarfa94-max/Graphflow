@@ -125,6 +125,20 @@ def _kb_detail_payload(row: KbItemRow) -> dict:
     let the FE pick based on what's populated.
     """
     classification = dict(row.classification_json or {})
+    # Synthesize summary/tags so the FE meta panel renders consistently
+    # whether the row is an LLM-classified ingest (carries summary+tags
+    # in classification_json) or a user-authored note (has title+body).
+    # Without this, KbItemDetail's "classification" panel renders empty
+    # for ingest rows because the FE reads `summary` / `tags` / `classification_json`
+    # at the top level — the previous payload only emitted `classification`.
+    summary_val = classification.get("summary") if isinstance(classification.get("summary"), str) else ""
+    if not summary_val and row.title:
+        summary_val = row.title
+        if row.content_md:
+            summary_val = f"{row.title}: {row.content_md[:160]}"
+    tags_val = classification.get("tags")
+    if not isinstance(tags_val, list):
+        tags_val = []
     return {
         "id": row.id,
         "project_id": row.project_id,
@@ -138,8 +152,11 @@ def _kb_detail_payload(row: KbItemRow) -> dict:
         "scope": row.scope,
         "source": row.source,
         "owner_user_id": row.owner_user_id,
-        # Common metadata.
-        "classification": classification,
+        # Common metadata. Field is `classification_json` to match the FE
+        # KbItemDetail interface (renamed from `classification`).
+        "classification_json": classification,
+        "summary": summary_val,
+        "tags": tags_val,
         "status": row.status,
         "ingested_by_user_id": row.ingested_by_user_id,
         "approved_by_user_id": row.approved_by_user_id,

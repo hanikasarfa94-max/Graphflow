@@ -845,18 +845,27 @@ async def test_respond_silence_strips_stray_tool_call():
     assert out.response.body is None
 
 
-def test_allowed_skills_contains_expected_six():
-    # Skill catalog grew in Phase N (why_chain) and Phase O (routing_suggest).
-    # The prompt text + SkillsService dispatcher + this set must stay in
-    # sync; the Literal SkillName type in edge.py is the source of truth.
-    assert ALLOWED_SKILLS == {
+def test_allowed_skills_matches_catalog():
+    # The prompt text + SkillsService dispatcher + ToolCall.name Literal
+    # must stay in sync. ALLOWED_SKILLS is the runtime gate; SkillName is
+    # the schema-validated form. If they drift, an LLM-emitted tool_call
+    # for an "allowed" skill can still fail Pydantic validation and never
+    # reach the dispatcher (this happened to propose_wiki_entry).
+    expected = {
         "kb_search",
         "recent_decisions",
         "risk_scan",
         "member_profile",
         "why_chain",
         "routing_suggest",
+        "propose_wiki_entry",
+        "active_tasks",
+        "propose_task",
     }
+    assert ALLOWED_SKILLS == expected
+    # Lockstep: every allowed skill must also validate as a ToolCall.name.
+    for skill in expected:
+        ToolCall.model_validate({"name": skill, "args": {}})
 
 
 def test_tool_call_schema_rejects_unknown_name():
