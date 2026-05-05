@@ -225,21 +225,30 @@ class FlowProjectionService:
 # ----------------------------------------------------------------------
 
 
+_ROUTE_ACTIVE_STATUSES = frozenset({"pending", "replied"})
+
+
 def _route_packet_from_row(row: RoutedSignalRow) -> dict[str, Any]:
     """Map a RoutedSignalRow to an `ask_with_context` packet.
 
-    Status mapping:
-      pending  → active   (target hasn't replied)
-      replied  → completed (target replied)
-      *        → completed (declined / expired / accepted — terminal)
+    Lifecycle (revised in C.1 — see flow-actions-c1-design.md §11):
+      pending   → active, target is currently_blocking
+      replied   → active, SOURCE is currently_blocking (awaiting
+                  accept / counter / escalate / followup)
+      accepted  → completed, terminal
+      countered → completed, terminal (new packet active in its place)
+      escalated → completed, terminal (gate fan-out is C.2)
+      *         → completed (declined / expired)
 
-    `current_target_user_ids` is [target] while pending; [] once replied.
-    `target_user_ids` is participation history — always [target] for v1
-    routed signals (single-target). When delegate_up lands in Slice C,
-    this list grows; the projection reads from a future
-    `participants_json` column, but for now it's just the original target.
+    `target_user_ids` is participation history — always [target] for
+    v1 routed signals (single-target). When delegate_up lands in C.2,
+    this list grows; current implementation reads from the row's
+    target_user_id field directly.
     """
-    status_alive = (row.status or "pending") == "pending"
+    status = row.status or "pending"
+    is_pending = status == "pending"
+    is_replied = status == "replied"
+    status_alive = status in _ROUTE_ACTIVE_STATUSES
     packet_status: PacketStatus = "active" if status_alive else "completed"
     title = (row.framing or "").strip().splitlines()[0] if row.framing else "(no framing)"
     if len(title) > 120:
@@ -265,15 +274,20 @@ def _route_packet_from_row(row: RoutedSignalRow) -> dict[str, Any]:
                 "refs": [],
             }
         )
+
     next_actions: list[dict[str, Any]] = []
-    if status_alive:
-        # Deep-link directly to the routing message in the project's
-        # team room. This matches the anchor pattern the existing
-        # /inbox page uses (inbox/page.tsx:100) so the team-room
-        # stream scrolls straight to the routed-inbound card on
-        # arrival. Plain /inbox was a "scroll the dashboard yourself"
-        # experience; this lands the user on the answerable card.
-        href = f"/projects/{row.project_id or ''}/team#routing-{row.id}" if row.project_id else "/inbox"
+    if is_pending:
+        # Target is currently blocking — render the legacy "Reply"
+        # affordance. Target reply still flows through
+        # RoutingService.reply (target-side surface lifts to the
+        # flow endpoint in C.2; for now the action.kind="open" link
+        # deep-anchors to the inbound card so the target lands on
+        # the answerable surface).
+        href = (
+            f"/projects/{row.project_id}/team#routing-{row.id}"
+            if row.project_id
+            else "/inbox"
+        )
         next_actions.append(
             {
                 "id": "reply",
@@ -284,15 +298,63 @@ def _route_packet_from_row(row: RoutedSignalRow) -> dict[str, Any]:
                 "href": href,
             }
         )
+    elif is_replied:
+        # Source is currently blocking — emit the four C.1 source-side
+        # affordances. FE renders one button per entry; no
+        # re-derivation from recipe_id or signal_id needed.
+        src_href = (
+            f"/projects/{row.project_id}/team#routing-{row.id}"
+            if row.project_id
+            else "/inbox"
+        )
+        for action_kind, label in (
+            ("accept", "Accept"),
+            ("counter_back", "Counter back"),
+            ("escalate_to_gate", "Escalate to gate"),
+            ("custom_followup", "Send follow-up"),
+        ):
+            next_actions.append(
+                {
+                    "id": action_kind,
+                    "label": label,
+                    "kind": action_kind,
+                    "actor_user_id": row.source_user_id,
+                    "requires_membrane": False,
+                    # All four point at the same surface — the team-room
+                    # routing card. The FE will render the button inline
+                    # in the flows panel; the href is a fallback for
+                    # users who want to act in the original surface.
+                    "href": src_href,
+                }
+            )
+
+    # current_target_user_ids derives from who is currently blocking,
+    # not from participation history. Spec §6 / line 276.
+    if is_pending:
+        current_target = [row.target_user_id]
+    elif is_replied:
+        current_target = [row.source_user_id]
+    else:
+        current_target = []
+
+    # `stage` is a display label, not state-of-truth (spec §4). We map
+    # to a coarse per-status string the FE can translate.
+    if is_pending:
+        stage = "awaiting_target"
+    elif is_replied:
+        stage = "awaiting_source"
+    else:
+        stage = "completed"
+
     return {
         "id": f"route:{row.id}",
         "project_id": row.project_id or "",
         "recipe_id": "ask_with_context",
-        "stage": "awaiting_target" if status_alive else "completed",
+        "stage": stage,
         "status": packet_status,
         "source_user_id": row.source_user_id,
         "target_user_ids": [row.target_user_id],
-        "current_target_user_ids": [row.target_user_id] if status_alive else [],
+        "current_target_user_ids": current_target,
         "authority_user_ids": [],
         "title": title,
         "summary": (row.framing or "")[:240],

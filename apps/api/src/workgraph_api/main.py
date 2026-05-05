@@ -99,6 +99,7 @@ from workgraph_api.services import (
     DeliveryService,
     DissentService,
     DriftService,
+    FlowActionService,
     FlowProjectionService,
     GatedProposalService,
     KbItemService,
@@ -552,6 +553,7 @@ async def lifespan(app: FastAPI):
     )
     handoff_service = HandoffService(sessionmaker)
     flow_projection_service = FlowProjectionService(sessionmaker)
+    flow_action_service = FlowActionService(routing_service)
     dissent_service = DissentService(sessionmaker, event_bus)
     gated_proposals_service = GatedProposalService(
         sessionmaker,
@@ -660,6 +662,7 @@ async def lifespan(app: FastAPI):
     app.state.scrimmage_service = scrimmage_service
     app.state.handoff_service = handoff_service
     app.state.flow_projection_service = flow_projection_service
+    app.state.flow_action_service = flow_action_service
     app.state.dissent_service = dissent_service
     app.state.gated_proposals_service = gated_proposals_service
     app.state.composition_service = composition_service

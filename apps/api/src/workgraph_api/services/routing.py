@@ -34,6 +34,7 @@ render as a 🤖 Edge card on the frontend.
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timezone
 from typing import Any
 
 from sqlalchemy.ext.asyncio import async_sessionmaker
@@ -601,6 +602,274 @@ class RoutingService:
                 return {"ok": False, "error": "not_accepted_state"}
             updated = await repo.mark_accepted(signal_id)
             return {"ok": True, "signal": _shape(updated)}
+
+    # ---- C.1 — source-side reply symmetry --------------------------------
+    #
+    # Four new source-side methods backing the FlowActionService dispatch.
+    # Stricter than the legacy `accept()` above: they error with
+    # `not_ready_for_source_action` instead of being idempotent on the
+    # already-terminal state. Rationale (memo §5.1): the flow action
+    # endpoint is the audit trail for "the source clicked X"; a no-op
+    # success on stale clicks would mask state confusion.
+    #
+    # All four use `RoutedSignalRepository.update_status_if` for the
+    # status flip — atomic conditional update, no SELECT-then-mutate
+    # race. Notes are appended to reply_json["source_action_notes"]
+    # (memo Q1: reuse reply_json for C.1, promote to its own column in
+    # C.3 if the audit shape gets messy).
+
+    async def _precheck_source_action(
+        self,
+        signal_id: str,
+        source_user_id: str,
+        *,
+        require_status: str = "replied",
+    ) -> tuple[dict[str, Any] | None, RoutedSignalRow | None]:
+        """Shared precheck for the four source_* methods. Returns
+        `(error_dict, None)` on failure or `(None, row)` on success.
+        Caller uses the row's snapshotted fields (target/project) only;
+        do not mutate row outside this session.
+        """
+        async with session_scope(self._sessionmaker) as session:
+            row = await RoutedSignalRepository(session).get(signal_id)
+            if row is None:
+                return ({"ok": False, "error": "signal_not_found"}, None)
+            if row.source_user_id != source_user_id:
+                return ({"ok": False, "error": "not_the_source"}, None)
+            if row.status != require_status:
+                return (
+                    {"ok": False, "error": "not_ready_for_source_action"},
+                    None,
+                )
+            # Detach a snapshot so the caller can read fields after the
+            # session closes. We don't return the SQLA-managed row.
+            snapshot = RoutedSignalRow(
+                id=row.id,
+                source_user_id=row.source_user_id,
+                target_user_id=row.target_user_id,
+                project_id=row.project_id,
+                source_stream_id=row.source_stream_id,
+                target_stream_id=row.target_stream_id,
+                framing=row.framing,
+                status=row.status,
+            )
+            return (None, snapshot)
+
+    async def source_accept(
+        self,
+        *,
+        signal_id: str,
+        source_user_id: str,
+        note: str | None = None,
+    ) -> dict[str, Any]:
+        """Source accepts the target's reply as final. Status:
+        replied → accepted. Returns
+        {ok: True, signal_id, status: 'accepted'}.
+        """
+        err, _ = await self._precheck_source_action(signal_id, source_user_id)
+        if err is not None:
+            return err
+        async with session_scope(self._sessionmaker) as session:
+            repo = RoutedSignalRepository(session)
+            ok = await repo.update_status_if(
+                signal_id, expect="replied", set_to="accepted"
+            )
+            if not ok:
+                return {"ok": False, "error": "not_ready_for_source_action"}
+            await repo.append_source_action_note(
+                signal_id,
+                action="accept",
+                note=note,
+                at=datetime.now(timezone.utc).isoformat(),
+            )
+        _log.info(
+            "routing.source_accept",
+            extra={"signal_id": signal_id, "source_user_id": source_user_id},
+        )
+        return {"ok": True, "signal_id": signal_id, "status": "accepted"}
+
+    async def source_escalate(
+        self,
+        *,
+        signal_id: str,
+        source_user_id: str,
+        note: str | None = None,
+    ) -> dict[str, Any]:
+        """Source escalates the matter to a gate. Status:
+        replied → escalated. C.1 does NOT auto-fan-out to authority;
+        that's C.2. The status change is the audit trail.
+        """
+        err, _ = await self._precheck_source_action(signal_id, source_user_id)
+        if err is not None:
+            return err
+        async with session_scope(self._sessionmaker) as session:
+            repo = RoutedSignalRepository(session)
+            ok = await repo.update_status_if(
+                signal_id, expect="replied", set_to="escalated"
+            )
+            if not ok:
+                return {"ok": False, "error": "not_ready_for_source_action"}
+            await repo.append_source_action_note(
+                signal_id,
+                action="escalate_to_gate",
+                note=note,
+                at=datetime.now(timezone.utc).isoformat(),
+            )
+        _log.info(
+            "routing.source_escalate",
+            extra={"signal_id": signal_id, "source_user_id": source_user_id},
+        )
+        return {"ok": True, "signal_id": signal_id, "status": "escalated"}
+
+    async def source_counter(
+        self,
+        *,
+        signal_id: str,
+        source_user_id: str,
+        framing: str,
+        note: str | None = None,
+    ) -> dict[str, Any]:
+        """Source counters the reply. Status: replied → countered;
+        also dispatches a NEW signal carrying `framing` as the counter
+        ask.
+
+        Atomicity (memo §4.2 / Q3 sign-off):
+          1. Precheck (cheap fail).
+          2. Spawn first via self.dispatch().
+          3. Conditional update on original. If False, delete the
+             spawned row (compensating rollback) so the caller doesn't
+             see a phantom counter packet.
+
+        Returns
+            {ok: True, signal_id, status: 'countered',
+             spawned_signal_id: '<new>'}
+        on success.
+        """
+        err, snap = await self._precheck_source_action(signal_id, source_user_id)
+        if err is not None:
+            return err
+        assert snap is not None  # narrowed by err check above
+
+        # Spawn first. dispatch() returns ok=False with sub-detail on
+        # any of its own validation paths (target_not_found,
+        # source_not_project_member, etc.); surface as domain_error.
+        spawn = await self.dispatch(
+            source_user_id=source_user_id,
+            target_user_id=snap.target_user_id,
+            framing=framing,
+            background=[],
+            options=[],
+            project_id=snap.project_id,
+        )
+        if not spawn.get("ok"):
+            return {
+                "ok": False,
+                "error": "domain_error",
+                "detail": spawn.get("error", "spawn_failed"),
+            }
+        spawned_id: str = spawn["signal"]["id"]
+
+        # Conditional update on original. Compensate on failure.
+        async with session_scope(self._sessionmaker) as session:
+            repo = RoutedSignalRepository(session)
+            ok = await repo.update_status_if(
+                signal_id, expect="replied", set_to="countered"
+            )
+            if not ok:
+                # The spawn just succeeded in this same request; nobody
+                # else can be racing it. Unconditional delete is safe.
+                await repo.delete(spawned_id)
+                return {
+                    "ok": False,
+                    "error": "not_ready_for_source_action",
+                }
+            await repo.append_source_action_note(
+                signal_id,
+                action="counter_back",
+                note=note,
+                at=datetime.now(timezone.utc).isoformat(),
+            )
+        _log.info(
+            "routing.source_counter",
+            extra={
+                "signal_id": signal_id,
+                "source_user_id": source_user_id,
+                "spawned_signal_id": spawned_id,
+            },
+        )
+        return {
+            "ok": True,
+            "signal_id": signal_id,
+            "status": "countered",
+            "spawned_signal_id": spawned_id,
+        }
+
+    async def source_followup(
+        self,
+        *,
+        signal_id: str,
+        source_user_id: str,
+        framing: str,
+        note: str | None = None,
+    ) -> dict[str, Any]:
+        """Source sends a follow-up ask. Original signal **untouched**;
+        a new signal is dispatched with `framing`. Original packet
+        stays projected as completed (per memo §4.4: underlying signal
+        stays 'replied' which projects to packet status 'completed';
+        the new follow-up is the only active thing).
+
+        Spawn failure is harmless here — original isn't being mutated,
+        so a failed spawn just reports `domain_error` and leaves
+        nothing inconsistent.
+
+        Returns
+            {ok: True, signal_id, status: 'replied',
+             spawned_signal_id: '<new>'}
+        """
+        err, snap = await self._precheck_source_action(signal_id, source_user_id)
+        if err is not None:
+            return err
+        assert snap is not None
+
+        spawn = await self.dispatch(
+            source_user_id=source_user_id,
+            target_user_id=snap.target_user_id,
+            framing=framing,
+            background=[],
+            options=[],
+            project_id=snap.project_id,
+        )
+        if not spawn.get("ok"):
+            return {
+                "ok": False,
+                "error": "domain_error",
+                "detail": spawn.get("error", "spawn_failed"),
+            }
+        spawned_id: str = spawn["signal"]["id"]
+
+        # Note attaches to the original (audit trail), but original
+        # status is unchanged.
+        async with session_scope(self._sessionmaker) as session:
+            await RoutedSignalRepository(session).append_source_action_note(
+                signal_id,
+                action="custom_followup",
+                note=note,
+                at=datetime.now(timezone.utc).isoformat(),
+            )
+        _log.info(
+            "routing.source_followup",
+            extra={
+                "signal_id": signal_id,
+                "source_user_id": source_user_id,
+                "spawned_signal_id": spawned_id,
+            },
+        )
+        return {
+            "ok": True,
+            "signal_id": signal_id,
+            "status": "replied",
+            "spawned_signal_id": spawned_id,
+        }
 
 
 __all__ = ["RoutingService"]

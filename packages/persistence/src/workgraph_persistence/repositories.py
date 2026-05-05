@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from uuid import uuid4
 
-from sqlalchemy import select
+from sqlalchemy import delete, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -2479,6 +2479,70 @@ class RoutedSignalRepository:
         row.status = "accepted"
         await self._session.flush()
         return row
+
+    # ---- C.1 — atomic conditional helpers for the flow action surface ----
+    #
+    # The legacy `mark_accepted` / `mark_replied` methods do SELECT-then-
+    # mutate, which has a check-then-act race. The new flow-action endpoint
+    # (FlowActionService → RoutingService.source_*) is the first mutation
+    # surface that requires hard atomicity guarantees, so it gets the
+    # proper conditional-update primitive. Legacy paths stay as-is for now;
+    # C.2 is the moment to converge if target-side actions also need it.
+
+    async def update_status_if(
+        self, signal_id: str, *, expect: str, set_to: str,
+    ) -> bool:
+        """Atomic conditional update. Returns True iff exactly one row
+        was updated (signal existed AND was in `expect` status).
+
+        Caller maps False → not_ready_for_source_action.
+        """
+        result = await self._session.execute(
+            update(RoutedSignalRow)
+            .where(RoutedSignalRow.id == signal_id)
+            .where(RoutedSignalRow.status == expect)
+            .values(status=set_to)
+        )
+        return result.rowcount == 1
+
+    async def append_source_action_note(
+        self,
+        signal_id: str,
+        *,
+        action: str,
+        note: str | None,
+        at: str,
+    ) -> None:
+        """Append a {action, note, at} record to
+        reply_json["source_action_notes"]. Caller has already verified
+        the row exists (typically right after a successful
+        `update_status_if`).
+
+        The reply_json blob is mutated in-place rather than via a
+        conditional UPDATE because only the source ever appends here,
+        and the source's own actions are serialized through the HTTP
+        endpoint. Concurrency concern is the status flip — already
+        handled by `update_status_if`.
+        """
+        row = await self.get(signal_id)
+        if row is None:
+            return
+        rj = dict(row.reply_json or {})
+        notes = list(rj.get("source_action_notes") or [])
+        notes.append({"action": action, "note": note or "", "at": at})
+        rj["source_action_notes"] = notes
+        row.reply_json = rj
+        await self._session.flush()
+
+    async def delete(self, signal_id: str) -> None:
+        """Remove a signal row by id. Used for compensating rollback in
+        the source_counter flow (spawn-first; if the conditional update
+        on the original fails, the just-spawned row is deleted to avoid
+        leaving a phantom counter packet).
+        """
+        await self._session.execute(
+            delete(RoutedSignalRow).where(RoutedSignalRow.id == signal_id)
+        )
 
 
 # ---- Phase D — membrane signal repository -------------------------------
