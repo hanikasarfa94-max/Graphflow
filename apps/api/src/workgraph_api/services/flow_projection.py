@@ -267,8 +267,13 @@ def _route_packet_from_row(row: RoutedSignalRow) -> dict[str, Any]:
         )
     next_actions: list[dict[str, Any]] = []
     if status_alive:
-        # Target answers from their personal stream / inbox; href deep-
-        # links to /inbox where the routed-inbound card renders.
+        # Deep-link directly to the routing message in the project's
+        # team room. This matches the anchor pattern the existing
+        # /inbox page uses (inbox/page.tsx:100) so the team-room
+        # stream scrolls straight to the routed-inbound card on
+        # arrival. Plain /inbox was a "scroll the dashboard yourself"
+        # experience; this lands the user on the answerable card.
+        href = f"/projects/{row.project_id or ''}/team#routing-{row.id}" if row.project_id else "/inbox"
         next_actions.append(
             {
                 "id": "reply",
@@ -276,7 +281,7 @@ def _route_packet_from_row(row: RoutedSignalRow) -> dict[str, Any]:
                 "kind": "open",
                 "actor_user_id": row.target_user_id,
                 "requires_membrane": False,
-                "href": "/inbox",
+                "href": href,
             }
         )
     return {
@@ -356,6 +361,11 @@ def _kb_review_packet_from_row(
     next_actions: list[dict[str, Any]] = []
     if stage_alive:
         # Membrane review surface lives at /projects/{pid}/detail/im.
+        # The ChatPane on that page does NOT carry a per-suggestion
+        # anchor (verified: no `#kb-{id}` or `?suggestion={id}` pattern
+        # exists in the FE). So the best we can do is land the user on
+        # the review queue and let them scroll. C.0 stops here for KB;
+        # a per-suggestion anchor lands when ChatPane gains one.
         next_actions.append(
             {
                 "id": "review",
@@ -443,16 +453,19 @@ def _handoff_packet_from_row(
         )
     next_actions: list[dict[str, Any]] = []
     if stage_alive:
-        # Handoff finalize lives in the team / handoff prep surface;
-        # /projects/{pid}/team is the durable entry point for now.
-        # Slice B may swap to a deep-link if a dedicated route lands.
+        # Handoff finalize lives behind MemberHandoffButton on the
+        # /projects/{pid}/skills page (the skill-atlas surface where
+        # member cards expose the HandoffDialog). The previous /team
+        # link was hollow — landing on the team room when the user
+        # wanted to act on a draft handoff. Skills page is the
+        # canonical actionable surface.
         next_actions.append(
             {
                 "id": "finalize",
                 "label": "Open handoff",
                 "kind": "open",
                 "requires_membrane": False,
-                "href": f"/projects/{row.project_id}/team",
+                "href": f"/projects/{row.project_id}/skills",
             }
         )
     return {

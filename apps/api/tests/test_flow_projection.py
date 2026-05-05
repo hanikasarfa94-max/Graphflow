@@ -609,3 +609,65 @@ async def test_every_active_next_action_has_href(api_env):
             assert action["href"].startswith("/"), (
                 f"{p['recipe_id']} href is not absolute: {action['href']}"
             )
+
+
+# ---- C.0 — focused hrefs (deep-link to the actionable surface) ----------
+
+
+@pytest.mark.asyncio
+async def test_route_packet_href_deep_links_to_routing_anchor(api_env):
+    """C.0 — route packet's Open should land the user ON the routing
+    message, not on the inbox dashboard. Mirrors the anchor pattern
+    /inbox itself uses (inbox/page.tsx:100): /projects/{pid}/team#routing-{id}."""
+    client, maker, *_ = api_env
+    maya_id = await _register(client, "fp_c0_route_maya")
+    raj_id = await _register(client, "fp_c0_route_raj")
+    pid = await _mk_project_with_members(maker, owner_id=maya_id, member_id=raj_id)
+
+    await _login(client, "fp_c0_route_maya")
+    r = await client.post(
+        "/api/routing/dispatch",
+        json={
+            "target_user_id": raj_id,
+            "project_id": pid,
+            "framing": "Deep-link test",
+            "background": [],
+            "options": [
+                {"id": "y", "label": "Yes", "kind": "action", "weight": 0.5},
+                {"id": "n", "label": "No", "kind": "action", "weight": 0.5},
+            ],
+        },
+    )
+    signal_id = r.json()["signal"]["id"]
+
+    r = await _list_flows(client, pid)
+    packets = [p for p in r.json()["packets"] if p["recipe_id"] == "ask_with_context"]
+    assert len(packets) == 1
+    href = packets[0]["next_actions"][0]["href"]
+    assert href == f"/projects/{pid}/team#routing-{signal_id}", href
+
+
+@pytest.mark.asyncio
+async def test_handoff_packet_href_points_to_skills_surface(api_env):
+    """C.0 — handoff Open must land on /projects/{pid}/skills, where the
+    MemberHandoffButton + HandoffDialog actually live. Pre-C.0 this
+    pointed at /team, which felt hollow because /team has no handoff
+    affordance."""
+    client, maker, *_ = api_env
+    owner_id = await _register(client, "fp_c0_ho_owner")
+    successor_id = await _register(client, "fp_c0_ho_successor")
+    pid = await _mk_project_with_members(
+        maker, owner_id=owner_id, member_id=successor_id
+    )
+
+    await _login(client, "fp_c0_ho_owner")
+    await client.post(
+        f"/api/projects/{pid}/handoff/prepare",
+        json={"from_user_id": owner_id, "to_user_id": successor_id},
+    )
+
+    r = await _list_flows(client, pid)
+    packets = [p for p in r.json()["packets"] if p["recipe_id"] == "handoff"]
+    assert len(packets) == 1
+    href = packets[0]["next_actions"][0]["href"]
+    assert href == f"/projects/{pid}/skills", href
