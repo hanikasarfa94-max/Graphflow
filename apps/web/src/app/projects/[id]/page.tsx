@@ -9,6 +9,7 @@
 
 import { getTranslations } from "next-intl/server";
 
+import { ActiveFlowsButton } from "@/components/flows/ActiveFlowsButton";
 import { OnboardingOverlay } from "@/components/onboarding/OnboardingOverlay";
 import { PersonalStream } from "@/components/stream/PersonalStream";
 import { StreamCompactToolbar } from "@/components/stream/StreamCompactToolbar";
@@ -81,6 +82,9 @@ export default async function ProjectPersonalPage({
           // workgraph_next_design_20260428).
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <StreamContextPanel streamKey={`project:${id}:personal`} />
+            {/* B.2 — bridge to Flow Packets surface from the legacy
+                personal stream toolbar. */}
+            <ActiveFlowsButton projectId={id} />
           </div>
         }
       />

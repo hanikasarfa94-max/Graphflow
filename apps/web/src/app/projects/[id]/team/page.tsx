@@ -12,6 +12,7 @@
 import Link from "next/link";
 import { getTranslations } from "next-intl/server";
 
+import { ActiveFlowsButton } from "@/components/flows/ActiveFlowsButton";
 import { StreamCompactToolbar } from "@/components/stream/StreamCompactToolbar";
 import { StreamContextPanel } from "@/components/stream/StreamContextPanel";
 import { StreamView } from "@/components/stream/StreamView";
@@ -84,6 +85,10 @@ export default async function ProjectTeamPage({
             {/* Scope-tier pills moved to the project module rail —
                 single canonical place to toggle scope. */}
             <StreamContextPanel streamKey={`project:${id}:team`} />
+            {/* B.2 — bridge to Flow Packets surface from the legacy
+                team room. Workbench-hosted version is unreachable
+                here because v-Next is rolled back. */}
+            <ActiveFlowsButton projectId={id} />
             {isAdmin ? (
               <Link
                 href={`/projects/${id}/team/perf`}
