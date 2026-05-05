@@ -97,11 +97,18 @@ export interface EvidencePacket {
   agent_runs: FlowRef[];
   human_gates: Array<{
     user_id: string;
+    // Spec §6 / §7 split: target-side `delegate_up` (push to authority
+    // with stance attached) is distinct from source-side
+    // `escalate_to_gate` (push to authority pool / quorum / Membrane).
+    // Pre-v1.1 this union had a single ambiguous "escalate" — Slice C's
+    // FlowActionService relies on the split, so the FE union must
+    // match the spec exactly here.
     action:
       | "accept"
       | "counter"
       | "dismiss"
-      | "escalate"
+      | "delegate_up"
+      | "escalate_to_gate"
       | "approve"
       | "reject";
     at: string;
