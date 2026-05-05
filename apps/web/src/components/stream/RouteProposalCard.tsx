@@ -31,6 +31,7 @@ import {
   type PreAnswerPayload,
   type ScrimmageResult,
 } from "@/lib/api";
+import { formatIso } from "@/lib/time";
 
 import {
   DebateSummaryCard,
@@ -361,7 +362,7 @@ export function RouteProposalCard({
       >
         <span>{t("routeProposal.header")}</span>
         <span
-          title={new Date(message.created_at).toLocaleString()}
+          title={formatIso(message.created_at)}
           style={{ color: "var(--wg-ink-soft)", textTransform: "none", fontWeight: 400 }}
         >
           {formatMessageTime(message.created_at)}
@@ -1070,7 +1071,7 @@ function GatedProposalCard({
           <DecisionClassChip decisionClass={decisionClass} />
         </span>
         <span
-          title={new Date(message.created_at).toLocaleString()}
+          title={formatIso(message.created_at)}
           style={{
             color: "var(--wg-ink-soft)",
             textTransform: "none",

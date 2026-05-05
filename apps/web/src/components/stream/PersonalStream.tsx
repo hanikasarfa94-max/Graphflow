@@ -59,6 +59,7 @@ import {
   type PersonalMessage,
   type RehearsalPreview as RehearsalPreviewType,
 } from "@/lib/api";
+import { formatIso } from "@/lib/time";
 
 import { SkillDeclarationBanner } from "@/components/onboarding/SkillDeclarationBanner";
 
@@ -696,7 +697,7 @@ export function PersonalStream({
               {m.body}
             </div>
             <span
-              title={new Date(m.created_at).toLocaleString()}
+              title={formatIso(m.created_at)}
               style={{
                 fontSize: 10,
                 fontFamily: "var(--wg-font-mono)",
@@ -828,7 +829,7 @@ export function PersonalStream({
             }}
           >
             <span>{m.body}</span>
-            <span title={new Date(m.created_at).toLocaleString()}>
+            <span title={formatIso(m.created_at)}>
               {formatMessageTime(m.created_at)}
             </span>
           </div>,

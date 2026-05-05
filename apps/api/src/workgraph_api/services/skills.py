@@ -62,6 +62,8 @@ from workgraph_persistence import (
     session_scope,
 )
 
+from ._kb_visibility import is_canonical_kb_row
+
 _log = logging.getLogger("workgraph.api.skills")
 
 
@@ -318,12 +320,16 @@ class SkillsService:
         RetrievalService wired (existing test fixtures, embedded usage).
         """
         async with session_scope(self._sessionmaker) as session:
+            # M1.1 — canonical-shared-memory whitelist. Same policy
+            # as RetrievalService: published user-authored + approved/
+            # routed ingest. Pre-M1.1 the blacklist permitted
+            # pending-review rows to surface in kb_search.
             kb_item_rows = [
                 r
                 for r in await KbItemRepository(session).list_group_for_project(
                     project_id=project_id, limit=400
                 )
-                if r.status not in ("archived", "draft", "rejected")
+                if is_canonical_kb_row(r)
             ]
 
         matched: list[dict[str, Any]] = []

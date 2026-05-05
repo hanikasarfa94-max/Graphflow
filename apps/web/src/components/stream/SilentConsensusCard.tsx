@@ -23,6 +23,7 @@ import {
   type PersonalMessage,
   type SilentConsensusProposal,
 } from "@/lib/api";
+import { formatIso } from "@/lib/time";
 
 import { relativeTime,
   formatMessageTime } from "./types";
@@ -170,7 +171,7 @@ export function SilentConsensusCard({ message, projectId, onResolved }: Props) {
           <span style={{ textTransform: "uppercase", letterSpacing: "0.08em" }}>
             {t("header")}
           </span>
-          <span title={new Date(message.created_at).toLocaleString()}>
+          <span title={formatIso(message.created_at)}>
             {formatMessageTime(message.created_at)}
           </span>
         </div>

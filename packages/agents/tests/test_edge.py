@@ -868,6 +868,45 @@ def test_allowed_skills_matches_catalog():
         ToolCall.model_validate({"name": skill, "args": {}})
 
 
+def test_prompt_tool_schema_lists_every_allowed_skill():
+    """M1.1 §3 — the prompt's JSON schema (the line that says
+    `"name": "kb_search" | ... | "routing_suggest" | ...`) is what the
+    LLM reads. If a skill is in ALLOWED_SKILLS but absent from that
+    schema line, the LLM is unlikely to emit it (and even if it does,
+    Pydantic will reject — the existing parity tests cover that). The
+    failure mode this test prevents is "Python catalog drifted ahead
+    of the prompt and the LLM never gets the option to invoke a new
+    skill."
+    """
+    from pathlib import Path
+
+    prompt_path = (
+        Path(__file__).resolve().parent.parent
+        / "src"
+        / "workgraph_agents"
+        / "prompts"
+        / "edge"
+        / "v1.md"
+    )
+    text = prompt_path.read_text(encoding="utf-8")
+    # Find the schema line: starts with `    "name":` followed by the
+    # alternation. We compare *names listed there* with ALLOWED_SKILLS.
+    import re
+
+    m = re.search(r'"name":\s*((?:"\w+"\s*\|?\s*)+)', text)
+    assert m is not None, "schema 'name' line not found in prompt"
+    schema_names = set(re.findall(r'"(\w+)"', m.group(1)))
+    missing = ALLOWED_SKILLS - schema_names
+    assert not missing, (
+        f"Edge prompt schema is missing {missing} — Python allows them "
+        f"but the LLM-facing schema doesn't list them"
+    )
+    extra = schema_names - ALLOWED_SKILLS
+    assert not extra, (
+        f"Edge prompt schema lists {extra} but Python doesn't allow them"
+    )
+
+
 def test_tool_call_schema_rejects_unknown_name():
     with pytest.raises(ValidationError):
         ToolCall.model_validate({"name": "fake", "args": {}})

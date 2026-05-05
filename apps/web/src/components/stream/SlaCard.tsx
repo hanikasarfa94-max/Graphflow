@@ -13,6 +13,7 @@
 import { useTranslations } from "next-intl";
 
 import type { PersonalMessage } from "@/lib/api";
+import { formatIso } from "@/lib/time";
 
 import { relativeTime,
   formatMessageTime } from "./types";
@@ -139,7 +140,7 @@ export function SlaCard({ message, onOpen }: Props) {
           color: "var(--wg-ink-soft)",
         }}
       >
-        target {new Date(payload.target_date).toLocaleString()}
+        target {formatIso(payload.target_date)}
       </div>
       {onOpen && (
         <button

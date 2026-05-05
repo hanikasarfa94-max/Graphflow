@@ -1206,3 +1206,179 @@ async def test_personal_post_kb_slice_empty_when_no_retrieval_service(
     ctx = stub.calls[0]["context"]
     # Field is present (uniform shape) but empty since no retrieval.
     assert ctx.get("kb_slice") == []
+
+
+# ---- M1.1 — canonical-shared-memory whitelist --------------------------
+
+
+@pytest.mark.asyncio
+async def test_retrieval_excludes_pending_review(api_env):
+    """M1.1: a group-scope KB row in `pending-review` is staged for
+    Membrane review and must NOT surface in retrieval pretext.
+    Pre-M1.1 the blacklist (status not in {archived, draft, rejected})
+    let pending-review rows leak into shared agent context — that was
+    the dogfood KB-conflict bug."""
+    _, maker, *_ = api_env
+    pid = await _mk_project(maker)
+    owner = await _mk_user(maker, "ret_m11_owner")
+    await _add_member(maker, pid, owner)
+
+    canonical = await _mk_user_kb(
+        maker, pid, owner_user_id=owner,
+        title="canon", content_md="alpha bravo",
+        status="published",
+    )
+    await _mk_user_kb(
+        maker, pid, owner_user_id=owner,
+        title="staged", content_md="alpha bravo",
+        status="pending-review",
+    )
+
+    svc = RetrievalService(maker)
+    out = await svc.retrieve_kb_items(project_id=pid, query="alpha", k=5)
+    assert [c.row.id for c in out] == [canonical]
+
+
+@pytest.mark.asyncio
+async def test_candidate_set_excludes_pending_review(api_env):
+    """M1.1: candidate_set wraps retrieve_kb_items; the agent-prompt
+    kb_slice must inherit the canonical whitelist."""
+    _, maker, *_ = api_env
+    pid = await _mk_project(maker)
+    owner = await _mk_user(maker, "ret_m11_cs_owner")
+    await _add_member(maker, pid, owner)
+
+    canonical = await _mk_user_kb(
+        maker, pid, owner_user_id=owner,
+        title="canon", content_md="alpha bravo",
+        status="published",
+    )
+    await _mk_user_kb(
+        maker, pid, owner_user_id=owner,
+        title="staged", content_md="alpha bravo",
+        status="pending-review",
+    )
+
+    svc = RetrievalService(maker)
+    out = await svc.candidate_set(
+        project_id=pid, query="alpha", viewer_user_id=None, k=5
+    )
+    assert [c["id"] for c in out] == [canonical]
+
+
+@pytest.mark.asyncio
+async def test_warm_kb_items_does_not_embed_pending_review(api_env):
+    """M1.1: the post-deploy warmer must skip pending-review rows.
+    Embedding them would warm the cache for content that may yet be
+    rejected on owner review — and worse, vector retrieval after
+    that rejection still has the cache hit."""
+    _, maker, *_ = api_env
+
+    class _StubEmbedder:
+        def __init__(self) -> None:
+            self.calls: list[list[str]] = []
+
+        async def embed(self, texts):
+            self.calls.append(list(texts))
+            return [[0.1] * 4 for _ in texts]
+
+    pid = await _mk_project(maker)
+    owner = await _mk_user(maker, "ret_m11_warm_owner")
+    await _add_member(maker, pid, owner)
+
+    await _mk_user_kb(
+        maker, pid, owner_user_id=owner,
+        title="canon", content_md="alpha bravo",
+        status="published",
+    )
+    staged_id = await _mk_user_kb(
+        maker, pid, owner_user_id=owner,
+        title="STAGED-KEY-do-not-embed",
+        content_md="forbidden-content-do-not-embed",
+        status="pending-review",
+    )
+
+    embedder = _StubEmbedder()
+    svc = RetrievalService(maker, embedding_client=embedder)
+    await svc.warm_kb_items(project_id=pid)
+
+    # Embedder was called once with only the canonical row's text. The
+    # staged row's distinctive words must not appear in any embed call.
+    flat = " ".join(t for batch in embedder.calls for t in batch)
+    assert "STAGED-KEY-do-not-embed" not in flat
+    assert "forbidden-content-do-not-embed" not in flat
+    assert staged_id not in flat
+
+
+@pytest.mark.asyncio
+async def test_kb_search_excludes_pending_review(api_env):
+    """M1.1: SkillsService._kb_search_substring (the legacy substring
+    scan used when RetrievalService isn't wired) must apply the same
+    canonical whitelist as retrieve_kb_items."""
+    _, maker, *_ = api_env
+    pid = await _mk_project(maker)
+    owner = await _mk_user(maker, "ret_m11_sk_owner")
+    await _add_member(maker, pid, owner)
+
+    await _mk_user_kb(
+        maker, pid, owner_user_id=owner,
+        title="canon kb", content_md="needle-token-here",
+        status="published",
+    )
+    await _mk_user_kb(
+        maker, pid, owner_user_id=owner,
+        title="staged kb", content_md="needle-token-here",
+        status="pending-review",
+    )
+
+    # Skills with no retrieval service wired → falls through to the
+    # substring scan (which we just hardened to use the whitelist).
+    skills = SkillsService(maker, retrieval_service=None)
+    out = await skills._kb_search_substring(
+        project_id=pid, query="needle-token", limit_val=5
+    )
+    titles = [r["summary"].lower() for r in out]
+    assert any("canon kb" in t for t in titles)
+    assert not any("staged kb" in t for t in titles)
+
+
+@pytest.mark.asyncio
+async def test_retrieval_includes_approved_and_routed_ingest(api_env):
+    """M1.1: ingest-source KB rows in `approved` or `routed` are part
+    of canonical shared memory and MUST surface in retrieval. Without
+    this assertion the whitelist fix could swing too far the other
+    way and silently drop external ingest content."""
+    _, maker, *_ = api_env
+    pid = await _mk_project(maker)
+    owner = await _mk_user(maker, "ret_m11_ing_owner")
+    await _add_member(maker, pid, owner)
+
+    approved_id = await _mk_ingest_kb(
+        maker, pid,
+        source_identifier="commit:abc",
+        raw_content="alpha bravo charlie",
+        summary="approved ingest",
+        status="approved",
+    )
+    routed_id = await _mk_ingest_kb(
+        maker, pid,
+        source_identifier="commit:def",
+        raw_content="alpha bravo delta",
+        summary="routed ingest",
+        status="routed",
+    )
+    await _mk_ingest_kb(
+        maker, pid,
+        source_identifier="commit:ghi",
+        raw_content="alpha bravo echo",
+        summary="pending ingest",
+        status="pending-review",
+    )
+
+    svc = RetrievalService(maker)
+    out = await svc.retrieve_kb_items(project_id=pid, query="alpha", k=5)
+    ids = {c.row.id for c in out}
+    assert approved_id in ids
+    assert routed_id in ids
+    # Pending-review ingest never surfaces.
+    assert all(c.row.status != "pending-review" for c in out)

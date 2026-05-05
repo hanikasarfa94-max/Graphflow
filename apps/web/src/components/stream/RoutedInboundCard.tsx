@@ -33,6 +33,7 @@ import {
   type RoutingOption,
   type RoutingSignal,
 } from "@/lib/api";
+import { formatIso } from "@/lib/time";
 import { useAppShell } from "@/components/shell/AppShellClient";
 
 import type { StreamMember } from "./types";
@@ -123,7 +124,7 @@ export function RoutedInboundCard({ message, memberById }: StreamProps) {
             fontFamily: "var(--wg-font-mono)",
             color: "var(--wg-ink-soft)",
           }}
-          title={new Date(message.created_at).toLocaleString()}
+          title={formatIso(message.created_at)}
         >
           {formatMessageTime(message.created_at)}
         </span>
@@ -761,7 +762,7 @@ export function RoutedInboundFullCard({
             {t("inbound.from", { name: sourceName })}
           </strong>
         </span>
-        <span title={new Date(message.created_at).toLocaleString()}>
+        <span title={formatIso(message.created_at)}>
           {formatMessageTime(message.created_at)}
         </span>
       </div>

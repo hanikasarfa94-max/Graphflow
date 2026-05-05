@@ -78,6 +78,7 @@ from workgraph_persistence import (
 )
 from sqlalchemy import select
 
+from ._kb_visibility import is_canonical_kb_row
 from .collab_hub import CollabHub
 from .streams import StreamService
 
@@ -580,12 +581,25 @@ class MembraneService:
             packet = await self._build_kb_review_packet(
                 candidate=candidate, existing=existing
             )
-        except Exception:  # pragma: no cover — defensive
+        except Exception:
+            # M1.1 — fail closed. Pre-M1.1 this returned None (let
+            # auto_merge through), which meant a pretext-builder bug
+            # would let unreviewed candidates into shared memory
+            # silently. The whole point of the agent gate is to be
+            # the safety boundary; a bug in OUR code shouldn't open
+            # that boundary.
             _log.exception(
                 "membrane.agent_review.pretext_failed",
                 extra={"project_id": candidate.project_id},
             )
-            return None  # don't degrade UX on a pretext-build bug
+            return MembraneReview(
+                action="request_review",
+                reason="agent_review_pretext_failed",
+                diff_summary=(
+                    "Membrane semantic-review pretext failed to build. "
+                    "Holding candidate for owner review as a safety default."
+                ),
+            )
 
         # Skip when nothing to review against — spec §7 explicitly
         # avoids burning LLM calls for low-risk candidates.
@@ -647,7 +661,14 @@ class MembraneService:
 
         scored: list[tuple[int, KbItemRow]] = []
         for row in existing:
-            if row.status != "published":
+            # M1.1 — pretext only sees canonical shared memory. Pre-
+            # M1.1 this checked `row.status != "published"`, which
+            # excluded approved/routed ingest rows that ARE part of
+            # canonical shared context. Now driven by the same
+            # whitelist as RetrievalService / SkillsService so
+            # "what the agent reviews against" matches "what the agent
+            # would later see in retrieval."
+            if not is_canonical_kb_row(row):
                 continue
             row_tokens = _topic_tokens(
                 f"{row.title or ''}\n{row.content_md or ''}"

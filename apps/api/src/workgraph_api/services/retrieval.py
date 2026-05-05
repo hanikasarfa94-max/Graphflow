@@ -58,6 +58,7 @@ from ._embeddings import (
     content_hash,
     embed_with_cache,
 )
+from ._kb_visibility import is_canonical_kb_row
 from ._retrieval_primitives import (
     BM25Retriever,
     RetrievalDoc,
@@ -215,7 +216,10 @@ class RetrievalService:
         Filters applied BEFORE BM25 (matching the existing
         `_kb_search` semantics in services/skills.py):
           * scope: per `viewer_user_id` rule above
-          * status not in {archived, draft, rejected}
+          * canonical-shared-memory whitelist via
+            `is_canonical_kb_row` (M1.1) — published user-authored
+            rows + approved/routed ingest rows; pending-review /
+            draft / rejected / archived all excluded
           * `allowed_scopes` membership if provided
 
         Filters applied AFTER BM25:
@@ -246,10 +250,10 @@ class RetrievalService:
                     limit=_REPO_LIST_LIMIT,
                 )
 
-        live_rows = [
-            r for r in rows
-            if r.status not in ("archived", "draft", "rejected")
-        ]
+        # M1.1 — canonical-shared-memory whitelist. Pre-M1.1 this was
+        # a blacklist that allowed `pending-review` rows into pretext;
+        # the dogfood KB-conflict bug exploited that gap.
+        live_rows = [r for r in rows if is_canonical_kb_row(r)]
         if allowed_scopes is not None:
             live_rows = [r for r in live_rows if r.scope in allowed_scopes]
         if not live_rows:
@@ -543,10 +547,10 @@ class RetrievalService:
             rows = await KbItemRepository(session).list_group_for_project(
                 project_id=project_id, limit=_REPO_LIST_LIMIT
             )
-        live_rows = [
-            r for r in rows
-            if r.status not in ("archived", "draft", "rejected")
-        ]
+        # M1.1 — only embed canonical shared memory. Embedding a
+        # pending-review row would warm the cache for content that
+        # might be rejected on owner review.
+        live_rows = [r for r in rows if is_canonical_kb_row(r)]
         if not live_rows:
             return 0
 

@@ -33,6 +33,7 @@ import {
   type PersonalMessage,
   type RoutingSignal,
 } from "@/lib/api";
+import { formatIso } from "@/lib/time";
 
 import { CitedClaimList } from "./CitedClaimList";
 import type { StreamMember } from "./types";
@@ -276,7 +277,7 @@ export function RoutedReplyCard({ message, memberById, onFollowUp }: Props) {
             {t("reply.header", { name: targetName || "…" })}
           </strong>
         </span>
-        <span title={new Date(message.created_at).toLocaleString()}>
+        <span title={formatIso(message.created_at)}>
           {formatMessageTime(message.created_at)}
         </span>
       </div>

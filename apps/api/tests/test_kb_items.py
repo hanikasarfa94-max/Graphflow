@@ -539,6 +539,69 @@ async def test_m1_agent_permits_compatible_elaboration(api_env):
 
 
 @pytest.mark.asyncio
+async def test_m11_agent_pretext_build_failure_fails_closed(api_env):
+    """M1.1 §2: when `_build_kb_review_packet` raises, the agent path
+    must return request_review (not None / not auto_merge). A bug in
+    OUR pretext code shouldn't open the safety boundary the agent is
+    supposed to enforce.
+    """
+    from workgraph_api.main import app
+
+    client, maker, *_ = api_env
+
+    owner_id = await _register_and_login(client, "kb_m11_pf_owner")
+    member_id = await _register_and_login(client, "kb_m11_pf_member")
+    pid = await _mk_project_with_members(maker, owner_id=owner_id, member_id=member_id)
+
+    # Seed a published row so the candidate has *something* to review
+    # against; otherwise the agent path is short-circuited per spec
+    # §7 ("don't burn LLM calls on empty pretext"), which would
+    # ALSO bypass the failure path we want to test.
+    await _login(client, "kb_m11_pf_member")
+    r = await client.post(
+        f"/api/projects/{pid}/kb-items",
+        json={
+            "title": "Existing canon",
+            "content_md": "Some shared context.",
+            "scope": "group",
+        },
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["status"] == "published"
+
+    # Patch a stub reviewer so the agent path is enabled at all, then
+    # force `_build_kb_review_packet` to raise.
+    stub = _StubMembraneReviewer(_make_review("auto_merge"))
+    app.state.membrane_service._agent_reviewer = stub
+
+    membrane_service = app.state.membrane_service
+    original_builder = membrane_service._build_kb_review_packet
+
+    async def _raise_pretext(**kwargs):
+        raise RuntimeError("simulated pretext-builder bug")
+
+    membrane_service._build_kb_review_packet = _raise_pretext
+    try:
+        r = await client.post(
+            f"/api/projects/{pid}/kb-items",
+            json={
+                "title": "Different canon",
+                "content_md": "Some other shared context.",
+                "scope": "group",
+            },
+        )
+        assert r.status_code == 200, r.text
+        body = r.json()
+        # Fail-closed: lands as draft, not published.
+        assert body["status"] == "draft", body
+        assert body["scope"] == "group"
+        # Stub reviewer never reached — pretext failed first.
+        assert stub.calls == []
+    finally:
+        membrane_service._build_kb_review_packet = original_builder
+
+
+@pytest.mark.asyncio
 async def test_m1_agent_skipped_when_pretext_empty(api_env):
     """Spec §7: don't burn LLM calls when there's nothing to review
     against. First-write-into-empty-project should auto_merge without

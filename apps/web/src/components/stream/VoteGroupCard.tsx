@@ -17,6 +17,7 @@ import { useTranslations } from "next-intl";
 import type { CSSProperties } from "react";
 
 import type { IMMessage } from "@/lib/api";
+import { formatIso } from "@/lib/time";
 import { relativeTime,
   formatMessageTime } from "./types";
 
@@ -154,7 +155,7 @@ export function VoteGroupCard({ message }: Props) {
           </span>
           {cls ? <ClassChip cls={cls} /> : null}
           <span
-            title={new Date(message.created_at).toLocaleString()}
+            title={formatIso(message.created_at)}
             style={{
               marginLeft: "auto",
               fontFamily: "var(--wg-font-mono)",

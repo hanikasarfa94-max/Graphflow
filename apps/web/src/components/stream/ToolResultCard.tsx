@@ -23,6 +23,7 @@ import { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 
 import type { PersonalMessage } from "@/lib/api";
+import { formatIso } from "@/lib/time";
 
 import { relativeTime,
   formatMessageTime } from "./types";
@@ -456,7 +457,7 @@ export function ToolResultCard({
         <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
           <span
             style={{ fontSize: 10, color: "var(--wg-ink-faint)" }}
-            title={new Date(message.created_at).toLocaleString()}
+            title={formatIso(message.created_at)}
           >
             {formatMessageTime(message.created_at)}
           </span>

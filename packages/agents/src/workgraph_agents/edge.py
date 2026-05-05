@@ -51,7 +51,7 @@ from .llm import LLMClient, LLMResult, ParseFailure
 
 _log = logging.getLogger("workgraph.agents.edge")
 
-PROMPT_VERSION = "2026-05-05.phaseR.v3"
+PROMPT_VERSION = "2026-05-05.phaseR.v4"
 OPTIONS_PROMPT_VERSION = "2026-04-18.phaseQ.v1"
 REPLY_FRAME_PROMPT_VERSION = "2026-04-21.phaseM.v2"
 
