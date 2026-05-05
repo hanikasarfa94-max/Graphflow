@@ -1796,5 +1796,43 @@
       "focus": "Focus panel",
       "close": "Close panel"
     }
+  },
+  "roles": {
+    "historian": "Historian",
+    "scout": "Risk Scout",
+    "clerk": "Decision Clerk",
+    "router": "Routing Scout",
+    "scribe": "Handoff Writer",
+    "reviewer": "Reviewer"
+  },
+  "rituals": {
+    "menuTitle": "Rituals",
+    "menuHint": "Type a / command to invoke a team ritual.",
+    "argHintPrefix": "Fill in:",
+    "noMatch": "No ritual matches.",
+    "save": {
+      "label": "Save to team memory",
+      "hint": "Capture this thread as a wiki draft for the owner to review."
+    },
+    "route": {
+      "label": "Ask the smallest relevant group",
+      "hint": "Find who on the team is closest to this topic by graph signal."
+    },
+    "risk": {
+      "label": "Run risk scan",
+      "hint": "Surface open risks at or above a severity floor."
+    },
+    "why": {
+      "label": "Explain lineage",
+      "hint": "Walk decision history backward from a goal or commitment."
+    },
+    "handoff": {
+      "label": "Generate handoff",
+      "hint": "Compose a role-summary handoff doc for a teammate."
+    },
+    "crystallize": {
+      "label": "Crystallize decision",
+      "hint": "Turn a thread of agreement into a recorded decision."
+    }
   }
 }

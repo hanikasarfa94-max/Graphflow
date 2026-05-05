@@ -29,15 +29,22 @@ import {
   useCallback,
   useEffect,
   useImperativeHandle,
+  useMemo,
   useRef,
   useState,
 } from "react";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 
 import { ApiError, api, extractApiErrorDetail, type IMMessage } from "@/lib/api";
+import {
+  expandRitual,
+  filterRituals,
+  type Ritual,
+} from "@/lib/rituals";
 
 import { getScopeTiers } from "./ScopeTierPills";
 import { getStreamScope } from "./StreamContextPanel";
+import { SlashMenu } from "./SlashMenu";
 import { MESSAGE_BODY_MAX_LENGTH } from "./types";
 
 // 500ms matches north-star §pre-commit rehearsal: long enough that typing
@@ -121,14 +128,59 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
 ) {
   const t = useTranslations("stream");
   const tMembrane = useTranslations("membrane");
+  const locale = useLocale();
   const [value, setValue] = useState("");
   const [posting, setPosting] = useState(false);
   const [ingesting, setIngesting] = useState(false);
   const [ingestMessage, setIngestMessage] = useState<string | null>(null);
   const [plusOpen, setPlusOpen] = useState(false);
   const [submittingTask, setSubmittingTask] = useState(false);
+  // Slash menu — visible when the textarea starts with `/`. selection
+  // tracks which ritual is highlighted for Enter / arrow nav. We clamp
+  // to filtered.length-1 in the keydown handler so a backspace that
+  // shrinks the filtered list doesn't leave the highlight pointing
+  // past the end.
+  const [slashIndex, setSlashIndex] = useState(0);
+  const slashOpen = value.startsWith("/");
+  // Reset highlight to the top whenever the open/close transition flips
+  // — feels more natural than persisting the index across reopens.
+  useEffect(() => {
+    if (slashOpen) setSlashIndex(0);
+  }, [slashOpen]);
+  const filteredRituals = useMemo(() => {
+    if (!slashOpen) return [];
+    const firstToken = value.split(/\s/, 1)[0] ?? "";
+    return filterRituals(firstToken);
+  }, [slashOpen, value]);
   const taRef = useRef<HTMLTextAreaElement | null>(null);
   const previewTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const pickRitual = useCallback(
+    (ritual: Ritual) => {
+      const expanded = expandRitual(ritual, "", locale === "zh" ? "zh" : "en");
+      setValue(expanded);
+      // Place the cursor at the {arg} slot (or end if the template has
+      // no slot left) so the user types straight into it.
+      requestAnimationFrame(() => {
+        const ta = taRef.current;
+        if (!ta) return;
+        ta.focus();
+        const slot = expanded.indexOf("{arg}");
+        if (slot >= 0) {
+          ta.setSelectionRange(slot, slot + "{arg}".length);
+        } else {
+          ta.setSelectionRange(expanded.length, expanded.length);
+        }
+        // Resize after content swap so we don't leave the box short.
+        ta.style.height = "auto";
+        ta.style.height = `${Math.min(
+          ta.scrollHeight,
+          LINE_HEIGHT_PX * MAX_ROWS + 20,
+        )}px`;
+      });
+    },
+    [locale],
+  );
 
   const handleSubmitAsTask = useCallback(async () => {
     if (!onSubmitAsTask) return;
@@ -227,6 +279,15 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
   async function send() {
     const body = value.trim();
     if (!body || posting) return;
+    // A ritual template still showing the literal `{arg}` slot means
+    // the user picked a ritual but hasn't filled in the argument yet.
+    // Don't send the placeholder — just keep the textarea focused so
+    // they can type. (No error toast — this is a "still drafting"
+    // signal, not a failure.)
+    if (body.includes("{arg}")) {
+      taRef.current?.focus();
+      return;
+    }
     if (!(await beforeSend(body))) return;
 
     setPosting(true);
@@ -453,6 +514,17 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
           )}
         </>
       )}
+      {slashOpen ? (
+        <SlashMenu
+          value={value}
+          selectedIndex={Math.min(
+            slashIndex,
+            Math.max(0, filteredRituals.length - 1),
+          )}
+          onPick={pickRitual}
+          onHover={(i) => setSlashIndex(i)}
+        />
+      ) : null}
       <textarea
         ref={taRef}
         value={value}
@@ -461,6 +533,42 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
           autosize();
         }}
         onKeyDown={(e) => {
+          // Slash-menu keyboard handling. Only intercept when the menu
+          // is open AND filtered list is non-empty — otherwise fall
+          // through to the default send behaviour (Enter sends, etc.).
+          if (slashOpen && filteredRituals.length > 0) {
+            if (e.key === "ArrowDown") {
+              e.preventDefault();
+              setSlashIndex((i) => (i + 1) % filteredRituals.length);
+              return;
+            }
+            if (e.key === "ArrowUp") {
+              e.preventDefault();
+              setSlashIndex((i) =>
+                i === 0 ? filteredRituals.length - 1 : i - 1,
+              );
+              return;
+            }
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              const idx = Math.min(slashIndex, filteredRituals.length - 1);
+              const ritual = filteredRituals[idx];
+              if (ritual) pickRitual(ritual);
+              return;
+            }
+            if (e.key === "Escape") {
+              e.preventDefault();
+              setValue("");
+              return;
+            }
+            if (e.key === "Tab") {
+              e.preventDefault();
+              const idx = Math.min(slashIndex, filteredRituals.length - 1);
+              const ritual = filteredRituals[idx];
+              if (ritual) pickRitual(ritual);
+              return;
+            }
+          }
           if (e.key === "Enter" && !e.shiftKey) {
             e.preventDefault();
             void send();

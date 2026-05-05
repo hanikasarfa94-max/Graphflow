@@ -1796,5 +1796,43 @@
       "focus": "聚焦此面板",
       "close": "关闭面板"
     }
+  },
+  "roles": {
+    "historian": "档案员",
+    "scout": "风险侦察",
+    "clerk": "决议记录员",
+    "router": "路由顾问",
+    "scribe": "交接撰稿",
+    "reviewer": "审阅者"
+  },
+  "rituals": {
+    "menuTitle": "仪式",
+    "menuHint": "输入 / 指令调用团队仪式。",
+    "argHintPrefix": "请填入：",
+    "noMatch": "没有匹配的仪式。",
+    "save": {
+      "label": "存入团队记忆",
+      "hint": "把当前线程沉淀为 wiki 草稿，待 owner 在 Membrane 中审阅。"
+    },
+    "route": {
+      "label": "路由到最小相关组",
+      "hint": "按图信号找出团队里和此话题最相关的人。"
+    },
+    "risk": {
+      "label": "风险扫描",
+      "hint": "列出达到或高于指定严重度的开放风险。"
+    },
+    "why": {
+      "label": "解释脉络",
+      "hint": "从一个目标或承诺反向走一遍决策链。"
+    },
+    "handoff": {
+      "label": "生成交接",
+      "hint": "为某位同事按角色摘要生成交接文档。"
+    },
+    "crystallize": {
+      "label": "凝结为决议",
+      "hint": "把已经趋于一致的讨论沉淀为正式决议。"
+    }
   }
 }
