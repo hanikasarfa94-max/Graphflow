@@ -20,6 +20,7 @@ import { useRoomKnowledge } from "@/hooks/useRoomKnowledge";
 import { useRoomTasks } from "@/hooks/useRoomTasks";
 import type { UseRoomTimelineResult } from "@/hooks/useRoomTimeline";
 
+import { FlowsPanelBody } from "./FlowsPanelBody";
 import { PanelItem } from "./PanelItem";
 import {
   WorkbenchPanel,
@@ -84,6 +85,7 @@ const FUNCTIONAL_KINDS: ReadonlySet<PanelKind> = new Set([
   "tasks",
   "skills",
   "workflow",
+  "flows",
 ]);
 
 const tasksScopePillStyle = (active: boolean): CSSProperties => ({
@@ -276,6 +278,13 @@ export function RoomWorkbench({ projectId, timeline, open, onClose }: Props) {
           >
             ＋{t("chipWorkflow")}
           </button>
+          <button
+            data-testid="workbench-chip-flows"
+            style={chipStyle}
+            onClick={() => addPanel("flows", t("chipFlows"))}
+          >
+            ＋{t("chipFlows")}
+          </button>
         </div>
         <div className={"panelGrid"} style={gridStyle}>
           {panels.map((panel) => (
@@ -322,6 +331,12 @@ function renderPanelBody(
   }
   if (kind === "workflow") {
     return <WorkflowPanelBody t={t} />;
+  }
+  if (kind === "flows") {
+    // FlowsPanelBody owns its own translator scope (`flows.*`); it
+    // doesn't take the room workbench `t`. That keeps the keys it
+    // reads stable even if the workbench namespace renames later.
+    return <FlowsPanelBody projectId={projectId} />;
   }
   // Inert fallback — every functional kind already returns above.
   return (

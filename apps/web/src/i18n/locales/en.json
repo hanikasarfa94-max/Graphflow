@@ -501,6 +501,7 @@
       "chipKnowledge": "Knowledge",
       "chipSkills": "Skills",
       "chipWorkflow": "Workflow",
+      "chipFlows": "Active flows",
       "comingSoon": "Coming in N.4 — vocabulary established now.",
       "comingSoonBody": "This panel kind is part of the projection vocabulary; its renderer ships next slice.",
       "requestsEmpty": "No pending reviews — everything's settled.",
@@ -1804,6 +1805,40 @@
     "router": "Routing Scout",
     "scribe": "Handoff Writer",
     "reviewer": "Reviewer"
+  },
+  "flows": {
+    "title": "Active flows",
+    "subtitle": "Work circulating through the project, grouped by who needs to act.",
+    "buckets": {
+      "needsMe": "Needs me",
+      "waitingOnOthers": "Waiting on others",
+      "awaitingMembrane": "Awaiting Membrane"
+    },
+    "empty": {
+      "needsMe": "No work is waiting on your judgment.",
+      "waitingOnOthers": "No packets are currently waiting on teammates.",
+      "awaitingMembrane": "No shared-memory writes are waiting for review."
+    },
+    "loading": "Loading flows…",
+    "error": "Couldn't load flows.",
+    "open": "Open",
+    "openMissing": "(no surface yet)",
+    "stage": {
+      "awaiting_target": "Awaiting reply",
+      "awaiting_membrane": "Awaiting review",
+      "awaiting_owner": "Awaiting owner",
+      "completed": "Completed",
+      "published": "Published"
+    },
+    "recipes": {
+      "ask_with_context": "Ask with context",
+      "promote_to_memory": "Save to team memory",
+      "crystallize_decision": "Crystallize decision",
+      "review": "Review",
+      "handoff": "Handoff",
+      "meeting_metabolism": "Meeting follow-up"
+    },
+    "metaUpdated": "Updated {time}"
   },
   "rituals": {
     "menuTitle": "Rituals",

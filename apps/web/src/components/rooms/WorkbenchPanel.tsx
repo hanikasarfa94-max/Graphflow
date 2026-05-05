@@ -19,7 +19,8 @@ export type PanelKind =
   | "tasks"
   | "knowledge"
   | "skills"
-  | "workflow";
+  | "workflow"
+  | "flows";
 
 export interface PanelDef {
   id: string;

@@ -501,6 +501,7 @@
       "chipKnowledge": "知识记忆",
       "chipSkills": "技能图谱",
       "chipWorkflow": "工作流",
+      "chipFlows": "活跃流转",
       "comingSoon": "N.4 阶段上线 — 词汇已先建立。",
       "comingSoonBody": "此面板属于投影词汇；具体渲染在下一切片落地。",
       "requestsEmpty": "暂无待评审项 — 一切处理就绪。",
@@ -1804,6 +1805,40 @@
     "router": "路由顾问",
     "scribe": "交接撰稿",
     "reviewer": "审阅者"
+  },
+  "flows": {
+    "title": "活跃流转",
+    "subtitle": "项目中正在流转的工作，按当前需要行动的人分组。",
+    "buckets": {
+      "needsMe": "等我处理",
+      "waitingOnOthers": "等待他人",
+      "awaitingMembrane": "等待审核"
+    },
+    "empty": {
+      "needsMe": "没有需要你判断的工作。",
+      "waitingOnOthers": "目前没有等待其他成员的流转。",
+      "awaitingMembrane": "没有等待审核的共享记忆写入。"
+    },
+    "loading": "加载中…",
+    "error": "无法加载流转。",
+    "open": "打开",
+    "openMissing": "（暂无可跳转面板）",
+    "stage": {
+      "awaiting_target": "等待回复",
+      "awaiting_membrane": "等待审核",
+      "awaiting_owner": "等待 owner",
+      "completed": "已完成",
+      "published": "已发布"
+    },
+    "recipes": {
+      "ask_with_context": "带上下文询问",
+      "promote_to_memory": "存入团队记忆",
+      "crystallize_decision": "凝结为决议",
+      "review": "审阅",
+      "handoff": "交接",
+      "meeting_metabolism": "会议跟进"
+    },
+    "metaUpdated": "更新于 {time}"
   },
   "rituals": {
     "menuTitle": "仪式",
