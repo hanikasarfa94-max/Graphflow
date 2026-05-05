@@ -92,6 +92,12 @@ from .membrane import (
     MembraneClassification,
     MembraneOutcome,
 )
+from .membrane_reviewer import (
+    MembraneAgentReview,
+    MembraneAgentReviewOutcome,
+    MembraneAgentReviewer,
+    PROMPT_VERSION as MEMBRANE_REVIEWER_PROMPT_VERSION,
+)
 from .pre_answer import (
     PRE_ANSWER_PROMPT_VERSION,
     PreAnswerAgent,
@@ -182,6 +188,10 @@ __all__ = [
     "MembraneAction",
     "MembraneClassification",
     "MembraneOutcome",
+    "MembraneAgentReview",
+    "MembraneAgentReviewOutcome",
+    "MembraneAgentReviewer",
+    "MEMBRANE_REVIEWER_PROMPT_VERSION",
     "EdgeAgent",
     "EdgeResponse",
     "EdgeResponseOutcome",

@@ -51,7 +51,7 @@ from .llm import LLMClient, LLMResult, ParseFailure
 
 _log = logging.getLogger("workgraph.agents.edge")
 
-PROMPT_VERSION = "2026-05-05.discuss_plan.v4"
+PROMPT_VERSION = "2026-05-05.phaseR.v3"
 OPTIONS_PROMPT_VERSION = "2026-04-18.phaseQ.v1"
 REPLY_FRAME_PROMPT_VERSION = "2026-04-21.phaseM.v2"
 
@@ -454,7 +454,7 @@ class EdgeAgent:
             # `silence`, at 0.4 it still felt mechanical on discussion
             # / planning turns. The phaseR.v2 prompt explicitly broadens
             # `answer` to cover discussion + brainstorm + thinking-out-
-            # loud, and 0.5 gives enough variety for substantive
+            # loud, and 0.6 gives enough variety for substantive
             # engagement. complete_structured's parse-retry path keeps
             # JSON stable (retries drop to 0.0 on parse fail). Other
             # EdgeAgent helper paths (options, reply-frame) keep the
@@ -462,7 +462,7 @@ class EdgeAgent:
             parsed, result, attempts = await self._llm.complete_structured(
                 messages,
                 pydantic_cls=EdgeResponse,
-                temperature=0.5,
+                temperature=0.6,
                 max_attempts=3,
             )
         except ParseFailure as e:

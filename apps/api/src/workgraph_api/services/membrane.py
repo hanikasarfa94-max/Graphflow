@@ -46,17 +46,23 @@ ingest() — same cell, same agent, same boundary, just inward-facing.
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
-from workgraph_agents import MembraneAgent, MembraneClassification
+from workgraph_agents import (
+    MembraneAgent,
+    MembraneAgentReviewer,
+    MembraneClassification,
+)
 from workgraph_domain import EventBus
 from workgraph_observability import get_trace_id
 from workgraph_persistence import (
     AgentRunLogRepository,
     AssignmentRepository,
+    DecisionRepository,
     EDGE_AGENT_SYSTEM_USER_ID,
     KbItemRepository,
     KbItemRow,
@@ -168,12 +174,19 @@ class MembraneService:
         hub: CollabHub,
         stream_service: StreamService,
         agent: MembraneAgent,
+        agent_reviewer: MembraneAgentReviewer | None = None,
     ) -> None:
         self._sessionmaker = sessionmaker
         self._event_bus = event_bus
         self._hub = hub
         self._stream_service = stream_service
         self._agent = agent
+        # Slice M1 (docs/membrane-agent-review-spec.md) — optional
+        # semantic reviewer that runs *after* deterministic checks
+        # when the candidate is headed for auto_merge. Optional so
+        # tests can pass None and skip the LLM round-trip; in prod
+        # the constructor receives a wired reviewer.
+        self._agent_reviewer = agent_reviewer
 
     async def ingest(
         self,
@@ -424,7 +437,7 @@ class MembraneService:
         existing entry, supersede it, or accept as a related sibling.
 
         Not yet covered (stage 4+):
-        - Semantic contradiction with existing entries (needs LLM)
+        - Full semantic contradiction with existing entries (needs LLM)
         - Conflict with crystallized DecisionRow rationales
         - Conflict with active CommitmentRow content
         - Stale-on-arrival (older than the most recent edit on the
@@ -510,10 +523,204 @@ class MembraneService:
                 conflict_with=(row.id,),
             )
 
+        numeric_conflict = _first_numeric_fact_conflict(
+            title=candidate.title,
+            content=candidate.content,
+            existing=existing,
+        )
+        if numeric_conflict is not None:
+            row, new_numbers, existing_numbers = numeric_conflict
+            return MembraneReview(
+                action="request_review",
+                reason="numeric_claim_conflict",
+                diff_summary=(
+                    "Candidate appears to cover the same KB topic as "
+                    f"'{row.title}' (id={row.id}) but carries different "
+                    f"numeric claims: candidate={sorted(new_numbers)}, "
+                    f"existing={sorted(existing_numbers)}. Owner should "
+                    "decide whether this supersedes the older entry, is a "
+                    "separate scenario, or should be rejected."
+                ),
+                conflict_with=(row.id,),
+            )
+
+        # Slice M1 — semantic reviewer as the *last* gate before
+        # auto_merge. Spec §7: only call the LLM when the candidate is
+        # otherwise headed for auto_merge AND we have something for it
+        # to review. If retrieval / decisions are empty there's nothing
+        # the agent can reason against; skip the round-trip.
+        if self._agent_reviewer is not None:
+            agent_action = await self._agent_review_kb_candidate(
+                candidate=candidate, existing=existing
+            )
+            if agent_action is not None:
+                return agent_action
+
         return MembraneReview(
             action="auto_merge",
             reason="no_conflicts",
         )
+
+    async def _agent_review_kb_candidate(
+        self,
+        *,
+        candidate: MembraneCandidate,
+        existing: list[KbItemRow],
+    ) -> MembraneReview | None:
+        """Build a KB review packet (spec §5.2) and run the Membrane
+        Agent. Returns a MembraneReview that overrides auto_merge when
+        the agent flags a conflict, or `None` when the agent permits
+        auto_merge so the caller's existing flow continues.
+
+        Failure modes return MembraneReview directly with
+        `request_review` (fail-closed) — never raise into the caller.
+        """
+        assert self._agent_reviewer is not None
+        try:
+            packet = await self._build_kb_review_packet(
+                candidate=candidate, existing=existing
+            )
+        except Exception:  # pragma: no cover — defensive
+            _log.exception(
+                "membrane.agent_review.pretext_failed",
+                extra={"project_id": candidate.project_id},
+            )
+            return None  # don't degrade UX on a pretext-build bug
+
+        # Skip when nothing to review against — spec §7 explicitly
+        # avoids burning LLM calls for low-risk candidates.
+        if not packet["retrieved_context"] and not packet["recent_decisions"]:
+            return None
+
+        try:
+            outcome = await self._agent_reviewer.review_candidate(packet)
+        except Exception:
+            # Network / unexpected agent failure: fail-closed to
+            # request_review with a generic reason.
+            _log.exception(
+                "membrane.agent_review.call_failed",
+                extra={"project_id": candidate.project_id},
+            )
+            return MembraneReview(
+                action="request_review",
+                reason="agent_review_call_failed",
+                diff_summary=(
+                    "Membrane semantic reviewer failed to run. "
+                    "Holding candidate for owner review as a safety default."
+                ),
+            )
+
+        review = outcome.review
+        if review.action == "auto_merge":
+            return None  # let the caller's auto_merge path proceed
+
+        # Map agent's ref strings (e.g. "kb:abc") back to bare ids for
+        # the public MembraneReview shape. Agent already filtered to
+        # pretext-only refs.
+        conflict_ids = tuple(
+            ref.partition(":")[2]
+            for ref in review.conflict_with
+            if ref.partition(":")[2]
+        )
+        return MembraneReview(
+            action=review.action,
+            reason=review.reason,
+            diff_summary=review.diff_summary,
+            clarify_question=review.clarify_question,
+            conflict_with=conflict_ids,
+            warnings=tuple(review.warnings),
+        )
+
+    async def _build_kb_review_packet(
+        self,
+        *,
+        candidate: MembraneCandidate,
+        existing: list[KbItemRow],
+    ) -> dict[str, Any]:
+        """Build the KB review packet per spec §5.2. Picks top-K
+        published group KB items by simple title/content token overlap
+        with the candidate (no LLM ranking; Slice M2 may upgrade to
+        retrieval-service candidate_set if it proves needed).
+        """
+        candidate_text = f"{candidate.title or ''}\n{candidate.content or ''}"
+        candidate_tokens = _topic_tokens(candidate_text)
+
+        scored: list[tuple[int, KbItemRow]] = []
+        for row in existing:
+            if row.status != "published":
+                continue
+            row_tokens = _topic_tokens(
+                f"{row.title or ''}\n{row.content_md or ''}"
+            )
+            score = len(candidate_tokens & row_tokens)
+            if score > 0:
+                scored.append((score, row))
+        scored.sort(key=lambda t: t[0], reverse=True)
+        top_kb = [row for _, row in scored[:8]]
+
+        retrieved_context = [
+            {
+                "ref": f"kb:{row.id}",
+                "title": row.title or "",
+                "excerpt": (row.content_md or "")[:240],
+                "status": row.status,
+                "scope": row.scope,
+                "source": row.source,
+                "updated_at": _iso_or_none(row.created_at),
+                "folder_id": row.folder_id,
+            }
+            for row in top_kb
+        ]
+
+        recent_decisions: list[dict[str, Any]] = []
+        async with session_scope(self._sessionmaker) as session:
+            decisions = await DecisionRepository(session).list_for_project(
+                candidate.project_id, limit=20
+            )
+        # Filter to decisions whose headline / rationale shares any
+        # token with the candidate. Cap at 5 per spec §5.2.
+        for d in decisions:
+            d_text = f"{d.custom_text or ''}\n{d.rationale or ''}"
+            if not _topic_tokens(d_text) & candidate_tokens:
+                continue
+            recent_decisions.append(
+                {
+                    "ref": f"decision:{d.id}",
+                    "headline": (d.custom_text or "")[:200],
+                    "rationale": (d.rationale or "")[:600],
+                    "apply_outcome": d.apply_outcome,
+                    "created_at": _iso_or_none(d.created_at),
+                    "scope_stream_id": d.scope_stream_id,
+                }
+            )
+            if len(recent_decisions) >= 5:
+                break
+
+        return {
+            "candidate": {
+                "kind": "kb_item_group",
+                "project_id": candidate.project_id,
+                "proposer_user_id": candidate.proposer_user_id,
+                "title": candidate.title,
+                "content": candidate.content,
+                "metadata": dict(candidate.metadata or {}),
+            },
+            "policy_context": {
+                "allowed_actions": [
+                    "auto_merge",
+                    "request_review",
+                    "request_clarification",
+                    "reject",
+                ],
+                "write_target": "group_kb",
+                "shared_context_impact": (
+                    "will_be_visible_to_project_agents_if_published"
+                ),
+            },
+            "retrieved_context": retrieved_context,
+            "recent_decisions": recent_decisions,
+            "warnings_from_fixed_checks": [],
+        }
 
     async def _review_task_promote(
         self, candidate: MembraneCandidate
@@ -1284,7 +1491,6 @@ def _normalize_title(title: str | None) -> str:
     """
     if not title:
         return ""
-    import re
     s = title.strip().lower()
     # Drop punctuation; keep word chars + Unicode letters (so "API 设计" stays
     # comparable to "API设计"). \W matches non-word; combined with the unicode
@@ -1292,6 +1498,112 @@ def _normalize_title(title: str | None) -> str:
     s = re.sub(r"[^\w\s]", "", s, flags=re.UNICODE)
     s = re.sub(r"\s+", " ", s).strip()
     return s
+
+
+_NUMBER_RE = re.compile(r"\d+(?:\.\d+)?")
+_ASCII_TOKEN_RE = re.compile(r"[a-z][a-z0-9_-]{1,}")
+_CJK_RUN_RE = re.compile(r"[\u4e00-\u9fff]{2,}")
+
+_TOPIC_STOP_TOKENS = {
+    "note",
+    "notes",
+    "summary",
+    "draft",
+    "plan",
+    "record",
+    "wiki",
+    "目标",
+    "记录",
+    "总结",
+    "草稿",
+    "方案",
+}
+
+
+def _first_numeric_fact_conflict(
+    *,
+    title: str,
+    content: str,
+    existing: list[KbItemRow],
+) -> tuple[KbItemRow, set[str], set[str]] | None:
+    """Conservative semantic guard for crowd KB pollution.
+
+    This is intentionally not a full contradiction engine. It catches
+    the high-value class the product just exposed in dogfood: two KB
+    entries are about the same topic, both assert concrete numbers, and
+    the number sets differ. Example: "5 levels + 2 bosses" vs
+    "8 levels + 3 bosses". That should never auto-publish into shared
+    LLM pretext; it should become owner review.
+    """
+    new_text = f"{title}\n{content}"
+    new_numbers = _numeric_claims(new_text)
+    if not new_numbers:
+        return None
+    new_tokens = _topic_tokens(new_text)
+    if not new_tokens:
+        return None
+
+    for row in existing:
+        if row.status in ("archived", "rejected"):
+            continue
+        old_text = f"{row.title or ''}\n{row.content_md or ''}"
+        old_numbers = _numeric_claims(old_text)
+        if not old_numbers or old_numbers == new_numbers:
+            continue
+        old_tokens = _topic_tokens(old_text)
+        if _topic_overlap(new_tokens, old_tokens):
+            return row, new_numbers, old_numbers
+    return None
+
+
+def _numeric_claims(text: str) -> set[str]:
+    out: set[str] = set()
+    for raw in _NUMBER_RE.findall(text or ""):
+        try:
+            n = float(raw)
+        except ValueError:
+            continue
+        out.add(str(int(n)) if n.is_integer() else str(n))
+    return out
+
+
+def _topic_tokens(text: str) -> set[str]:
+    s = (text or "").lower()
+    tokens = {t for t in _ASCII_TOKEN_RE.findall(s) if t not in _TOPIC_STOP_TOKENS}
+    for run in _CJK_RUN_RE.findall(s):
+        # CJK bigrams keep this dependency-free while still catching
+        # "关卡目标" / "Boss关" style topic overlap.
+        for i in range(0, max(0, len(run) - 1)):
+            tok = run[i : i + 2]
+            if tok not in _TOPIC_STOP_TOKENS:
+                tokens.add(tok)
+    return tokens
+
+
+def _iso_or_none(value: Any) -> str | None:
+    """Best-effort ISO serialize for the agent pretext. Datetimes
+    serialize via .isoformat(); None/strings pass through; anything
+    else falls back to str()."""
+    if value is None:
+        return None
+    if hasattr(value, "isoformat"):
+        try:
+            return value.isoformat()
+        except Exception:
+            return str(value)
+    return str(value)
+
+
+def _topic_overlap(a: set[str], b: set[str]) -> bool:
+    if not a or not b:
+        return False
+    common = a & b
+    if len(common) >= 2:
+        return True
+    # Short titles can have only one meaningful shared token ("boss",
+    # "关卡"). Require that token to be relatively specific by appearing
+    # as a non-stop token on both sides.
+    return len(common) == 1 and len(next(iter(common))) >= 3
 
 
 __all__ = [

@@ -388,6 +388,245 @@ async def test_membrane_review_creates_inbox_suggestion_and_accept_publishes(
         assert row.status == "published"
 
 
+class _StubMembraneReviewer:
+    """Stub MembraneAgentReviewer for integration tests. Returns a
+    pre-canned review without calling an LLM. Mirrors the public
+    interface of MembraneAgentReviewer.review_candidate.
+    """
+
+    def __init__(self, review):
+        self._review = review
+        self.calls: list[dict] = []
+
+    async def review_candidate(self, packet):
+        from dataclasses import dataclass
+
+        from workgraph_agents.llm import LLMResult
+
+        @dataclass
+        class _Outcome:
+            review: object
+            result: LLMResult
+            outcome: str
+            attempts: int = 1
+            error: str | None = None
+
+        self.calls.append(packet)
+        return _Outcome(
+            review=self._review,
+            result=LLMResult(
+                content="",
+                model="stub",
+                prompt_tokens=0,
+                completion_tokens=0,
+                latency_ms=0,
+            ),
+            outcome="ok",
+        )
+
+
+def _make_review(action, **kwargs):
+    """Build a MembraneAgentReview for the stub reviewer."""
+    from workgraph_agents import MembraneAgentReview
+
+    defaults = {
+        "reason": "stub_test",
+        "diff_summary": None,
+        "clarify_question": None,
+        "conflict_with": [],
+        "warnings": [],
+        "confidence": 0.9,
+    }
+    defaults.update(kwargs)
+    return MembraneAgentReview(action=action, **defaults)
+
+
+@pytest.mark.asyncio
+async def test_m1_agent_blocks_non_numeric_contradiction(api_env):
+    """M1 integration: agent flags contradiction the deterministic
+    rules miss → KB candidate lands as draft, not published."""
+    from workgraph_api.main import app
+
+    client, maker, *_ = api_env
+    owner_id = await _register_and_login(client, "kb_m1_a_owner")
+    member_id = await _register_and_login(client, "kb_m1_a_member")
+    pid = await _mk_project_with_members(maker, owner_id=owner_id, member_id=member_id)
+
+    # Existing group KB row to give the agent something to review against.
+    await _login(client, "kb_m1_a_member")
+    r = await client.post(
+        f"/api/projects/{pid}/kb-items",
+        json={
+            "title": "Launch scope",
+            "content_md": "Revive was cut from launch.",
+            "scope": "group",
+        },
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["status"] == "published"
+
+    # Patch the stub reviewer that says: contradicts an existing entry.
+    stub_review = _make_review(
+        "request_review",
+        reason="candidate_contradicts_existing_memory",
+        diff_summary="Candidate restores revive after it was cut.",
+        confidence=0.86,
+    )
+    app.state.membrane_service._agent_reviewer = _StubMembraneReviewer(
+        stub_review
+    )
+
+    # Now post a candidate that contradicts (no numeric mismatch, no
+    # duplicate title). Without the agent this would auto_merge.
+    r = await client.post(
+        f"/api/projects/{pid}/kb-items",
+        json={
+            "title": "Revive scope",
+            "content_md": "Revive is in scope for v1.",
+            "scope": "group",
+        },
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["status"] == "draft", body
+    assert body["scope"] == "group"
+
+
+@pytest.mark.asyncio
+async def test_m1_agent_permits_compatible_elaboration(api_env):
+    """M1: agent says auto_merge for a compatible elaboration → KB
+    publishes normally."""
+    from workgraph_api.main import app
+
+    client, maker, *_ = api_env
+    owner_id = await _register_and_login(client, "kb_m1_b_owner")
+    member_id = await _register_and_login(client, "kb_m1_b_member")
+    pid = await _mk_project_with_members(maker, owner_id=owner_id, member_id=member_id)
+
+    # Seed a published row so the pretext isn't empty (otherwise the
+    # agent path is skipped per spec §7).
+    await _login(client, "kb_m1_b_member")
+    r = await client.post(
+        f"/api/projects/{pid}/kb-items",
+        json={
+            "title": "Auth flow",
+            "content_md": "Use the new session pool.",
+            "scope": "group",
+        },
+    )
+    assert r.status_code == 200, r.text
+
+    stub_review = _make_review(
+        "auto_merge",
+        reason="elaboration_compatible_with_existing",
+        confidence=0.78,
+    )
+    app.state.membrane_service._agent_reviewer = _StubMembraneReviewer(
+        stub_review
+    )
+
+    r = await client.post(
+        f"/api/projects/{pid}/kb-items",
+        json={
+            "title": "Auth flow — pool sizing",
+            "content_md": "Cap the pool at 200; P95 saturation observed at 150.",
+            "scope": "group",
+        },
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["status"] == "published", body
+
+
+@pytest.mark.asyncio
+async def test_m1_agent_skipped_when_pretext_empty(api_env):
+    """Spec §7: don't burn LLM calls when there's nothing to review
+    against. First-write-into-empty-project should auto_merge without
+    the reviewer being invoked at all."""
+    from workgraph_api.main import app
+
+    client, maker, *_ = api_env
+    owner_id = await _register_and_login(client, "kb_m1_c_owner")
+    member_id = await _register_and_login(client, "kb_m1_c_member")
+    pid = await _mk_project_with_members(maker, owner_id=owner_id, member_id=member_id)
+
+    stub = _StubMembraneReviewer(
+        _make_review("request_review", reason="should_not_fire")
+    )
+    app.state.membrane_service._agent_reviewer = stub
+
+    await _login(client, "kb_m1_c_member")
+    r = await client.post(
+        f"/api/projects/{pid}/kb-items",
+        json={
+            "title": "First note",
+            "content_md": "Nothing else exists yet.",
+            "scope": "group",
+        },
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["status"] == "published"
+    # The reviewer must NOT have been called — pretext was empty.
+    assert stub.calls == []
+
+
+@pytest.mark.asyncio
+async def test_membrane_blocks_same_topic_numeric_conflict_on_promote(api_env):
+    """A personal note promoted to group must not auto-publish when it
+    contradicts an existing group KB item's numeric claims on the same
+    topic. This is the dogfood bug: both notes polluted shared pretext
+    before Membrane caught semantic-ish conflict beyond duplicate title.
+    """
+    client, maker, *_ = api_env
+    owner_id = await _register_and_login(client, "kb_num_owner")
+    member_id = await _register_and_login(client, "kb_num_member")
+    pid = await _mk_project_with_members(
+        maker, owner_id=owner_id, member_id=member_id
+    )
+
+    await _login(client, "kb_num_member")
+    r = await client.post(
+        f"/api/projects/{pid}/kb-items",
+        json={
+            "title": "发布范围记录",
+            "content_md": "当前关卡目标：发布 5 个关卡 + 2 个 Boss 关。",
+        },
+    )
+    assert r.status_code == 200, r.text
+    first_id = r.json()["id"]
+    r = await client.post(f"/api/kb-items/{first_id}/promote")
+    assert r.status_code == 200, r.text
+    assert r.json()["scope"] == "group"
+    assert r.json()["status"] == "published"
+
+    r = await client.post(
+        f"/api/projects/{pid}/kb-items",
+        json={
+            "title": "关卡目标",
+            "content_md": "最新目标：发布 8 个关卡 + 3 个 Boss 关。",
+        },
+    )
+    assert r.status_code == 200, r.text
+    second_id = r.json()["id"]
+    r = await client.post(f"/api/kb-items/{second_id}/promote")
+    assert r.status_code == 200, r.text
+    assert r.json()["scope"] == "group"
+    assert r.json()["status"] == "draft"
+
+    from workgraph_api.services.retrieval import RetrievalService
+
+    retrieval = RetrievalService(maker)
+    hits = await retrieval.candidate_set(
+        project_id=pid,
+        query="关卡目标 Boss",
+        viewer_user_id=None,
+        k=5,
+    )
+    hit_ids = {h["id"] for h in hits}
+    assert first_id in hit_ids
+    assert second_id not in hit_ids
+
+
 # ---- file upload --------------------------------------------------------
 
 

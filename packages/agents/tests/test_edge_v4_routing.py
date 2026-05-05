@@ -103,12 +103,12 @@ def _ctx(*, gate_keeper_map: dict | None = None) -> dict:
 # ---- prompt version ----------------------------------------------------
 
 
-def test_prompt_version_bumped_to_phase_r_v1():
+def test_prompt_version_bumped_to_phase_r_v3():
     # v3 → v4 was the Scene 2 introduction. PROMPT_VERSION is pinned so
     # the agent_run_log correlates responses with the prompt that produced
     # them; if this constant drifts from prompts/edge/v1.md, split-brain
     # deployments stop being auditable.
-    assert PROMPT_VERSION == "2026-04-23.phaseR.v1"
+    assert PROMPT_VERSION == "2026-05-05.phaseR.v3"
 
 
 # ---- Scene 1: discovery route -----------------------------------------

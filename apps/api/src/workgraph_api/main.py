@@ -464,12 +464,21 @@ async def lifespan(app: FastAPI):
     sla_service = SlaService(sessionmaker, event_bus, stream_service)
     simulation_service = SimulationService(sessionmaker)
     skill_atlas_service = SkillAtlasService(sessionmaker)
+    # Slice M1 — semantic reviewer for KB promote (and later task
+    # promote / decision crystallize). Uses real LLMClient in prod;
+    # tests construct a stubbed one or pass None to skip.
+    if settings.use_stubs:
+        membrane_reviewer = None
+    else:
+        from workgraph_agents import MembraneAgentReviewer
+        membrane_reviewer = MembraneAgentReviewer()
     membrane_service = MembraneService(
         sessionmaker,
         event_bus,
         collab_hub,
         stream_service,
         membrane_agent,
+        agent_reviewer=membrane_reviewer,
     )
     membrane_ingest_service = MembraneIngestService(
         sessionmaker,

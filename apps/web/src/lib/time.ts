@@ -15,6 +15,7 @@
 // code should import from here, not call `toLocaleString()` directly.
 
 export const DISPLAY_TZ = "Asia/Shanghai";
+export const DISPLAY_TZ_LABEL = "GMT+8";
 export const DISPLAY_LOCALE = "en-CA"; // YYYY-MM-DD ordering, ISO-friendly
 
 // ISO-style absolute. "2026-05-03 14:30" — 24h, hyphenated date, no TZ
@@ -36,7 +37,7 @@ export function formatIso(iso?: string | number | Date | null): string {
     hour12: false,
   })
     .format(d)
-    .replace(",", "");
+    .replace(",", "") + ` ${DISPLAY_TZ_LABEL}`;
 }
 
 // Same as formatIso plus seconds. Reserved for audit / debug surfaces
@@ -57,7 +58,7 @@ export function formatIsoSeconds(iso: string | number | Date | null): string {
     hour12: false,
   })
     .format(d)
-    .replace(",", "");
+    .replace(",", "") + ` ${DISPLAY_TZ_LABEL}`;
 }
 
 // "14:30" clock-only — for in-stream message rows where the date is
