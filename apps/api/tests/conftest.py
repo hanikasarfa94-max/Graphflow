@@ -414,6 +414,7 @@ from workgraph_api.services import (
     DeliveryService,
     DissentService,
     DriftService,
+    FlowProjectionService,
     GatedProposalService,
     HandoffService,
     KbItemService,
@@ -541,6 +542,7 @@ async def api_env():
         skill_atlas_service,
     )
     handoff_service = HandoffService(maker)
+    flow_projection_service = FlowProjectionService(maker)
     dissent_service = DissentService(maker, bus)
     gated_proposals_service = GatedProposalService(
         maker, stream_service, bus, signal_tally_service
@@ -687,6 +689,7 @@ async def api_env():
     app.state.leader_escalation_service = leader_escalation_service
     app.state.scrimmage_service = scrimmage_service
     app.state.handoff_service = handoff_service
+    app.state.flow_projection_service = flow_projection_service
     app.state.dissent_service = dissent_service
     app.state.gated_proposals_service = gated_proposals_service
     app.state.composition_service = composition_service

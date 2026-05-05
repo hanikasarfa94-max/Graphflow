@@ -33,6 +33,7 @@ from .decisions import DecisionError, DecisionService
 from .delivery import DeliveryError, DeliveryService
 from .dissent import DissentError, DissentService, MAX_STANCE_CHARS
 from .drift import DRIFT_RATE_LIMIT_SECONDS, DriftService
+from .flow_projection import FlowProjectionService
 from .gated_proposals import (
     DECISION_CLASS_LABELS,
     GatedProposalError,
