@@ -84,7 +84,7 @@ export default async function ProjectPersonalPage({
             <StreamContextPanel streamKey={`project:${id}:personal`} />
             {/* B.2 — bridge to Flow Packets surface from the legacy
                 personal stream toolbar. */}
-            <ActiveFlowsButton projectId={id} />
+            <ActiveFlowsButton projectId={id} currentUserId={user.id} />
           </div>
         }
       />

@@ -33,6 +33,7 @@ type Mode = "grid" | "vertical" | "focus";
 interface Props {
   projectId: string;
   timeline: UseRoomTimelineResult;
+  currentUserId?: string;
   // Caller controls the open/close state of the workbench (the
   // RoomShell owns it so the rail toggle and the layout dance live
   // in one place, like the prototype's setToolsOpen).
@@ -99,7 +100,13 @@ const tasksScopePillStyle = (active: boolean): CSSProperties => ({
   cursor: "pointer",
 });
 
-export function RoomWorkbench({ projectId, timeline, open, onClose }: Props) {
+export function RoomWorkbench({
+  projectId,
+  timeline,
+  currentUserId,
+  open,
+  onClose,
+}: Props) {
   const t = useTranslations("stream.workbench");
 
   const initialPanels: PanelDef[] = useMemo(
@@ -298,7 +305,7 @@ export function RoomWorkbench({ projectId, timeline, open, onClose }: Props) {
               onDragEnd={() => setDraggingId(null)}
               onDrop={() => movePanel(panel.id)}
             >
-              {renderPanelBody(panel.kind, projectId, timeline, t)}
+              {renderPanelBody(panel.kind, projectId, timeline, currentUserId, t)}
             </WorkbenchPanel>
           ))}
         </div>
@@ -315,6 +322,7 @@ function renderPanelBody(
   kind: PanelKind,
   projectId: string,
   timeline: UseRoomTimelineResult,
+  currentUserId: string | undefined,
   t: ReturnType<typeof useTranslations>,
 ): React.ReactNode {
   if (kind === "requests") {
@@ -336,7 +344,7 @@ function renderPanelBody(
     // FlowsPanelBody owns its own translator scope (`flows.*`); it
     // doesn't take the room workbench `t`. That keeps the keys it
     // reads stable even if the workbench namespace renames later.
-    return <FlowsPanelBody projectId={projectId} />;
+    return <FlowsPanelBody projectId={projectId} viewerUserId={currentUserId} />;
   }
   // Inert fallback — every functional kind already returns above.
   return (

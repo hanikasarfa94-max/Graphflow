@@ -88,7 +88,7 @@ export default async function ProjectTeamPage({
             {/* B.2 — bridge to Flow Packets surface from the legacy
                 team room. Workbench-hosted version is unreachable
                 here because v-Next is rolled back. */}
-            <ActiveFlowsButton projectId={id} />
+            <ActiveFlowsButton projectId={id} currentUserId={user.id} />
             {isAdmin ? (
               <Link
                 href={`/projects/${id}/team/perf`}

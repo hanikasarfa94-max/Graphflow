@@ -230,6 +230,7 @@ export function RoomShell({
           <RoomWorkbench
             projectId={projectId}
             timeline={timeline}
+            currentUserId={currentUserId}
             open={workbenchOpen}
             onClose={() => setWorkbenchOpen(false)}
           />
@@ -261,6 +262,7 @@ export function RoomShell({
             <RoomWorkbench
               projectId={projectId}
               timeline={timeline}
+              currentUserId={currentUserId}
               open
               onClose={() => setWorkbenchOpen(false)}
             />

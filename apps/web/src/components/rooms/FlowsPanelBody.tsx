@@ -31,6 +31,7 @@ import { FlowRowActions } from "./FlowRowActions";
 
 interface Props {
   projectId: string;
+  viewerUserId?: string;
 }
 
 interface BucketState {
@@ -50,7 +51,7 @@ const initial: BucketState = {
   participants: {},
 };
 
-export function FlowsPanelBody({ projectId }: Props) {
+export function FlowsPanelBody({ projectId, viewerUserId }: Props) {
   const t = useTranslations("flows");
   const [byBucket, setByBucket] = useState<Record<FlowBucket, BucketState>>({
     needs_me: initial,
@@ -126,6 +127,7 @@ export function FlowsPanelBody({ projectId }: Props) {
           bucket={bucket}
           state={byBucket[bucket]}
           onActed={refresh}
+          viewerUserId={viewerUserId}
         />
       ))}
     </div>
@@ -136,10 +138,12 @@ function BucketSection({
   bucket,
   state,
   onActed,
+  viewerUserId,
 }: {
   bucket: FlowBucket;
   state: BucketState;
   onActed: () => void;
+  viewerUserId?: string;
 }) {
   const t = useTranslations("flows");
   // i18n key for the bucket header — `needs_me` → `needsMe`. Camel-
@@ -177,6 +181,7 @@ function BucketSection({
             packet={p}
             participants={state.participants}
             onActed={onActed}
+            viewerUserId={viewerUserId}
           />
         ))
       )}
@@ -188,10 +193,12 @@ function FlowRow({
   packet,
   participants,
   onActed,
+  viewerUserId,
 }: {
   packet: FlowPacket;
   participants: Record<string, ParticipantInfo>;
   onActed: () => void;
+  viewerUserId?: string;
 }) {
   const t = useTranslations("flows");
   // Spec §6: drawer reads `current_target_user_ids` for who is
@@ -273,7 +280,11 @@ function FlowRow({
       {/* Slice D — compact evidence: Asked / Replied / Closed. Toggled
           per-row so default is calm; participants come from the panel
           state via the bucket's sidecar map. */}
-      <EvidenceBlock packet={packet} participants={participants} />
+      <EvidenceBlock
+        packet={packet}
+        participants={participants}
+        viewerUserId={viewerUserId}
+      />
     </div>
   );
 }
@@ -352,4 +363,3 @@ const metaChipStyle: CSSProperties = {
   borderRadius: 10,
   color: "var(--wg-ink-soft)",
 };
-

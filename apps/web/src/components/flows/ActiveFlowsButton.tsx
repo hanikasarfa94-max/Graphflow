@@ -19,9 +19,10 @@ import { FlowsPanelBody } from "@/components/rooms/FlowsPanelBody";
 
 interface Props {
   projectId: string;
+  currentUserId?: string;
 }
 
-export function ActiveFlowsButton({ projectId }: Props) {
+export function ActiveFlowsButton({ projectId, currentUserId }: Props) {
   const t = useTranslations("flows");
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement | null>(null);
@@ -70,7 +71,7 @@ export function ActiveFlowsButton({ projectId }: Props) {
           aria-label={t("title")}
           style={popoverStyle}
         >
-          <FlowsPanelBody projectId={projectId} />
+          <FlowsPanelBody projectId={projectId} viewerUserId={currentUserId} />
         </div>
       ) : null}
     </div>
