@@ -57,6 +57,7 @@ from workgraph_api.routers import decision_votes as decision_votes_router
 from workgraph_api.routers import dissent as dissent_router
 from workgraph_api.routers import drift as drift_router
 from workgraph_api.routers import gated_proposals as gated_proposals_router
+from workgraph_api.routers import org_capabilities as org_capabilities_router
 from workgraph_api.routers import organizations as organizations_router
 from workgraph_api.routers import task_progress as task_progress_router
 from workgraph_api.routers import kb_items as kb_items_router
@@ -126,6 +127,7 @@ from workgraph_api.services import (
     SilentConsensusService,
     RenderService,
     RoutingService,
+    OrgCapabilityService,
     SignalTallyService,
     SimulationService,
     SkillAtlasService,
@@ -514,6 +516,12 @@ async def lifespan(app: FastAPI):
         kb_item_service=kb_item_service,
         retrieval_service=retrieval_service,
     )
+    # O2 — Org Graph Trust Ladder projection (read-only).
+    org_capability_service = OrgCapabilityService(sessionmaker)
+    # O3 — late-bind into SkillsService so routing_suggest can cite
+    # capability levels per skill without breaking back-compat for
+    # callers that don't have the projection wired (tests).
+    skills_service.attach_org_capability_service(org_capability_service)
     # R2 — late-bind for the routing grounding gate. RoutingService
     # is constructed earlier in this lifespan; SkillsService didn't
     # exist yet then. Without this attach, dispatch() falls back to
@@ -658,6 +666,7 @@ async def lifespan(app: FastAPI):
     app.state.edge_agent = edge_agent
     app.state.personal_service = personal_service
     app.state.skills_service = skills_service
+    app.state.org_capability_service = org_capability_service
     app.state.room_timeline_service = RoomTimelineService(sessionmaker)
     # N.4 vote affordance — needs collab_hub to publish RoomTimelineEvent
     # patches on the room stream when a vote lands.
@@ -908,6 +917,7 @@ app.include_router(composition_router.router)
 app.include_router(organizations_router.router)
 app.include_router(task_progress_router.router)
 app.include_router(kb_items_router.router)
+app.include_router(org_capabilities_router.router)
 app.include_router(commitments_router.router)
 app.include_router(simulation_router.router)
 app.include_router(skill_atlas_router.router)

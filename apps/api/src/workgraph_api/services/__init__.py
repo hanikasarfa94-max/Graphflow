@@ -105,6 +105,12 @@ from .render import RenderError, RenderService
 from .retrieval import RetrievalCandidate, RetrievalService
 from .room_timeline import RoomTimelineService
 from .routing import RoutingService
+from .org_capabilities import (
+    OrgCapabilityService,
+    TRUSTED_THRESHOLD as CAPABILITY_TRUSTED_THRESHOLD,
+    VALIDATED_THRESHOLD as CAPABILITY_VALIDATED_THRESHOLD,
+    level_at_least as capability_level_at_least,
+)
 from .signal_tally import SIGNAL_KINDS, SignalTallyService
 from .simulation import SimulationError, SimulationService
 from .skill_atlas import SkillAtlasService
@@ -221,6 +227,10 @@ __all__ = [
     "RoomTimelineService",
     "RoutingService",
     "SIGNAL_KINDS",
+    "OrgCapabilityService",
+    "CAPABILITY_TRUSTED_THRESHOLD",
+    "CAPABILITY_VALIDATED_THRESHOLD",
+    "capability_level_at_least",
     "SignalTallyService",
     "SimulationError",
     "SimulationService",

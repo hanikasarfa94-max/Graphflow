@@ -123,6 +123,16 @@ class SkillsService:
         # (legacy callers, tests that haven't wired it yet) falls back
         # to the substring scan that shipped before slice 5a.
         self._retrieval_service = retrieval_service
+        # O3 — late-bound. When set, _routing_suggest enriches its
+        # evidence bundle with capability levels per matched skill.
+        # When None, behavior is identical to pre-O3 (back-compat).
+        self._org_capability_service = None
+
+    def attach_org_capability_service(self, service: Any) -> None:
+        """Late-bind the OrgCapabilityService so _routing_suggest can
+        cite capability levels. Tests / cold-start contexts that
+        don't construct it leave _routing_suggest unchanged."""
+        self._org_capability_service = service
 
     async def execute(
         self,
@@ -713,6 +723,25 @@ class SkillsService:
             # than guess — the LLM should fall back to prompt intuition.
             return []
 
+        # O3 — capability projection lookup. Off-session call (the
+        # service opens its own); when None, leaves matched_capabilities
+        # empty and pre-O3 ranking is preserved.
+        capabilities_by_user_id: dict[str, list[dict[str, Any]]] = {}
+        if self._org_capability_service is not None:
+            try:
+                proj = await self._org_capability_service.list_for_project(
+                    project_id
+                )
+                for entry in proj:
+                    capabilities_by_user_id[entry["user_id"]] = entry.get(
+                        "capabilities", []
+                    )
+            except Exception:
+                _log.exception(
+                    "routing_suggest.capability_lookup_failed",
+                    extra={"project_id": project_id},
+                )
+
         async with session_scope(self._sessionmaker) as session:
             members = await ProjectMemberRepository(session).list_for_project(
                 project_id
@@ -919,8 +948,57 @@ class SkillsService:
                         if len(related_decision_refs) >= 4:
                             break
 
+                # O3 — typed capability levels per matched skill.
+                # `matched_skills` stays a flat list[str] for back-compat;
+                # `matched_capabilities` is the typed per-skill view that
+                # callers (FE / Edge / dispatch audit) can use to ask
+                # "is this person *trusted* on the skill, or just self-
+                # declared?". Only skills the user actually has in their
+                # capability projection appear here — it's a strict
+                # subset of `matched_skills`, since the projection's
+                # skill_keys come from declared/role/skill_tags only.
+                matched_capabilities: list[dict[str, Any]] = []
+                member_caps = capabilities_by_user_id.get(m.user_id, [])
+                if member_caps:
+                    # Pick capabilities whose skill_key token-matches the
+                    # query (mirrors the matched_skills loop above).
+                    for cap in member_caps:
+                        sk = (cap.get("skill_key") or "").lower()
+                        if not sk:
+                            continue
+                        if not any(tok in sk or sk in tok for tok in tokens):
+                            continue
+                        matched_capabilities.append(
+                            {
+                                "skill_key": cap["skill_key"],
+                                "label": cap.get("label", cap["skill_key"]),
+                                "level": cap["level"],
+                                "confidence": cap["confidence"],
+                                "evidence_count": len(
+                                    cap.get("evidence_refs") or []
+                                ),
+                            }
+                        )
+                        if len(matched_capabilities) >= 4:
+                            break
+
+                # O3 — small bounded boost when a matched capability is
+                # validated/trusted. Caps at +20% so the existing
+                # graph/activity/profile signals still dominate. Pre-O3
+                # tie-breaks stay consistent for declared/observed.
+                cap_boost = 0.0
+                for mc in matched_capabilities:
+                    lvl = mc["level"]
+                    if lvl == "trusted":
+                        cap_boost = max(cap_boost, 0.20)
+                    elif lvl == "validated":
+                        cap_boost = max(cap_boost, 0.10)
+                if cap_boost > 0:
+                    total *= 1.0 + cap_boost
+
                 evidence = {
                     "matched_skills": matched_skills,
+                    "matched_capabilities": matched_capabilities,
                     "related_task_refs": related_task_refs,
                     "related_decision_refs": related_decision_refs,
                     "activity_window_days": _ROUTING_ACTIVITY_WINDOW_DAYS,
