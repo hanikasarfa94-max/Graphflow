@@ -2658,3 +2658,326 @@ async def test_m5_no_direct_stream_row_created_on_non_owner_post(api_env):
         == "manual_room"
         for s in sugs
     )
+
+
+# ---- M5.1 — manual_skill_change Membrane gate -------------------------
+
+
+@pytest.mark.asyncio
+async def test_m51_owner_skill_change_auto_merges(api_env):
+    """Owner editing skill_tags goes straight through; no deferral."""
+    client, maker, *_ = api_env
+    owner_id = await _register(client, "m51_sk_om_owner")
+    member_id = await _register(client, "m51_sk_om_member")
+    pid = await _mk_project_with_members(
+        maker, owner_id=owner_id, member_id=member_id
+    )
+    await _login(client, "m51_sk_om_owner")
+    r = await client.patch(
+        f"/api/projects/{pid}/members/{member_id}/skills",
+        json={"skill_tags": ["backend", "qa"]},
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body.get("deferred") is not True
+    assert sorted(body["skill_tags"]) == ["backend", "qa"]
+
+
+@pytest.mark.asyncio
+async def test_m51_non_owner_self_skill_change_is_deferred(api_env):
+    """Non-owner editing their OWN skill_tags now defers — closes the
+    gap that let any member silently mint role-level capability."""
+    client, maker, *_ = api_env
+    owner_id = await _register(client, "m51_sk_self_owner")
+    member_id = await _register(client, "m51_sk_self_member")
+    pid = await _mk_project_with_members(
+        maker, owner_id=owner_id, member_id=member_id
+    )
+    await _login(client, "m51_sk_self_member")
+    r = await client.patch(
+        f"/api/projects/{pid}/members/{member_id}/skills",
+        json={"skill_tags": ["compliance"]},
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["ok"] is True
+    assert body["deferred"] is True, body
+    assert body["suggestion_id"] is not None
+    assert body["skill_tags"] is None  # not yet applied
+
+    # The pending packet shows up under recipe=manual_skill_change.
+    await _login(client, "m51_sk_self_owner")
+    r = await _list_flows(client, pid, recipe="manual_skill_change")
+    pkts = r.json()["packets"]
+    assert len(pkts) == 1
+    pkt = pkts[0]
+    assert pkt["id"] == f"manual_skill_change:{body['suggestion_id']}"
+    tc = pkt["transition_contract"]
+    assert tc["source_state"] == "capability_claim_proposed"
+    assert tc["target_state"] == "project_role_capability_accepted"
+    assert tc["review_method"] == "membrane_review"
+    assert owner_id in tc["authority_user_ids"]
+    ev = pkt["epistemic_event"]
+    assert ev["kind"] == "capability_claim"
+    assert ev["status"] == "review_pending"
+    assert ev["membrane_policy"] == "request_review"
+    assert ev["accepted_scope"] is None
+    assert owner_id in ev["authority_required"]
+
+
+@pytest.mark.asyncio
+async def test_m51_non_owner_cross_skill_change_still_403s(api_env):
+    """Cross-edit by a non-owner stays a hard 403; the gate is for
+    self-edit deferral only, not bypass of the cross-member ACL."""
+    client, maker, *_ = api_env
+    owner_id = await _register(client, "m51_sk_x_owner")
+    a_id = await _register(client, "m51_sk_x_a")
+    b_id = await _register(client, "m51_sk_x_b")
+    pid = await _mk_project_with_members(
+        maker, owner_id=owner_id, member_id=a_id
+    )
+    async with session_scope(maker) as session:
+        await ProjectMemberRepository(session).add(
+            project_id=pid, user_id=b_id, role="member"
+        )
+    await _login(client, "m51_sk_x_a")
+    r = await client.patch(
+        f"/api/projects/{pid}/members/{b_id}/skills",
+        json={"skill_tags": ["backend"]},
+    )
+    assert r.status_code == 403, r.text
+
+
+@pytest.mark.asyncio
+async def test_m51_skill_change_owner_accept_applies(api_env):
+    """Owner accepts the deferred manual_skill_change suggestion;
+    the member's skill_tags actually update on the ProjectMember row."""
+    client, maker, *_ = api_env
+    owner_id = await _register(client, "m51_sk_acc_owner")
+    member_id = await _register(client, "m51_sk_acc_member")
+    pid = await _mk_project_with_members(
+        maker, owner_id=owner_id, member_id=member_id
+    )
+    await _login(client, "m51_sk_acc_member")
+    r = await client.patch(
+        f"/api/projects/{pid}/members/{member_id}/skills",
+        json={"skill_tags": ["frontend"]},
+    )
+    sug_id = r.json()["suggestion_id"]
+
+    await _login(client, "m51_sk_acc_owner")
+    r = await client.post(f"/api/im_suggestions/{sug_id}/accept")
+    assert r.status_code == 200, r.text
+
+    async with session_scope(maker) as session:
+        rows = await ProjectMemberRepository(session).list_for_project(pid)
+    target = next(m for m in rows if m.user_id == member_id)
+    assert sorted(target.skill_tags or []) == ["frontend"]
+
+
+# ---- M5.1 — manual_invite Membrane gate -------------------------------
+
+
+@pytest.mark.asyncio
+async def test_m51_owner_invite_auto_merges(api_env):
+    """Owner-issued invite goes straight through to add_member."""
+    client, maker, *_ = api_env
+    owner_id = await _register(client, "m51_inv_om_owner")
+    invitee_id = await _register(client, "m51_inv_om_target")
+    member_id = await _register(client, "m51_inv_om_member")
+    pid = await _mk_project_with_members(
+        maker, owner_id=owner_id, member_id=member_id
+    )
+    await _login(client, "m51_inv_om_owner")
+    r = await client.post(
+        f"/api/projects/{pid}/invite",
+        json={"username": "m51_inv_om_target"},
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["ok"] is True
+    assert body.get("deferred") is not True
+    assert body["user_id"] == invitee_id
+
+
+@pytest.mark.asyncio
+async def test_m51_non_owner_invite_is_deferred(api_env):
+    """Non-owner invite stages an IMSuggestion(manual_invite); no
+    ProjectMember row appears for the proposed username yet."""
+    client, maker, *_ = api_env
+    owner_id = await _register(client, "m51_inv_def_owner")
+    invitee_id = await _register(client, "m51_inv_def_target")
+    member_id = await _register(client, "m51_inv_def_member")
+    pid = await _mk_project_with_members(
+        maker, owner_id=owner_id, member_id=member_id
+    )
+    await _login(client, "m51_inv_def_member")
+    r = await client.post(
+        f"/api/projects/{pid}/invite",
+        json={"username": "m51_inv_def_target"},
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["ok"] is True
+    assert body["deferred"] is True, body
+    sug_id = body["suggestion_id"]
+    assert sug_id is not None
+
+    # Invitee NOT yet in member list.
+    async with session_scope(maker) as session:
+        rows = await ProjectMemberRepository(session).list_for_project(pid)
+    assert all(m.user_id != invitee_id for m in rows), (
+        "invitee must not land before owner accept"
+    )
+
+    # Pending flow packet under recipe=manual_invite.
+    await _login(client, "m51_inv_def_owner")
+    r = await _list_flows(client, pid, recipe="manual_invite")
+    pkts = r.json()["packets"]
+    assert len(pkts) == 1
+    pkt = pkts[0]
+    assert pkt["id"] == f"manual_invite:{sug_id}"
+    tc = pkt["transition_contract"]
+    assert tc["source_state"] == "member_invite_proposed"
+    assert tc["target_state"] == "project_member_accepted"
+    assert tc["review_method"] == "membrane_review"
+    assert owner_id in tc["authority_user_ids"]
+    ev = pkt["epistemic_event"]
+    assert ev["status"] == "review_pending"
+    assert ev["membrane_policy"] == "request_review"
+
+
+@pytest.mark.asyncio
+async def test_m51_invite_owner_accept_applies(api_env):
+    """Owner accepts the deferred manual_invite; the invitee shows up
+    in the project member list."""
+    client, maker, *_ = api_env
+    owner_id = await _register(client, "m51_inv_acc_owner")
+    invitee_id = await _register(client, "m51_inv_acc_target")
+    member_id = await _register(client, "m51_inv_acc_member")
+    pid = await _mk_project_with_members(
+        maker, owner_id=owner_id, member_id=member_id
+    )
+    await _login(client, "m51_inv_acc_member")
+    r = await client.post(
+        f"/api/projects/{pid}/invite",
+        json={"username": "m51_inv_acc_target"},
+    )
+    sug_id = r.json()["suggestion_id"]
+
+    await _login(client, "m51_inv_acc_owner")
+    r = await client.post(f"/api/im_suggestions/{sug_id}/accept")
+    assert r.status_code == 200, r.text
+
+    async with session_scope(maker) as session:
+        rows = await ProjectMemberRepository(session).list_for_project(pid)
+    assert any(m.user_id == invitee_id for m in rows)
+
+
+# ---- M5.1 Lane B — decision warnings + supersedes persistence --------
+
+
+@pytest.mark.asyncio
+async def test_m51_decision_packet_surfaces_persisted_warnings(api_env):
+    """A crystallized DecisionRow whose apply_detail carries
+    membrane_warnings + supersedes shows them in the flow packet's
+    epistemic_event evidence + supersedes blocks."""
+    from workgraph_persistence import DecisionRepository
+
+    client, maker, *_ = api_env
+    owner_id = await _register(client, "m51_dec_owner")
+    member_id = await _register(client, "m51_dec_member")
+    pid = await _mk_project_with_members(
+        maker, owner_id=owner_id, member_id=member_id
+    )
+    async with session_scope(maker) as session:
+        prior = await DecisionRepository(session).create(
+            conflict_id=None,
+            project_id=pid,
+            resolver_id=owner_id,
+            option_index=None,
+            custom_text="ship without analytics",
+            rationale="speed > telemetry for v0",
+            apply_actions=[],
+            apply_outcome="advisory",
+        )
+        prior_id = prior.id
+        # Crystallized decision with warnings + supersedes already
+        # persisted into apply_detail (as Lane B's IMService write
+        # path would produce).
+        await DecisionRepository(session).create(
+            conflict_id=None,
+            project_id=pid,
+            resolver_id=owner_id,
+            option_index=None,
+            custom_text="add analytics for v1",
+            rationale="we now need retention numbers",
+            apply_actions=[{"kind": "advisory"}],
+            source_suggestion_id=None,
+            apply_outcome="ok",
+            apply_detail={
+                "applied": {"graph_touched": False},
+                "membrane_warnings": [
+                    "This decision was crystallized without a recorded "
+                    "rationale.",
+                    "A prior decision in this project has the same "
+                    "title-equivalent.",
+                ],
+                "supersedes": prior_id,
+            },
+        )
+
+    await _login(client, "m51_dec_owner")
+    r = await _list_flows(client, pid, recipe="crystallize_decision")
+    pkts = r.json()["packets"]
+    pkt = next(p for p in pkts if "add analytics" in (p["title"] or ""))
+    ev = pkt["epistemic_event"]
+
+    # Warnings rendered as `membrane_warning` evidence_refs.
+    warning_refs = [
+        e for e in ev["evidence_refs"]
+        if e.get("kind") == "membrane_warning"
+    ]
+    assert len(warning_refs) == 2
+
+    # Supersedes ref carried.
+    sup = ev["supersedes"]
+    assert len(sup) == 1
+    assert sup[0]["kind"] == "decision"
+    assert sup[0]["id"] == prior_id
+
+
+@pytest.mark.asyncio
+async def test_m51_decision_packet_no_warnings_keeps_clean_shape(api_env):
+    """Decisions whose apply_detail has no membrane_warnings /
+    supersedes still produce a valid packet — fields default to []."""
+    from workgraph_persistence import DecisionRepository
+
+    client, maker, *_ = api_env
+    owner_id = await _register(client, "m51_dec_clean_owner")
+    member_id = await _register(client, "m51_dec_clean_member")
+    pid = await _mk_project_with_members(
+        maker, owner_id=owner_id, member_id=member_id
+    )
+    async with session_scope(maker) as session:
+        await DecisionRepository(session).create(
+            conflict_id=None,
+            project_id=pid,
+            resolver_id=owner_id,
+            option_index=None,
+            custom_text="no-warning decision",
+            rationale="straightforward",
+            apply_actions=[{"kind": "advisory"}],
+            source_suggestion_id=None,
+            apply_outcome="advisory",
+            apply_detail={"applied": {"graph_touched": False}},
+        )
+    await _login(client, "m51_dec_clean_owner")
+    r = await _list_flows(client, pid, recipe="crystallize_decision")
+    pkt = r.json()["packets"][0]
+    ev = pkt["epistemic_event"]
+    assert all(
+        e.get("kind") != "membrane_warning"
+        for e in ev["evidence_refs"]
+    )
+    assert ev["supersedes"] == []

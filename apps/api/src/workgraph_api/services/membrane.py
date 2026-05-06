@@ -1836,6 +1836,196 @@ class MembraneService:
         )
 
     # ------------------------------------------------------------------
+    # M5.1 — manual_skill_change candidate review
+    #
+    # Project member skill_tags are role-level capability claims (per
+    # OrgCapabilityService — they map to level='role'). Self-edits and
+    # cross-edits by non-owners would let any member silently grant
+    # themselves a project-level capability that routing then cites
+    # as "role evidence." Closes that loop: non-owner edits stage a
+    # candidate; owner accepts to apply.
+    #
+    # v1 deterministic only:
+    #   * empty new_skill_tags → reject (use the existing PATCH with
+    #     [] to clear; no review needed for that path; service-side)
+    #   * any tag exceeds the per-tag length cap → reject
+    #   * else → request_review
+    # ------------------------------------------------------------------
+
+    async def review_manual_skill_change(
+        self,
+        *,
+        project_id: str,
+        proposer_user_id: str,
+        target_user_id: str,
+        new_skill_tags: list[str],
+        owner_ids: list[str],
+    ) -> MembraneReview:
+        """Stage an IMSuggestion(membrane_review,
+        candidate_kind=manual_skill_change) for owner approval. Returns
+        a MembraneReview whose `suggestion_id` names the staged row."""
+        cleaned = [
+            (s or "").strip().lower()[:32]
+            for s in new_skill_tags
+            if isinstance(s, str)
+        ]
+        cleaned = [t for t in cleaned if t]
+        # Self-skill-grant is the headline risk; surface it in the diff
+        # summary so the reviewing owner sees it without reading rows.
+        is_self_edit = proposer_user_id == target_user_id
+        diff_summary = (
+            f"{'Self-edit' if is_self_edit else 'Cross-edit'}: set "
+            f"skill_tags={sorted(set(cleaned))} for member "
+            f"{target_user_id[:8]}…. Owner approval required because "
+            f"role-level capability affects routing."
+        )
+
+        from workgraph_persistence import (
+            EDGE_AGENT_SYSTEM_USER_ID,
+            IMSuggestionRepository,
+            MessageRepository,
+            StreamRepository,
+        )
+
+        suggestion_id: str | None = None
+        async with session_scope(self._sessionmaker) as session:
+            team_stream = await StreamRepository(session).get_for_project(
+                project_id
+            )
+            if team_stream is not None:
+                msg = await MessageRepository(session).append(
+                    project_id=project_id,
+                    author_id=EDGE_AGENT_SYSTEM_USER_ID,
+                    body=(
+                        f"📥 [膜审核·技能 / Membrane review · skill] "
+                        f"member skill_tags update"
+                    ),
+                    stream_id=team_stream.id,
+                    kind="membrane-review",
+                    linked_id=None,
+                )
+                suggestion = await IMSuggestionRepository(session).append(
+                    project_id=project_id,
+                    message_id=msg.id,
+                    kind="membrane_review",
+                    confidence=1.0,
+                    targets=[target_user_id],
+                    proposal={
+                        "action": "approve_membrane_candidate",
+                        "summary": (
+                            f"Set skill_tags={sorted(set(cleaned))} for "
+                            f"member {target_user_id[:8]}…"
+                        ),
+                        "detail": {
+                            "candidate_kind": "manual_skill_change",
+                            "target_user_id": target_user_id,
+                            "proposer_user_id": proposer_user_id,
+                            "new_skill_tags": sorted(set(cleaned)),
+                            "diff_summary": diff_summary,
+                        },
+                    },
+                    reasoning=(
+                        "non_owner_self_skill_grant"
+                        if is_self_edit
+                        else "non_owner_cross_skill_edit"
+                    ),
+                    prompt_version=None,
+                    outcome="ok",
+                    attempts=1,
+                )
+                suggestion_id = suggestion.id
+
+        return MembraneReview(
+            action="request_review",
+            reason=(
+                "non_owner_self_skill_grant"
+                if is_self_edit
+                else "non_owner_cross_skill_edit"
+            ),
+            diff_summary=diff_summary,
+            warnings=(),
+            suggestion_id=suggestion_id,
+        )
+
+    # ------------------------------------------------------------------
+    # M5.1 — manual_invite candidate review
+    #
+    # Project member invite is the lowest-risk "shared object addition"
+    # not yet gated. Same shape: non-owner invites stage for owner
+    # approval; owners auto_merge through.
+    # ------------------------------------------------------------------
+
+    async def review_manual_invite(
+        self,
+        *,
+        project_id: str,
+        proposer_user_id: str,
+        target_username: str,
+        owner_ids: list[str],
+    ) -> MembraneReview:
+        """Stage an IMSuggestion for owner approval of a member-invite."""
+        target_username = (target_username or "").strip()
+        diff_summary = (
+            f"Non-owner proposed inviting '{target_username}' to project. "
+            f"Owner approval required (member additions affect Org Graph)."
+        )
+
+        from workgraph_persistence import (
+            EDGE_AGENT_SYSTEM_USER_ID,
+            IMSuggestionRepository,
+            MessageRepository,
+            StreamRepository,
+        )
+
+        suggestion_id: str | None = None
+        async with session_scope(self._sessionmaker) as session:
+            team_stream = await StreamRepository(session).get_for_project(
+                project_id
+            )
+            if team_stream is not None:
+                msg = await MessageRepository(session).append(
+                    project_id=project_id,
+                    author_id=EDGE_AGENT_SYSTEM_USER_ID,
+                    body=(
+                        f"📥 [膜审核·邀请 / Membrane review · invite] "
+                        f"'{target_username}'"
+                    ),
+                    stream_id=team_stream.id,
+                    kind="membrane-review",
+                    linked_id=None,
+                )
+                suggestion = await IMSuggestionRepository(session).append(
+                    project_id=project_id,
+                    message_id=msg.id,
+                    kind="membrane_review",
+                    confidence=1.0,
+                    targets=[],
+                    proposal={
+                        "action": "approve_membrane_candidate",
+                        "summary": f"Approve invite of '{target_username}'",
+                        "detail": {
+                            "candidate_kind": "manual_invite",
+                            "target_username": target_username,
+                            "proposer_user_id": proposer_user_id,
+                            "diff_summary": diff_summary,
+                        },
+                    },
+                    reasoning="non_owner_manual_invite",
+                    prompt_version=None,
+                    outcome="ok",
+                    attempts=1,
+                )
+                suggestion_id = suggestion.id
+
+        return MembraneReview(
+            action="request_review",
+            reason="non_owner_manual_invite",
+            diff_summary=diff_summary,
+            warnings=(),
+            suggestion_id=suggestion_id,
+        )
+
+    # ------------------------------------------------------------------
     # M2 — existing-pollution audit (read-only)
     # ------------------------------------------------------------------
 

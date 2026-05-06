@@ -49,6 +49,8 @@ _Recipe = Literal[
     "promote_task_to_plan",
     "crystallize_decision",
     "manual_create_room",
+    "manual_skill_change",
+    "manual_invite",
     "review",
     "handoff",
     "meeting_metabolism",

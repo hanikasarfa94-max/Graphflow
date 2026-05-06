@@ -86,6 +86,9 @@ class IMService:
         # branch in `_apply_proposal`. When None, manual_room
         # candidates can't be approved (return clean error).
         self._stream_service: Any = None
+        # M5.1 — late-bound ProjectService for manual_skill_change /
+        # manual_invite accept replays.
+        self._project_service: Any = None
         # Keep in-flight classification tasks so tests + shutdown can await.
         self._pending: set[asyncio.Task] = set()
 
@@ -96,6 +99,12 @@ class IMService:
         """M5 — late-bind StreamService so the accept handler can
         materialize manual_room candidates after owner approval."""
         self._stream_service = stream_service
+
+    def attach_project_service(self, project_service: Any) -> None:
+        """M5.1 — late-bind ProjectService so the accept handler can
+        replay manual_skill_change / manual_invite candidates after
+        owner approval."""
+        self._project_service = project_service
 
     async def post_message(
         self,
@@ -577,12 +586,41 @@ class IMService:
                 # response. The review opens its own session for the
                 # recent-decisions scan; aiosqlite serializes reads
                 # cleanly so nesting under our outer session is safe.
+                # M5.1 Lane B — preserve a `supersedes` ref from the
+                # IMSuggestion proposal so the membrane can apply its
+                # softer mapping (advisory, not block) and so we can
+                # stamp the ref onto DecisionRow.apply_detail for the
+                # flow packet to surface.
+                supersedes_ref: str | None = None
+                if isinstance(proposal, dict):
+                    candidate_supersedes = (
+                        proposal.get("supersedes")
+                        or (
+                            (proposal.get("metadata") or {}).get("supersedes")
+                            if isinstance(proposal.get("metadata"), dict)
+                            else None
+                        )
+                        or (
+                            (detail or {}).get("supersedes")
+                            if isinstance(detail, dict)
+                            else None
+                        )
+                    )
+                    if isinstance(candidate_supersedes, str):
+                        supersedes_ref = candidate_supersedes
                 if self._membrane_service is not None:
                     from .membrane import MembraneCandidate
 
                     review_title = (
                         proposal.get("summary", "") if isinstance(proposal, dict) else ""
                     )[:200]
+                    candidate_metadata: dict[str, Any] = {
+                        "source": "im_apply",
+                        "suggestion_id": suggestion_id,
+                        "rationale": row.reasoning or "",
+                    }
+                    if supersedes_ref:
+                        candidate_metadata["supersedes"] = supersedes_ref
                     review = await self._membrane_service.review(
                         MembraneCandidate(
                             kind="decision_crystallize",
@@ -590,11 +628,7 @@ class IMService:
                             proposer_user_id=actor_id,
                             title=review_title,
                             content="",
-                            metadata={
-                                "source": "im_apply",
-                                "suggestion_id": suggestion_id,
-                                "rationale": row.reasoning or "",
-                            },
+                            metadata=candidate_metadata,
                         )
                     )
                     membrane_warnings = list(review.warnings)
@@ -615,6 +649,17 @@ class IMService:
                 # rolls back, the bump rolls back with it.
                 if source_msg is not None:
                     await bump_frecency(session, message_ids=[source_msg.id])
+                # M5.1 Lane B — apply_detail carries M4 membrane
+                # warnings + supersedes ref so the flow packet can
+                # render them on the crystallized decision card and
+                # the epistemic_event evidence stays honest.
+                apply_detail_payload: dict[str, Any] = {"applied": applied}
+                if membrane_warnings:
+                    apply_detail_payload["membrane_warnings"] = list(
+                        membrane_warnings
+                    )
+                if supersedes_ref:
+                    apply_detail_payload["supersedes"] = supersedes_ref
                 decision_row = await DecisionRepository(session).create(
                     conflict_id=None,
                     project_id=project_id,
@@ -625,7 +670,7 @@ class IMService:
                     apply_actions=[{"kind": action, "detail": detail}],
                     source_suggestion_id=suggestion_id,
                     apply_outcome=crystallize_outcome,
-                    apply_detail={"applied": applied},
+                    apply_detail=apply_detail_payload,
                     scope_stream_id=source_stream_id,
                 )
                 # applied_at mirrors create_at since crystallization is synchronous.
@@ -1251,6 +1296,89 @@ class IMService:
                     "ok": True,
                     "graph_touched": True,
                     "stream_id": stream.get("id"),
+                    "action": "approve_membrane_candidate",
+                }
+
+            if candidate_kind == "manual_skill_change":
+                # M5.1 — owner accepted a non-owner's skill_tags edit.
+                # Replay through ProjectService with _skip_membrane=True.
+                if self._project_service is None:
+                    return {
+                        "ok": False,
+                        "error": "project_service_unavailable",
+                    }
+                if not isinstance(detail, dict):
+                    return {
+                        "ok": False,
+                        "error": "missing_manual_skill_change_detail",
+                    }
+                target_user_id = detail.get("target_user_id")
+                proposer_user_id = (
+                    detail.get("proposer_user_id") or actor_id
+                )
+                new_skill_tags = detail.get("new_skill_tags") or []
+                if not target_user_id:
+                    return {"ok": False, "error": "missing_target_user_id"}
+                result = await self._project_service.set_member_skill_tags(
+                    project_id=row.project_id,
+                    actor_user_id=proposer_user_id,
+                    target_user_id=target_user_id,
+                    skill_tags=list(new_skill_tags),
+                    _skip_membrane=True,
+                )
+                if not result.get("ok"):
+                    return {
+                        "ok": False,
+                        "error": result.get(
+                            "error", "manual_skill_change_failed"
+                        ),
+                    }
+                return {
+                    "ok": True,
+                    "graph_touched": True,
+                    "user_id": target_user_id,
+                    "skill_tags": result.get("skill_tags"),
+                    "action": "approve_membrane_candidate",
+                }
+
+            if candidate_kind == "manual_invite":
+                # M5.1 — owner accepted a non-owner's member-invite
+                # proposal. Replay add_member through the gated
+                # service path with _skip_membrane=True.
+                if self._project_service is None:
+                    return {
+                        "ok": False,
+                        "error": "project_service_unavailable",
+                    }
+                if not isinstance(detail, dict):
+                    return {
+                        "ok": False,
+                        "error": "missing_manual_invite_detail",
+                    }
+                target_username = detail.get("target_username") or ""
+                proposer_user_id = (
+                    detail.get("proposer_user_id") or actor_id
+                )
+                if not target_username:
+                    return {"ok": False, "error": "missing_target_username"}
+                result = await self._project_service.add_member(
+                    project_id=row.project_id,
+                    username=target_username,
+                    invited_by=proposer_user_id,
+                    _skip_membrane=True,
+                )
+                if not result.get("ok"):
+                    return {
+                        "ok": False,
+                        "error": result.get(
+                            "error", "manual_invite_failed"
+                        ),
+                    }
+                return {
+                    "ok": True,
+                    "graph_touched": True,
+                    "user_id": result.get("user_id"),
+                    "username": target_username,
                     "action": "approve_membrane_candidate",
                 }
 

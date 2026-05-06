@@ -126,28 +126,26 @@ async def patch_member_skills(
     if target is None:
         raise HTTPException(status_code=404, detail="member_not_found")
 
-    # Normalize: lowercase, strip, dedup, drop empties. Cap each tag
-    # length so we don't store essays.
-    seen: set[str] = set()
-    cleaned: list[str] = []
-    for raw in body.skill_tags:
-        tag = (raw or "").strip().lower()[:32]
-        if not tag or tag in seen:
-            continue
-        seen.add(tag)
-        cleaned.append(tag)
-
-    async with session_scope(request.app.state.sessionmaker) as session:
-        updated = await ProjectMemberRepository(session).set_skill_tags(
-            project_id=project_id, user_id=user_id, skill_tags=cleaned
-        )
-        if updated is None:
-            raise HTTPException(status_code=404, detail="member_not_found")
-        return {
-            "ok": True,
-            "user_id": user_id,
-            "skill_tags": list(updated.skill_tags or []),
-        }
+    # M5.1 — call through the gated service method. Owner edits
+    # auto_merge; non-owner edits (self or cross) defer into an
+    # IMSuggestion(membrane_review, candidate_kind=manual_skill_change)
+    # for owner approval. Cross-edit-by-non-owner still 403s.
+    result = await service.set_member_skill_tags(
+        project_id=project_id,
+        actor_user_id=user.id,
+        target_user_id=user_id,
+        skill_tags=body.skill_tags,
+    )
+    if not result.get("ok"):
+        err = result.get("error", "set_skill_tags_failed")
+        if err == "owner_or_self_only":
+            raise HTTPException(status_code=403, detail=err)
+        if err == "not_a_project_member":
+            raise HTTPException(status_code=403, detail=err)
+        if err == "member_not_found":
+            raise HTTPException(status_code=404, detail=err)
+        raise HTTPException(status_code=400, detail=err)
+    return result
 
 
 @router.patch("/{project_id}/requirements/{requirement_id}/budget")

@@ -53,6 +53,8 @@ RecipeId = Literal[
     "promote_task_to_plan",
     "crystallize_decision",
     "manual_create_room",
+    "manual_skill_change",
+    "manual_invite",
     "review",
     "handoff",
     "meeting_metabolism",
@@ -350,6 +352,18 @@ class FlowProjectionService:
             if recipe in (None, "manual_create_room"):
                 packets.extend(
                     await self._derive_manual_room_packets(
+                        session, project_id, owner_ids
+                    )
+                )
+            if recipe in (None, "manual_skill_change"):
+                packets.extend(
+                    await self._derive_manual_skill_change_packets(
+                        session, project_id, owner_ids
+                    )
+                )
+            if recipe in (None, "manual_invite"):
+                packets.extend(
+                    await self._derive_manual_invite_packets(
                         session, project_id, owner_ids
                     )
                 )
@@ -678,6 +692,80 @@ class FlowProjectionService:
             if detail.get("candidate_kind") != "manual_room":
                 continue
             out.append(_manual_room_packet_from_suggestion(sug, owner_ids))
+        return out
+
+    # ------------------------------------------------------------------
+    # manual_skill_change / manual_invite — IMSuggestionRow(
+    #   kind=membrane_review,
+    #   candidate_kind=manual_skill_change | manual_invite) [pending]
+    #
+    # M5.1 slice. Closes the Org Graph mutation gap: skill_tags edits
+    # by non-owners + invites by non-owners are now stage-then-approve
+    # rather than direct mutate.
+    # ------------------------------------------------------------------
+
+    async def _derive_manual_skill_change_packets(
+        self, session, project_id: str, owner_ids: list[str]
+    ) -> list[dict[str, Any]]:
+        rows = list(
+            (
+                await session.execute(
+                    select(IMSuggestionRow)
+                    .where(IMSuggestionRow.project_id == project_id)
+                    .where(IMSuggestionRow.kind == "membrane_review")
+                    .where(IMSuggestionRow.status == "pending")
+                )
+            )
+            .scalars()
+            .all()
+        )
+        out: list[dict[str, Any]] = []
+        for sug in rows:
+            proposal = (
+                sug.proposal if isinstance(sug.proposal, dict) else None
+            )
+            if not proposal:
+                continue
+            detail = proposal.get("detail")
+            if not isinstance(detail, dict):
+                continue
+            if detail.get("candidate_kind") != "manual_skill_change":
+                continue
+            out.append(
+                _manual_skill_change_packet_from_suggestion(sug, owner_ids)
+            )
+        return out
+
+    async def _derive_manual_invite_packets(
+        self, session, project_id: str, owner_ids: list[str]
+    ) -> list[dict[str, Any]]:
+        rows = list(
+            (
+                await session.execute(
+                    select(IMSuggestionRow)
+                    .where(IMSuggestionRow.project_id == project_id)
+                    .where(IMSuggestionRow.kind == "membrane_review")
+                    .where(IMSuggestionRow.status == "pending")
+                )
+            )
+            .scalars()
+            .all()
+        )
+        out: list[dict[str, Any]] = []
+        for sug in rows:
+            proposal = (
+                sug.proposal if isinstance(sug.proposal, dict) else None
+            )
+            if not proposal:
+                continue
+            detail = proposal.get("detail")
+            if not isinstance(detail, dict):
+                continue
+            if detail.get("candidate_kind") != "manual_invite":
+                continue
+            out.append(
+                _manual_invite_packet_from_suggestion(sug, owner_ids)
+            )
         return out
 
     # ------------------------------------------------------------------
@@ -1752,6 +1840,41 @@ def _decision_crystallized_packet_from_row(
                 "stream", row.scope_stream_id, label="scope stream (vote)"
             )
         )
+    # M5.1 Lane B — persisted M4 membrane warnings + supersedes ref
+    # live in apply_detail; surface them as evidence so the flow
+    # packet records the membrane's verdict honestly. Empty / missing
+    # apply_detail keeps the prior shape.
+    apply_detail = row.apply_detail if isinstance(row.apply_detail, dict) else {}
+    membrane_warnings_persisted: list[str] = [
+        w for w in (apply_detail.get("membrane_warnings") or [])
+        if isinstance(w, str)
+    ]
+    for idx, warning in enumerate(membrane_warnings_persisted):
+        required_evidence.append(
+            _flow_ref(
+                "membrane_warning",
+                f"{row.id}:{idx}",
+                label=warning[:160],
+            )
+        )
+    supersedes_persisted: list[dict[str, Any]] = []
+    raw_supersedes = apply_detail.get("supersedes")
+    if isinstance(raw_supersedes, str) and raw_supersedes:
+        supersedes_persisted.append(
+            _flow_ref(
+                "decision",
+                raw_supersedes,
+                label="supersedes prior decision",
+            )
+        )
+    elif isinstance(raw_supersedes, list):
+        for ref in raw_supersedes:
+            if isinstance(ref, str) and ref:
+                supersedes_persisted.append(
+                    _flow_ref(
+                        "decision", ref, label="supersedes prior decision"
+                    )
+                )
 
     lineage_output = [
         _flow_ref(
@@ -1815,11 +1938,11 @@ def _decision_crystallized_packet_from_row(
         membrane_policy="advisory",
         update_effects=["canonical_decision"],
         lineage_output=lineage_output,
-        # supersedes ref if present in proposal metadata. We don't
-        # have that on DecisionRow directly; the suggestion was the
-        # carrier and it's already gone (status='accepted'). Skip
-        # for v1 — note in the report.
-        supersedes=[],
+        # M5.1 Lane B — supersedes ref persisted in apply_detail by
+        # IMService at crystallize time, lifted onto the epistemic
+        # event so consumers can trace decision-revisions without
+        # touching the source suggestion (which has resolved by now).
+        supersedes=supersedes_persisted,
         expires_at=None,
     )
 
@@ -1999,6 +2122,288 @@ def _manual_room_packet_from_suggestion(
             "kind": "manual_room",
             "action": "request_review",
             "conflict_with": conflict_with,
+            "warnings": [],
+        },
+        "transition_contract": transition_contract,
+        "epistemic_event": epistemic_event,
+        "timeline": timeline,
+        "next_actions": next_actions,
+        "created_at": _iso(suggestion.created_at),
+        "updated_at": _iso(suggestion.created_at),
+    }
+
+
+def _manual_skill_change_packet_from_suggestion(
+    suggestion: IMSuggestionRow, owner_ids: list[str]
+) -> dict[str, Any]:
+    """Map a pending IMSuggestion(membrane_review, manual_skill_change)
+    to a `manual_skill_change` flow packet."""
+    proposal = (
+        suggestion.proposal if isinstance(suggestion.proposal, dict) else None
+    ) or {}
+    detail = proposal.get("detail") or {}
+    target_user_id = detail.get("target_user_id") or ""
+    proposer_user_id = detail.get("proposer_user_id")
+    new_skill_tags = list(detail.get("new_skill_tags") or [])
+    diff_summary = detail.get("diff_summary")
+
+    title = (
+        f"Skill_tags update for member {target_user_id[:8]}…"
+        if target_user_id
+        else "Skill_tags update"
+    )
+
+    timeline = [
+        {
+            "at": _iso(suggestion.created_at),
+            "actor": "membrane",
+            "actor_user_id": proposer_user_id,
+            "kind": "manual_skill_change_proposed",
+            "summary": (
+                "Non-owner proposed a skill_tags update — staged for "
+                "owner approval (Org Graph governance)."
+            ),
+            "refs": [
+                _flow_ref(
+                    "im_suggestion",
+                    suggestion.id,
+                    label="manual_skill_change review",
+                )
+            ],
+        }
+    ]
+
+    next_actions: list[dict[str, Any]] = [
+        {
+            "id": "review",
+            "label": "Open review",
+            "kind": "open",
+            "requires_membrane": True,
+            "href": f"/projects/{suggestion.project_id}/detail/im",
+        }
+    ]
+
+    required_evidence: list[dict[str, Any]] = [
+        _flow_ref(
+            "im_suggestion",
+            suggestion.id,
+            label="manual_skill_change review",
+        ),
+    ]
+    if target_user_id:
+        required_evidence.append(
+            _flow_ref(
+                "user", target_user_id, label="target member"
+            )
+        )
+    if diff_summary:
+        required_evidence.append(
+            _flow_ref(
+                "diff_summary", suggestion.id, label=diff_summary[:80]
+            )
+        )
+
+    transition_contract = _transition_contract(
+        source_state="capability_claim_proposed",
+        target_state="project_role_capability_accepted",
+        review_method="membrane_review",
+        mutation_service="ProjectService+MembraneService",
+        status="awaiting_authority",
+        required_evidence=required_evidence,
+        authority_user_ids=list(owner_ids),
+        lineage_output=[],
+    )
+
+    epistemic_event = _epistemic_event(
+        kind="capability_claim",
+        status="review_pending",
+        proposition=(
+            f"set skill_tags={sorted(set(new_skill_tags))} for "
+            f"member {target_user_id[:8]}…"
+        ),
+        source_actor_id=proposer_user_id,
+        target_audience=list(owner_ids),
+        visibility_scope="project",
+        accepted_scope=None,
+        evidence_refs=required_evidence,
+        preconditions=[],
+        authority_required=list(owner_ids),
+        membrane_policy="request_review",
+        update_effects=["project_role_capability_accepted"],
+        lineage_output=[],
+        supersedes=[],
+        expires_at=None,
+    )
+
+    return {
+        "id": f"manual_skill_change:{suggestion.id}",
+        "project_id": suggestion.project_id,
+        "recipe_id": "manual_skill_change",
+        "stage": "awaiting_membrane",
+        "status": "active",
+        "source_user_id": proposer_user_id,
+        "target_user_ids": list(owner_ids),
+        "current_target_user_ids": list(owner_ids),
+        "authority_user_ids": list(owner_ids),
+        "title": title,
+        "summary": diff_summary or "",
+        "intent": (
+            "Update a project member's skill_tags — owner approval "
+            "required because skill_tags become role-level capability "
+            "evidence in routing."
+        ),
+        "source_refs": [
+            _flow_ref(
+                "im_suggestion",
+                suggestion.id,
+                label="manual_skill_change review",
+            )
+        ],
+        "graph_refs": [],
+        "evidence": _empty_evidence(),
+        "im_suggestion_id": suggestion.id,
+        "manual_skill_change_proposal": {
+            "target_user_id": target_user_id,
+            "proposer_user_id": proposer_user_id,
+            "new_skill_tags": new_skill_tags,
+        },
+        "membrane_candidate": {
+            "kind": "manual_skill_change",
+            "action": "request_review",
+            "conflict_with": [],
+            "warnings": [],
+        },
+        "transition_contract": transition_contract,
+        "epistemic_event": epistemic_event,
+        "timeline": timeline,
+        "next_actions": next_actions,
+        "created_at": _iso(suggestion.created_at),
+        "updated_at": _iso(suggestion.created_at),
+    }
+
+
+def _manual_invite_packet_from_suggestion(
+    suggestion: IMSuggestionRow, owner_ids: list[str]
+) -> dict[str, Any]:
+    """Map a pending IMSuggestion(membrane_review, manual_invite) to a
+    `manual_invite` flow packet."""
+    proposal = (
+        suggestion.proposal if isinstance(suggestion.proposal, dict) else None
+    ) or {}
+    detail = proposal.get("detail") or {}
+    target_username = detail.get("target_username") or ""
+    proposer_user_id = detail.get("proposer_user_id")
+    diff_summary = detail.get("diff_summary")
+
+    title = f"Invite '{target_username}'" if target_username else "Member invite"
+
+    timeline = [
+        {
+            "at": _iso(suggestion.created_at),
+            "actor": "membrane",
+            "actor_user_id": proposer_user_id,
+            "kind": "manual_invite_proposed",
+            "summary": (
+                "Non-owner proposed adding a member — staged for "
+                "owner approval."
+            ),
+            "refs": [
+                _flow_ref(
+                    "im_suggestion",
+                    suggestion.id,
+                    label="manual_invite review",
+                )
+            ],
+        }
+    ]
+
+    next_actions: list[dict[str, Any]] = [
+        {
+            "id": "review",
+            "label": "Open review",
+            "kind": "open",
+            "requires_membrane": True,
+            "href": f"/projects/{suggestion.project_id}/detail/im",
+        }
+    ]
+
+    required_evidence: list[dict[str, Any]] = [
+        _flow_ref(
+            "im_suggestion",
+            suggestion.id,
+            label="manual_invite review",
+        ),
+    ]
+    if diff_summary:
+        required_evidence.append(
+            _flow_ref(
+                "diff_summary", suggestion.id, label=diff_summary[:80]
+            )
+        )
+
+    transition_contract = _transition_contract(
+        source_state="member_invite_proposed",
+        target_state="project_member_accepted",
+        review_method="membrane_review",
+        mutation_service="ProjectService+MembraneService",
+        status="awaiting_authority",
+        required_evidence=required_evidence,
+        authority_user_ids=list(owner_ids),
+        lineage_output=[],
+    )
+
+    epistemic_event = _epistemic_event(
+        kind="proposal",
+        status="review_pending",
+        proposition=f"invite '{target_username}' to project",
+        source_actor_id=proposer_user_id,
+        target_audience=list(owner_ids),
+        visibility_scope="project",
+        accepted_scope=None,
+        evidence_refs=required_evidence,
+        preconditions=[],
+        authority_required=list(owner_ids),
+        membrane_policy="request_review",
+        update_effects=["project_member_accepted"],
+        lineage_output=[],
+        supersedes=[],
+        expires_at=None,
+    )
+
+    return {
+        "id": f"manual_invite:{suggestion.id}",
+        "project_id": suggestion.project_id,
+        "recipe_id": "manual_invite",
+        "stage": "awaiting_membrane",
+        "status": "active",
+        "source_user_id": proposer_user_id,
+        "target_user_ids": list(owner_ids),
+        "current_target_user_ids": list(owner_ids),
+        "authority_user_ids": list(owner_ids),
+        "title": title,
+        "summary": diff_summary or "",
+        "intent": (
+            "Add a project member — owner approval required (member "
+            "additions affect Org Graph)."
+        ),
+        "source_refs": [
+            _flow_ref(
+                "im_suggestion",
+                suggestion.id,
+                label="manual_invite review",
+            )
+        ],
+        "graph_refs": [],
+        "evidence": _empty_evidence(),
+        "im_suggestion_id": suggestion.id,
+        "manual_invite_proposal": {
+            "target_username": target_username,
+            "proposer_user_id": proposer_user_id,
+        },
+        "membrane_candidate": {
+            "kind": "manual_invite",
+            "action": "request_review",
+            "conflict_with": [],
             "warnings": [],
         },
         "transition_contract": transition_contract,

@@ -182,6 +182,13 @@ class DecisionService:
             actions=apply_actions, actor_id=actor_id
         )
 
+        # M5.1 Lane B — persist M4 warnings into apply_detail so the
+        # signal survives in audit + flow packets after the response is
+        # gone. Conflict-resolution decisions don't carry supersedes
+        # natively, so the field is left empty here.
+        if warnings:
+            detail = {**detail, "membrane_warnings": list(warnings)}
+
         async with session_scope(self._sessionmaker) as session:
             decision_repo = DecisionRepository(session)
             await decision_repo.mark_applied(

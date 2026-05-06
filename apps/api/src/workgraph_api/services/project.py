@@ -29,6 +29,17 @@ class ProjectService:
     ) -> None:
         self._sessionmaker = sessionmaker
         self._event_bus = event_bus
+        # M5.1 — late-bound MembraneService. When attached, non-owner
+        # skill_tags edits + member invites stage for owner review;
+        # without it, behavior is the pre-M5.1 direct mutation.
+        self._membrane_service = None
+
+    def attach_membrane(self, membrane_service) -> None:
+        """Late-bind the Membrane gate for skill_tags / invite. Without
+        this attach, mutations stay direct (legacy behavior); production
+        wiring in main.py must call attach_membrane for the invariant
+        to hold."""
+        self._membrane_service = membrane_service
 
     async def bind_creator(self, *, project_id: str, user_id: str) -> None:
         async with session_scope(self._sessionmaker) as session:
@@ -55,8 +66,59 @@ class ProjectService:
         )
 
     async def add_member(
-        self, *, project_id: str, username: str, invited_by: str
+        self,
+        *,
+        project_id: str,
+        username: str,
+        invited_by: str,
+        _skip_membrane: bool = False,
     ) -> dict:
+        """Add a member to a project.
+
+        M5.1: When `self._membrane_service` is attached and the inviter
+        is NOT a project owner, the call stages an IMSuggestion for
+        owner approval and returns `{ok=True, deferred=True, ...}`
+        instead of mutating. `_skip_membrane=True` is the back-channel
+        the accept handler uses (avoids gate recursion). Owners
+        auto_merge through to direct add as before.
+        """
+        # Pre-resolve owner / member state for the gate decision.
+        async with session_scope(self._sessionmaker) as session:
+            members = await ProjectMemberRepository(session).list_for_project(
+                project_id
+            )
+            is_owner = any(
+                m.user_id == invited_by and m.role == "owner" for m in members
+            )
+            owner_ids = [m.user_id for m in members if m.role == "owner"]
+
+        if (
+            self._membrane_service is not None
+            and not _skip_membrane
+            and not is_owner
+        ):
+            review = await self._membrane_service.review_manual_invite(
+                project_id=project_id,
+                proposer_user_id=invited_by,
+                target_username=username,
+                owner_ids=owner_ids,
+            )
+            if review.action == "reject":
+                return {
+                    "ok": False,
+                    "error": "membrane_rejected",
+                    "reason": review.reason,
+                }
+            if review.action in ("request_review", "request_clarification"):
+                return {
+                    "ok": True,
+                    "deferred": True,
+                    "reason": review.reason,
+                    "suggestion_id": review.suggestion_id,
+                    "user_id": None,
+                    "username": username,
+                }
+
         async with session_scope(self._sessionmaker) as session:
             user_row = await UserRepository(session).get_by_username(username)
             if user_row is None:
@@ -93,6 +155,106 @@ class ProjectService:
             },
         )
         return {"ok": True, "user_id": member_user_id, "username": username}
+
+    async def set_member_skill_tags(
+        self,
+        *,
+        project_id: str,
+        actor_user_id: str,
+        target_user_id: str,
+        skill_tags: list[str],
+        _skip_membrane: bool = False,
+    ) -> dict[str, Any]:
+        """Set per-project skill_tags for a member.
+
+        M5.1: gates non-owner edits (self or cross) through the
+        Membrane. Owner edits auto_merge. `_skip_membrane=True` is
+        the accept-handler back-channel.
+
+        Permission rules (consistent with the prior router-level checks):
+          * actor must be a project member.
+          * cross-edit (actor != target) requires owner role.
+          * self-edit by non-owner now goes through review (closes
+            the gap that let any member silently grant themselves
+            project skill_tags routing then cited as 'role' evidence).
+        """
+        # Normalize tags consistently with the router's prior shape:
+        # lowercase, strip, dedup, drop empties, cap each at 32 chars.
+        seen: set[str] = set()
+        cleaned: list[str] = []
+        for raw in skill_tags or []:
+            if not isinstance(raw, str):
+                continue
+            tag = raw.strip().lower()[:32]
+            if not tag or tag in seen:
+                continue
+            seen.add(tag)
+            cleaned.append(tag)
+
+        async with session_scope(self._sessionmaker) as session:
+            members = await ProjectMemberRepository(session).list_for_project(
+                project_id
+            )
+            actor = next(
+                (m for m in members if m.user_id == actor_user_id), None
+            )
+            if actor is None:
+                return {"ok": False, "error": "not_a_project_member"}
+            target = next(
+                (m for m in members if m.user_id == target_user_id), None
+            )
+            if target is None:
+                return {"ok": False, "error": "member_not_found"}
+            is_owner = actor.role == "owner"
+            owner_ids = [m.user_id for m in members if m.role == "owner"]
+
+        # Cross-edit by non-owner stays a hard 403 (preserves the
+        # existing router-level invariant).
+        if actor_user_id != target_user_id and not is_owner:
+            return {"ok": False, "error": "owner_or_self_only"}
+
+        if (
+            self._membrane_service is not None
+            and not _skip_membrane
+            and not is_owner
+        ):
+            review = await self._membrane_service.review_manual_skill_change(
+                project_id=project_id,
+                proposer_user_id=actor_user_id,
+                target_user_id=target_user_id,
+                new_skill_tags=cleaned,
+                owner_ids=owner_ids,
+            )
+            if review.action == "reject":
+                return {
+                    "ok": False,
+                    "error": "membrane_rejected",
+                    "reason": review.reason,
+                }
+            if review.action in ("request_review", "request_clarification"):
+                return {
+                    "ok": True,
+                    "deferred": True,
+                    "reason": review.reason,
+                    "suggestion_id": review.suggestion_id,
+                    "user_id": target_user_id,
+                    "skill_tags": None,
+                }
+
+        # Owner-direct or accept-replay: write through.
+        async with session_scope(self._sessionmaker) as session:
+            updated = await ProjectMemberRepository(session).set_skill_tags(
+                project_id=project_id,
+                user_id=target_user_id,
+                skill_tags=cleaned,
+            )
+            if updated is None:
+                return {"ok": False, "error": "member_not_found"}
+            return {
+                "ok": True,
+                "user_id": target_user_id,
+                "skill_tags": list(updated.skill_tags or []),
+            }
 
     async def list_for_user(self, user_id: str) -> list[dict[str, Any]]:
         async with session_scope(self._sessionmaker) as session:

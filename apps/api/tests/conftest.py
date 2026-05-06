@@ -632,6 +632,11 @@ async def api_env():
     # candidate_kind=manual_room); accept replays via IMService.
     stream_service.attach_membrane(membrane_service)
     im_service.attach_stream_service(stream_service)
+    # M5.1: manual_skill_change + manual_invite gates. Non-owner edits
+    # to skill_tags or member-add land in the owner inbox; accept
+    # replays via ProjectService.
+    project_service.attach_membrane(membrane_service)
+    im_service.attach_project_service(project_service)
     render_agent = _StubRenderAgent()
     render_service = RenderService(maker, render_agent)
 

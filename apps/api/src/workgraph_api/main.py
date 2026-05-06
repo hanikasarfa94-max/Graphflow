@@ -559,6 +559,11 @@ async def lifespan(app: FastAPI):
     # replays the args via StreamService. Both wires must be live.
     stream_service.attach_membrane(membrane_service)
     im_service.attach_stream_service(stream_service)
+    # M5.1 — manual_skill_change + manual_invite gates. ProjectService
+    # routes non-owner skill_tags edits + invites through MembraneService;
+    # on accept, IMService replays via ProjectService.
+    project_service.attach_membrane(membrane_service)
+    im_service.attach_project_service(project_service)
     # silent_consensus_service is constructed further down (line ~544);
     # its attach_membrane() call lives down there to satisfy ordering.
 
