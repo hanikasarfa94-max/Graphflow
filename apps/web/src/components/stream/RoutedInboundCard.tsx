@@ -81,13 +81,25 @@ export function RoutedInboundCard({ message, memberById }: StreamProps) {
   const t = useTranslations("personal");
   const shell = useAppShell();
 
+  // routed-inbound MessageRow.author_id is EDGE_AGENT_SYSTEM_USER_ID;
+  // the actual source human lives on the linked RoutedSignalRow. The
+  // backend hydrates routed_signal_source_* into the payload so we
+  // never have to render "🧠 Edge" as the asker. Member lookup by
+  // routed_signal_source_user_id is the next-best (covers messages
+  // saved before the FE knew the source name); author fields are a
+  // last-resort fallback so a malformed payload still shows something.
   const sourceName = useMemo(() => {
-    const m = memberById.get(message.author_id);
+    const sourceUserId =
+      message.routed_signal_source_user_id ?? null;
+    const m = sourceUserId ? memberById.get(sourceUserId) : null;
     return (
+      message.routed_signal_source_display_name ??
       m?.display_name ??
+      message.routed_signal_source_username ??
+      m?.username ??
+      (sourceUserId ? sourceUserId.slice(0, 8) : null) ??
       message.author_display_name ??
       message.author_username ??
-      m?.username ??
       message.author_id.slice(0, 8)
     );
   }, [memberById, message]);

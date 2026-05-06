@@ -45,6 +45,7 @@ from workgraph_persistence import (
     MessageRepository,
     ProjectMemberRepository,
     ProjectRow,
+    RoutedSignalRow,
     UserRepository,
     bump_citations,
     session_scope,
@@ -1148,6 +1149,40 @@ class PersonalStreamService:
                         authors[r.author_id] = u.username
                         display_names[r.author_id] = u.display_name
 
+            # Routed-inbound attribution leak fix — the routed-inbound
+            # MessageRow is authored by EDGE_AGENT_SYSTEM_USER_ID, so the
+            # FE used to render "from 🧠 Edge". Truth is on the linked
+            # RoutedSignalRow.source_user_id. Batch-load both signals and
+            # the source users in one shot to avoid N+1.
+            routed_inbound_signal_ids = [
+                r.linked_id
+                for r in rows
+                if r.kind == "routed-inbound" and r.linked_id
+            ]
+            signal_source_by_signal_id: dict[str, str] = {}
+            if routed_inbound_signal_ids:
+                signal_rows = list(
+                    (
+                        await session.execute(
+                            select(RoutedSignalRow).where(
+                                RoutedSignalRow.id.in_(routed_inbound_signal_ids)
+                            )
+                        )
+                    )
+                    .scalars()
+                    .all()
+                )
+                for s in signal_rows:
+                    signal_source_by_signal_id[s.id] = s.source_user_id
+                # Fill the username + display_name cache for any source
+                # user we haven't already loaded.
+                for src_uid in set(signal_source_by_signal_id.values()):
+                    if src_uid not in authors:
+                        u = await user_repo.get(src_uid)
+                        if u is not None:
+                            authors[src_uid] = u.username
+                            display_names[src_uid] = u.display_name
+
         messages: list[dict[str, Any]] = []
         for r in rows:
             body = r.body
@@ -1180,6 +1215,19 @@ class PersonalStreamService:
                     metadata["claims"] = claims_list
                     metadata["uncited"] = all(
                         not (c.get("citations") or []) for c in claims_list
+                    )
+            # Routed-inbound: surface the source human so the FE can
+            # render "{source} asked through Project assistant" instead
+            # of leaking the EDGE_AGENT_SYSTEM_USER_ID author.
+            if r.kind == "routed-inbound" and r.linked_id:
+                src_uid = signal_source_by_signal_id.get(r.linked_id)
+                if src_uid:
+                    metadata["routed_signal_source_user_id"] = src_uid
+                    metadata["routed_signal_source_username"] = authors.get(
+                        src_uid
+                    )
+                    metadata["routed_signal_source_display_name"] = (
+                        display_names.get(src_uid)
                     )
             messages.append(
                 {

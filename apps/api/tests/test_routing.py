@@ -96,7 +96,10 @@ async def test_edge_agent_system_user_exists(api_env):
 
     assert row is not None
     assert row.username == "edge"
-    assert row.display_name == "🧠 Edge"
+    # Display name is user-visible (FE may surface it as author label),
+    # so it tracks the project-assistant rename. Internal id +
+    # username stay "edge-agent-system" / "edge".
+    assert row.display_name == "项目助手"
 
 
 # ---------- personal stream backfill ------------------------------------
@@ -1018,3 +1021,213 @@ async def test_r2_dispatch_grounds_when_target_in_suggestions(api_env):
         assert basis["matched_suggestion"]["user_id"] == raj_id
     finally:
         app.state.routing_service._skills_service = saved_skills
+
+
+# ---------- routed-inbound source-human attribution ---------------------
+# RoutedInboundCard used to read message.author_id (which is the shared
+# EDGE_AGENT_SYSTEM_USER_ID), causing "from 🧠 Edge" to render as the
+# asker. Fix: PersonalStreamService.list_messages now hydrates
+# routed_signal_source_user_id / display_name / username from the
+# linked RoutedSignalRow. These tests pin both the new contract and
+# the regression on an existing Edge-authored row.
+
+
+@pytest.mark.asyncio
+async def test_routed_inbound_payload_carries_source_human_fields(api_env):
+    """PersonalStreamService.list_messages must surface
+    routed_signal_source_* on every routed-inbound message so the FE
+    never has to render the EDGE_AGENT_SYSTEM_USER_ID author."""
+    client, maker, _, _, _, _ = api_env
+    await _register(client, "ria_maya")
+    project_id = await _intake(client, "RIA-attr-1")
+    maya_id = await _me_id(client)
+    await _register(client, "ria_raj")
+    raj_id = await _me_id(client)
+    await _login(client, "ria_maya")
+    await _invite(client, project_id, "ria_raj")
+
+    await backfill_streams_from_projects(maker)
+
+    # Maya routes a question to Raj.
+    r = await client.post(
+        "/api/routing/dispatch",
+        json={
+            "target_user_id": raj_id,
+            "project_id": project_id,
+            "framing": "Should we drop permadeath for the boss rooms?",
+            "background": [],
+            "options": [
+                {
+                    "id": "drop",
+                    "label": "Drop permadeath",
+                    "kind": "action",
+                    "background": "",
+                    "reason": "",
+                    "tradeoff": "",
+                    "weight": 0.6,
+                },
+            ],
+        },
+    )
+    assert r.status_code == 200, r.text
+
+    # Raj reads his personal stream — the routed-inbound payload must
+    # name MAYA, not the edge-agent.
+    await _login(client, "ria_raj")
+    r = await client.get(f"/api/personal/{project_id}/messages")
+    assert r.status_code == 200, r.text
+    msgs = r.json()["messages"]
+    inbound = [m for m in msgs if m["kind"] == "routed-inbound"]
+    assert len(inbound) == 1, msgs
+    pkt = inbound[0]
+    # The MessageRow author IS the edge-agent — that part is intentional.
+    assert pkt["author_id"] == EDGE_AGENT_SYSTEM_USER_ID
+    # But the source-human fields name Maya.
+    assert pkt["routed_signal_source_user_id"] == maya_id
+    assert pkt["routed_signal_source_username"] == "ria_maya"
+    # display_name may be None if the user hasn't set one — assert
+    # presence-of-key (the FE will fall back to username) rather than
+    # value, since display_name is optional on UserRow.
+    assert "routed_signal_source_display_name" in pkt
+
+
+@pytest.mark.asyncio
+async def test_routed_inbound_legacy_row_still_resolves_source_human(api_env):
+    """Regression: a routed-inbound MessageRow that was written BEFORE
+    the hydration fix (still authored by EDGE_AGENT_SYSTEM_USER_ID) must
+    still resolve the source human via the linked RoutedSignalRow.
+
+    Simulated by dispatching, then asserting the payload independently of
+    any author_display_name fallback."""
+    client, maker, _, _, _, _ = api_env
+    await _register(client, "ria_legacy_src")
+    project_id = await _intake(client, "RIA-legacy-1")
+    src_id = await _me_id(client)
+    await _register(client, "ria_legacy_tgt")
+    tgt_id = await _me_id(client)
+    await _login(client, "ria_legacy_src")
+    await _invite(client, project_id, "ria_legacy_tgt")
+    await backfill_streams_from_projects(maker)
+
+    r = await client.post(
+        "/api/routing/dispatch",
+        json={
+            "target_user_id": tgt_id,
+            "project_id": project_id,
+            "framing": "Legacy attribution check",
+            "background": [],
+            "options": [
+                {
+                    "id": "ack",
+                    "label": "Ack",
+                    "kind": "action",
+                    "background": "",
+                    "reason": "",
+                    "tradeoff": "",
+                    "weight": 1.0,
+                },
+            ],
+        },
+    )
+    assert r.status_code == 200, r.text
+
+    # Confirm the underlying row is the legacy shape (authored by
+    # EDGE_AGENT_SYSTEM_USER_ID, source truth on RoutedSignalRow).
+    async with session_scope(maker) as session:
+        msg_row = (
+            await session.execute(
+                select(MessageRow).where(
+                    MessageRow.kind == "routed-inbound",
+                    MessageRow.project_id == project_id,
+                )
+            )
+        ).scalar_one()
+        assert msg_row.author_id == EDGE_AGENT_SYSTEM_USER_ID
+        signal = (
+            await session.execute(
+                select(RoutedSignalRow).where(
+                    RoutedSignalRow.id == msg_row.linked_id
+                )
+            )
+        ).scalar_one()
+        assert signal.source_user_id == src_id
+
+    await _login(client, "ria_legacy_tgt")
+    r = await client.get(f"/api/personal/{project_id}/messages")
+    assert r.status_code == 200, r.text
+    inbound = next(
+        m for m in r.json()["messages"] if m["kind"] == "routed-inbound"
+    )
+    # The fix lifts the source human onto the payload regardless of
+    # who authored the MessageRow.
+    assert inbound["routed_signal_source_user_id"] == src_id
+    assert inbound["routed_signal_source_username"] == "ria_legacy_src"
+
+
+def test_locales_have_no_user_visible_edge_attribution():
+    """i18n guard — every user-facing routed-inbound / reply / preview
+    string must say "项目助手" or "Project assistant", never raw "Edge"
+    or "🧠 Edge". The internal kind keys (edge-answer, edge-clarify,
+    discussWithEdge as a translation KEY name) are fine — they don't
+    render to users."""
+    import json
+    from pathlib import Path
+
+    repo_root = Path(__file__).resolve().parents[3]
+    locales_dir = repo_root / "apps" / "web" / "src" / "i18n" / "locales"
+
+    banned_substrings = (
+        "🧠 Edge",
+        "🤖 Edge",
+        "Edge 的新路由",
+        "Edge的新路由",
+        "via edge",
+        "边缘代理",
+    )
+
+    def visit(node, path):
+        if isinstance(node, dict):
+            for k, v in node.items():
+                visit(v, f"{path}.{k}")
+        elif isinstance(node, str):
+            for b in banned_substrings:
+                assert b not in node, (
+                    f"locale string {path} still contains banned "
+                    f"user-visible Edge attribution: {b!r} — value: {node!r}"
+                )
+
+    for locale_file in ("zh.json", "en.json"):
+        with (locales_dir / locale_file).open(encoding="utf-8") as fh:
+            data = json.load(fh)
+        visit(data, locale_file)
+
+
+@pytest.mark.asyncio
+async def test_edge_agent_legacy_display_name_migrated(api_env):
+    """Boot migrates a legacy `🧠 Edge` display name to `项目助手` so
+    any FE path that surfaces author_display_name reads cleanly."""
+    from workgraph_persistence import ensure_edge_agent_system_user
+
+    _, maker, _, _, _, _ = api_env
+
+    # Force the row back to the legacy display name to simulate a prod
+    # row seeded before the rename.
+    async with session_scope(maker) as session:
+        legacy = (
+            await session.execute(
+                select(UserRow).where(UserRow.id == EDGE_AGENT_SYSTEM_USER_ID)
+            )
+        ).scalar_one()
+        legacy.display_name = "🧠 Edge"
+        await session.flush()
+
+    # Re-running the seeder must migrate the legacy name.
+    await ensure_edge_agent_system_user(maker)
+
+    async with session_scope(maker) as session:
+        migrated = (
+            await session.execute(
+                select(UserRow).where(UserRow.id == EDGE_AGENT_SYSTEM_USER_ID)
+            )
+        ).scalar_one()
+    assert migrated.display_name == "项目助手"

@@ -45,7 +45,13 @@ from .repositories import StreamMemberRepository, StreamRepository
 # per-user agent rows for profile tracking, we migrate then.
 EDGE_AGENT_SYSTEM_USER_ID = "edge-agent-system"
 _EDGE_AGENT_USERNAME = "edge"
-_EDGE_AGENT_DISPLAY_NAME = "🧠 Edge"
+# User-visible display name for the shared sub-agent author. Was
+# "🧠 Edge" historically; renamed to "项目助手" / "Project assistant"
+# per the routed-inbound attribution audit so any FE path that falls
+# back to author_display_name reads correctly. The legacy display
+# name is migrated in `ensure_edge_agent_system_user` below.
+_EDGE_AGENT_DISPLAY_NAME = "项目助手"
+_EDGE_AGENT_LEGACY_DISPLAY_NAMES = ("🧠 Edge",)
 # System users cannot authenticate — the password-salt+hash pair is bogus
 # (pbkdf2 would never match), and there is no /api/auth/login path that
 # uses this id. Kept populated because the UserRow columns are non-null.
@@ -69,6 +75,12 @@ async def ensure_edge_agent_system_user(
             )
         ).scalar_one_or_none()
         if existing is not None:
+            # Legacy rows seeded before the attribution rename still
+            # carry "🧠 Edge". Migrate them in-place on boot so the
+            # display name is clean for any FE path that surfaces it.
+            if existing.display_name in _EDGE_AGENT_LEGACY_DISPLAY_NAMES:
+                existing.display_name = _EDGE_AGENT_DISPLAY_NAME
+                await session.flush()
             return existing
         row = UserRow(
             id=EDGE_AGENT_SYSTEM_USER_ID,

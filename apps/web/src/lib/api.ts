@@ -1615,6 +1615,13 @@ export interface PersonalMessage {
   // True iff every claim has an empty `citations` list. Lets the UI
   // decide once per card whether to render muted.
   uncited?: boolean;
+  // Routed-inbound source-human attribution. Backend hydrates these
+  // from the linked RoutedSignalRow.source_user_id so the FE never
+  // has to render the EDGE_AGENT_SYSTEM_USER_ID author for
+  // kind === "routed-inbound" cards.
+  routed_signal_source_user_id?: string | null;
+  routed_signal_source_username?: string | null;
+  routed_signal_source_display_name?: string | null;
 }
 
 // edge_response.kind uses the EdgeAgent response kinds (not the stored

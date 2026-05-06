@@ -908,7 +908,7 @@
       }
     },
     "gatedProposal": {
-      "header": "Edge — 需要审批",
+      "header": "项目助手 — 需要审批",
       "gateKeeper": "审批人:{name}",
       "send": "送交 {name} 审批",
       "sending": "发送中……",
@@ -932,8 +932,8 @@
       "classScopeCut": "范围"
     },
     "inbound": {
-      "from": "{name} 通过 Edge 询问",
-      "inlineLine": "来自 {name} 的新路由询问",
+      "from": "{name} 通过项目助手询问",
+      "inlineLine": "{name} 通过项目助手询问你",
       "openDrawer": "打开",
       "framing": "概述",
       "framingFrom": "{name} 想问你的事",
@@ -955,7 +955,7 @@
       "loadFailed": "路由信号加载失败"
     },
     "reply": {
-      "header": "🤖 Edge —— {name} 已回复",
+      "header": "{name} 通过项目助手回复你",
       "acceptAction": "接受",
       "counterBackAction": "反提回去",
       "escalateAction": "上报",
@@ -1242,20 +1242,20 @@
   "rehearsal": {
     "thinking": "推演中…",
     "silent": "",
-    "answer": "Edge 会这样回答:",
-    "clarify": "Edge 会这样反问:",
-    "routeProposal": "Edge 建议转给 <strong>{name}</strong>:<em>{rationale}</em>",
+    "answer": "项目助手会这样回答:",
+    "clarify": "项目助手会这样反问:",
+    "routeProposal": "项目助手建议转给 <strong>{name}</strong>:<em>{rationale}</em>",
     "devilsAdvocate": "反向质疑:",
     "cooldown": "预览冷却中 —— 继续输入",
     "sendAsIs": "原样发送",
-    "eyebrow": "Edge — 预览"
+    "eyebrow": "项目助手 — 预览"
   },
   "drift": {
     "alertTitle": "偏航提醒",
     "driftingFrom": "偏离自",
     "whatChanged": "变化点",
     "suggestedNext": "建议下一步",
-    "discussWithEdge": "与 Edge 讨论",
+    "discussWithEdge": "与项目助手讨论",
     "severity": {
       "low": "低",
       "medium": "中",

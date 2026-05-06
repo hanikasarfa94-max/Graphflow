@@ -908,7 +908,7 @@
       }
     },
     "gatedProposal": {
-      "header": "Edge — sign-off required",
+      "header": "Project assistant — sign-off required",
       "gateKeeper": "Gate-keeper: {name}",
       "send": "Send to {name} for sign-off",
       "sending": "Sending to {name}…",
@@ -932,8 +932,8 @@
       "classScopeCut": "Scope"
     },
     "inbound": {
-      "from": "{name} asked (via edge)",
-      "inlineLine": "New routed question from {name}",
+      "from": "{name} asked through Project assistant",
+      "inlineLine": "{name} asked through Project assistant",
       "openDrawer": "Open",
       "framing": "Framing",
       "framingFrom": "What {name} is asking you",
@@ -955,7 +955,7 @@
       "loadFailed": "Couldn't load routed signal"
     },
     "reply": {
-      "header": "🤖 Edge — {name} replied",
+      "header": "{name} replied through Project assistant",
       "acceptAction": "Accept",
       "counterBackAction": "Counter back",
       "escalateAction": "Escalate",
@@ -1242,20 +1242,20 @@
   "rehearsal": {
     "thinking": "thinking…",
     "silent": "",
-    "answer": "Edge would answer:",
-    "clarify": "Edge would ask back:",
-    "routeProposal": "Edge would propose routing to <strong>{name}</strong>: <em>{rationale}</em>",
+    "answer": "Project assistant would answer:",
+    "clarify": "Project assistant would ask back:",
+    "routeProposal": "Project assistant would propose routing to <strong>{name}</strong>: <em>{rationale}</em>",
     "devilsAdvocate": "Devil's advocate:",
     "cooldown": "preview cooldown — keep typing",
     "sendAsIs": "Send as-is",
-    "eyebrow": "Edge — preview"
+    "eyebrow": "Project assistant — preview"
   },
   "drift": {
     "alertTitle": "Drift alert",
     "driftingFrom": "Drifting from",
     "whatChanged": "What changed",
     "suggestedNext": "Suggested next step",
-    "discussWithEdge": "Discuss with edge",
+    "discussWithEdge": "Discuss with project assistant",
     "severity": {
       "low": "Low",
       "medium": "Medium",
