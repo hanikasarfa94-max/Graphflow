@@ -10,9 +10,13 @@
 //   * edge-clarify  — amber-tinted attribution; the agent is asking back
 //   * edge-thinking — placeholder "thinking" variant
 //
-// Visual: flat-flowing prose, NOT a card. Small attribution chip at the
-// top-left, then the body flows left-aligned like ChatGPT/Claude. No
-// background, no border, no box. Reserved for conversational turns.
+// Visual (M1.2): light-touch left-side assistant bubble. The pre-M1.2
+// flat-prose look read like a database warning when the reply was a
+// KB conflict; users wanted "an answer in a bubble" so the assistant
+// turn feels like part of the chat, not a system pane. Still
+// LEFT-aligned (assistant), still NARROW gutter on the right so line
+// length stays readable. Subtle background + rounded edge, no shadow,
+// no heavy card chrome.
 //
 // The "Follow up…" button pre-fills the composer via `onFollowUp`.
 
@@ -81,12 +85,18 @@ export function EdgeReplyCard({
       data-message-id={message.id}
       data-kind={message.kind}
       style={{
-        // No card shell — just left-aligned flowing prose. Padding keeps
-        // some breathing room on the left so text doesn't kiss the
-        // scroller edge. Right margin leaves ~30% gutter so the line
-        // length stays readable.
-        padding: "2px 4px",
+        // M1.2: assistant bubble. Subtle paper background + rounded
+        // corners + gutter on the right. Self-contained block so
+        // citations and follow-up button feel like one assistant turn.
+        padding: "10px 12px",
         marginRight: "20%",
+        background: "var(--wg-paper-2, #f7f6f1)",
+        border: "1px solid var(--wg-line)",
+        borderRadius: "var(--wg-radius)",
+        // Top-left flat: hints at "this came from the assistant on the
+        // left" — symmetric to a future user-bubble that flattens its
+        // top-right. Cheap polish; remove if it reads as gimmicky.
+        borderTopLeftRadius: 4,
         fontSize: "var(--wg-fs-body)",
       }}
     >
