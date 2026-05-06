@@ -472,6 +472,31 @@ export function EdgeLLMTurnCard({
   );
 }
 
+// ---------- M1.3 — proposal action localization ----------
+
+// Map machine action codes to localized labels. Falls back to the raw
+// code when no translation exists, so a new BE action just shows
+// machine-shaped text instead of throwing.
+function translateAction(
+  action: string | undefined,
+  t: ReturnType<typeof useTranslations>,
+): string {
+  if (!action) return "";
+  // next-intl throws by default on missing keys. Rich-format `t.has`
+  // is hookless; we wrap in try/catch as the safest fallback.
+  try {
+    const localized = t(`proposal.actionLabels.${action}`);
+    // next-intl returns the key itself on miss in some configs; treat
+    // a literal-key match as miss so we fall through.
+    if (localized && localized !== `proposal.actionLabels.${action}`) {
+      return localized;
+    }
+  } catch {
+    // fall through to raw
+  }
+  return action;
+}
+
 // ---------- Kind-specific previews ----------
 
 // Inserted inside SubAgentTurnCard to give richer affordances for the
@@ -697,7 +722,8 @@ export function SubAgentTurnCard({
       {suggestion.proposal && (
         <>
           <div style={{ fontWeight: 600 }}>
-            {t("proposal.label")}: {suggestion.proposal.action}
+            {t("proposal.label")}:{" "}
+            {translateAction(suggestion.proposal.action, t)}
           </div>
           <div style={{ color: "var(--wg-ink-soft)", marginTop: 2 }}>
             {suggestion.proposal.summary}

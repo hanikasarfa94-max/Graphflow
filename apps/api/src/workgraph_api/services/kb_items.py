@@ -276,18 +276,17 @@ class KbItemService:
                     review_conflicts = (
                         list(review.conflict_with) if review is not None else []
                     )
+                    # M1.3 Slice D — short locale-neutral body. Reason
+                    # codes (numeric_claim_conflict / llm_proposed_draft
+                    # etc.) are machine values that read as English noise
+                    # in zh locale; the structured proposal preview
+                    # carries diff_summary + conflict count for the FE
+                    # to render localized. The body just identifies the
+                    # event + title.
                     if review is not None and review.action == "request_review":
-                        body = (
-                            f"📥 Membrane staged a group KB entry for review: "
-                            f"'{title}'. Reason: {review_reason}."
-                        )
+                        body = f"📥 [膜审核 / Membrane review] '{title}'"
                     else:
-                        body = (
-                            f"📥 Edge agent proposed a group KB entry for review: "
-                            f"'{title}'. Owner can approve or dismiss."
-                        )
-                    if review_diff:
-                        body = f"{body}\n{review_diff}"
+                        body = f"📥 [助手草稿 / Assistant draft] '{title}'"
                     msg = await MessageRepository(session).append(
                         project_id=project_id,
                         author_id=EDGE_AGENT_SYSTEM_USER_ID,
@@ -518,12 +517,8 @@ class KbItemService:
                         project_id
                     )
                     if team_stream is not None:
-                        body = (
-                            f"📥 Membrane staged a personal→group promote for review: "
-                            f"'{title}'. Reason: {review.reason}."
-                        )
-                        if review.diff_summary:
-                            body = f"{body}\n{review.diff_summary}"
+                        # M1.3 Slice D — short locale-neutral body.
+                        body = f"📥 [膜审核·提升 / Promote review] '{title}'"
                         msg = await MessageRepository(session).append(
                             project_id=project_id,
                             author_id=EDGE_AGENT_SYSTEM_USER_ID,
@@ -805,12 +800,9 @@ class KbItemService:
             )
             if team_stream is None:
                 raise KbItemError("no_team_stream", status_=500)
-            body = (
-                f"📥 Member requested archive of group KB '{row.title}'. "
-                f"Reason: {reason}"
-            )
-            if suggested_replacement_id:
-                body = f"{body}\n→ Suggested replacement: kb/{suggested_replacement_id[:8]}…"
+            # M1.3 Slice D — short locale-neutral body. Reason text
+            # carried in proposal.detail.reason for the FE to render.
+            body = f"📥 [归档申请 / Archive request] '{row.title}'"
             msg = await MessageRepository(session).append(
                 project_id=row.project_id,
                 author_id=EDGE_AGENT_SYSTEM_USER_ID,
