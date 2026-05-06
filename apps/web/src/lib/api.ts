@@ -3053,6 +3053,33 @@ export function demoteKbNote(itemId: string): Promise<KbNote> {
   return api(`/api/kb-items/${itemId}/demote`, { method: "POST" });
 }
 
+// M1.2 — soft-archive primitive. Project owner for group-scope; item
+// owner for personal-scope. Excluded from is_canonical_kb_row + KB
+// listing afterwards.
+export function archiveKbNote(itemId: string): Promise<KbNote> {
+  return api(`/api/kb-items/${itemId}/archive`, { method: "POST" });
+}
+
+// M1.2 — non-owner archive request. Posts an IMSuggestion(membrane_review)
+// for the project owner to accept or dismiss.
+export function requestArchiveKb(
+  itemId: string,
+  body: { reason: string; suggested_replacement_id?: string },
+): Promise<{
+  ok: boolean;
+  suggestion_id: string;
+  kb_item_id: string;
+  message_id: string;
+}> {
+  return api(`/api/kb-items/${itemId}/archive-request`, {
+    method: "POST",
+    body: JSON.stringify({
+      reason: body.reason,
+      suggested_replacement_id: body.suggested_replacement_id ?? null,
+    }),
+  });
+}
+
 // Phase B — file upload. Multipart, so we don't go through the
 // JSON `api` helper. Browser sets Content-Type with boundary.
 export async function uploadKbNote(

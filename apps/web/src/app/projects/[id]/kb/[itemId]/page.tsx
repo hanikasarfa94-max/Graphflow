@@ -10,6 +10,7 @@
 import Link from "next/link";
 import { getTranslations } from "next-intl/server";
 
+import { KbItemActions } from "@/components/kb/KbItemActions";
 import { KbItemDetail } from "@/components/kb/KbItemDetail";
 import { KbItemLicenseControl } from "@/components/kb/KbItemLicenseControl";
 import {
@@ -108,6 +109,15 @@ export default async function KbItemPage({
           isOwner ? (
             <KbItemLicenseControl projectId={id} itemId={itemId} />
           ) : null
+        }
+        actions={
+          <KbItemActions
+            itemId={itemId}
+            scope={item.scope}
+            status={item.status}
+            isProjectOwner={isOwner}
+            isItemOwner={item.owner_user_id === user.id}
+          />
         }
       />
     </main>

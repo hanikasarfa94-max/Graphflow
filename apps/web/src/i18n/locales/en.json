@@ -771,6 +771,17 @@
       "emptyBody": "This item has no content yet. Drafts created via Save-to-wiki materialize once an owner promotes them through Membrane review.",
       "reviewLink": "Open membrane review →"
     },
+    "actions": {
+      "kicker": "Memory repair",
+      "archive": "Archive",
+      "archiving": "Archiving…",
+      "requestArchive": "Request archive",
+      "requesting": "Sending request…",
+      "confirmArchive": "Archive this item? It will stop appearing in search and agent context, but the row stays in the audit log.",
+      "reasonPrompt": "Why should this be archived? (visible to project owners)",
+      "requestSent": "Request sent — a project owner will review it.",
+      "archivedBadge": "Archived — excluded from search + agent context."
+    },
     "folder": {
       "treeTitle": "Folders",
       "root": "/",

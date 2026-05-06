@@ -15,6 +15,7 @@ export async function KbItemDetail({
   projectId,
   item,
   licenseControl,
+  actions,
 }: {
   projectId: string;
   item: KbItemDetailT;
@@ -22,6 +23,10 @@ export async function KbItemDetail({
   // owner. The server component composes it conditionally so
   // non-owners never ship the client bundle.
   licenseControl?: React.ReactNode;
+  // M1.2 — KB memory repair (archive / request-archive). Composed by
+  // the page so the server can resolve owner role without leaking
+  // identity into the client bundle.
+  actions?: React.ReactNode;
 }) {
   const t = await getTranslations();
   const cls =
@@ -305,6 +310,7 @@ export async function KbItemDetail({
           </MetaPanel>
 
           {licenseControl}
+          {actions}
         </aside>
       </div>
     </div>
