@@ -724,16 +724,55 @@ function TasksPanelBody({
                 ? ` · ${task.assignee_role}`
                 : ""
             }`;
-            // Personal tasks have no inline timeline projection today
-            // (no manual_task candidate kind on the membrane yet), so
-            // the PanelItem is a passive row. When the membrane learns
-            // manual_task, source_message_id will let it scrollToEntity
-            // back to the originating message instead.
+            // F.2 — Promote-to-plan affordance. Owner-only on the BE
+            // (POST /api/tasks/{id}/promote returns 403 for non-owner),
+            // and the row is fetched from /api/projects/{pid}/personal-
+            // tasks which is already viewer-scoped — so every row in
+            // this list is already promotable by the viewer. Goes
+            // through MembraneService; can return auto_merge (task
+            // flips to plan-scope, vanishes from this list) or
+            // deferred (suggestion enqueued for owner inbox).
+            const outcome = tasksState.promoteState[task.id];
+            const isPromoting = !!tasksState.promoting[task.id];
+            const submitted = outcome === "submitted";
+            const promoteAction = (
+              <button
+                type="button"
+                data-testid="workbench-task-promote"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (!submitted && !isPromoting) {
+                    void tasksState.promote(task.id);
+                  }
+                }}
+                disabled={isPromoting || submitted}
+                title={t("tasksPromoteHint")}
+                style={{
+                  padding: "2px 8px",
+                  fontSize: 11,
+                  border: "1px solid var(--wg-line)",
+                  borderRadius: 3,
+                  background: submitted ? "var(--wg-amber-soft)" : "#fff",
+                  color: submitted
+                    ? "var(--wg-amber)"
+                    : "var(--wg-ink-soft)",
+                  cursor: isPromoting || submitted ? "default" : "pointer",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {isPromoting
+                  ? t("tasksPromoting")
+                  : submitted
+                    ? t("tasksPromoteSubmitted")
+                    : t("tasksPromote")}
+              </button>
+            );
             return (
               <PanelItem
                 key={task.id}
                 title={task.title || t("tasksUntitled")}
                 meta={meta}
+                actions={promoteAction}
               />
             );
           })}
