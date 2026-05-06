@@ -1182,6 +1182,58 @@ async def test_m2_audit_surfaces_pairwise_conflicts(api_env):
 
 
 @pytest.mark.asyncio
+async def test_m2_audit_max_rows_bound(api_env):
+    """The endpoint accepts ?max_rows=N and the underlying service caps
+    iteration at that bound — protects the LLM-cost ceiling per the
+    spec. We verify by stubbing an agent that would otherwise flag
+    every row, and asserting findings ≤ max_rows even when more rows
+    exist."""
+    from workgraph_api.main import app
+
+    client, maker, *_ = api_env
+    owner_id = await _register_and_login(client, "kb_m2_d_owner")
+    member_id = await _register_and_login(client, "kb_m2_d_member")
+    pid = await _mk_project_with_members(
+        maker, owner_id=owner_id, member_id=member_id
+    )
+
+    # Seed 5 group rows; cap to 2.
+    await _login(client, "kb_m2_d_owner")
+    titles = [
+        "Auth flow notes",
+        "Auth flow pool sizing",
+        "Auth flow rate limit",
+        "Auth flow token rotation",
+        "Auth flow regression suite",
+    ]
+    for title in titles:
+        r = await client.post(
+            f"/api/projects/{pid}/kb-items",
+            json={
+                "title": title,
+                "content_md": "Auth flow detail covered here.",
+                "scope": "group",
+            },
+        )
+        assert r.status_code == 200, r.text
+
+    # Stub the agent: every call returns request_review.
+    stub = _StubMembraneReviewer(
+        _make_review(
+            "request_review", reason="bound_test", confidence=0.85
+        )
+    )
+    app.state.membrane_service._agent_reviewer = stub
+
+    # Cap at 2 — the audit should iterate only 2 rows so findings ≤ 2.
+    r = await client.get(f"/api/projects/{pid}/kb-audit?max_rows=2")
+    assert r.status_code == 200, r.text
+    findings = r.json()["findings"]
+    assert len(findings) <= 2, findings
+    assert len(stub.calls) <= 2, "audit must respect max_rows cap"
+
+
+@pytest.mark.asyncio
 async def test_m2_audit_skips_when_agent_reviewer_unconfigured(api_env):
     """If the membrane has no reviewer attached, the audit cleanly
     returns an empty list rather than 500."""

@@ -467,6 +467,65 @@ class RetrievalService:
             if fid:
                 folder_to_candidate_ids.setdefault(fid, []).append(c.row.id)
 
+        # R4 — `cited_by_decision`: scan recent decisions for any whose
+        # rationale or custom_text references one of the candidate KB
+        # items. Each candidate then carries the decisions that cite it
+        # as inbound edges so the LLM (and audit) can see "this KB
+        # backs decisions D-1, D-3" without an extra tool call.
+        #
+        # Cheap heuristic for v1: scan rationale text for the kb id
+        # substring AND for the kb title (case-insensitive). The id
+        # match is exact and comes "for free" if the original
+        # crystallization stored the id in rationale; the title match
+        # catches the more common case where the rationale references
+        # the KB by its human title.
+        cited_by_by_kb_id: dict[str, list[dict[str, str]]] = {}
+        if candidates:
+            kb_id_by_title: dict[str, str] = {}
+            for c in candidates:
+                t = (c.row.title or "").strip().lower()
+                if t:
+                    kb_id_by_title[t] = c.row.id
+            kb_id_set = {c.row.id for c in candidates}
+            async with session_scope(self._sessionmaker) as session:
+                from workgraph_persistence import DecisionRepository
+
+                decisions = await DecisionRepository(session).list_for_project(
+                    project_id, limit=80
+                )
+            for d in decisions:
+                d_text = f"{(d.custom_text or '').lower()}\n{(d.rationale or '').lower()}"
+                if not d_text.strip():
+                    continue
+                # id-substring match (exact).
+                for kb_id in kb_id_set:
+                    if kb_id in d_text:
+                        bucket = cited_by_by_kb_id.setdefault(kb_id, [])
+                        if not any(e["target_id"] == d.id for e in bucket):
+                            bucket.append(
+                                {
+                                    "type": "cited_by_decision",
+                                    "target_id": d.id,
+                                    "target_kind": "decision",
+                                    "direction": "in",
+                                    "label": (d.custom_text or "")[:80] or None,
+                                }
+                            )
+                # title-substring match (case-insensitive).
+                for title, kb_id in kb_id_by_title.items():
+                    if title and title in d_text:
+                        bucket = cited_by_by_kb_id.setdefault(kb_id, [])
+                        if not any(e["target_id"] == d.id for e in bucket):
+                            bucket.append(
+                                {
+                                    "type": "cited_by_decision",
+                                    "target_id": d.id,
+                                    "target_kind": "decision",
+                                    "direction": "in",
+                                    "label": (d.custom_text or "")[:80] or None,
+                                }
+                            )
+
         out: list[dict[str, Any]] = []
         for c in candidates:
             row = c.row
@@ -519,6 +578,10 @@ class RetrievalService:
                         "label": row.source_kind,
                     }
                 )
+
+            # R4 — inbound decision-citation edges built above.
+            for cited_edge in cited_by_by_kb_id.get(row.id, [])[:4]:
+                edges.append(cited_edge)
 
             out.append(
                 {

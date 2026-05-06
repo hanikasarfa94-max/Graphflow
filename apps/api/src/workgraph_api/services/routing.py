@@ -96,6 +96,19 @@ class RoutingService:
         self._stream_service = stream_service
         self._signal_tally = signal_tally
         self._license_ctx = license_context_service
+        # R2 — grounding gate. Late-bound (avoids the
+        # RoutingService → SkillsService → ... ordering problem in
+        # main.py). When None, dispatch skips the gate and falls back
+        # to the pre-R2 trust-the-client behavior (used in test
+        # contexts that don't construct SkillsService).
+        self._skills_service = None
+
+    def attach_skills(self, skills_service) -> None:
+        """Late-bind the SkillsService instance so dispatch can re-run
+        routing_suggest server-side. Without this attach, the grounding
+        gate is silently skipped — call sites that need the invariant
+        must verify the attach happened (see main.py)."""
+        self._skills_service = skills_service
 
     # ---- dispatch --------------------------------------------------------
 
@@ -145,6 +158,102 @@ class RoutingService:
             target_display = (
                 target_user.display_name or target_user.username
             )
+
+        # R2 — grounding gate. Re-run routing_suggest server-side. The
+        # client (Edge agent or any caller) doesn't get to claim a
+        # routing target on its word alone; the BE checks the chosen
+        # target against the same scorer that produced the suggestion.
+        #
+        # Three outcomes:
+        #   * target appears in the suggested set → grounded; stash the
+        #     matching suggestion entry as the routing_basis.
+        #   * suggestions exist but target is NOT among them → reject
+        #     with `target_not_grounded`. The caller surfaces the
+        #     alternatives back to the proposer.
+        #   * suggestions list is empty (cold-start project, framing
+        #     too thin) → degrade gracefully with grounded=False so
+        #     the dispatch still succeeds. Documented in the
+        #     routing_basis envelope so audit can find ungrounded
+        #     dispatches later.
+        #
+        # When SkillsService isn't attached (test contexts), bypass —
+        # we don't want to force every routing test to seed a full
+        # graph just to dispatch one signal. Production wiring must
+        # attach for the invariant to hold.
+        routing_basis: dict[str, Any]
+        if self._skills_service is not None:
+            try:
+                suggestions = await self._skills_service.suggest_routing(
+                    project_id=project_id,
+                    query=framing,
+                    source_user_id=source_user_id,
+                    limit=5,
+                )
+            except Exception:
+                _log.exception(
+                    "routing.grounding.suggest_failed",
+                    extra={
+                        "project_id": project_id,
+                        "source_user_id": source_user_id,
+                        "target_user_id": target_user_id,
+                    },
+                )
+                suggestions = []
+
+            matched = next(
+                (s for s in suggestions if s.get("user_id") == target_user_id),
+                None,
+            )
+            if matched is not None:
+                routing_basis = {
+                    "grounded": True,
+                    "matched_suggestion": matched,
+                    # All scored alternatives travel along; lets the
+                    # FE / audit surface "why not these others?" later.
+                    "alternatives": [
+                        s for s in suggestions
+                        if s.get("user_id") != target_user_id
+                    ],
+                }
+            elif suggestions:
+                # Real signal exists but the chosen target isn't in it
+                # — the strict reject. The error payload returns the
+                # alternatives so the caller can re-prompt with one of
+                # them or escalate to clarification.
+                return {
+                    "ok": False,
+                    "error": "target_not_grounded",
+                    "alternatives": suggestions,
+                }
+            else:
+                routing_basis = {
+                    "grounded": False,
+                    "reason": "no_signal_in_project_state",
+                    "alternatives": [],
+                }
+        else:
+            routing_basis = {
+                "grounded": False,
+                "reason": "skills_service_unattached",
+                "alternatives": [],
+            }
+
+        # Inject routing_basis as a typed entry in background_json. The
+        # column shape is documented as a list of {source, snippet, ...}
+        # objects; a `source: "routing_basis"` entry is a typed
+        # extension that audit code can find without a schema migration.
+        background_with_basis = list(background) + [
+            {
+                "source": "routing_basis",
+                "snippet": (
+                    "Server-side routing_suggest verification."
+                    if routing_basis["grounded"]
+                    else f"Ungrounded ({routing_basis['reason']})."
+                ),
+                "routing_basis": routing_basis,
+            }
+        ]
+        background = background_with_basis
 
         # Ensure both personal streams exist (backfill may not have covered
         # this pair if a member joined after boot).

@@ -514,6 +514,13 @@ async def lifespan(app: FastAPI):
         kb_item_service=kb_item_service,
         retrieval_service=retrieval_service,
     )
+    # R2 — late-bind for the routing grounding gate. RoutingService
+    # is constructed earlier in this lifespan; SkillsService didn't
+    # exist yet then. Without this attach, dispatch() falls back to
+    # the pre-R2 trust-the-client behavior, which voids the
+    # north-star §"Routing suggestions are grounded in evidence"
+    # claim.
+    routing_service.attach_skills(skills_service)
     personal_service = PersonalStreamService(
         sessionmaker,
         stream_service,

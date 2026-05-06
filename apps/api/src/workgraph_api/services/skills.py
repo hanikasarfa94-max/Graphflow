@@ -674,6 +674,26 @@ class SkillsService:
     # short tokens are filtered. Embeddings replace this in v2 without
     # changing the wire format.
     # ------------------------------------------------------------------
+    async def suggest_routing(
+        self,
+        *,
+        project_id: str,
+        query: str = "",
+        source_user_id: str | None = None,
+        limit: int = 3,
+    ) -> list[dict[str, Any]]:
+        """Public wrapper around `_routing_suggest` for non-LLM
+        callers (R2 — RoutingService.dispatch grounding gate).
+
+        Same semantics, same return shape; exists so callers don't
+        reach into a private method by name."""
+        return await self._routing_suggest(
+            project_id=project_id,
+            query=query,
+            source_user_id=source_user_id,
+            limit=limit,
+        )
+
     async def _routing_suggest(
         self,
         *,
@@ -848,6 +868,74 @@ class SkillsService:
                 else:
                     reason = "baseline fit"
 
+                # R3 — bounded, citation-like evidence bundle. Lets
+                # callers (Edge prompt, Active Flows packet, dispatch
+                # audit) explain "why this person and not someone
+                # else" without a long prose blob.
+                #
+                # Each list capped tight (≤4 refs) so the agent's
+                # pretext stays compact.
+                matched_skills: list[str] = []
+                if user is not None:
+                    profile = dict(user.profile or {})
+                    for ability in profile.get("declared_abilities") or []:
+                        s = str(ability).lower()
+                        if any(tok in s for tok in tokens):
+                            matched_skills.append(str(ability))
+                            if len(matched_skills) >= 4:
+                                break
+                    for hint in profile.get("role_hints") or []:
+                        if len(matched_skills) >= 4:
+                            break
+                        s = str(hint).lower()
+                        if any(tok in s for tok in tokens):
+                            matched_skills.append(str(hint))
+
+                related_task_refs: list[dict[str, str]] = []
+                for tid in assigned_task_ids:
+                    title = task_title_by_id.get(tid)
+                    if not title:
+                        continue
+                    if any(tok in title for tok in tokens):
+                        related_task_refs.append(
+                            {"ref": f"task:{tid}", "title": title[:80]}
+                        )
+                        if len(related_task_refs) >= 4:
+                            break
+
+                related_decision_refs: list[dict[str, str]] = []
+                for d in recent_decisions:
+                    if d.resolver_id != m.user_id:
+                        continue
+                    d_text = (
+                        f"{(d.custom_text or '').lower()}\n"
+                        f"{(d.rationale or '').lower()}"
+                    )
+                    if any(tok in d_text for tok in tokens):
+                        headline = (d.custom_text or d.rationale or "")[:80]
+                        related_decision_refs.append(
+                            {"ref": f"decision:{d.id}", "headline": headline}
+                        )
+                        if len(related_decision_refs) >= 4:
+                            break
+
+                evidence = {
+                    "matched_skills": matched_skills,
+                    "related_task_refs": related_task_refs,
+                    "related_decision_refs": related_decision_refs,
+                    "activity_window_days": _ROUTING_ACTIVITY_WINDOW_DAYS,
+                    "activity": {
+                        "messages": msg_count,
+                        "decisions": dec_count,
+                    },
+                    # Differentiator: which signal dominated. Maps to
+                    # the same `primary` selector used for `reason`,
+                    # but exposed as a structured field so the FE / agent
+                    # can compare candidates ("X wins on graph, Y wins
+                    # on profile") without re-parsing the prose reason.
+                    "primary_signal": primary,
+                }
+
                 scored.append(
                     {
                         "user_id": m.user_id,
@@ -858,6 +946,7 @@ class SkillsService:
                         "activity_score": round(activity_score, 3),
                         "profile_score": round(profile_score, 3),
                         "reason": reason,
+                        "evidence": evidence,
                     }
                 )
 

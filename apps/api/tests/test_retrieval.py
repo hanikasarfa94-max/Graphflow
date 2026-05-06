@@ -1382,3 +1382,64 @@ async def test_retrieval_includes_approved_and_routed_ingest(api_env):
     assert routed_id in ids
     # Pending-review ingest never surfaces.
     assert all(c.row.status != "pending-review" for c in out)
+
+
+# R4 — retrieved KB carries cited_by_decision relation when data exists -
+
+
+@pytest.mark.asyncio
+async def test_r4_candidate_set_surfaces_cited_by_decision_edge(api_env):
+    """A KB item whose title appears in a recent decision's rationale
+    is returned with a `cited_by_decision` inbound edge — the
+    retrieved cell now carries its downstream-citation relation."""
+    from datetime import datetime, timezone
+
+    from workgraph_persistence import DecisionRow, session_scope
+
+    _, maker, *_ = api_env
+    pid = await _mk_project(maker)
+    owner = await _mk_user(maker, "cand_r4_owner")
+    await _add_member(maker, pid, owner)
+
+    hit_id = await _mk_user_kb(
+        maker,
+        pid,
+        owner_user_id=owner,
+        title="Postgres pool sizing canonical",
+        content_md="Cap pool at 200 per the auth service note.",
+    )
+
+    # Seed a decision whose rationale references the KB title.
+    decision_id = str(uuid.uuid4())
+    async with session_scope(maker) as session:
+        session.add(
+            DecisionRow(
+                id=decision_id,
+                project_id=pid,
+                resolver_id=owner,
+                custom_text="Adopt the Postgres pool sizing canonical doc",
+                rationale=(
+                    "Per Postgres pool sizing canonical (cap 200) we'll "
+                    "ship the new auth pool wiring this sprint."
+                ),
+                apply_actions=[],
+                apply_outcome="advisory",
+                created_at=datetime.now(timezone.utc),
+            )
+        )
+
+    svc = RetrievalService(maker)
+    out = await svc.candidate_set(
+        project_id=pid, query="postgres pool sizing", k=3
+    )
+    assert out, "expected at least one candidate"
+    candidate = next(c for c in out if c["id"] == hit_id)
+    edge_types = {e["type"] for e in candidate["edges"]}
+    assert "cited_by_decision" in edge_types, candidate["edges"]
+    cited_edges = [
+        e for e in candidate["edges"] if e["type"] == "cited_by_decision"
+    ]
+    assert any(e["target_id"] == decision_id for e in cited_edges)
+    # Direction is INBOUND — decision cites this KB.
+    assert all(e["direction"] == "in" for e in cited_edges)
+    assert all(e["target_kind"] == "decision" for e in cited_edges)

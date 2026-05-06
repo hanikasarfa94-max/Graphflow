@@ -670,3 +670,55 @@ async def test_routing_suggest_accepts_cjk_tokens(api_env):
     rows = out["result"]
     assert len(rows) == 1
     assert rows[0]["graph_score"] > 0
+
+
+# R3 — bounded, citation-like evidence bundle ----------------------------
+
+
+@pytest.mark.asyncio
+async def test_r3_routing_suggest_carries_evidence_bundle(api_env):
+    """Each scored row must include a structured `evidence` bundle:
+    matched_skills, related_task_refs, related_decision_refs, activity
+    counts, primary_signal. The Edge agent and the dispatch grounding
+    gate use this to explain "why this person and not another"."""
+    _, maker, *_ = api_env
+    pid = await _mk_project(maker)
+    uid = await _mk_user(
+        maker,
+        "sk_r3_target",
+        declared_abilities=["compliance"],
+    )
+    await _add_member(maker, pid, uid)
+    await _mk_decision(
+        maker,
+        pid,
+        resolver_id=uid,
+        rationale="compliance review crystallized before launch",
+    )
+
+    svc = SkillsService(maker)
+    out = await svc.execute(
+        project_id=pid,
+        skill_name="routing_suggest",
+        args={"query": "compliance review"},
+    )
+    assert out["ok"] is True
+    row = out["result"][0]
+    # Evidence bundle is present + structured.
+    assert "evidence" in row
+    ev = row["evidence"]
+    # Skills the candidate self-declared that matched the query.
+    assert "compliance" in ev["matched_skills"]
+    # Decisions they resolved that match the query are cited by ref.
+    assert any(
+        d["ref"].startswith("decision:") for d in ev["related_decision_refs"]
+    )
+    # Activity rollup is structured (not a prose blob).
+    assert "messages" in ev["activity"]
+    assert "decisions" in ev["activity"]
+    # Differentiator is one of the three primary signals.
+    assert ev["primary_signal"] in {"graph", "activity", "profile"}
+    # Bounded — no list larger than 4.
+    assert len(ev["matched_skills"]) <= 4
+    assert len(ev["related_task_refs"]) <= 4
+    assert len(ev["related_decision_refs"]) <= 4

@@ -96,7 +96,7 @@ async def test_edge_agent_system_user_exists(api_env):
 
     assert row is not None
     assert row.username == "edge"
-    assert row.display_name == "🤖 Edge"
+    assert row.display_name == "🧠 Edge"
 
 
 # ---------- personal stream backfill ------------------------------------
@@ -827,3 +827,194 @@ async def test_reply_posts_edge_reply_frame_in_source_stream(api_env):
         assert frame_msgs[0].linked_id == signal_id
         assert frame_msgs[0].author_id == EDGE_AGENT_SYSTEM_USER_ID
         assert "halve" in frame_msgs[0].body.lower() or "boss" in frame_msgs[0].body.lower()
+
+
+# ---------- R2 — backend route grounding gate ---------------------------
+
+
+@pytest.mark.asyncio
+async def test_r2_dispatch_persists_routing_basis_when_no_signal(api_env):
+    """Cold-start project (no graph state for routing_suggest to score
+    against) → dispatch still succeeds with grounded=False in
+    routing_basis. Audit-visible but not blocking."""
+    client, maker, *_ = api_env
+    await _register(client, "r2_a_maya")
+    project_id = await _intake(client, "R2-cold-start")
+    maya_id = await _me_id(client)
+    await _register(client, "r2_a_raj")
+    raj_id = await _me_id(client)
+    await _login(client, "r2_a_maya")
+    await _invite(client, project_id, "r2_a_raj")
+    await backfill_streams_from_projects(maker)
+
+    r = await client.post(
+        "/api/routing/dispatch",
+        json={
+            "target_user_id": raj_id,
+            "project_id": project_id,
+            "framing": "Should we keep the boss permadeath rule?",
+            "background": [],
+            "options": [
+                {"id": "y", "label": "Yes", "kind": "action", "weight": 0.5},
+                {"id": "n", "label": "No", "kind": "action", "weight": 0.5},
+            ],
+        },
+    )
+    assert r.status_code == 200, r.text
+    signal_id = r.json()["signal"]["id"]
+
+    # Inspect persisted background_json — the routing_basis envelope
+    # must be there, marked grounded=False because the cold-start
+    # project has no scoreable activity.
+    async with session_scope(maker) as session:
+        from workgraph_persistence import RoutedSignalRow
+
+        signal = (
+            await session.execute(
+                select(RoutedSignalRow).where(RoutedSignalRow.id == signal_id)
+            )
+        ).scalar_one()
+        bg = list(signal.background_json or [])
+    basis_entries = [e for e in bg if e.get("source") == "routing_basis"]
+    assert len(basis_entries) == 1, bg
+    basis = basis_entries[0]["routing_basis"]
+    assert basis["grounded"] is False
+    assert basis["reason"] in (
+        "no_signal_in_project_state",
+        "skills_service_unattached",
+    )
+
+
+@pytest.mark.asyncio
+async def test_r2_dispatch_blocks_target_not_in_suggestions(api_env):
+    """When routing_suggest returns a non-empty set that does NOT
+    include the chosen target_user_id, dispatch must reject with 422
+    target_not_grounded. The error payload returns the alternatives
+    so the FE can re-prompt with one of them."""
+    from workgraph_api.main import app
+
+    client, maker, *_ = api_env
+    await _register(client, "r2_b_maya")
+    project_id = await _intake(client, "R2-blocks")
+    maya_id = await _me_id(client)
+    await _register(client, "r2_b_raj")
+    raj_id = await _me_id(client)
+    await _register(client, "r2_b_aiko")
+    aiko_id = await _me_id(client)
+    await _login(client, "r2_b_maya")
+    await _invite(client, project_id, "r2_b_raj")
+    await _invite(client, project_id, "r2_b_aiko")
+    await backfill_streams_from_projects(maker)
+
+    # Stub SkillsService.suggest_routing to return Aiko but NOT Raj —
+    # simulating a real-graph case where the BE scorer would only
+    # surface the qualified target. The proposer (Maya) tries to
+    # route to Raj anyway; gate must reject.
+    saved_skills = app.state.routing_service._skills_service
+
+    class _StubSkills:
+        async def suggest_routing(self, **kwargs):
+            return [
+                {
+                    "user_id": aiko_id,
+                    "display_name": "Aiko",
+                    "role": "engineer",
+                    "score": 0.9,
+                    "graph_score": 0.9,
+                    "activity_score": 0.5,
+                    "profile_score": 0.7,
+                    "reason": "graph-adjacent work",
+                },
+            ]
+
+    app.state.routing_service._skills_service = _StubSkills()
+    try:
+        r = await client.post(
+            "/api/routing/dispatch",
+            json={
+                "target_user_id": raj_id,
+                "project_id": project_id,
+                "framing": "Boss tuning calibration ask.",
+                "background": [],
+                "options": [
+                    {"id": "y", "label": "Yes", "kind": "action", "weight": 0.5},
+                ],
+            },
+        )
+        assert r.status_code == 422, r.text
+        body = r.json()
+        assert body["ok"] is False
+        assert body["error"] == "target_not_grounded"
+        assert any(a.get("user_id") == aiko_id for a in body["alternatives"])
+    finally:
+        app.state.routing_service._skills_service = saved_skills
+
+
+@pytest.mark.asyncio
+async def test_r2_dispatch_grounds_when_target_in_suggestions(api_env):
+    """When the chosen target IS in the suggestion set, dispatch
+    succeeds and persists the matched suggestion as routing_basis."""
+    from workgraph_api.main import app
+
+    client, maker, *_ = api_env
+    await _register(client, "r2_c_maya")
+    project_id = await _intake(client, "R2-grounded")
+    maya_id = await _me_id(client)
+    await _register(client, "r2_c_raj")
+    raj_id = await _me_id(client)
+    await _login(client, "r2_c_maya")
+    await _invite(client, project_id, "r2_c_raj")
+    await backfill_streams_from_projects(maker)
+
+    saved_skills = app.state.routing_service._skills_service
+
+    class _StubSkills:
+        async def suggest_routing(self, **kwargs):
+            return [
+                {
+                    "user_id": raj_id,
+                    "display_name": "Raj",
+                    "role": "designer",
+                    "score": 0.85,
+                    "graph_score": 0.7,
+                    "activity_score": 0.6,
+                    "profile_score": 0.9,
+                    "reason": "self-declared expertise",
+                },
+            ]
+
+    app.state.routing_service._skills_service = _StubSkills()
+    try:
+        r = await client.post(
+            "/api/routing/dispatch",
+            json={
+                "target_user_id": raj_id,
+                "project_id": project_id,
+                "framing": "Boss permadeath calibration ask.",
+                "background": [],
+                "options": [
+                    {"id": "y", "label": "Yes", "kind": "action", "weight": 0.5},
+                ],
+            },
+        )
+        assert r.status_code == 200, r.text
+        signal_id = r.json()["signal"]["id"]
+
+        async with session_scope(maker) as session:
+            from workgraph_persistence import RoutedSignalRow
+
+            signal = (
+                await session.execute(
+                    select(RoutedSignalRow).where(
+                        RoutedSignalRow.id == signal_id
+                    )
+                )
+            ).scalar_one()
+            bg = list(signal.background_json or [])
+        basis_entries = [e for e in bg if e.get("source") == "routing_basis"]
+        assert len(basis_entries) == 1, bg
+        basis = basis_entries[0]["routing_basis"]
+        assert basis["grounded"] is True
+        assert basis["matched_suggestion"]["user_id"] == raj_id
+    finally:
+        app.state.routing_service._skills_service = saved_skills

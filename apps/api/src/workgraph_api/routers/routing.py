@@ -15,6 +15,7 @@ Routes (all require auth):
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 from workgraph_api.deps import require_user
@@ -89,6 +90,19 @@ async def post_dispatch(
     )
     if not result.get("ok"):
         err = result.get("error", "dispatch_failed")
+        # R2 — grounding rejection. 422 Unprocessable Entity, JSON body
+        # includes `alternatives` so the caller can re-prompt with a
+        # grounded target. We bypass HTTPException for this code so the
+        # alternatives don't get stringified by the global error handler.
+        if err == "target_not_grounded":
+            return JSONResponse(
+                status_code=422,
+                content={
+                    "ok": False,
+                    "error": "target_not_grounded",
+                    "alternatives": result.get("alternatives", []),
+                },
+            )
         status_map = {
             "cannot_route_to_self": 400,
             "target_not_found": 404,
