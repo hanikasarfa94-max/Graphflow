@@ -391,6 +391,47 @@ class OrgCapabilityService:
                     + decision_refs
                 )
 
+                # E3 — light epistemic interpretation. Each capability
+                # carries a tiny `epistemic` block so consumers reading
+                # /capabilities see the same kind/status vocabulary
+                # used elsewhere on the response shape.
+                #
+                # Mapping (per spec, conservative — does NOT overclaim):
+                #   declared  → status='proposed' (self-claim only)
+                #   role      → status='accepted_for_scope' for project
+                #   observed  → status='proposed' (no accepted-for-scope
+                #               evidence yet — observed != validated)
+                #   validated → status='validated'
+                #   trusted   → status='accepted_for_scope' for project
+                #               (high confidence, but NOT canonical —
+                #               canonical implies enterprise-wide truth
+                #               we cannot project)
+                if level == "declared":
+                    ep_status = "proposed"
+                    ep_accepted = None
+                elif level == "role":
+                    ep_status = "accepted_for_scope"
+                    ep_accepted = {
+                        "scope_type": "project",
+                        "scope_id": project_id,
+                        "accepted_by_user_ids": [],
+                        "accepted_at": None,
+                    }
+                elif level == "observed":
+                    ep_status = "proposed"
+                    ep_accepted = None
+                elif level == "validated":
+                    ep_status = "validated"
+                    ep_accepted = None
+                else:  # trusted
+                    ep_status = "accepted_for_scope"
+                    ep_accepted = {
+                        "scope_type": "project",
+                        "scope_id": project_id,
+                        "accepted_by_user_ids": [],
+                        "accepted_at": last_seen_at,
+                    }
+
                 capabilities.append(
                     {
                         "skill_key": skill_key,
@@ -400,6 +441,11 @@ class OrgCapabilityService:
                         "evidence_refs": evidence_refs,
                         "last_seen_at": last_seen_at,
                         "signals": signals,
+                        "epistemic": {
+                            "kind": "capability_claim",
+                            "status": ep_status,
+                            "accepted_scope": ep_accepted,
+                        },
                     }
                 )
 

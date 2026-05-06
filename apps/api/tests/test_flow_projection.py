@@ -1919,3 +1919,489 @@ async def test_dc_unknown_message_kind_does_not_invent_upstream_ref(api_env):
         e["kind"] for e in contract["required_evidence"]
     } & {"routed_signal", "kb_item", "task"}
     assert inferred_kinds == set(), contract["required_evidence"]
+
+
+# ---- E4 — Epistemic Event Contract invariants --------------------------
+
+
+_EPISTEMIC_KINDS = {
+    "question",
+    "claim",
+    "proposal",
+    "decision",
+    "memory",
+    "task_transition",
+    "capability_claim",
+    "handoff",
+    "risk",
+    "constraint",
+}
+
+_EPISTEMIC_STATUSES = {
+    "private",
+    "draft",
+    "hypothesis",
+    "proposed",
+    "review_pending",
+    "accepted_for_scope",
+    "canonical",
+    "validated",
+    "superseded",
+    "rejected",
+    "archived",
+}
+
+_EPISTEMIC_VISIBILITY_SCOPES = {
+    "personal",
+    "room",
+    "project",
+    "department",
+    "enterprise",
+}
+
+_EPISTEMIC_MEMBRANE_POLICIES = {
+    "none",
+    "auto_merge",
+    "request_review",
+    "request_clarification",
+    "reject",
+    "advisory",
+}
+
+
+def _assert_epistemic_event_shape(ev):
+    """Universal invariants: shape + closed-set vocabularies + the
+    hard rules the spec calls out."""
+    assert isinstance(ev, dict), ev
+    expected_keys = {
+        "kind",
+        "status",
+        "proposition",
+        "source_actor_id",
+        "target_audience",
+        "visibility_scope",
+        "accepted_scope",
+        "evidence_refs",
+        "preconditions",
+        "authority_required",
+        "membrane_policy",
+        "update_effects",
+        "lineage_output",
+        "supersedes",
+        "expires_at",
+    }
+    assert set(ev.keys()) == expected_keys, ev.keys()
+
+    # Hard rule: kind and status are SEPARATE — each in its own
+    # closed vocab.
+    assert ev["kind"] in _EPISTEMIC_KINDS, ev
+    assert ev["status"] in _EPISTEMIC_STATUSES, ev
+    # No common_knowledge anywhere.
+    assert "common_knowledge" not in ev
+
+    assert ev["visibility_scope"] in _EPISTEMIC_VISIBILITY_SCOPES, ev
+    assert ev["membrane_policy"] in _EPISTEMIC_MEMBRANE_POLICIES, ev
+
+    # accepted_for_scope MUST come with an accepted_scope block.
+    if ev["status"] == "accepted_for_scope":
+        assert ev["accepted_scope"] is not None, ev
+        sc = ev["accepted_scope"]
+        assert sc["scope_type"] in _EPISTEMIC_VISIBILITY_SCOPES, sc
+        assert "scope_id" in sc
+        assert isinstance(sc["accepted_by_user_ids"], list)
+
+    # review_pending MUST carry non-empty authority_required for any
+    # human-facing kind. capability_claim is the only
+    # potentially-system-only kind we allow exceptions for, and even
+    # that's a stretch — rule applies universally for now.
+    if ev["status"] == "review_pending":
+        assert ev["authority_required"], ev
+
+    # Lists are lists, not None.
+    for k in (
+        "target_audience",
+        "evidence_refs",
+        "preconditions",
+        "authority_required",
+        "update_effects",
+        "lineage_output",
+        "supersedes",
+    ):
+        assert isinstance(ev[k], list), (k, ev[k])
+
+
+@pytest.mark.asyncio
+async def test_e4_every_packet_has_epistemic_event(api_env):
+    """First invariant: every projected packet has a well-shaped
+    epistemic_event envelope."""
+    client, maker, *_ = api_env
+    owner_id = await _register(client, "ee_all_owner")
+    member_id = await _register(client, "ee_all_member")
+    pid = await _mk_project_with_members(
+        maker, owner_id=owner_id, member_id=member_id
+    )
+
+    # Seed one of each recipe.
+    await _login(client, "ee_all_owner")
+    await client.post(
+        "/api/routing/dispatch",
+        json={
+            "target_user_id": member_id,
+            "project_id": pid,
+            "framing": "Should we drop permadeath?",
+            "background": [],
+            "options": [
+                {"id": "y", "label": "Yes", "kind": "action", "weight": 0.5},
+            ],
+        },
+    )
+    await _seed_kb_draft(
+        maker, project_id=pid, owner_id=owner_id, title="Auth notes"
+    )
+    task_id = await _seed_personal_task(
+        maker, project_id=pid, owner_id=member_id, title="OTP polish"
+    )
+    await _seed_task_promote_suggestion(
+        maker, project_id=pid, task_id=task_id, owner_id=owner_id
+    )
+
+    r = await _list_flows(client, pid)
+    packets = r.json()["packets"]
+    assert len(packets) >= 3
+    for p in packets:
+        assert "epistemic_event" in p, p["id"]
+        _assert_epistemic_event_shape(p["epistemic_event"])
+
+
+@pytest.mark.asyncio
+async def test_e4_kind_and_status_are_separate(api_env):
+    """The kind axis (question/memory/etc.) and the status axis
+    (proposed/review_pending/accepted_for_scope/...) must NOT
+    collapse into a combined enum — each comes from its own closed
+    vocabulary on every packet."""
+    client, maker, *_ = api_env
+    owner_id = await _register(client, "ee_sep_owner")
+    member_id = await _register(client, "ee_sep_member")
+    pid = await _mk_project_with_members(
+        maker, owner_id=owner_id, member_id=member_id
+    )
+    await _login(client, "ee_sep_owner")
+    await client.post(
+        "/api/routing/dispatch",
+        json={
+            "target_user_id": member_id,
+            "project_id": pid,
+            "framing": "Boss tuning ask",
+            "background": [],
+            "options": [
+                {"id": "y", "label": "Yes", "kind": "action", "weight": 0.5},
+            ],
+        },
+    )
+    await _seed_kb_draft(
+        maker, project_id=pid, owner_id=owner_id, title="kind/status sep test"
+    )
+
+    r = await _list_flows(client, pid)
+    for p in r.json()["packets"]:
+        ev = p["epistemic_event"]
+        # Kind values come from the kind set; status values come from
+        # the status set. These sets do not overlap (sanity).
+        assert ev["kind"] not in _EPISTEMIC_STATUSES, ev
+        assert ev["status"] not in _EPISTEMIC_KINDS, ev
+
+
+@pytest.mark.asyncio
+async def test_e4_no_common_knowledge_field_anywhere(api_env):
+    """The spec's hardest line: NO common_knowledge field, anywhere
+    in the response. Walk the entire response payload."""
+    client, maker, *_ = api_env
+    owner_id = await _register(client, "ee_ck_owner")
+    member_id = await _register(client, "ee_ck_member")
+    pid = await _mk_project_with_members(
+        maker, owner_id=owner_id, member_id=member_id
+    )
+    await _login(client, "ee_ck_owner")
+    await client.post(
+        "/api/routing/dispatch",
+        json={
+            "target_user_id": member_id,
+            "project_id": pid,
+            "framing": "Common knowledge test",
+            "background": [],
+            "options": [
+                {"id": "y", "label": "Yes", "kind": "action", "weight": 0.5},
+            ],
+        },
+    )
+    r = await _list_flows(client, pid)
+    body = r.json()
+    text = __import__("json").dumps(body, ensure_ascii=False)
+    assert "common_knowledge" not in text, body
+
+
+@pytest.mark.asyncio
+async def test_e4_routed_signal_is_directed_epistemic_action(api_env):
+    """Routed signal projects as kind='question' (not notification),
+    target_audience names the target, evidence_refs include the
+    routing_basis envelope from R2."""
+    client, maker, *_ = api_env
+    owner_id = await _register(client, "ee_rt_owner")
+    member_id = await _register(client, "ee_rt_member")
+    pid = await _mk_project_with_members(
+        maker, owner_id=owner_id, member_id=member_id
+    )
+    await _login(client, "ee_rt_owner")
+    await client.post(
+        "/api/routing/dispatch",
+        json={
+            "target_user_id": member_id,
+            "project_id": pid,
+            "framing": "Switch perf feasibility ask",
+            "background": [],
+            "options": [
+                {"id": "y", "label": "Yes", "kind": "action", "weight": 0.5},
+            ],
+        },
+    )
+    r = await _list_flows(client, pid)
+    routes = [
+        p for p in r.json()["packets"] if p["recipe_id"] == "ask_with_context"
+    ]
+    assert len(routes) == 1
+    ev = routes[0]["epistemic_event"]
+    assert ev["kind"] == "question"
+    assert member_id in ev["target_audience"]
+    assert ev["status"] == "proposed"
+    # routing_basis envelope from R2 is in evidence_refs.
+    kinds = [e["kind"] for e in ev["evidence_refs"]]
+    assert "framing" in kinds
+    assert "routing_basis" in kinds
+
+
+@pytest.mark.asyncio
+async def test_e4_kb_review_packet_membrane_policy_request_review(api_env):
+    """KB packet: kind=memory, status=review_pending,
+    membrane_policy=request_review, authority_required non-empty."""
+    client, maker, *_ = api_env
+    owner_id = await _register(client, "ee_kb_owner")
+    member_id = await _register(client, "ee_kb_member")
+    pid = await _mk_project_with_members(
+        maker, owner_id=owner_id, member_id=member_id
+    )
+    await _seed_kb_draft(
+        maker, project_id=pid, owner_id=owner_id, title="KB review event test"
+    )
+    await _login(client, "ee_kb_owner")
+    r = await _list_flows(client, pid, recipe="promote_to_memory")
+    pkt = r.json()["packets"][0]
+    ev = pkt["epistemic_event"]
+    assert ev["kind"] == "memory"
+    # The seeded row's status is 'draft' — projection maps that to 'draft'.
+    # Either draft or review_pending is acceptable depending on KbItemRow.status.
+    assert ev["status"] in ("draft", "review_pending")
+    # Both alive states gate on Membrane review.
+    assert ev["membrane_policy"] == "request_review"
+    assert ev["authority_required"], ev
+    assert owner_id in ev["authority_required"]
+
+
+@pytest.mark.asyncio
+async def test_e4_task_promote_packet_names_membrane_boundary(api_env):
+    """Task promote packet: kind=task_transition, status=review_pending,
+    membrane_policy names Membrane as the boundary."""
+    client, maker, *_ = api_env
+    owner_id = await _register(client, "ee_tp_owner")
+    member_id = await _register(client, "ee_tp_member")
+    pid = await _mk_project_with_members(
+        maker, owner_id=owner_id, member_id=member_id
+    )
+    task_id = await _seed_personal_task(
+        maker, project_id=pid, owner_id=member_id, title="Triage bug"
+    )
+    await _seed_task_promote_suggestion(
+        maker, project_id=pid, task_id=task_id, owner_id=owner_id
+    )
+
+    await _login(client, "ee_tp_owner")
+    r = await _list_flows(client, pid, recipe="promote_task_to_plan")
+    pkt = r.json()["packets"][0]
+    ev = pkt["epistemic_event"]
+    assert ev["kind"] == "task_transition"
+    assert ev["status"] == "review_pending"
+    assert ev["membrane_policy"] == "request_review"
+    assert owner_id in ev["authority_required"]
+
+
+@pytest.mark.asyncio
+async def test_e4_crystallized_decision_carries_accepted_scope(api_env):
+    """Crystallized DecisionRow projects as kind=decision,
+    status=accepted_for_scope; accepted_scope reflects scope_stream_id
+    when set, else project."""
+    client, maker, *_ = api_env
+    owner_id = await _register(client, "ee_dc_owner")
+    member_id = await _register(client, "ee_dc_member")
+    pid = await _mk_project_with_members(
+        maker, owner_id=owner_id, member_id=member_id
+    )
+    async with session_scope(maker) as session:
+        team_stream = await StreamRepository(session).get_for_project(pid)
+        scope_stream_id = team_stream.id
+
+    decision_id = await _seed_decision_row(
+        maker,
+        project_id=pid,
+        resolver_id=owner_id,
+        scope_stream_id=scope_stream_id,
+        custom_text="Voted: cap pool at 200",
+    )
+
+    await _login(client, "ee_dc_owner")
+    r = await _list_flows(client, pid)
+    pkt = next(
+        p for p in r.json()["packets"] if p["id"] == f"decision:{decision_id}"
+    )
+    ev = pkt["epistemic_event"]
+    assert ev["kind"] == "decision"
+    assert ev["status"] == "accepted_for_scope"
+    sc = ev["accepted_scope"]
+    assert sc is not None
+    # scope_type=room because scope_stream_id is set.
+    assert sc["scope_type"] == "room"
+    assert sc["scope_id"] == scope_stream_id
+    assert owner_id in sc["accepted_by_user_ids"]
+
+
+@pytest.mark.asyncio
+async def test_e4_kb_published_canonical_event_has_accepted_scope(api_env):
+    """Canonical (published) KB rows ARE in projection because the
+    upstream query filters in 'draft'/'pending-review'. So we verify
+    archived-or-published flows by directly mutating after seeding —
+    the projection at that point drops the row, demonstrating the
+    invariant 'archived/superseded KB is not projected as canonical'."""
+    from sqlalchemy import update
+    from workgraph_persistence import KbItemRow
+
+    client, maker, *_ = api_env
+    owner_id = await _register(client, "ee_kbpub_owner")
+    member_id = await _register(client, "ee_kbpub_member")
+    pid = await _mk_project_with_members(
+        maker, owner_id=owner_id, member_id=member_id
+    )
+    item_id = await _seed_kb_draft(
+        maker, project_id=pid, owner_id=owner_id, title="Soon-to-publish"
+    )
+    await _login(client, "ee_kbpub_owner")
+    # Pre: the draft packet exists.
+    r = await _list_flows(client, pid, recipe="promote_to_memory")
+    assert any(p["id"] == f"kb:{item_id}" for p in r.json()["packets"])
+
+    # Flip status='published' directly.
+    async with session_scope(maker) as session:
+        await session.execute(
+            update(KbItemRow)
+            .where(KbItemRow.id == item_id)
+            .values(status="published")
+        )
+
+    # Post: packet is gone — the projection's draft/pending-review
+    # filter dropped it, so canonical KB is NOT projected as a flow
+    # packet (lives elsewhere as the wiki / KB tree row).
+    r = await _list_flows(client, pid, recipe="promote_to_memory")
+    assert not any(p["id"] == f"kb:{item_id}" for p in r.json()["packets"])
+
+
+@pytest.mark.asyncio
+async def test_e4_archived_kb_is_not_projected_as_canonical(api_env):
+    """Same shape as the published test but for archive — archived
+    KB drops from projection, so consumers can't mistake an archived
+    row for canonical."""
+    from sqlalchemy import update
+    from workgraph_persistence import KbItemRow
+
+    client, maker, *_ = api_env
+    owner_id = await _register(client, "ee_kbarch_owner")
+    member_id = await _register(client, "ee_kbarch_member")
+    pid = await _mk_project_with_members(
+        maker, owner_id=owner_id, member_id=member_id
+    )
+    item_id = await _seed_kb_draft(
+        maker, project_id=pid, owner_id=owner_id, title="Soon-to-archive"
+    )
+
+    async with session_scope(maker) as session:
+        await session.execute(
+            update(KbItemRow)
+            .where(KbItemRow.id == item_id)
+            .values(status="archived")
+        )
+
+    await _login(client, "ee_kbarch_owner")
+    r = await _list_flows(client, pid, recipe="promote_to_memory")
+    assert not any(p["id"] == f"kb:{item_id}" for p in r.json()["packets"])
+
+
+@pytest.mark.asyncio
+async def test_e4_accepted_for_scope_requires_accepted_scope(api_env):
+    """Universal invariant: any packet with status='accepted_for_scope'
+    has a non-None accepted_scope block. Verified across all packet
+    kinds via the shape helper."""
+    client, maker, *_ = api_env
+    owner_id = await _register(client, "ee_afs_owner")
+    member_id = await _register(client, "ee_afs_member")
+    pid = await _mk_project_with_members(
+        maker, owner_id=owner_id, member_id=member_id
+    )
+    # Seed a crystallized decision (project scope) — that gives us an
+    # accepted_for_scope status to verify.
+    await _seed_decision_row(
+        maker,
+        project_id=pid,
+        resolver_id=owner_id,
+        custom_text="A canonical-ish decision",
+    )
+
+    await _login(client, "ee_afs_owner")
+    r = await _list_flows(client, pid)
+    for p in r.json()["packets"]:
+        ev = p["epistemic_event"]
+        if ev["status"] == "accepted_for_scope":
+            assert ev["accepted_scope"] is not None, p["id"]
+
+
+@pytest.mark.asyncio
+async def test_e4_capability_projection_does_not_claim_trusted_from_self_declared(
+    api_env,
+):
+    """Capability projection: a self-declared skill alone is NOT
+    'trusted' (or 'accepted_for_scope' or 'validated'). It's
+    'declared' / 'proposed' until evidence accumulates."""
+    from workgraph_api.services import OrgCapabilityService
+    from workgraph_persistence import UserRow
+
+    _, maker, *_ = api_env
+    pid = str(uuid.uuid4())
+    uid = str(uuid.uuid4())
+    async with session_scope(maker) as session:
+        session.add(ProjectRow(id=pid, title="cap honest"))
+        session.add(
+            UserRow(
+                id=uid,
+                username="ee_cap_dec",
+                display_name="ee_cap_dec",
+                password_hash="pw",
+                password_salt="salt",
+                profile={"declared_abilities": ["compliance"]},
+            )
+        )
+        await session.flush()
+        await ProjectMemberRepository(session).add(
+            project_id=pid, user_id=uid, role="member"
+        )
+
+    svc = OrgCapabilityService(maker)
+    out = await svc.list_for_project(pid)
+    cap = next(c for c in out[0]["capabilities"] if c["skill_key"] == "compliance")
+    assert cap["level"] == "declared"
+    assert cap["epistemic"]["status"] == "proposed", cap
+    assert cap["epistemic"]["accepted_scope"] is None

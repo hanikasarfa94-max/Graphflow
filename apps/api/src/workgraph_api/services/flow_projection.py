@@ -132,6 +132,148 @@ def _transition_contract(
     }
 
 
+# Epistemic Event Contract types (E1) — see
+# `docs/north-star-graph-system.md §Modal Logic / Public Announcement
+# Logic / Dynamic Epistemic Logic Inspiration`. The contract is a
+# read-only envelope per packet that names the epistemic state
+# transition the packet governs.
+#
+# Hard rules enforced here (and in tests):
+#   * `kind` and `status` are SEPARATE fields. `kind` is the type of
+#     epistemic content (a question / claim / memory / decision …);
+#     `status` is the lifecycle state (proposed / review_pending /
+#     accepted_for_scope / canonical …). Conflating them was the
+#     pre-E1 mistake we explicitly avoid.
+#   * No `common_knowledge` boolean. PAL / DEL define common
+#     knowledge as the infinite intersection "everyone knows that
+#     everyone knows that…"; we cannot verify it and refuse to ship
+#     it. The shipped primitive is `accepted_for_scope`.
+#   * `accepted_for_scope` status MUST come with an `accepted_scope`
+#     block naming which scope and which users accepted.
+#   * `review_pending` status MUST carry non-empty
+#     `authority_required` unless the packet is system-only — known
+#     gates with unknown actors is a worse failure mode than no
+#     contract at all.
+EpistemicKind = Literal[
+    "question",
+    "claim",
+    "proposal",
+    "decision",
+    "memory",
+    "task_transition",
+    "capability_claim",
+    "handoff",
+    "risk",
+    "constraint",
+]
+
+EpistemicStatus = Literal[
+    "private",
+    "draft",
+    "hypothesis",
+    "proposed",
+    "review_pending",
+    "accepted_for_scope",
+    "canonical",
+    "validated",
+    "superseded",
+    "rejected",
+    "archived",
+]
+
+EpistemicVisibilityScope = Literal[
+    "personal",
+    "room",
+    "project",
+    "department",
+    "enterprise",
+]
+
+EpistemicMembranePolicy = Literal[
+    "none",
+    "auto_merge",
+    "request_review",
+    "request_clarification",
+    "reject",
+    "advisory",
+]
+
+
+def _accepted_scope(
+    *,
+    scope_type: EpistemicVisibilityScope,
+    scope_id: str | None,
+    accepted_by_user_ids: list[str] | None = None,
+    accepted_at: str | None = None,
+) -> dict[str, Any]:
+    """Factory for the `accepted_scope` sub-envelope. Required
+    whenever `epistemic_event.status == 'accepted_for_scope'`."""
+    return {
+        "scope_type": scope_type,
+        "scope_id": scope_id,
+        "accepted_by_user_ids": list(accepted_by_user_ids or []),
+        "accepted_at": accepted_at,
+    }
+
+
+def _epistemic_event(
+    *,
+    kind: EpistemicKind,
+    status: EpistemicStatus,
+    proposition: str,
+    source_actor_id: str | None,
+    target_audience: list[str] | None = None,
+    visibility_scope: EpistemicVisibilityScope = "project",
+    accepted_scope: dict[str, Any] | None = None,
+    evidence_refs: list[dict[str, Any]] | None = None,
+    preconditions: list[str] | None = None,
+    authority_required: list[str] | None = None,
+    membrane_policy: EpistemicMembranePolicy = "none",
+    update_effects: list[str] | None = None,
+    lineage_output: list[dict[str, Any]] | None = None,
+    supersedes: list[dict[str, Any]] | None = None,
+    expires_at: str | None = None,
+) -> dict[str, Any]:
+    """Build an EpistemicEvent envelope for a flow packet.
+
+    Centralized so every recipe's packet builder produces the same
+    shape and so the test suite can assert on a single key structure.
+    The hard rules from the spec are enforced INSIDE this factory:
+
+      * `accepted_for_scope` status requires `accepted_scope` to be
+        non-None — the factory raises ValueError otherwise.
+      * No `common_knowledge` field is added. The factory simply
+        does not accept that name; tests confirm the response shape
+        carries no such key.
+
+    Empty list defaults are [] not None — the FE / audit code reads
+    absence as "not yet known", which differs from "no evidence
+    required".
+    """
+    if status == "accepted_for_scope" and accepted_scope is None:
+        raise ValueError(
+            "epistemic_event(status='accepted_for_scope') requires "
+            "an accepted_scope block; passing None breaks the contract"
+        )
+    return {
+        "kind": kind,
+        "status": status,
+        "proposition": proposition,
+        "source_actor_id": source_actor_id,
+        "target_audience": list(target_audience or []),
+        "visibility_scope": visibility_scope,
+        "accepted_scope": accepted_scope,
+        "evidence_refs": list(evidence_refs or []),
+        "preconditions": list(preconditions or []),
+        "authority_required": list(authority_required or []),
+        "membrane_policy": membrane_policy,
+        "update_effects": list(update_effects or []),
+        "lineage_output": list(lineage_output or []),
+        "supersedes": list(supersedes or []),
+        "expires_at": expires_at,
+    }
+
+
 class FlowProjectionService:
     """Read-only projection. One method per source-row family."""
 
@@ -827,6 +969,56 @@ def _route_packet_from_row(row: RoutedSignalRow) -> dict[str, Any]:
         lineage_output=contract_lineage,
     )
 
+    # E2 — Epistemic Event for routed signal: a question whose
+    # status moves through proposed → review_pending → accepted_for_
+    # scope. `update_effects` enumerates the lifecycle outcomes;
+    # the membrane_policy is "none" because routes don't go through
+    # Membrane (RoutingService is the gate, not Membrane).
+    if is_pending:
+        ep_status: EpistemicStatus = "proposed"
+        ep_accepted_scope = None
+    elif is_replied:
+        ep_status = "review_pending"
+        ep_accepted_scope = None
+    else:
+        ep_status = "accepted_for_scope"
+        ep_accepted_scope = _accepted_scope(
+            # Routes are scoped to the source/target pair within the
+            # project; the named scope is the project (we don't track
+            # a smaller "DM scope" in v1).
+            scope_type="project",
+            scope_id=row.project_id,
+            accepted_by_user_ids=[row.source_user_id],
+            accepted_at=(
+                _iso(source_action_notes[-1].get("at"))
+                if isinstance(source_action_notes, list)
+                and source_action_notes
+                else None
+            ),
+        )
+    epistemic_event = _epistemic_event(
+        kind="question",
+        status=ep_status,
+        proposition=(row.framing or "")[:200],
+        source_actor_id=row.source_user_id,
+        target_audience=[row.target_user_id],
+        visibility_scope="project",
+        accepted_scope=ep_accepted_scope,
+        evidence_refs=contract_required_evidence,
+        preconditions=[],
+        authority_required=list(current_target),
+        membrane_policy="none",
+        update_effects=[
+            "expert_reply_received",
+            "reply_accepted",
+            "reply_countered",
+            "reply_escalated",
+        ],
+        lineage_output=contract_lineage,
+        supersedes=[],
+        expires_at=None,
+    )
+
     return {
         "id": f"route:{row.id}",
         "project_id": row.project_id or "",
@@ -845,6 +1037,7 @@ def _route_packet_from_row(row: RoutedSignalRow) -> dict[str, Any]:
         "evidence": evidence,
         "routed_signal_id": row.id,
         "transition_contract": transition_contract,
+        "epistemic_event": epistemic_event,
         "timeline": timeline,
         "next_actions": next_actions,
         "created_at": _iso(row.created_at),
@@ -981,6 +1174,68 @@ def _kb_review_packet_from_row(
                 else [_flow_ref("kb_item_published", row.id, label=row.title or "")]
             ),
         ),
+        # E2 — KB promote as memory transition. status names the
+        # KbItemRow.status directly: draft / review_pending / canonical
+        # / archived. accepted_scope is filled when canonical (project
+        # scope; the team is the audience). membrane_policy reflects
+        # the actual gate (request_review while pending, auto_merge
+        # post-publish).
+        "epistemic_event": _epistemic_event(
+            kind="memory",
+            status=(
+                "draft"
+                if row.status == "draft"
+                else "review_pending"
+                if row.status == "pending-review"
+                else "archived"
+                if row.status == "archived"
+                else "canonical"
+            ),
+            proposition=title,
+            source_actor_id=row.ingested_by_user_id or row.owner_user_id,
+            target_audience=list(owner_ids),
+            visibility_scope="project",
+            accepted_scope=(
+                None
+                if stage_alive or row.status == "archived"
+                else _accepted_scope(
+                    scope_type="project",
+                    scope_id=row.project_id,
+                    accepted_by_user_ids=list(owner_ids),
+                    accepted_at=_iso(row.created_at),
+                )
+            ),
+            evidence_refs=[
+                _flow_ref("kb_item", row.id, label=row.title or ""),
+                *[
+                    _flow_ref(
+                        "membrane_suggestion", s.id, label="KB review"
+                    )
+                    for s in suggestions
+                ],
+            ],
+            preconditions=[],
+            authority_required=(
+                list(owner_ids) if stage_alive else []
+            ),
+            membrane_policy=(
+                "request_review" if stage_alive else "auto_merge"
+            ),
+            update_effects=["canonical_world_memory"],
+            lineage_output=(
+                []
+                if stage_alive
+                else [
+                    _flow_ref(
+                        "kb_item_published",
+                        row.id,
+                        label=row.title or "",
+                    )
+                ]
+            ),
+            supersedes=[],
+            expires_at=None,
+        ),
         "timeline": timeline,
         "next_actions": next_actions,
         "created_at": _iso(row.created_at),
@@ -1104,6 +1359,31 @@ def _task_promote_packet_from_rows(
         lineage_output=[],
     )
 
+    # E2 — task promote as task_transition. The packet is alive only
+    # while the IMSuggestion is pending; once accepted, the task
+    # flips scope='plan' and the packet drops from projection. So
+    # the only status we see here is review_pending.
+    epistemic_event = _epistemic_event(
+        kind="task_transition",
+        status="review_pending",
+        proposition=title,
+        source_actor_id=task.owner_user_id,
+        target_audience=list(owner_ids),
+        visibility_scope="project",
+        accepted_scope=None,
+        evidence_refs=contract_required_evidence,
+        preconditions=[],
+        authority_required=list(owner_ids),
+        membrane_policy="request_review",
+        update_effects=[
+            "plan_task_candidate",
+            "plan_task_canonical",
+        ],
+        lineage_output=[],
+        supersedes=[],
+        expires_at=None,
+    )
+
     return {
         # `task_promote:` namespace mirrors `kb:` / `handoff:` — synthetic
         # ids per spec §11. Suggestion id is the stable source key
@@ -1128,6 +1408,7 @@ def _task_promote_packet_from_rows(
         "im_suggestion_id": suggestion.id,
         "membrane_candidate": membrane_candidate,
         "transition_contract": transition_contract,
+        "epistemic_event": epistemic_event,
         "timeline": timeline,
         "next_actions": next_actions,
         "created_at": _iso(suggestion.created_at),
@@ -1277,6 +1558,32 @@ def _decision_pending_packet_from_suggestion(
         lineage_output=[],
     )
 
+    # E2 — pending decision crystallize as a `decision` epistemic
+    # event. Status = review_pending; M4 runs but advisory-only, so
+    # membrane_policy = "advisory". target_audience = scope-stream
+    # members + owners (the authority pool).
+    epistemic_event = _epistemic_event(
+        kind="decision",
+        status="review_pending",
+        proposition=summary,
+        source_actor_id=None,
+        target_audience=list(authority_user_ids),
+        # Visibility scope is the scope-stream when set; we don't
+        # have stream type at hand here, so use "project" as the
+        # honest default — the scope_stream_id ref is in
+        # required_evidence so consumers can resolve.
+        visibility_scope="project",
+        accepted_scope=None,
+        evidence_refs=required_evidence,
+        preconditions=[],
+        authority_required=list(authority_user_ids),
+        membrane_policy="advisory",
+        update_effects=["canonical_decision"],
+        lineage_output=[],
+        supersedes=[],
+        expires_at=None,
+    )
+
     return {
         "id": f"decision_pending:{suggestion.id}",
         "project_id": suggestion.project_id,
@@ -1302,6 +1609,7 @@ def _decision_pending_packet_from_suggestion(
         "im_suggestion_id": suggestion.id,
         "decision_id": None,
         "transition_contract": transition_contract,
+        "epistemic_event": epistemic_event,
         "timeline": timeline,
         "next_actions": next_actions,
         "created_at": _iso(suggestion.created_at),
@@ -1426,6 +1734,46 @@ def _decision_crystallized_packet_from_row(
         lineage_output=lineage_output,
     )
 
+    # E2 — crystallized decision as a `decision` epistemic event,
+    # status=accepted_for_scope. The `accepted_scope` block names
+    # the smallest-relevant-vote scope (the scope_stream_id when
+    # set) or falls back to project. Visibility scope mirrors:
+    # `room` when scope_stream_id is set, else `project`.
+    ep_visibility: EpistemicVisibilityScope = (
+        "room" if row.scope_stream_id else "project"
+    )
+    ep_accepted_scope = _accepted_scope(
+        scope_type=ep_visibility,
+        scope_id=row.scope_stream_id or row.project_id,
+        accepted_by_user_ids=[row.resolver_id] if row.resolver_id else [],
+        accepted_at=_iso(row.applied_at) or _iso(row.created_at),
+    )
+    epistemic_event = _epistemic_event(
+        kind="decision",
+        # Use accepted_for_scope rather than canonical: the decision is
+        # accepted at the named scope. canonical implies project-wide
+        # acceptance regardless of scope, which a room-scoped decision
+        # explicitly is NOT.
+        status="accepted_for_scope",
+        proposition=headline[:200],
+        source_actor_id=row.resolver_id,
+        target_audience=[],
+        visibility_scope=ep_visibility,
+        accepted_scope=ep_accepted_scope,
+        evidence_refs=required_evidence,
+        preconditions=[],
+        authority_required=[],
+        membrane_policy="advisory",
+        update_effects=["canonical_decision"],
+        lineage_output=lineage_output,
+        # supersedes ref if present in proposal metadata. We don't
+        # have that on DecisionRow directly; the suggestion was the
+        # carrier and it's already gone (status='accepted'). Skip
+        # for v1 — note in the report.
+        supersedes=[],
+        expires_at=None,
+    )
+
     return {
         "id": f"decision:{row.id}",
         "project_id": row.project_id,
@@ -1449,6 +1797,7 @@ def _decision_crystallized_packet_from_row(
         "im_suggestion_id": row.source_suggestion_id,
         "decision_id": row.id,
         "transition_contract": transition_contract,
+        "epistemic_event": epistemic_event,
         "timeline": timeline,
         "next_actions": [],
         "created_at": _iso(row.created_at),
@@ -1555,6 +1904,56 @@ def _handoff_packet_from_row(
                     )
                 ]
             ),
+        ),
+        # E2 — handoff as a `handoff` epistemic event. status moves
+        # draft → review_pending → accepted_for_scope. accepted_scope
+        # is project-wide (the project plan absorbs the routine).
+        # membrane_policy = "none" because handoff doesn't go through
+        # Membrane; HandoffService.finalize is its own owner gate.
+        "epistemic_event": _epistemic_event(
+            kind="handoff",
+            status=(
+                "review_pending" if stage_alive else "accepted_for_scope"
+            ),
+            proposition=title,
+            source_actor_id=row.from_user_id,
+            target_audience=[row.to_user_id]
+            if row.to_user_id
+            else [],
+            visibility_scope="project",
+            accepted_scope=(
+                None
+                if stage_alive
+                else _accepted_scope(
+                    scope_type="project",
+                    scope_id=row.project_id,
+                    accepted_by_user_ids=list(owner_ids),
+                    accepted_at=_iso(row.finalized_at),
+                )
+            ),
+            evidence_refs=[
+                _flow_ref("handoff", row.id, label=title),
+            ],
+            preconditions=[],
+            authority_required=list(owner_ids) if stage_alive else [],
+            # No Membrane gate on handoff — it's owner_acceptance, which
+            # the transition_contract already names. Honest "none" here.
+            membrane_policy="none",
+            update_effects=["handoff_finalized"],
+            lineage_output=(
+                []
+                if stage_alive
+                else [
+                    _flow_ref(
+                        "handoff_finalized",
+                        row.id,
+                        label="finalized",
+                        at=_iso(row.finalized_at),
+                    )
+                ]
+            ),
+            supersedes=[],
+            expires_at=None,
         ),
         "timeline": timeline,
         "next_actions": next_actions,

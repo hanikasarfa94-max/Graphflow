@@ -46,6 +46,7 @@ _Bucket = Literal[
 _Recipe = Literal[
     "ask_with_context",
     "promote_to_memory",
+    "promote_task_to_plan",
     "crystallize_decision",
     "review",
     "handoff",

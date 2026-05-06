@@ -39,6 +39,116 @@ passes the right boundary,
 and leaves traceable graph state behind.
 ```
 
+## Epistemic Logic Lens
+
+GraphFlow can borrow from modal logic, public announcement logic, and
+dynamic epistemic logic, not as academic decoration, but as a practical
+way to define what "information flow" means inside a team.
+
+In modal logic, the important question is not only whether a proposition
+`phi` is true. It is also where, for whom, under which assumptions, and
+in which possible world `phi` holds. In an organization, possible worlds
+are the competing states the team may be living in:
+
+- A thinks a launch scope is already decided.
+- B thinks it is still only a proposal.
+- C has started execution from the old version.
+- D never saw that the old version was superseded.
+
+Most coordination failure is not caused by a lack of information. It is
+caused by members occupying different possible organization-worlds. The
+product problem is therefore epistemic: who knows what, who should know
+it, who has confirmed it, who may act on it, and what has become accepted
+for a given scope.
+
+In epistemic modal logic, `K_i phi` means "actor `i` knows `phi`." For
+GraphFlow this implies that a row cannot be meaningful only as text. The
+system must also track the proposition's governance status: private
+belief, draft, hypothesis, claim, proposal, review pending, accepted
+decision, canonical memory, validated memory, superseded memory, or
+rejected claim. "Launch next week" means different things depending on
+whether it is a private guess, a PM proposal, an owner-approved decision,
+a room-scoped agreement, or an old memory superseded by a later call.
+
+Public announcement logic adds the second key idea: an announcement is
+not ordinary content. A public announcement updates a multi-actor
+knowledge state by eliminating prior possible worlds. In GraphFlow, a
+message, summary, expert reply, meeting note, task, or decision proposal
+is only an announcement candidate. It updates the World Graph, Org
+Graph, or Work Graph only after the proper evidence, authority, scope,
+and Membrane policy accept it.
+
+This makes the Membrane the governed announcement operator:
+
+```text
+LLM recommends.
+Membrane enforces.
+Domain services mutate.
+Accepted mutations leave lineage.
+Rejected candidates leave reasons.
+```
+
+Dynamic epistemic logic is closer to real organizations than simple
+public announcement logic, because most work signals are not broadcast
+to everyone. They are local, scoped, permissioned, compressed, or routed.
+The Router Agent is therefore a planner for directed epistemic actions,
+not a notification system. A route is a context transformation: it
+declares source intent, target reason, visibility scope, compressed
+context, requested judgment, evidence refs, expected return type, and
+the update effects expected when the reply returns.
+
+GraphFlow should not overclaim true formal common knowledge in v1.
+Common knowledge means more than "everyone can see it." It means
+everyone knows it, everyone knows everyone knows it, and the proposition
+can be used as a shared premise for future action. v1's practical
+primitive is narrower and safer: **scoped canonicality**, or
+**accepted-for-scope**. The product moves toward common knowledge by
+turning visibility into scoped, reviewed, accepted graph state.
+
+Therefore GraphFlow does not manage content. It manages governed
+epistemic state transitions:
+
+```text
+private signal
+-> scoped announcement candidate
+-> reviewed proposition
+-> accepted-for-scope state
+-> canonical / superseded / rejected memory
+-> downstream action, routing, and capability evidence
+```
+
+### Hard rules for v1
+
+The framing borrows from PAL / DEL but **v1 does not claim** their
+formal machinery:
+
+- **No `common_knowledge` field.** Anywhere. PAL defines common
+  knowledge as the infinite intersection "everyone knows that
+  everyone knows that…"; we cannot verify that boolean and we
+  refuse to ship it. There is no `common_knowledge: true` value in
+  any response shape.
+- **No formal world-model enumeration.** GraphFlow does not list
+  possible organization-worlds and remove ones inconsistent with
+  announcements. We track scoped canonicality instead.
+- **No proof of belief revision.** When a decision supersedes
+  another, the supersession ref is recorded; we do not derive what
+  every member should believe afterward.
+
+**`accepted_for_scope` is the v1 practical primitive; common
+knowledge is a theoretical direction, not a shipped boolean.** The
+shipped notion is "this proposition has been accepted as canonical
+for a named scope (room / project / etc.) through a governed
+transition." `accepted_for_scope` ≠ common knowledge. It is "the
+gate consented and the audience was named." Whether members
+internalized it is outside the system's reach.
+
+The shipped contract that makes this testable is the
+**Epistemic Event Contract** — a per-FlowPacket envelope with a
+small closed vocabulary (kind / status / accepted_scope /
+authority_required / membrane_policy / lineage_output / supersedes
+/ evidence_refs). The contract's invariants are enforced by tests,
+not just docs.
+
 ## The Three Graphs
 
 ### World Graph
@@ -103,6 +213,41 @@ observed skill  = what the graph has seen them do
 validated skill = observed work accepted or reused by others
 trusted skill   = repeated validated work with durable graph evidence
 ```
+
+**Trust ladder v1 — implementation status.** The five-level ladder
+above is **real in code** as of the Org Graph Trust Ladder v1 slice:
+`OrgCapabilityService.list_for_project` derives per-member levels
+from existing rows (declared abilities + role hints + project
+skill_tags + accepted routed replies + completed tasks + resolved
+decisions). The contract is read at `GET /api/projects/{id}/capabilities`.
+Routing reads it via `routing_suggest.evidence.matched_capabilities`
+and applies a small bounded boost.
+
+Honest caveats on v1 — what the ladder does not yet do:
+
+- **Substring matching only.** Skill keys are tested as lowercase
+  substrings of row text (task title / decision rationale /
+  routed framing). No word-boundary check, no embedding match. A
+  short skill key like "qa" can stretch — keep skill names
+  specific.
+- **No decay.** Once `trusted`, a member stays `trusted` forever in
+  the projection. There is no time-based fall-off.
+- **No cross-project rollup.** A member trusted on Project A starts
+  at `declared` on Project B. The Org-level trust transfer story
+  is aspirational.
+- **No decision citation / reuse signal.** A decision the member
+  resolved counts as `observed`, not `validated`, because we don't
+  yet scan whether later decisions cite it. `decision_citation_count`
+  exists in the response but reports 0.
+- **Not an HR / performance system.** The ladder is route-grounding
+  evidence — the system cites it to explain "why this person and
+  not another." It does not project an authoritative judgment of
+  capability outside that routing context.
+
+The ladder produces evidence-backed signals; the production claim
+"skill is a projection over evidence" holds for the routing /
+review surface. A full HR-grade competence system is intentionally
+not on the v1 roadmap.
 
 ### Work Graph
 
