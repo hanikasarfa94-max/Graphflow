@@ -3,7 +3,7 @@
 录制目标：7 分钟，竞赛复赛 Demo 提交。
 基线团队：Moonshot Studios（《Stellar Drift》Season 1 发版团队，7 人跨职能）— 这是产品里已 seeded 的 demo 项目，所有数据真实。
 品牌：GraphFlow（Topbar / 侧栏 logo / 页面标题已正式化）。
-技术栈：DeepSeek 在产品运行时承担 4 类 Agent；前端 Next.js 15；后端 FastAPI + SQLite + Alembic；部署在阿里云 + Cloudflare Tunnel（graphflow.flyflow.love）。
+技术栈：DeepSeek 在产品运行时承担项目助手 / Router / IM-assist / Membrane 等 Agent 角色；前端 Next.js 15；后端 FastAPI + SQLite + Alembic；部署在阿里云 + Cloudflare Tunnel（graphflow.flyflow.love）。
 
 ---
 
@@ -28,6 +28,10 @@ curl -b /tmp/cast_cookie.txt "$PROD/api/projects/$PID/renders/handoff/$JAMES_ID"
 
 # (d) 给个人任务列表加 1-2 条，避免 /detail/tasks 完全空白
 # （走 chat 让项目助手自己提议，更自然；详见 Scene 4 备用脚本）
+
+# (e) 今日版本关键探针：确认新不变量真的在线
+curl -b /tmp/cast_cookie.txt "$PROD/api/projects/$PID/flows?limit=5" | python -c "import sys,json;d=json.load(sys.stdin);p=(d.get('packets') or [])[0];print('transition_contract' in p, 'epistemic_event' in p)"
+curl -b /tmp/cast_cookie.txt "$PROD/api/projects/$PID/capabilities" | python -c "import sys,json;d=json.load(sys.stdin);print('capabilities_ok', bool(d.get('members') or d.get('items') or d))"
 ```
 
 ### 0.2 浏览器准备
@@ -56,6 +60,7 @@ curl -b /tmp/cast_cookie.txt "$PROD/api/projects/$PID/renders/handoff/$JAMES_ID"
 - **如果录制中产品挂了**：切到本地 `npm run dev` 备份环境，提前确认本地是同一 commit
 - **如果 Membrane 审核 IMSuggestion 没出现**：直接打开 `/api/projects/{PID}/membrane/notes` 让评委看 JSON 也是有效的（"我们的 Membrane 不是 UI 装饰，是 BE 真实的状态机"）
 - **如果 LLM 回答太慢**：备 Plan B 录像 — 提前录好"理想路径"的 30s 切片，必要时切过去
+- **如果界面还出现"🧠 Edge / Edge 的新路由询问"**：不要开录。这说明 routed-inbound attribution 修复没有部署完整，必须等到显示"某某 通过项目助手询问你"。
 
 ---
 
@@ -68,7 +73,7 @@ curl -b /tmp/cast_cookie.txt "$PROD/api/projects/$PID/renders/handoff/$JAMES_ID"
 | 2 | 0:50–1:50 | 真实产品 | 团队会议室 + Crystallize 决策 |
 | 3 | 1:50–3:00 | 真实产品 | Save-to-Wiki + Membrane 审核 |
 | 4 | 3:00–3:50 | 真实产品 | KB 详情 + 引用 |
-| 5 | 3:50–4:30 | AI-gen 图 + 旁白 | 5 层架构解释 |
+| 5 | 3:50–4:30 | AI-gen 图 + 旁白 | 三张图 + 认知事件解释 |
 | 6 | 4:30–5:30 | 真实产品 | 图谱视图 + 跨引用 |
 | 7 | 5:30–6:30 | 真实产品 | Postmortem render + 引用 |
 | 8 | 6:30–7:00 | AI-gen + 真实 | 闭幕愿景 + URL |
@@ -118,7 +123,7 @@ Aspect ratio: 16:9. Duration: 20 seconds. Loopable in last 2 seconds for safety.
 
 ### 3.1 屏幕动作
 
-1. 浏览器在登录页，已填好 `maya` / 密码。点 **登录**。
+1. 浏览器在登录页，已填好 `maya_zh` / 密码。点 **登录**。
 2. 跳转到首页 `/`。镜头停 3 秒看主体。
 3. 鼠标移到页面 hero 区，特别是 "{count} 项待确认" 数字上。
 4. 点 hero 上的"处理路由收件箱（{count}）"按钮。
@@ -138,6 +143,7 @@ Aspect ratio: 16:9. Duration: 20 seconds. Loopable in last 2 seconds for safety.
 
 - 首页 hero 的 "{count} 项待确认" 数字（突出"系统脉搏"）
 - 路由收件箱中"路由给你的"区，显示"智能路由"标签
+- 如果出现 routed-inbound 行，来源必须是"陈梅雅 / 中村爱子 通过项目助手询问你"，不能再出现"🧠 Edge"。
 
 ### 3.4 备用文案（如果 routed inbox 是 0）
 
@@ -217,7 +223,7 @@ curl -b /tmp/cast_cookie.txt "$PROD/api/projects/$PID/membrane/notes" | python -
 
 1. 切回团队会议室，鼠标移到 Sofia 的消息上。
 2. 点消息上的 "Save to wiki" 按钮（💾 图标）。
-3. 出现确认浮层："Edge Agent 将把这条消息提议为团队 Wiki 条目"。点确认。
+3. 出现确认浮层："项目助手将把这条消息提议为团队 Wiki 条目"。点确认。
 4. 浮层关闭，消息流右上角出现 toast："📥 已提议给团队审核"。
 5. 镜头切到 `/projects/{PID}/kb`。
 6. 在 KB 树里找到刚创建的草稿，标签是 **🔶 待审 · 去审批 →**。
@@ -288,60 +294,63 @@ curl -b /tmp/cast_cookie.txt "$PROD/api/projects/$PID/membrane/notes" | python -
 
 ---
 
-## 7. Scene 5（3:50–4:30）5 层架构解释 — AI-gen 图 + 旁白
+## 7. Scene 5（3:50–4:30）三张图 + 认知事件解释 — AI-gen 图 + 旁白
 
 ### 7.1 视觉（AI-gen 静态图 + 简单动效）
 
-一张分层堆叠的概念图，从下往上 5 层：
+一张"三图同构"概念图，画面中央是一个被 Membrane 包裹的项目 Cell，里面有三张互相套叠的图：
 
-1. **Cell（细胞）**：圆形封闭空间，里面有节点和边
-2. **Membrane（膜）**：包裹 Cell 的半透明边界，有 4 个小箭头出入（auto_merge / request_review / request_clarification / reject）
-3. **Graph（图）**：Cell 上方一张连接 Cell 内部的关系网，多个 Cell 之间也通过 Graph 连接
-4. **LLM**：图上方的云形组件，箭头从 Graph 指向 LLM
-5. **Projection-Attention（注意力投影）**：LLM 上方的扇形辐射，向多个屏幕（用户、Agent、Inbox）投射结果
+1. **World Graph（世界图）**：知识、决策、风险、约束、why-chain，颜色偏蓝。
+2. **Org Graph（组织图）**：成员、角色、声明能力、观察能力、验证能力、可信能力，颜色偏绿。
+3. **Work Graph（工作图）**：任务、路由、Flow Packet、交接、评审、状态转换，颜色偏琥珀。
+4. **Membrane（膜）**：包裹三张图的半透明边界，外部信号进入时变成 announcement candidate，通过 auto_merge / request_review / request_clarification / reject。
+5. **Router + 项目助手**：Router 是在图之间移动信号的"主动神经"；项目助手是用户接入共享图状态的局部界面。
 
-整张图风格：信息图，cool-clinical 蓝灰底色 + 暖琥珀强调（#b5802b），无装饰文字，只有标签。
+整张图风格：cool-clinical 蓝白 blueprint paper，少量琥珀强调。画面不要像企业架构 PPT，要像一张可操作的组织认知仪表图。
 
 ### 7.2 旁白（zh，约 40s）
 
 > 让我们退一步看 GraphFlow 的架构。
 >
-> 第一层 Cell——团队的私域记忆。这是数据归属。
+> GraphFlow 不是聊天，也不是任务表。它是一个动态组织认知系统。
 >
-> 第二层 Membrane——单一边界。所有写入团队上下文的对象都过这一道。
+> 第一张图叫 World Graph——团队共同承认的现实：知识、决策、风险、约束，以及为什么。
 >
-> 第三层 Graph——状态本身。决策、知识、任务、风险，互相连接，可遍历。
+> 第二张图叫 Org Graph——谁在这里，谁能判断什么，谁的能力已经被工作验证。
 >
-> 第四层 LLM——长上下文激活。Edge / Pre-answer / IM-assist / Membrane 4 个 Agent 都在这一层。
+> 第三张图叫 Work Graph——行动如何流动。注意，任务不是 todo item，而是一个被治理的状态转换：未知变成已判断，草稿变成团队计划，讨论变成决策。
 >
-> 第五层 Projection-Attention——注意力投影。系统决定什么浮上来给谁看。
+> Membrane 是公告算子。AI 可以提出候选，但只有经过证据、权限、范围和审查之后，才会写入共享状态。
 >
-> 重点：**Graph 不是和向量、关键词竞争的另一种检索，它是给检索结果排序与扩张的遍历先验**。GraphFlow 不重新发明搜索，它路由搜索。
+> Router 不是通知系统，而是上下文转换系统：它决定这条信号应该带着哪些证据，去问谁，要对方做什么判断，回来以后更新哪一张图。
+>
+> 所以 GraphFlow 的目标不是生成更多内容，而是在 AI 加速协作时，维持团队共同现实不失真。
 
 ### 7.3 AI-gen Prompt
 
 ```
-A clean diagrammatic illustration of a 5-layer software architecture, stacked vertically. Style: technical infographic in the style of Edward Tufte meets a thoughtful tech blog. Color palette: cool blue-grey background (#f7f2e8 cream warm-tinted), with amber accent strokes (#b5802b) and soft cyan highlights. Bilingual labels: English bold + smaller Chinese annotation in italic.
+A clean diagrammatic illustration of GraphFlow as a dynamic organizational cognition system. Style: technical infographic in the style of Edward Tufte meets a precise blueprint instrument. Background: pale blueprint paper (#f5f8ff), fine blue grid lines, deep navy ink, sparse amber highlights.
 
-Layers from bottom to top:
+Main structure:
 
-Layer 1 — "Cell / 细胞": circular enclosed space, several connected dots inside, labeled "team-private memory".
+Center: one translucent project cell surrounded by a semi-transparent Membrane / 膜 boundary. The membrane has four labeled gates: auto-merge, request-review, request-clarification, reject.
 
-Layer 2 — "Membrane / 膜": translucent boundary surrounding the Cell, with 4 small directional arrows piercing it (4 verbs: auto-merge, request-review, request-clarification, reject — show as small icons).
+Inside the cell, show three nested but visually distinct graphs:
 
-Layer 3 — "Graph / 图谱": a relationship network above the Cell, connecting nodes inside the Cell, also connecting to nodes in adjacent Cells. Show 4 node types with different shapes (decision = diamond, knowledge = square, task = circle, risk = triangle).
+1. World Graph / 世界图: blue nodes labeled knowledge, decisions, risks, constraints, why-chain.
+2. Org Graph / 组织图: green nodes labeled members, roles, declared skill, observed skill, validated skill, trusted skill.
+3. Work Graph / 工作图: amber nodes labeled routed signal, Flow Packet, task transition, review, handoff.
 
-Layer 4 — "LLM": cloud-like component above the graph, with 4 small icons inside representing Edge / Pre-answer / IM-assist / Membrane agents. Arrow points from Graph up into the cloud.
+Show arrows between the graphs: accepted work updates World Graph, accepted replies update Org Graph capability evidence, World Graph context informs routing.
 
-Layer 5 — "Projection-Attention / 注意力投影": fan-shaped radiation at the top, beaming down to several user-shaped silhouettes and one inbox icon.
+At the left edge, show "Project assistant / 项目助手" as a local interface beside one user, connected into the cell. At the top, show "Router Agent / 路由器" as a routing nerve moving a signal from one user to another with compressed context and evidence refs. Outside the membrane, show a messy message/document entering as "announcement candidate / 认知事件候选"; inside, after the membrane, it becomes "accepted-for-scope / 范围内承认".
 
-Camera: top-down isometric view, slight 3D depth so layers feel stacked but readable.
+Include a small contract strip at the bottom:
+"LLM recommends → Membrane enforces → Domain services mutate → Lineage remains"
 
-Style: minimal, technical, NOT slick. Like a research paper figure with one accent color. Negative space matters. NO 3D rendering effects, NO gradients beyond two flat colors.
+Typography: bilingual labels, English bold + smaller Chinese annotation. Minimal, technical, clean. No corporate clipart. No AI brain. No neon. No purple gradients. No decorative blobs.
 
-AVOID: corporate cliche imagery, generic AI brain imagery, neon, cyberpunk, anything that looks like a TED talk slide template.
-
-Aspect: 16:9, leave 30% bottom margin for caption text overlay.
+Aspect ratio: 16:9, leave 20% bottom margin for caption text overlay.
 ```
 
 ### 7.4 备用图（如 AI 不出图）
@@ -366,7 +375,9 @@ Aspect: 16:9, leave 30% bottom margin for caption text overlay.
 
 > 进入图谱视图——这是 GraphFlow 区别于其他协作工具的关键。
 >
-> 你看到的不是装饰，是项目的真实状态。每个节点是一次写入团队上下文的决定：决策、知识、任务、风险。每条边是一次实际引用：决策 cite 了知识，任务 owns 了决策。
+> 你看到的不是装饰，是项目的真实状态。World Graph 记录团队共同承认的背景和依据，Org Graph 记录谁的能力被工作验证，Work Graph 记录每个任务和路由正在把什么状态转成什么状态。
+>
+> 每个节点是一次写入团队上下文的认知事件：决策、知识、任务、风险。每条边是一次实际引用：决策 cite 了知识，任务依赖了决策，路由把判断送到最合适的人。
 >
 > Time-Cursor 让你可以倒带——拉到 4 月底，看那个时间点项目长什么样。决策还没结晶，几个 KB 还在草稿。
 >
@@ -421,11 +432,11 @@ Aspect: 16:9, leave 30% bottom margin for caption text overlay.
 
 ### 10.2 旁白（zh，约 30s）
 
-> 当人开始变成超级个体，团队应该怎么组织？
+> 当 AI 让每个人都变快，团队最危险的不是信息不够，而是共享现实开始失真。
 >
-> GraphFlow 给出的答案是：让每个人对自己的"个人流"说话；让 AI 在背后做基础设施；让所有进入团队上下文的对象，过同一道边界；让协作的状态本身，变成可遍历的图。
+> GraphFlow 给出的答案是：让每个人通过项目助手接入同一张共享图；让 Router 把信号带着证据送到正确的人；让所有进入团队状态的候选，经过 Membrane；让任务、知识、决策都留下可追踪的状态转换。
 >
-> GraphFlow——**协作即图谱**。
+> GraphFlow——**让团队在 AI 加速下，仍然知道同一个现实。**
 
 ### 10.3 屏幕字幕
 
@@ -435,6 +446,9 @@ graphflow.flyflow.love
 
 Coordination as a graph, not a document.
 协作是一张图，而不是一份文档。
+
+Shared state under AI acceleration.
+AI 加速下的团队共享状态。
 ```
 
 ### 10.4 AI-gen Prompt（闭幕场景）
@@ -463,6 +477,8 @@ Aspect: 16:9. Duration: 30 seconds. Last 3 seconds reserved for logo lockup.
 - [ ] 检查每个 Scene 的画面是否正确（特别是 Membrane Accept 后的 KB 状态翻转）
 - [ ] 确认所有引用点击都跳到正确目标
 - [ ] 确认 `**D-{id}**` 在 postmortem 里渲染为蓝色可点击
+- [ ] 确认全片没有用户可见的"🧠 Edge / Edge 的新路由询问 / 边缘代理"旧称
+- [ ] 确认所有聊天时间都显示 GMT+8
 - [ ] 检查时间总长 ≤ 7:30
 - [ ] 检查音量、麦克风噪音
 - [ ] 准备字幕文件（.srt），双语
@@ -474,19 +490,19 @@ Aspect: 16:9. Duration: 30 seconds. Last 3 seconds reserved for logo lockup.
 
 ### Q1：和 Slack / Lark / Notion 的差异？
 
-> Slack 在做"沟通"。Notion 在做"知识"。Lark 在做"工作台"。GraphFlow 在做"协作的状态机"——所有写入团队上下文的对象（决策、知识、任务、风险）共享一张图谱、过同一个 Membrane 审核。AI 在背后做基础设施，不在前台做"另一个聊天工具"。
+> Slack 在做"沟通"。Notion 在做"知识"。Lark 在做"工作台"。GraphFlow 在做"动态组织认知系统"——团队不是缺更多内容，而是在 AI 加速后需要稳定、可审查、可追踪的共享状态。World Graph 记录共同现实，Org Graph 记录能力和责任，Work Graph 记录行动状态转换；所有共享状态更新都要经过 Membrane 或明确的 transition contract。
 
 ### Q2：如果 Membrane 误判了怎么办？
 
-> Membrane 的 4 状态包含 request_clarification——AI 不确定时回到提议人确认。Reject 在 v0 是保留的，目前主要走 auto_merge 和 request_review 两条路。AI 误判 = 直接由 Owner 在审核面板 Override，整个动作记录到 audit log。第一周期已经测了 24 个 Membrane 测试用例，但 production 误判率统计需要更多真实数据。
+> Membrane 不是普通审批 UI，而是组织认知更新的合法化机制。LLM recommends，Membrane enforces，Domain services mutate，Lineage remains。它包含 deterministic checks 和 LLM semantic review；AI 不确定时走 request_clarification，冲突或越权时走 request_review / reject。Owner 可以在审核面板 Override，动作进入 audit log。
 
 ### Q3：Demo 数据是真实的吗？
 
-> 所有数据落到真实 SQLite 数据库。zh demo 项目 26 条 KB、3 条决策、6 个成员、5 条 chat 历史，全部走真实的 KB Service / Membrane Service / Decision Service。其中 KB 内容是用 DeepSeek 生成的 zh-native 文本，模拟真实游戏开发场景。代码完全可重现：`scripts/demo/seed_moonshot_zh.py`。
+> 所有数据落到真实 SQLite 数据库。zh demo 项目 26 条 KB、3 条决策、6 个成员、5 条 chat 历史，全部走真实的 KB Service / Membrane Service / Decision Service / Routing Service。Flow Packet 里能看到 transition_contract 和 epistemic_event，不是前端 mock。其中 KB 内容是用 DeepSeek 生成的 zh-native 文本，模拟真实游戏开发场景。代码完全可重现：`scripts/demo/seed_moonshot_zh.py`。
 
 ### Q4：技术栈？
 
-> 前端 Next.js 15 + RSC + Turbopack。后端 FastAPI + SQLAlchemy + Alembic（21 条迁移到 0029）。LLM 层用 DeepSeek（OpenAI 兼容协议），4 类 Agent 角色：Edge / Pre-answer / IM-assist / Membrane。部署：阿里云 + Docker Compose + Cloudflare Tunnel。整个项目从 4.17 第一行代码到现在，约 200+ 次 commit，多个 Alembic 迁移，AI coding 占主导但 PM 在做架构判断。
+> 前端 Next.js 15 + RSC + Turbopack。后端 FastAPI + SQLAlchemy + Alembic。LLM 层用 DeepSeek（OpenAI 兼容协议），运行时角色包括项目助手、Router、Pre-answer、IM-assist、Membrane Agent。部署：阿里云 + Docker Compose + Cloudflare Tunnel。整个项目从 4.17 第一行代码到现在，约 200+ 次 commit，多个 Alembic 迁移，AI coding 占主导但 PM 在做架构判断。
 
 ---
 

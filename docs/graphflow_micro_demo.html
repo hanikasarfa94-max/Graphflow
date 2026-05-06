@@ -1,0 +1,845 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>GraphFlow Micro Demo</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --wg-paper: #f5f8ff;
+        --wg-surface: #ffffff;
+        --wg-surface-sunk: #f3f7ff;
+        --wg-ink: #172033;
+        --wg-ink-soft: #667085;
+        --wg-ink-faint: #9aa8bd;
+        --wg-line: #d9e3f4;
+        --wg-line-soft: #eef3fb;
+        --wg-accent: #2563eb;
+        --wg-accent-soft: rgba(37, 99, 235, 0.08);
+        --wg-accent-ring: rgba(37, 99, 235, 0.24);
+        --wg-amber: #d97706;
+        --wg-amber-soft: rgba(217, 119, 6, 0.1);
+        --wg-ok: #16a34a;
+        --wg-ok-soft: rgba(22, 163, 74, 0.1);
+        --wg-radius-sm: 12px;
+        --wg-radius: 18px;
+        --wg-shadow: 0 16px 48px rgba(23, 32, 51, 0.08);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        overflow: hidden;
+        color: var(--wg-ink);
+        font-family:
+          "General Sans",
+          "Inter",
+          "Segoe UI",
+          system-ui,
+          sans-serif;
+        background:
+          linear-gradient(var(--wg-line-soft) 1px, transparent 1px),
+          linear-gradient(90deg, var(--wg-line-soft) 1px, transparent 1px),
+          var(--wg-paper);
+        background-size: 36px 36px;
+      }
+
+      button {
+        font: inherit;
+      }
+
+      .shell {
+        display: grid;
+        grid-template-columns: 256px 1fr;
+        width: min(1440px, 100vw);
+        height: min(900px, 100vh);
+        margin: 0 auto;
+        background: rgba(255, 255, 255, 0.32);
+      }
+
+      .sidebar {
+        border-right: 1px solid var(--wg-line);
+        background: rgba(255, 255, 255, 0.86);
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+      }
+
+      .brand {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        padding: 18px 16px 14px;
+        border-bottom: 1px solid var(--wg-line);
+      }
+
+      .brand img {
+        width: 36px;
+        height: 36px;
+        object-fit: contain;
+        border-radius: 12px;
+      }
+
+      .brand strong {
+        display: block;
+        font-family: Georgia, "Times New Roman", serif;
+        font-weight: 400;
+        font-size: 22px;
+        line-height: 1;
+      }
+
+      .mono {
+        font-family: "JetBrains Mono", "Cascadia Mono", monospace;
+        font-size: 11px;
+        color: var(--wg-ink-soft);
+      }
+
+      .nav {
+        padding: 12px 10px;
+        display: grid;
+        gap: 4px;
+      }
+
+      .section-label {
+        margin: 14px 10px 5px;
+        font-family: "JetBrains Mono", "Cascadia Mono", monospace;
+        color: var(--wg-ink-soft);
+        font-size: 10px;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+      }
+
+      .nav-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        min-height: 36px;
+        padding: 8px 10px;
+        border-radius: 10px;
+        color: var(--wg-ink);
+        font-size: 13px;
+      }
+
+      .nav-row.active {
+        background: linear-gradient(135deg, #eaf2ff, #dbeafe);
+        color: var(--wg-accent);
+        font-weight: 700;
+      }
+
+      .nav-row .count {
+        margin-left: auto;
+        min-width: 20px;
+        padding: 2px 6px;
+        border-radius: 999px;
+        background: var(--wg-amber-soft);
+        color: var(--wg-amber);
+        text-align: center;
+        font-family: "JetBrains Mono", "Cascadia Mono", monospace;
+        font-size: 10px;
+      }
+
+      .sidebar-foot {
+        margin-top: auto;
+        padding: 14px 16px;
+        border-top: 1px solid var(--wg-line);
+        display: flex;
+        align-items: center;
+        gap: 9px;
+      }
+
+      .avatar {
+        width: 28px;
+        height: 28px;
+        border-radius: 50%;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        background: #dbeafe;
+        color: var(--wg-accent);
+        font-weight: 700;
+        font-size: 12px;
+      }
+
+      .workspace {
+        min-width: 0;
+        display: grid;
+        grid-template-rows: 52px 1fr;
+      }
+
+      .topbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 22px;
+        border-bottom: 1px solid var(--wg-line);
+        background: rgba(255, 255, 255, 0.74);
+      }
+
+      .crumb {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        color: var(--wg-ink-soft);
+        font-size: 12px;
+      }
+
+      .crumb b {
+        color: var(--wg-ink);
+        font-weight: 600;
+      }
+
+      .gmt {
+        color: var(--wg-ink-soft);
+        font-family: "JetBrains Mono", "Cascadia Mono", monospace;
+        font-size: 11px;
+      }
+
+      .project {
+        min-height: 0;
+        display: grid;
+        grid-template-rows: auto 1fr;
+      }
+
+      .project-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 18px 28px 12px;
+      }
+
+      .project-title h1 {
+        margin: 0;
+        font-family: Georgia, "Times New Roman", serif;
+        font-size: 32px;
+        line-height: 1.08;
+        font-weight: 400;
+      }
+
+      .project-title p {
+        margin: 5px 0 0;
+        color: var(--wg-ink-soft);
+        font-size: 13px;
+      }
+
+      .toolbar {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        position: relative;
+      }
+
+      .toolbar button,
+      .flow-action {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        border: 1px solid var(--wg-accent-ring);
+        border-radius: var(--wg-radius-sm);
+        background: #fff;
+        color: var(--wg-accent);
+        padding: 5px 10px;
+        font-family: "JetBrains Mono", "Cascadia Mono", monospace;
+        font-size: 12px;
+        cursor: pointer;
+      }
+
+      .toolbar button.active {
+        background: var(--wg-accent);
+        color: #fff;
+      }
+
+      .content {
+        min-height: 0;
+        display: grid;
+        grid-template-columns: minmax(0, 820px) 380px;
+        gap: 18px;
+        padding: 0 28px 24px;
+      }
+
+      .stream-wrap {
+        min-height: 0;
+        display: grid;
+        grid-template-rows: 1fr auto;
+        border: 1px solid var(--wg-line);
+        border-radius: var(--wg-radius);
+        background: rgba(255, 255, 255, 0.78);
+        box-shadow: var(--wg-shadow);
+        overflow: hidden;
+      }
+
+      .stream {
+        min-height: 0;
+        padding: 22px;
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+        overflow: hidden;
+      }
+
+      .turn {
+        width: min(680px, 78%);
+        opacity: 0;
+        transform: translateY(14px);
+        transition:
+          opacity 360ms cubic-bezier(0.2, 0.8, 0.2, 1),
+          transform 360ms cubic-bezier(0.2, 0.8, 0.2, 1);
+      }
+
+      .turn.show {
+        opacity: 1;
+        transform: translateY(0);
+      }
+
+      .bubble {
+        border: 1px solid var(--wg-line);
+        border-radius: var(--wg-radius);
+        background: var(--wg-surface);
+        padding: 13px 15px;
+      }
+
+      .turn.user {
+        align-self: flex-end;
+      }
+
+      .turn.user .bubble {
+        background: var(--wg-accent);
+        border-color: var(--wg-accent);
+        color: #fff;
+      }
+
+      .turn.struct {
+        width: min(760px, 92%);
+      }
+
+      .turn.struct .bubble {
+        background: var(--wg-surface-sunk);
+        border-style: dashed;
+      }
+
+      .turn.route .bubble {
+        border-left: 3px solid var(--wg-amber);
+      }
+
+      .turn.mem .bubble {
+        border-left: 3px solid var(--wg-ok);
+      }
+
+      .meta-line {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 8px;
+        color: var(--wg-ink-soft);
+        font-family: "JetBrains Mono", "Cascadia Mono", monospace;
+        font-size: 11px;
+      }
+
+      .user .meta-line {
+        color: rgba(255, 255, 255, 0.78);
+      }
+
+      .bubble p {
+        margin: 0;
+        font-size: 14px;
+        line-height: 1.55;
+      }
+
+      .claims {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-top: 10px;
+      }
+
+      .claim {
+        border: 1px solid var(--wg-line);
+        border-radius: 999px;
+        padding: 4px 8px;
+        background: #fff;
+        color: var(--wg-ink-soft);
+        font-family: "JetBrains Mono", "Cascadia Mono", monospace;
+        font-size: 11px;
+      }
+
+      .route-card {
+        margin-top: 10px;
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 10px;
+        align-items: end;
+        border: 1px solid var(--wg-line);
+        border-radius: var(--wg-radius-sm);
+        background: #fff;
+        padding: 10px;
+      }
+
+      .route-card b {
+        display: block;
+        font-size: 13px;
+        margin-bottom: 4px;
+      }
+
+      .route-card span {
+        display: block;
+        color: var(--wg-ink-soft);
+        font-size: 12px;
+        line-height: 1.45;
+      }
+
+      .compose {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 14px 16px;
+        border-top: 1px solid var(--wg-line);
+        background: #fff;
+      }
+
+      .compose .input {
+        flex: 1;
+        border: 1px solid var(--wg-line);
+        border-radius: 999px;
+        background: var(--wg-surface-sunk);
+        padding: 10px 14px;
+        color: var(--wg-ink-soft);
+        font-size: 13px;
+      }
+
+      .send {
+        border: 0;
+        border-radius: 999px;
+        background: var(--wg-accent);
+        color: #fff;
+        padding: 10px 16px;
+        font-weight: 600;
+        cursor: pointer;
+      }
+
+      .side-stack {
+        min-height: 0;
+        display: grid;
+        grid-template-rows: auto 1fr;
+        gap: 12px;
+      }
+
+      .context-panel,
+      .flows-popover {
+        border: 1px solid var(--wg-line);
+        border-radius: var(--wg-radius);
+        background: #fff;
+        box-shadow: var(--wg-shadow);
+        overflow: hidden;
+      }
+
+      .panel-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 12px 14px;
+        border-bottom: 1px solid var(--wg-line);
+        background: var(--wg-surface-sunk);
+      }
+
+      .panel-head b {
+        font-size: 13px;
+      }
+
+      .panel-head span {
+        color: var(--wg-ink-soft);
+        font-family: "JetBrains Mono", "Cascadia Mono", monospace;
+        font-size: 11px;
+      }
+
+      .context-body {
+        padding: 12px 14px;
+        display: grid;
+        gap: 8px;
+      }
+
+      .context-row {
+        display: grid;
+        grid-template-columns: 88px 1fr;
+        gap: 10px;
+        font-size: 12px;
+      }
+
+      .context-row span:first-child {
+        color: var(--wg-ink-soft);
+        font-family: "JetBrains Mono", "Cascadia Mono", monospace;
+      }
+
+      .flows-popover {
+        opacity: 0;
+        transform: translateY(12px);
+        transition:
+          opacity 300ms cubic-bezier(0.2, 0.8, 0.2, 1),
+          transform 300ms cubic-bezier(0.2, 0.8, 0.2, 1);
+      }
+
+      .flows-popover.show {
+        opacity: 1;
+        transform: translateY(0);
+      }
+
+      .bucket {
+        padding: 12px 14px;
+        border-bottom: 1px solid var(--wg-line-soft);
+      }
+
+      .bucket:last-child {
+        border-bottom: 0;
+      }
+
+      .bucket-title {
+        display: flex;
+        justify-content: space-between;
+        margin-bottom: 8px;
+        color: var(--wg-ink-soft);
+        font-family: "JetBrains Mono", "Cascadia Mono", monospace;
+        font-size: 11px;
+      }
+
+      .flow-row {
+        border: 1px solid var(--wg-line);
+        border-radius: var(--wg-radius-sm);
+        padding: 10px;
+        background: #fff;
+        margin-top: 8px;
+        opacity: 0.42;
+        transition:
+          opacity 300ms,
+          border-color 300ms,
+          background 300ms;
+      }
+
+      .flow-row.active {
+        opacity: 1;
+        border-color: var(--wg-accent-ring);
+        background: var(--wg-accent-soft);
+      }
+
+      .flow-row b {
+        display: block;
+        font-size: 12px;
+        margin-bottom: 5px;
+      }
+
+      .flow-row span {
+        display: block;
+        color: var(--wg-ink-soft);
+        font-family: "JetBrains Mono", "Cascadia Mono", monospace;
+        font-size: 10.5px;
+        line-height: 1.35;
+      }
+
+      .record-controls {
+        position: fixed;
+        left: 50%;
+        bottom: 14px;
+        transform: translateX(-50%);
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 10px;
+        border: 1px solid var(--wg-line);
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.94);
+        box-shadow: var(--wg-shadow);
+      }
+
+      .record-controls button {
+        border: 0;
+        border-radius: 999px;
+        padding: 8px 12px;
+        background: var(--wg-accent);
+        color: #fff;
+        font-weight: 600;
+        cursor: pointer;
+      }
+
+      .progress {
+        display: flex;
+        gap: 5px;
+      }
+
+      .tick {
+        width: 26px;
+        height: 6px;
+        border-radius: 999px;
+        background: var(--wg-line);
+      }
+
+      .tick.on {
+        background: var(--wg-accent);
+      }
+
+      @media (max-width: 980px) {
+        .shell {
+          grid-template-columns: 64px 1fr;
+        }
+
+        .brand div,
+        .nav-row span:not(:first-child),
+        .section-label,
+        .sidebar-foot div {
+          display: none;
+        }
+
+        .content {
+          grid-template-columns: 1fr;
+        }
+
+        .side-stack {
+          display: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <img src="../apps/web/public/brand/logo-mark.png" alt="" />
+          <div>
+            <strong>GraphFlow</strong>
+            <span class="mono">AI-native cooperation</span>
+          </div>
+        </div>
+
+        <div class="nav">
+          <div class="nav-row"><span>⌂</span><span>首页</span></div>
+          <div class="section-label">Projects</div>
+          <div class="nav-row active"><span>☁</span><span>我的会话</span><span class="count" id="badge">1</span></div>
+          <div class="nav-row"><span>♟</span><span>团队会议室</span></div>
+          <div class="nav-row"><span>▥</span><span>知识库</span></div>
+          <div class="nav-row"><span>✣</span><span>技能图谱</span></div>
+          <div class="nav-row"><span>🛡</span><span>审核</span><span class="count">2</span></div>
+          <div class="nav-row"><span>⌕</span><span>审计视图</span></div>
+        </div>
+
+        <div class="sidebar-foot">
+          <span class="avatar">陈</span>
+          <div>
+            <strong style="font-size: 13px">陈梅雅</strong>
+            <div class="mono">GMT+8 · owner</div>
+          </div>
+        </div>
+      </aside>
+
+      <section class="workspace">
+        <div class="topbar">
+          <div class="crumb"><span>星际漂流 — 第1季发布</span><span>/</span><b>我的会话</b></div>
+          <div class="gmt">10:43 GMT+8</div>
+        </div>
+
+        <div class="project">
+          <div class="project-head">
+            <div class="project-title">
+              <h1>我的会话</h1>
+              <p>项目助手是你接入共享图状态的局部界面。它可以回答、路由、暂存候选，但不会越过 Membrane 写入团队状态。</p>
+            </div>
+            <div class="toolbar">
+              <button class="active" id="flowButton">⇄ 活跃流转</button>
+              <button>范围</button>
+            </div>
+          </div>
+
+          <div class="content">
+            <div class="stream-wrap">
+              <div class="stream">
+                <article class="turn user" data-step="0">
+                  <div class="bubble">
+                    <div class="meta-line"><span>陈梅雅</span><span>10:43 GMT+8</span></div>
+                    <p>现在你怎么看我们的关卡目标？8 关 + 3 个 Boss 在 Switch 上靠谱不？</p>
+                  </div>
+                </article>
+
+                <article class="turn" data-step="1">
+                  <div class="bubble">
+                    <div class="meta-line"><span>项目助手 · 回答</span><span>10:43 GMT+8</span></div>
+                    <p>我觉得 8 关 + 3 个 Boss 可以作为北极星，但不能直接当成承诺。World Graph 里有性能预算风险；这需要工程判断。</p>
+                    <div class="claims">
+                      <span class="claim">kb/d51b48 · 关卡目标</span>
+                      <span class="claim">kb/dbd79f · Switch 性能预算</span>
+                    </div>
+                  </div>
+                </article>
+
+                <article class="turn struct route" data-step="2">
+                  <div class="bubble">
+                    <div class="meta-line"><span>项目助手 —— 路由建议</span><span>10:44 GMT+8</span></div>
+                    <p>这个判断应该问中村爱子。Org Graph 显示她在 Switch 性能和工程约束上有 validated evidence。</p>
+                    <div class="route-card">
+                      <div>
+                        <b>中村爱子 看到的内容</b>
+                        <span>爱子，能帮评估一下 8 关 + 3 Boss 在 Switch 上的可行性吗？主要担心性能预算瓶颈。</span>
+                      </div>
+                      <button class="flow-action" type="button">询问 中村爱子</button>
+                    </div>
+                  </div>
+                </article>
+
+                <article class="turn struct route" data-step="3">
+                  <div class="bubble">
+                    <div class="meta-line"><span>中村爱子 通过项目助手回复你</span><span>10:47 GMT+8</span></div>
+                    <p>8+3 可以继续评估，但需要先跑 Switch 场景压力测试。如果中盘商人和 Boss 3 同时进入 alpha，我建议保帧率，砍延伸内容，不砍主线关卡。</p>
+                    <div class="claims">
+                      <span class="claim">source_state=feasibility_unknown</span>
+                      <span class="claim">target_state=expert_judged</span>
+                    </div>
+                  </div>
+                </article>
+
+                <article class="turn struct mem" data-step="4">
+                  <div class="bubble">
+                    <div class="meta-line"><span>Membrane · 审核候选</span><span>10:48 GMT+8</span></div>
+                    <p>已暂存一个 scope decision 候选：8+3 保留为北极星，中盘商人为延伸目标；若性能不达标，优先降延伸内容而不是主线关卡。</p>
+                    <div class="claims">
+                      <span class="claim">kind=decision</span>
+                      <span class="claim">status=review_pending</span>
+                      <span class="claim">policy=request_review</span>
+                    </div>
+                  </div>
+                </article>
+
+                <article class="turn" data-step="5">
+                  <div class="bubble">
+                    <div class="meta-line"><span>项目助手 · 状态更新</span><span>10:49 GMT+8</span></div>
+                    <p>已接受为范围内决策。现在它可以被后续任务、复盘和交接文档引用。</p>
+                    <div class="claims">
+                      <span class="claim">accepted_for_scope=project</span>
+                      <span class="claim">lineage=route → reply → decision</span>
+                    </div>
+                  </div>
+                </article>
+              </div>
+
+              <div class="compose">
+                <div class="input">问项目助手：下一步谁需要行动？</div>
+                <button class="send" type="button" id="next">Next</button>
+              </div>
+            </div>
+
+            <aside class="side-stack">
+              <section class="context-panel">
+                <div class="panel-head"><b>当前图谱切片</b><span>read-only</span></div>
+                <div class="context-body">
+                  <div class="context-row"><span>World</span><b>关卡目标、Switch 性能预算</b></div>
+                  <div class="context-row"><span>Org</span><b>中村爱子 · validated: Switch performance</b></div>
+                  <div class="context-row"><span>Work</span><b>unknown → expert judged → scope decision</b></div>
+                </div>
+              </section>
+
+              <section class="flows-popover" id="flows">
+                <div class="panel-head"><b>活跃流转</b><span>3 buckets</span></div>
+                <div class="bucket">
+                  <div class="bucket-title"><span>Needs me</span><span id="needsCount">0</span></div>
+                  <div class="flow-row" id="f5">
+                    <b>crystallize_decision</b>
+                    <span>epistemic_event: decision / review_pending</span>
+                    <span>transition: discussion_or_suggestion → canonical_decision</span>
+                  </div>
+                </div>
+                <div class="bucket">
+                  <div class="bucket-title"><span>Waiting on others</span><span id="waitCount">1</span></div>
+                  <div class="flow-row" id="f2">
+                    <b>ask_with_context</b>
+                    <span>target: 中村爱子 · routing_reply</span>
+                    <span>evidence: kb/d51b48, kb/dbd79f, capability(validated)</span>
+                  </div>
+                </div>
+                <div class="bucket">
+                  <div class="bucket-title"><span>Awaiting Membrane</span><span id="memCount">0</span></div>
+                  <div class="flow-row" id="f4">
+                    <b>scope decision candidate</b>
+                    <span>Membrane: request_review</span>
+                    <span>authority_required: project owner</span>
+                  </div>
+                </div>
+              </section>
+            </aside>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <div class="record-controls">
+      <button id="play" type="button">Play</button>
+      <button id="reset" type="button">Reset</button>
+      <div class="progress" id="progress"></div>
+    </div>
+
+    <script>
+      const max = 5;
+      let step = -1;
+      let timer = 0;
+      const ticks = document.getElementById("progress");
+      for (let i = 0; i <= max; i += 1) {
+        const el = document.createElement("span");
+        el.className = "tick";
+        ticks.appendChild(el);
+      }
+
+      function render() {
+        document.querySelectorAll(".turn").forEach((el) => {
+          const n = Number(el.dataset.step || "0");
+          el.classList.toggle("show", n <= step);
+        });
+        document.querySelectorAll(".tick").forEach((el, i) => {
+          el.classList.toggle("on", i <= step);
+        });
+        document.getElementById("flows").classList.toggle("show", step >= 2);
+        document.getElementById("f2").classList.toggle("active", step >= 2 && step < 4);
+        document.getElementById("f4").classList.toggle("active", step >= 4 && step < 5);
+        document.getElementById("f5").classList.toggle("active", step >= 5);
+        document.getElementById("waitCount").textContent = step >= 2 && step < 4 ? "1" : "0";
+        document.getElementById("memCount").textContent = step >= 4 && step < 5 ? "1" : "0";
+        document.getElementById("needsCount").textContent = step >= 5 ? "1" : "0";
+        document.getElementById("badge").textContent = step >= 5 ? "0" : "1";
+      }
+
+      function next() {
+        step = Math.min(max, step + 1);
+        render();
+      }
+
+      function reset() {
+        clearInterval(timer);
+        timer = 0;
+        step = -1;
+        document.getElementById("play").textContent = "Play";
+        render();
+      }
+
+      document.getElementById("next").addEventListener("click", next);
+      document.getElementById("reset").addEventListener("click", reset);
+      document.getElementById("play").addEventListener("click", () => {
+        if (timer) {
+          clearInterval(timer);
+          timer = 0;
+          document.getElementById("play").textContent = "Play";
+          return;
+        }
+        if (step >= max) reset();
+        next();
+        document.getElementById("play").textContent = "Pause";
+        timer = setInterval(() => {
+          if (step >= max) {
+            clearInterval(timer);
+            timer = 0;
+            document.getElementById("play").textContent = "Play";
+            return;
+          }
+          next();
+        }, 2300);
+      });
+      render();
+    </script>
+  </body>
+</html>
