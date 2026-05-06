@@ -197,6 +197,7 @@
         "status": "Status",
         "kb": "KB",
         "tasks": "Tasks",
+        "reviews": "Reviews",
         "audit": "Audit",
         "skills": "Skills",
         "meetings": "Meetings",
@@ -723,6 +724,7 @@
       "empty": "Membrane has nothing waiting on humans.",
       "pendingReviews": "Pending reviews",
       "pendingClarifications": "Open clarifications",
+      "reviewLink": "Review →",
       "kind": {
         "taskPromote": "task → plan",
         "kbItemGroup": "personal → group KB",

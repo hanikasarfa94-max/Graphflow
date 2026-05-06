@@ -13,6 +13,7 @@
 // the calm state we want most of the time. The panel is intended
 // to be quiet 80% of the time; loud when it has work.
 
+import Link from "next/link";
 import { getTranslations } from "next-intl/server";
 
 import type { MembraneNotesResponse } from "@/lib/api";
@@ -70,6 +71,8 @@ export async function MembraneNotesPanel({
                     metaText={linkedId ? `→ ${linkedId.slice(0, 8)}` : null}
                     createdAt={r.created_at}
                     accent="amber"
+                    actionHref={`/projects/${projectId}/detail/im`}
+                    actionLabel={t("reviewLink")}
                   />
                 );
               })}
@@ -135,6 +138,8 @@ function NoteRow({
   metaText,
   createdAt,
   accent,
+  actionHref,
+  actionLabel,
 }: {
   kindLabel: string;
   title: string;
@@ -142,6 +147,11 @@ function NoteRow({
   metaText: string | null;
   createdAt: string | null;
   accent: "amber" | "accent";
+  // Optional action handoff — turns the row into a "see this in the
+  // Reviews surface" entry. Pre-this-slice the panel was read-only,
+  // which made the Membrane review route effectively orphaned.
+  actionHref?: string;
+  actionLabel?: string;
 }) {
   const accentColor =
     accent === "amber" ? "var(--wg-amber)" : "var(--wg-accent)";
@@ -223,6 +233,21 @@ function NoteRow({
           }}
         >
           {diff}
+        </div>
+      ) : null}
+      {actionHref && actionLabel ? (
+        <div style={{ marginTop: 6 }}>
+          <Link
+            href={actionHref}
+            style={{
+              fontSize: 11,
+              fontFamily: "var(--wg-font-mono)",
+              color: accentColor,
+              textDecoration: "none",
+            }}
+          >
+            {actionLabel}
+          </Link>
         </div>
       ) : null}
     </div>

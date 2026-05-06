@@ -16,102 +16,39 @@ import { useTranslations } from "next-intl";
 
 import { ScopeTierPills } from "@/components/stream/ScopeTierPills";
 
+import { MODULE_MATCHERS } from "./projectModuleRail.matchers";
+
 interface Props {
   projectId: string;
 }
 
-interface ModuleEntry {
-  key: string;
-  href: string;
-  icon: string;
-  // Predicate for "this module owns the current pathname". For most
-  // entries it's a startsWith check; the personal-stream entry is
-  // exact-match because /projects/[id] is the prefix of every other
-  // project route.
-  matches: (pathname: string) => boolean;
-}
+// Icon-by-key lookup. The matchers file is pure (no JSX-friendly
+// strings) — keep visual glyph mapping in the component layer.
+const MODULE_ICONS: Record<string, string> = {
+  stream: "💬",
+  team: "🏛",
+  status: "📋",
+  kb: "📚",
+  tasks: "✓",
+  reviews: "🛡",
+  audit: "📊",
+  skills: "🎨",
+  meetings: "📅",
+  renders: "📤",
+  settings: "⚙",
+};
 
 export function ProjectModuleRail({ projectId }: Props) {
   const pathname = usePathname() ?? "";
   const t = useTranslations("projects.moduleRail");
   const base = `/projects/${projectId}`;
 
-  const modules: ModuleEntry[] = [
-    {
-      key: "stream",
-      href: base,
-      icon: "💬",
-      matches: (p) =>
-        p === base ||
-        p === `${base}/` ||
-        p.startsWith(`${base}/rooms/`),
-    },
-    {
-      key: "team",
-      href: `${base}/team`,
-      icon: "🏛",
-      matches: (p) => p.startsWith(`${base}/team`),
-    },
-    {
-      key: "status",
-      href: `${base}/status`,
-      icon: "📋",
-      matches: (p) => p.startsWith(`${base}/status`),
-    },
-    {
-      key: "kb",
-      href: `${base}/kb`,
-      icon: "📚",
-      matches: (p) => p.startsWith(`${base}/kb`),
-    },
-    {
-      // Tasks gets a top-level rail entry so users have a one-click
-      // path to "what do I need to do today?". The same view is also
-      // reachable as the Tasks sub-tab inside Audit, but the QA
-      // feedback "task view was missing" was about discoverability —
-      // hiding tasks one tab deep behind Audit was a real bug.
-      key: "tasks",
-      href: `${base}/detail/tasks`,
-      icon: "✓",
-      matches: (p) => p.startsWith(`${base}/detail/tasks`),
-    },
-    {
-      key: "audit",
-      // Audit lands on the graph view as the canonical entry — same
-      // convention the prototype's auditView uses. The Tasks sub-tab
-      // here is unchanged; the new top-level Tasks entry above is an
-      // additional shortcut, not a redirect.
-      href: `${base}/detail/graph`,
-      icon: "📊",
-      matches: (p) =>
-        p.startsWith(`${base}/detail`) &&
-        !p.startsWith(`${base}/detail/tasks`),
-    },
-    {
-      key: "skills",
-      href: `${base}/skills`,
-      icon: "🎨",
-      matches: (p) => p.startsWith(`${base}/skills`),
-    },
-    {
-      key: "meetings",
-      href: `${base}/meetings`,
-      icon: "📅",
-      matches: (p) => p.startsWith(`${base}/meetings`),
-    },
-    {
-      key: "renders",
-      href: `${base}/renders`,
-      icon: "📤",
-      matches: (p) => p.startsWith(`${base}/renders`),
-    },
-    {
-      key: "settings",
-      href: `${base}/settings`,
-      icon: "⚙",
-      matches: (p) => p.startsWith(`${base}/settings`),
-    },
-  ];
+  const modules = MODULE_MATCHERS.map((m) => ({
+    key: m.key,
+    href: m.href(base),
+    icon: MODULE_ICONS[m.key] ?? "•",
+    matches: (p: string) => m.matches(p, base),
+  }));
 
   return (
     <nav

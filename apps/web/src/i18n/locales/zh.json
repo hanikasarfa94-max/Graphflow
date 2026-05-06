@@ -197,6 +197,7 @@
         "status": "状态",
         "kb": "知识库",
         "tasks": "任务",
+        "reviews": "审核",
         "audit": "审计",
         "skills": "技能",
         "meetings": "会议",
@@ -723,6 +724,7 @@
       "empty": "膜层目前没有需要人工处理的事项。",
       "pendingReviews": "待审核",
       "pendingClarifications": "待澄清",
+      "reviewLink": "去审核 →",
       "kind": {
         "taskPromote": "任务 → 计划",
         "kbItemGroup": "个人 → 团队知识库",
