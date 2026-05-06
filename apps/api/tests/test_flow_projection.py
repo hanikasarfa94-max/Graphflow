@@ -20,10 +20,14 @@ from sqlalchemy import select
 
 from workgraph_persistence import (
     HandoffRow,
+    IMSuggestionRow,
     KbItemRow,
+    MessageRow,
     ProjectMemberRepository,
     ProjectRow,
     RoutedSignalRow,
+    StreamRepository,
+    TaskRow,
     backfill_streams_from_projects,
     session_scope,
 )
@@ -897,3 +901,230 @@ async def test_timeline_carries_source_action_events(api_env):
     assert "route_dispatched" in kinds
     assert "route_replied" in kinds
     assert "source_accept" in kinds
+
+
+# ---- F.1 — promote_task_to_plan (TaskRow + IMSuggestion) ---------------
+
+
+async def _seed_personal_task(
+    maker, *, project_id: str, owner_id: str, title: str
+) -> str:
+    """Create a personal-scope TaskRow directly. The HTTP promote path
+    requires a real Membrane invocation that may auto-merge; this helper
+    skips that and lets us stage the (task, suggestion) pair the
+    projection actually consumes."""
+    task_id = str(uuid.uuid4())
+    async with session_scope(maker) as session:
+        session.add(
+            TaskRow(
+                id=task_id,
+                project_id=project_id,
+                owner_user_id=owner_id,
+                requirement_id=None,
+                title=title,
+                description="",
+                status="open",
+                scope="personal",
+            )
+        )
+    return task_id
+
+
+async def _seed_task_promote_suggestion(
+    maker, *, project_id: str, task_id: str, owner_id: str
+) -> str:
+    """Stage the IMSuggestion(membrane_review, task_promote) row that
+    `task_progress.promote` would create on a request_review verdict."""
+    sug_id = str(uuid.uuid4())
+    async with session_scope(maker) as session:
+        team_stream = await StreamRepository(session).get_for_project(
+            project_id
+        )
+        if team_stream is None:
+            team_stream = await StreamRepository(session).create(
+                type="project", project_id=project_id
+            )
+        msg_id = str(uuid.uuid4())
+        session.add(
+            MessageRow(
+                id=msg_id,
+                project_id=project_id,
+                stream_id=team_stream.id,
+                author_id=owner_id,
+                body="Membrane staged a personal task for promote review.",
+                kind="membrane-review",
+                linked_id=task_id,
+            )
+        )
+        await session.flush()
+        session.add(
+            IMSuggestionRow(
+                id=sug_id,
+                message_id=msg_id,
+                project_id=project_id,
+                kind="membrane_review",
+                confidence=1.0,
+                proposal={
+                    "action": "approve_membrane_candidate",
+                    "summary": f"Approve task for the project plan",
+                    "detail": {
+                        "candidate_kind": "task_promote",
+                        "task_id": task_id,
+                        "diff_summary": None,
+                        "conflict_with": [],
+                    },
+                },
+                reasoning="membrane request_review",
+                status="pending",
+                outcome="ok",
+                attempts=1,
+            )
+        )
+    return sug_id
+
+
+@pytest.mark.asyncio
+async def test_task_promote_projects_to_packet(api_env):
+    """A pending task_promote suggestion + its personal TaskRow project
+    to a `promote_task_to_plan` packet visible to the proposer and to
+    project owners (who are the gating reviewers)."""
+    client, maker, *_ = api_env
+    owner_id = await _register(client, "fp_tp_owner")
+    member_id = await _register(client, "fp_tp_member")
+    pid = await _mk_project_with_members(
+        maker, owner_id=owner_id, member_id=member_id
+    )
+
+    task_id = await _seed_personal_task(
+        maker,
+        project_id=pid,
+        owner_id=member_id,  # member is the proposer
+        title="Quick triage — bug 423",
+    )
+    sug_id = await _seed_task_promote_suggestion(
+        maker,
+        project_id=pid,
+        task_id=task_id,
+        owner_id=owner_id,
+    )
+
+    # Owner sees the packet.
+    await _login(client, "fp_tp_owner")
+    r = await _list_flows(client, pid)
+    assert r.status_code == 200, r.text
+    packets = r.json()["packets"]
+    tp = [p for p in packets if p["recipe_id"] == "promote_task_to_plan"]
+    assert len(tp) == 1, packets
+    p = tp[0]
+    assert p["id"] == f"task_promote:{sug_id}"
+    assert p["status"] == "active"
+    assert p["stage"] == "awaiting_membrane"
+    assert p["task_id"] == task_id
+    assert p["im_suggestion_id"] == sug_id
+    assert p["source_user_id"] == member_id
+    # Owners gate the promote — present on current_target so
+    # bucket=needs_me works for them.
+    assert owner_id in p["current_target_user_ids"]
+    assert p["membrane_candidate"] is not None
+    assert p["membrane_candidate"]["kind"] == "task_promote"
+    assert "Quick triage" in p["title"]
+
+
+@pytest.mark.asyncio
+async def test_task_promote_packet_visible_to_proposer_not_other_member(
+    api_env,
+):
+    """The proposer (member who initiated) sees their own packet.
+    A casual non-owner non-proposer member does NOT — same visibility
+    rule as kb_review packets per §10."""
+    client, maker, *_ = api_env
+    owner_id = await _register(client, "fp_tpv_owner")
+    proposer_id = await _register(client, "fp_tpv_proposer")
+    bystander_id = await _register(client, "fp_tpv_bystander")
+    pid = str(uuid.uuid4())
+    async with session_scope(maker) as session:
+        session.add(ProjectRow(id=pid, title="TP Visibility"))
+        await session.flush()
+        await ProjectMemberRepository(session).add(
+            project_id=pid, user_id=owner_id, role="owner"
+        )
+        await ProjectMemberRepository(session).add(
+            project_id=pid, user_id=proposer_id, role="member"
+        )
+        await ProjectMemberRepository(session).add(
+            project_id=pid, user_id=bystander_id, role="member"
+        )
+    await backfill_streams_from_projects(maker)
+
+    task_id = await _seed_personal_task(
+        maker, project_id=pid, owner_id=proposer_id, title="Member-only task"
+    )
+    await _seed_task_promote_suggestion(
+        maker, project_id=pid, task_id=task_id, owner_id=owner_id
+    )
+
+    # Proposer sees it.
+    await _login(client, "fp_tpv_proposer")
+    r = await _list_flows(client, pid)
+    assert r.status_code == 200
+    keys = {p["recipe_id"] for p in r.json()["packets"]}
+    assert "promote_task_to_plan" in keys
+
+    # Bystander member does NOT.
+    await _login(client, "fp_tpv_bystander")
+    r = await _list_flows(client, pid)
+    assert r.status_code == 200
+    keys = {p["recipe_id"] for p in r.json()["packets"]}
+    assert "promote_task_to_plan" not in keys
+
+
+@pytest.mark.asyncio
+async def test_task_promote_packet_drops_when_suggestion_resolves(api_env):
+    """Mirrors the kb_review convention: once the suggestion status
+    flips off pending (owner accepted / dismissed), the packet drops
+    out of the projection. The promoted task lives on as a plan row in
+    /detail/tasks; the suggestion is in audit logs. The Active Flows
+    surface stops showing it because there's nothing left to act on."""
+    from datetime import datetime, timezone
+    from sqlalchemy import update
+
+    client, maker, *_ = api_env
+    owner_id = await _register(client, "fp_tpc_owner")
+    member_id = await _register(client, "fp_tpc_member")
+    pid = await _mk_project_with_members(
+        maker, owner_id=owner_id, member_id=member_id
+    )
+
+    task_id = await _seed_personal_task(
+        maker, project_id=pid, owner_id=member_id, title="Soon-to-promote"
+    )
+    sug_id = await _seed_task_promote_suggestion(
+        maker, project_id=pid, task_id=task_id, owner_id=owner_id
+    )
+
+    # Pre-resolution: packet is projected.
+    await _login(client, "fp_tpc_owner")
+    r = await _list_flows(client, pid)
+    assert any(
+        p["id"] == f"task_promote:{sug_id}" for p in r.json()["packets"]
+    )
+
+    # Simulate accept: scope flips to 'plan', suggestion resolves.
+    async with session_scope(maker) as session:
+        await session.execute(
+            update(IMSuggestionRow)
+            .where(IMSuggestionRow.id == sug_id)
+            .values(
+                status="accepted",
+                resolved_at=datetime.now(timezone.utc),
+            )
+        )
+        await session.execute(
+            update(TaskRow).where(TaskRow.id == task_id).values(scope="plan")
+        )
+
+    # Post-resolution: packet is gone from Active Flows.
+    r = await _list_flows(client, pid)
+    assert not any(
+        p["id"] == f"task_promote:{sug_id}" for p in r.json()["packets"]
+    )
