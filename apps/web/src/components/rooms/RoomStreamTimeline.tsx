@@ -62,7 +62,8 @@ export function RoomStreamTimeline({
         stream_id: streamId,
         project_id: projectId,
         author_id: m.author_id,
-        author_username: null,
+        author_username: m.author_username ?? null,
+        author_display_name: m.author_display_name ?? null,
         body: m.body,
         kind_message: "text",
         linked_id: null,
@@ -287,7 +288,7 @@ function MessageBubble({
         }}
       >
         <span>
-          {item.author_username ?? item.author_id}
+          {item.author_display_name ?? item.author_username ?? item.author_id}
           {item.kind_message !== "text" && (
             <span style={{ marginLeft: 6, opacity: 0.7 }}>
               · {item.kind_message}

@@ -879,6 +879,7 @@ class IMService:
                 "project_id",
                 "author_id",
                 "author_username",
+                "author_display_name",
                 "body",
                 "created_at",
             )

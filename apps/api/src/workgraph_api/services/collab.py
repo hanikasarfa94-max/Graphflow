@@ -313,6 +313,9 @@ class CommentService:
                 "project_id": row.project_id,
                 "author_id": row.author_id,
                 "author_username": author.username if author else None,
+                "author_display_name": (
+                    author.display_name if author else None
+                ),
                 "target_kind": row.target_kind,
                 "target_id": row.target_id,
                 "parent_comment_id": row.parent_comment_id,
@@ -373,17 +376,20 @@ class CommentService:
                 return []
             user_repo = UserRepository(session)
             authors: dict[str, str] = {}
+            display_names: dict[str, str | None] = {}
             for r in rows:
                 if r.author_id not in authors:
                     u = await user_repo.get(r.author_id)
                     if u is not None:
                         authors[r.author_id] = u.username
+                        display_names[r.author_id] = u.display_name
             return [
                 {
                     "id": r.id,
                     "project_id": r.project_id,
                     "author_id": r.author_id,
                     "author_username": authors.get(r.author_id),
+                    "author_display_name": display_names.get(r.author_id),
                     "target_kind": r.target_kind,
                     "target_id": r.target_id,
                     "parent_comment_id": r.parent_comment_id,
@@ -518,6 +524,7 @@ class MessageService:
             "stream_id": stream_id,
             "author_id": author_id,
             "author_username": author.username if author else None,
+            "author_display_name": author.display_name if author else None,
             "body": body,
             "created_at": row.created_at.isoformat(),
         }
@@ -547,7 +554,12 @@ class MessageService:
         if stream.type == "room":
             from .room_timeline import make_message_event  # local: avoids cycle
             await self._hub.publish_stream(
-                stream_id, make_message_event(row, author_username=author.username if author else None)
+                stream_id,
+                make_message_event(
+                    row,
+                    author_username=author.username if author else None,
+                    author_display_name=author.display_name if author else None,
+                ),
             )
         return {"ok": True, **payload}
 
@@ -569,11 +581,13 @@ class MessageService:
             )
             user_repo = UserRepository(session)
             authors: dict[str, str] = {}
+            display_names: dict[str, str | None] = {}
             for r in rows:
                 if r.author_id not in authors:
                     u = await user_repo.get(r.author_id)
                     if u is not None:
                         authors[r.author_id] = u.username
+                        display_names[r.author_id] = u.display_name
             return [
                 {
                     "id": r.id,
@@ -581,6 +595,7 @@ class MessageService:
                     "stream_id": r.stream_id,
                     "author_id": r.author_id,
                     "author_username": authors.get(r.author_id),
+                    "author_display_name": display_names.get(r.author_id),
                     "body": r.body,
                     # `kind` lets the web switch on structural
                     # message kinds (vote-opened, vote-resolved-*)

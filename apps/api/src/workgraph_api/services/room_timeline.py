@@ -55,7 +55,12 @@ from workgraph_persistence import (
 # ---------------------------------------------------------------------------
 
 
-def make_message_event(message_row: MessageRow, *, author_username: str | None = None) -> dict[str, Any]:
+def make_message_event(
+    message_row: MessageRow,
+    *,
+    author_username: str | None = None,
+    author_display_name: str | None = None,
+) -> dict[str, Any]:
     """Build a `timeline.upsert` event for a freshly-posted message."""
     return {
         "type": "timeline.upsert",
@@ -66,6 +71,7 @@ def make_message_event(message_row: MessageRow, *, author_username: str | None =
             "project_id": message_row.project_id,
             "author_id": message_row.author_id,
             "author_username": author_username,
+            "author_display_name": author_display_name,
             "body": message_row.body,
             "kind_message": message_row.kind,
             "linked_id": message_row.linked_id,
@@ -193,11 +199,13 @@ class RoomTimelineService:
             )
             user_repo = UserRepository(session)
             authors: dict[str, str] = {}
+            display_names: dict[str, str | None] = {}
             for r in messages:
                 if r.author_id not in authors:
                     u = await user_repo.get(r.author_id)
                     if u is not None:
                         authors[r.author_id] = u.username
+                        display_names[r.author_id] = u.display_name
 
             # IM suggestions whose source message landed in this room.
             suggestions = await IMSuggestionRepository(session).list_for_project(
@@ -236,6 +244,7 @@ class RoomTimelineService:
                     "project_id": r.project_id,
                     "author_id": r.author_id,
                     "author_username": authors.get(r.author_id),
+                    "author_display_name": display_names.get(r.author_id),
                     "body": r.body,
                     "kind_message": r.kind,
                     "linked_id": r.linked_id,

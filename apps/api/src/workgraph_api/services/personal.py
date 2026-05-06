@@ -1140,11 +1140,13 @@ class PersonalStreamService:
             )
             user_repo = UserRepository(session)
             authors: dict[str, str] = {}
+            display_names: dict[str, str | None] = {}
             for r in rows:
                 if r.author_id not in authors:
                     u = await user_repo.get(r.author_id)
                     if u is not None:
                         authors[r.author_id] = u.username
+                        display_names[r.author_id] = u.display_name
 
         messages: list[dict[str, Any]] = []
         for r in rows:
@@ -1186,6 +1188,7 @@ class PersonalStreamService:
                     "project_id": r.project_id,
                     "author_id": r.author_id,
                     "author_username": authors.get(r.author_id),
+                    "author_display_name": display_names.get(r.author_id),
                     "body": body,
                     "kind": r.kind,
                     "linked_id": r.linked_id,

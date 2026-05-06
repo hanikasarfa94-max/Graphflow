@@ -994,6 +994,7 @@ export interface StreamMessage {
   project_id: string | null;
   author_id: string;
   author_username: string | null;
+  author_display_name?: string | null;
   body: string;
   kind: string;
   linked_id: string | null;
@@ -1110,6 +1111,7 @@ export type TimelineMessageItem = {
   project_id: string;
   author_id: string;
   author_username: string | null;
+  author_display_name?: string | null;
   body: string;
   // Renamed away from `kind` to avoid clashing with the discriminator.
   kind_message: string;
