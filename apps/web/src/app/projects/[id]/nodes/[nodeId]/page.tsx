@@ -1,10 +1,10 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 
 import { DissentList } from "@/components/decision/DissentList";
 import { Heading } from "@/components/ui";
-import type { DissentRecord, ProjectState, User } from "@/lib/api";
+import type { DissentRecord, KbItemDetail, ProjectState, User } from "@/lib/api";
 import { optionalUser, serverFetch } from "@/lib/auth";
 import { formatDate, formatIso } from "@/lib/time";
 
@@ -216,6 +216,17 @@ export default async function NodeDetailPage({
   }
   const node = resolve(state, nodeId);
   if (!node) {
+    // Citation kinds `kb` and `wiki_page` aren't on ProjectState, so
+    // resolve() returns null for them. Before declaring 404, try the
+    // KB endpoint — if the id is a KB item, redirect to its canonical
+    // page. This keeps every citation chip working even when the
+    // chip's `kind` was lost (older content, server-rendered prose).
+    const kb = await serverFetch<{ ok: boolean; item: KbItemDetail }>(
+      `/api/projects/${projectId}/kb/${nodeId}`,
+    ).catch(() => null);
+    if (kb && kb.ok && kb.item) {
+      redirect(`/projects/${projectId}/kb/${nodeId}`);
+    }
     notFound();
   }
 

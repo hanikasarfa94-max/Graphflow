@@ -99,7 +99,7 @@ export function CitedClaimList({ projectId, claims }: Props) {
             {(claim.citations || []).map((c, cIdx) => (
               <Link
                 key={`${c.node_id}-${cIdx}`}
-                href={`/projects/${projectId}/nodes/${c.node_id}`}
+                href={citationHref(projectId, c.node_id, c.kind)}
                 className="wg-motion-citation-glow"
                 style={{
                   ...chipStyle,
@@ -120,8 +120,22 @@ export function CitedClaimList({ projectId, claims }: Props) {
 }
 
 // Pure helper exported for snapshot / parser tests — matches the href
-// format the chip renders.
-export function citationHref(projectId: string, nodeId: string): string {
+// format the chip renders. KB / wiki citations point at their own
+// canonical pages (the /nodes/ resolver only walks the graph state and
+// would 404 for kb_items / wiki rows). Graph kinds keep the unified
+// /nodes/ entry so deep-linking still works for tasks / decisions /
+// risks / etc.
+export function citationHref(
+  projectId: string,
+  nodeId: string,
+  kind?: CitationKind | string,
+): string {
+  if (kind === "kb") {
+    return `/projects/${projectId}/kb/${nodeId}`;
+  }
+  if (kind === "wiki_page") {
+    return `/projects/${projectId}/wiki/${nodeId}`;
+  }
   return `/projects/${projectId}/nodes/${nodeId}`;
 }
 
@@ -177,7 +191,7 @@ export function EvidenceChips({
       {cites.map((c, idx) => (
         <Link
           key={`${c.node_id}-${idx}`}
-          href={`/projects/${projectId}/nodes/${c.node_id}`}
+          href={citationHref(projectId, c.node_id, c.kind)}
           className="wg-motion-citation-glow"
           style={{
             ...chipStyle,
