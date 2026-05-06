@@ -26,7 +26,7 @@
     "totalPending": "{count} 项待处理",
     "routedHeading": "路由给你的",
     "routedEmpty": "目前没有路由给你的信号。",
-    "routedTag": "EDGE · 路由",
+    "routedTag": "智能路由",
     "routedNoFraming": "(尚无措辞)",
     "gatedHeading": "等你签字的提案",
     "gatedEmpty": "目前没有等你签字的提案。",
@@ -287,7 +287,7 @@
       "status": "状态:",
       "age": "持续:",
       "llmOffer": "刷新状态或推演下一步…",
-      "llmSendLabel": "通知我的边缘 LLM",
+      "llmSendLabel": "通知我的项目助手",
       "caughtUp": "全部完成",
       "caughtUpLastCrystallization": "最近的决策:{time}",
       "caughtUpNoHistory": "还没有结晶的决策 —— 在项目流中发起一个吧。",
@@ -315,7 +315,7 @@
       "titleLabel": "项目名称",
       "titlePlaceholder": "例如:Stellar Drift 发布",
       "descriptionLabel": "第一条需求(可选)",
-      "descriptionPlaceholder": "一句话描述你在做的事 —— 边缘 LLM 会把它解析为首条需求。",
+      "descriptionPlaceholder": "一句话描述你在做的事 —— 项目助手会把它解析为首条需求。",
       "inviteLabel": "邀请成员(可选)",
       "invitePlaceholder": "用逗号分隔的用户名,例如:raj, aiko, diego",
       "submit": "创建项目",
@@ -349,10 +349,10 @@
       "buttonLabel": "上下文口径",
       "buttonCount": "{n}/{total} 启用",
       "buttonLoading": "加载中…",
-      "hint": "选择 Edge 在此会话中可读取的上下文源",
+      "hint": "选择项目助手在此会话中可读取的上下文源",
       "kicker": "会话上下文",
       "title": "Agent 在这里可以看哪些?",
-      "subtitle": "决定 Edge 在此会话中应答时会引用哪些来源。默认设置兼顾可信度,同时避免私信权限跨群组泄露。",
+      "subtitle": "决定项目助手在此会话中应答时会引用哪些来源。默认设置兼顾可信度,同时避免私信权限跨群组泄露。",
       "source": {
         "graph": {
           "label": "项目图谱",
@@ -552,7 +552,7 @@
       }
     },
     "attribution": {
-      "edge": "边缘",
+      "edge": "助手",
       "clarifier": "澄清员",
       "decision": "决策",
       "blocker": "阻塞",
@@ -819,9 +819,9 @@
   },
   "personal": {
     "title": "我的会话",
-    "subtitle": "你与你的 Edge 智能体,聚焦在这个项目",
+    "subtitle": "你与项目助手,聚焦在这个项目",
     "loading": "加载你的会话中…",
-    "empty": "向你的 Edge 智能体提问 —— 它了解这个项目的图谱、近期决策,以及该转给谁。",
+    "empty": "向项目助手提问 —— 它了解这个项目的图谱、近期决策,以及该转给谁。",
     "tabs": {
       "myThread": "🤖 我的会话",
       "teamRoom": "👥 团队会议室",
@@ -833,20 +833,20 @@
       "empty": "暂无可私信的成员。"
     },
     "composer": {
-      "placeholder": "与你的 Edge 智能体交谈…",
+      "placeholder": "向项目助手提问…",
       "send": "发送",
       "charCount": "{count} / {max}",
       "tooLong": "消息过长 —— 请控制在 {max} 字以内。"
     },
     "edge": {
-      "attribution": "边缘代理",
+      "attribution": "项目助手",
       "answer": "回答",
       "clarify": "澄清提问",
       "thinking": "思考中",
-      "unknown": "边缘"
+      "unknown": "助手"
     },
     "routeProposal": {
-      "header": "🤖 Edge —— 路由建议",
+      "header": "🤖 项目助手 —— 路由建议",
       "ask": "询问 {name}",
       "asking": "正在询问 {name}…",
       "bFacingLabel": "{name} 看到的内容",
@@ -1249,9 +1249,9 @@
     }
   },
   "membrane": {
-    "attribution": "Edge · 膜感知",
+    "attribution": "助手 · 膜感知",
     "ambient": "环境信号",
-    "routedAs": "Edge 将该外部信号作为 {tag} 路由给你",
+    "routedAs": "项目助手将该外部信号作为 {tag} 路由给你",
     "viewSource": "查看来源",
     "detectedUrl": "检测到链接 —",
     "ingestAsSignal": "作为信号收入",

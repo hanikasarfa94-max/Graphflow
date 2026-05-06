@@ -26,7 +26,7 @@
     "totalPending": "{count} pending",
     "routedHeading": "Routed to you",
     "routedEmpty": "Nothing routed to you right now.",
-    "routedTag": "EDGE · routed",
+    "routedTag": "Routed",
     "routedNoFraming": "(no framing yet)",
     "gatedHeading": "Gated approvals",
     "gatedEmpty": "No gated proposals waiting on you.",
@@ -287,7 +287,7 @@
       "status": "Status:",
       "age": "Age:",
       "llmOffer": "Refresh status or rehearse your next step…",
-      "llmSendLabel": "Nudge my edge LLM",
+      "llmSendLabel": "Nudge my project assistant",
       "caughtUp": "All caught up",
       "caughtUpLastCrystallization": "Last crystallization: {time}",
       "caughtUpNoHistory": "No crystallizations yet — kick one off from a project stream.",
@@ -315,7 +315,7 @@
       "titleLabel": "Project title",
       "titlePlaceholder": "e.g., Stellar Drift launch",
       "descriptionLabel": "First requirement (optional)",
-      "descriptionPlaceholder": "Describe what you're building — the edge LLM will parse this as the first requirement.",
+      "descriptionPlaceholder": "Describe what you're building — the project assistant will parse this as the first requirement.",
       "inviteLabel": "Invite members (optional)",
       "invitePlaceholder": "Comma-separated usernames, e.g. raj, aiko, diego",
       "submit": "Create project",
@@ -349,10 +349,10 @@
       "buttonLabel": "Context scope",
       "buttonCount": "{n}/{total} on",
       "buttonLoading": "loading…",
-      "hint": "Choose which sources Edge can read in this stream",
+      "hint": "Choose which sources the project assistant can read in this stream",
       "kicker": "Stream context",
       "title": "What can the agent read here?",
-      "subtitle": "Toggle which sources Edge consults when it answers in this stream. Defaults err on the side of trust without leaking private context across the room.",
+      "subtitle": "Toggle which sources the project assistant consults when it answers in this stream. Defaults err on the side of trust without leaking private context across the room.",
       "source": {
         "graph": {
           "label": "Project graph",
@@ -552,7 +552,7 @@
       }
     },
     "attribution": {
-      "edge": "edge",
+      "edge": "assistant",
       "clarifier": "clarifier",
       "decision": "decision",
       "blocker": "blocker",
@@ -819,9 +819,9 @@
   },
   "personal": {
     "title": "My thread",
-    "subtitle": "You + your edge agent, scoped to this project",
+    "subtitle": "You + your project assistant, scoped to this project",
     "loading": "Loading your thread…",
-    "empty": "Ask your edge agent anything — it knows this project's graph, recent decisions, and who to route to.",
+    "empty": "Ask your project assistant anything — it knows this project's graph, recent decisions, and who to route to.",
     "tabs": {
       "myThread": "🤖 My thread",
       "teamRoom": "👥 Team room",
@@ -833,20 +833,20 @@
       "empty": "No teammates to DM yet."
     },
     "composer": {
-      "placeholder": "Talk to your edge agent…",
+      "placeholder": "Ask your project assistant…",
       "send": "Send",
       "charCount": "{count} / {max}",
       "tooLong": "Message too long — keep under {max} characters."
     },
     "edge": {
-      "attribution": "Edge",
+      "attribution": "Project assistant",
       "answer": "answer",
       "clarify": "clarifying question",
       "thinking": "thinking",
-      "unknown": "edge"
+      "unknown": "assistant"
     },
     "routeProposal": {
-      "header": "🤖 Edge — routing proposal",
+      "header": "🤖 Project assistant — routing proposal",
       "ask": "Ask {name}",
       "asking": "Asking {name}…",
       "bFacingLabel": "What {name} will see",
@@ -1249,9 +1249,9 @@
     }
   },
   "membrane": {
-    "attribution": "Edge · membrane",
+    "attribution": "Assistant · membrane",
     "ambient": "ambient",
-    "routedAs": "Edge routed this to you as {tag}",
+    "routedAs": "Project assistant routed this to you as {tag}",
     "viewSource": "View source",
     "detectedUrl": "URL detected —",
     "ingestAsSignal": "Ingest as signal",
