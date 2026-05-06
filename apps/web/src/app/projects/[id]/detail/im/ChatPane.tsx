@@ -8,7 +8,8 @@ import {
   ApiError,
   type Decision,
 } from "@/lib/api";
-import { formatTime } from "@/lib/time";
+import { formatIso } from "@/lib/time";
+import { formatMessageTime } from "@/components/stream/types";
 
 type Suggestion = {
   id: string;
@@ -389,8 +390,11 @@ function MessageRow({
             message.author_username ??
             message.author_id.slice(0, 8)}
         </strong>
-        <span style={{ marginLeft: 6 }}>
-          {formatTime(message.created_at)}
+        <span
+          style={{ marginLeft: 6 }}
+          title={formatIso(message.created_at)}
+        >
+          {formatMessageTime(message.created_at)}
         </span>
       </div>
       {/* Above-body counter-of note */}
