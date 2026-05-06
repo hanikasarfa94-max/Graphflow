@@ -60,6 +60,27 @@ export function LoginForm() {
 
   return (
     <>
+      <div
+        style={{
+          width: 360,
+          maxWidth: "100%",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          marginBottom: 20,
+        }}
+      >
+        <img
+          src="/brand/logo-wordmark.png"
+          alt={t("brand.name")}
+          style={{
+            maxWidth: 240,
+            width: "100%",
+            height: "auto",
+            display: "block",
+          }}
+        />
+      </div>
       <form
         method="post"
         action="/api/auth/login"
@@ -82,18 +103,6 @@ export function LoginForm() {
             marginBottom: 24,
           }}
         >
-          <span
-            style={{
-              display: "inline-block",
-              width: "var(--wg-dot)",
-              height: "var(--wg-dot)",
-              borderRadius: "50%",
-              background: "var(--wg-accent)",
-              marginRight: 8,
-              verticalAlign: "middle",
-            }}
-          />
-          {t("brand.name")} —{" "}
           {mode === "login" ? t("login.heading") : t("login.registerHeading")}
         </div>
 

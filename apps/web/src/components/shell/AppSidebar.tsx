@@ -725,9 +725,9 @@ export function AppSidebar({
       >
         {collapsed ? "›" : "‹"}
       </button>
-      {/* Brand — gradient G mark + name + tagline. The mark is the
-          single most repeated visual; making it a small instrument
-          (gradient + soft shadow) is cheap personality. */}
+      {/* Brand — pure GraphFlow mark + name + tagline. The mark is the
+          single most repeated visual; we use the actual logo PNG so
+          the sidebar matches the login splash and the favicon. */}
       <Link
         href="/"
         style={{
@@ -740,25 +740,20 @@ export function AppSidebar({
           color: "var(--wg-ink)",
         }}
       >
-        <span
+        <img
+          src="/brand/logo-mark.png"
+          alt=""
           aria-hidden
+          width={32}
+          height={32}
           style={{
             width: 32,
             height: 32,
-            borderRadius: 11,
-            display: "grid",
-            placeItems: "center",
-            background:
-              "linear-gradient(135deg, #38bdf8, var(--wg-accent))",
-            color: "#fff",
-            fontWeight: 800,
-            fontSize: 15,
-            letterSpacing: "-0.02em",
-            boxShadow: "0 8px 18px rgba(37,99,235,0.22)",
+            borderRadius: 8,
+            objectFit: "contain",
+            display: "block",
           }}
-        >
-          G
-        </span>
+        />
         <span
           className="wg-sb-label"
           style={{ display: "flex", flexDirection: "column", gap: 1 }}
