@@ -107,3 +107,17 @@ graphify-out/
 # generator output (e.g. _double11_content.json) is committed; the
 # shared cache is not.
 scripts/demo/_deepseek_cache.json
+
+# Local MCP server config — per-machine paths / toggles that don't
+# generalize to other contributors.
+.mcp.json
+
+# Demo recording assets — the .mp4 files are 185 MB and not suitable
+# for git (would bloat clone size). Track them via release attachments
+# or object storage instead. The poster .jpg covers ARE small enough
+# to track if needed.
+feishudemo/*.mp4
+飞书demo/*.mp4
+
+# One-off prototype HTML preview — local design exploration scratch.
+prototype_extra_preview.html
