@@ -25,7 +25,7 @@ import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui";
 import type { PersonalMessage } from "@/lib/api";
 
-import { CitedClaimList } from "./CitedClaimList";
+import { EvidenceChips } from "./CitedClaimList";
 import { relativeTime,
   formatMessageTime } from "./types";
 import { formatIso } from "@/lib/time";
@@ -130,25 +130,32 @@ export function EdgeReplyCard({
           </span>
         </div>
       )}
+      {/*
+        M1.3 Slice A — render body as the main conversational answer,
+        ALWAYS. The pre-M1.3 path swapped body for CitedClaimList when
+        claims existed, which collapsed the assistant's living voice
+        into a list of cited factual rows. Body stays first; citations
+        become a compact provenance chip-line below.
+      */}
+      <div
+        data-uncited={isUncited ? "true" : "false"}
+        style={{
+          color: isUncited ? "var(--wg-ink-faint)" : "var(--wg-ink)",
+          fontStyle: isUncited ? "italic" : "normal",
+          whiteSpace: "pre-wrap",
+          wordBreak: "break-word",
+          lineHeight: 1.55,
+        }}
+      >
+        {message.body}
+      </div>
       {hasClaims ? (
-        <CitedClaimList
+        <EvidenceChips
           projectId={effectiveProjectId}
           claims={claims}
+          label={t("edge.evidenceLabel")}
         />
-      ) : (
-        <div
-          data-uncited={isUncited ? "true" : "false"}
-          style={{
-            color: isUncited ? "var(--wg-ink-faint)" : "var(--wg-ink)",
-            fontStyle: isUncited ? "italic" : "normal",
-            whiteSpace: "pre-wrap",
-            wordBreak: "break-word",
-            lineHeight: 1.55,
-          }}
-        >
-          {message.body}
-        </div>
-      )}
+      ) : null}
       {onFollowUp && (
         <Button
           variant="ghost"

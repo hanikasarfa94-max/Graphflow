@@ -124,3 +124,72 @@ export function CitedClaimList({ projectId, claims }: Props) {
 export function citationHref(projectId: string, nodeId: string): string {
   return `/projects/${projectId}/nodes/${nodeId}`;
 }
+
+// M1.3 Slice A — compact provenance chip line.
+//
+// Pre-M1.3, EdgeReplyCard rendered <CitedClaimList> in place of the
+// body when claims existed, which hid the LLM's conversational answer.
+// EvidenceChips is the replacement: it surfaces only the citation
+// chips (deduped across claims, in first-seen order) on a single line
+// labeled "依据" / "Evidence", so the body stays the main answer and
+// citations are supporting provenance.
+export function EvidenceChips({
+  projectId,
+  claims,
+  label,
+}: {
+  projectId: string;
+  claims: CitedClaim[];
+  // Optional override; default is the i18n string injected by the caller.
+  label?: string;
+}) {
+  // Dedupe: same node may appear in multiple claims. Preserve first-seen
+  // order so chip order is stable across re-renders.
+  const seen = new Set<string>();
+  const cites: { node_id: string; kind: CitationKind }[] = [];
+  for (const claim of claims) {
+    for (const c of claim.citations || []) {
+      const key = `${c.kind}:${c.node_id}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      cites.push(c);
+    }
+  }
+  if (cites.length === 0) return null;
+  return (
+    <div
+      data-testid="evidence-chips"
+      style={{
+        display: "flex",
+        flexWrap: "wrap",
+        alignItems: "center",
+        gap: 6,
+        marginTop: 8,
+        paddingTop: 6,
+        borderTop: "1px dashed var(--wg-line)",
+        fontSize: 11,
+        color: "var(--wg-ink-soft)",
+      }}
+    >
+      <span style={{ fontFamily: "var(--wg-font-mono)" }}>
+        {label ?? "Evidence"}:
+      </span>
+      {cites.map((c, idx) => (
+        <Link
+          key={`${c.node_id}-${idx}`}
+          href={`/projects/${projectId}/nodes/${c.node_id}`}
+          className="wg-motion-citation-glow"
+          style={{
+            ...chipStyle,
+            animationDelay: `${idx * 60}ms`,
+          }}
+          data-testid="evidence-chip"
+          data-node-id={c.node_id}
+          data-kind={c.kind}
+        >
+          [{citationLabel(c.kind, c.node_id)}]
+        </Link>
+      ))}
+    </div>
+  );
+}

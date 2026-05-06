@@ -418,7 +418,16 @@
     },
     "proposal": {
       "label": "Proposed",
-      "references": "References"
+      "references": "References",
+      "actionLabels": {
+        "approve_membrane_candidate": "Approve into team memory",
+        "archive_kb_item": "Archive this KB item",
+        "save_to_wiki": "Save to wiki",
+        "open_risk": "Open as risk",
+        "drop_deliverable": "Drop deliverable",
+        "mark_task_done": "Mark task done",
+        "update_constraint": "Update constraint"
+      }
     },
     "preview": {
       "membraneReview": {
@@ -854,7 +863,8 @@
       "answer": "answer",
       "clarify": "clarifying question",
       "thinking": "thinking",
-      "unknown": "assistant"
+      "unknown": "assistant",
+      "evidenceLabel": "Evidence"
     },
     "routeProposal": {
       "header": "🤖 Project assistant — routing proposal",

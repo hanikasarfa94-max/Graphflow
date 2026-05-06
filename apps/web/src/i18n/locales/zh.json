@@ -418,7 +418,16 @@
     },
     "proposal": {
       "label": "建议",
-      "references": "涉及"
+      "references": "涉及",
+      "actionLabels": {
+        "approve_membrane_candidate": "批准进入团队记忆",
+        "archive_kb_item": "归档此条 KB",
+        "save_to_wiki": "保存到 Wiki",
+        "open_risk": "登记风险",
+        "drop_deliverable": "删除交付物",
+        "mark_task_done": "标记任务完成",
+        "update_constraint": "更新约束"
+      }
     },
     "preview": {
       "membraneReview": {
@@ -854,7 +863,8 @@
       "answer": "回答",
       "clarify": "澄清提问",
       "thinking": "思考中",
-      "unknown": "助手"
+      "unknown": "助手",
+      "evidenceLabel": "依据"
     },
     "routeProposal": {
       "header": "🤖 项目助手 —— 路由建议",
