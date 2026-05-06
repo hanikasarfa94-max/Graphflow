@@ -123,6 +123,26 @@ def _encode_claims_body(body: str, claims: list[dict[str, Any]]) -> str:
     return f"{body}\n\n<claims>{json.dumps(claims, ensure_ascii=False)}</claims>"
 
 
+def _strip_machine_markers(body: str) -> str:
+    """M1.3 Slice C — sanitize a raw message body before handing it to
+    the LLM as `recent_messages` context.
+
+    Edge-agent replies stored in DB carry `<claims>...</claims>` and
+    `<route-proposal>...</route-proposal>` JSON markers so the FE can
+    surface citations and route proposals. The LLM does NOT need these
+    markers — they bias it toward repeating its own machine-shaped
+    output and add token noise. Strip them so `recent_messages` reads
+    like clean prose to the next prompt.
+
+    Pure string transform; safe to call on user messages too (they
+    won't have markers, so it's a no-op)."""
+    if not body:
+        return body
+    cleaned = _CLAIMS_MARKER_RE.sub("", body)
+    cleaned = _ROUTE_PROPOSAL_MARKER_RE.sub("", cleaned)
+    return cleaned.rstrip()
+
+
 async def _bump_cited_claims(
     sessionmaker: async_sessionmaker,
     claims: list[CitedClaim],
@@ -1292,7 +1312,10 @@ class PersonalStreamService:
                 {
                     "author_id": r.author_id,
                     "kind": r.kind,
-                    "body": r.body,
+                    # M1.3 Slice C — strip <claims> / <route-proposal>
+                    # markers so the LLM sees clean prose, not its own
+                    # machine-shaped output reflected back.
+                    "body": _strip_machine_markers(r.body),
                     "created_at": r.created_at.isoformat(),
                 }
                 for r in msg_rows
