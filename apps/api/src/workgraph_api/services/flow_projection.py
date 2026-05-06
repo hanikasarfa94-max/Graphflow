@@ -62,6 +62,72 @@ Bucket = Literal[
     "recent",
 ]
 
+# Transition Contract types (T1) — see
+# `docs/north-star-graph-system.md §Transition Contracts`. The contract
+# is a per-packet read-only field that names the state transition the
+# packet governs. The vocabulary is small, machine-readable, and
+# stable across recipes so an audit / FE / agent can ask "what
+# boundary does this signal cross?" without parsing prose.
+ReviewMethod = Literal[
+    "none",
+    "routing_reply",
+    "membrane_review",
+    "vote",
+    "owner_acceptance",
+    "agent_semantic_review",
+]
+
+TransitionStatus = Literal[
+    "satisfied",
+    "awaiting_evidence",
+    "awaiting_authority",
+    "blocked",
+    "completed",
+]
+
+
+def _flow_ref(kind: str, id_: str | None, **extra: Any) -> dict[str, Any]:
+    """Tiny factory for the `{kind, id, ...}` ref shape used in
+    transition_contract.required_evidence / lineage_output. `id` is
+    allowed to be None for refs that name a class of evidence
+    without a single row id (e.g. `{"kind": "framing"}`)."""
+    out: dict[str, Any] = {"kind": kind}
+    if id_ is not None:
+        out["id"] = id_
+    out.update(extra)
+    return out
+
+
+def _transition_contract(
+    *,
+    source_state: str,
+    target_state: str,
+    review_method: ReviewMethod,
+    mutation_service: str,
+    status: TransitionStatus,
+    required_evidence: list[dict[str, Any]] | None = None,
+    authority_user_ids: list[str] | None = None,
+    lineage_output: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """Build a TransitionContract envelope for a flow packet.
+
+    Centralized so every recipe's packet builder produces the same
+    shape, and so the test suite can assert on a single key
+    structure. Empty lists default to [] (not None) — the FE / audit
+    code treats absence as "not yet known", which is different from
+    "no evidence required".
+    """
+    return {
+        "source_state": source_state,
+        "target_state": target_state,
+        "required_evidence": list(required_evidence or []),
+        "authority_user_ids": list(authority_user_ids or []),
+        "review_method": review_method,
+        "mutation_service": mutation_service,
+        "lineage_output": list(lineage_output or []),
+        "status": status,
+    }
+
 
 class FlowProjectionService:
     """Read-only projection. One method per source-row family."""
@@ -529,6 +595,101 @@ def _route_packet_from_row(row: RoutedSignalRow) -> dict[str, Any]:
         "uncertainty": [],
     }
 
+    # T2 — Transition Contract for routed signal. The state pair
+    # describes what the signal is trying to move through, not what
+    # row exists. `question_unanswered` → `expert_reply_received` →
+    # `reply_accepted` / `reply_countered` / `reply_escalated`.
+    #
+    # required_evidence travels with the contract: framing is always
+    # there, plus any `routing_basis` envelope persisted in
+    # background_json by R2 (the server-side suggestion verification),
+    # plus the target reply once landed.
+    if is_pending:
+        contract_source = "question_unanswered"
+        contract_target = "expert_reply_received"
+        contract_status: TransitionStatus = "awaiting_authority"
+    elif is_replied:
+        contract_source = "expert_reply_received"
+        contract_target = "reply_accepted"
+        contract_status = "awaiting_authority"
+    else:
+        # Pick the terminal state name from the most recent
+        # source-side action note (slice D semantics).
+        last_action = (
+            source_action_notes[-1].get("action")
+            if source_action_notes
+            else None
+        )
+        contract_source = "expert_reply_received"
+        contract_target = (
+            f"reply_{last_action}"
+            if last_action in ("accepted", "countered", "escalated")
+            else "reply_accepted"
+        )
+        contract_status = "completed"
+
+    contract_required_evidence: list[dict[str, Any]] = [
+        _flow_ref("framing", row.id, label="routed signal framing"),
+    ]
+    bg = row.background_json if isinstance(row.background_json, list) else []
+    for entry in bg:
+        if isinstance(entry, dict) and entry.get("source") == "routing_basis":
+            basis = entry.get("routing_basis") or {}
+            if basis.get("grounded"):
+                matched = basis.get("matched_suggestion") or {}
+                contract_required_evidence.append(
+                    _flow_ref(
+                        "routing_basis",
+                        matched.get("user_id"),
+                        label="server-side routing_suggest match",
+                        primary_signal=(
+                            matched.get("evidence", {}) or {}
+                        ).get("primary_signal"),
+                    )
+                )
+            else:
+                contract_required_evidence.append(
+                    _flow_ref(
+                        "routing_basis",
+                        None,
+                        label=f"ungrounded ({basis.get('reason') or 'unknown'})",
+                    )
+                )
+            break  # one routing_basis envelope per dispatch
+
+    contract_authority = list(current_target)
+
+    contract_lineage: list[dict[str, Any]] = []
+    if row.responded_at:
+        contract_lineage.append(
+            _flow_ref(
+                "routed_reply",
+                row.id,
+                label="target reply",
+                at=_iso(row.responded_at),
+            )
+        )
+    for n in source_action_notes:
+        contract_lineage.append(
+            _flow_ref(
+                f"source_{n.get('action') or 'action'}",
+                row.id,
+                label=f"source {n.get('action') or 'action'}",
+                at=n.get("at"),
+            )
+        )
+
+    transition_contract = _transition_contract(
+        source_state=contract_source,
+        target_state=contract_target,
+        review_method="routing_reply",
+        mutation_service="RoutingService",
+        status=contract_status,
+        required_evidence=contract_required_evidence,
+        authority_user_ids=contract_authority,
+        lineage_output=contract_lineage,
+    )
+
     return {
         "id": f"route:{row.id}",
         "project_id": row.project_id or "",
@@ -546,6 +707,7 @@ def _route_packet_from_row(row: RoutedSignalRow) -> dict[str, Any]:
         "graph_refs": [],
         "evidence": evidence,
         "routed_signal_id": row.id,
+        "transition_contract": transition_contract,
         "timeline": timeline,
         "next_actions": next_actions,
         "created_at": _iso(row.created_at),
@@ -652,6 +814,36 @@ def _kb_review_packet_from_row(
         "kb_item_id": row.id,
         "im_suggestion_id": suggestions[0].id if suggestions else None,
         "membrane_candidate": membrane_candidate,
+        "transition_contract": _transition_contract(
+            # T4 — KB promote contract. Source state names match the
+            # `KbItemRow.status` lifecycle: `draft` (user-authored)
+            # and `pending-review` (ingest path). Target is canonical
+            # World memory once status flips to 'published'.
+            source_state=(
+                "personal_kb_draft"
+                if row.status == "draft"
+                else "kb_pending_review"
+            ),
+            target_state="canonical_world_memory",
+            review_method="membrane_review",
+            mutation_service="KbItemService+MembraneService",
+            status="awaiting_authority" if stage_alive else "completed",
+            required_evidence=[
+                _flow_ref("kb_item", row.id, label=row.title or ""),
+                *[
+                    _flow_ref(
+                        "membrane_suggestion", s.id, label="KB review"
+                    )
+                    for s in suggestions
+                ],
+            ],
+            authority_user_ids=list(owner_ids) if stage_alive else [],
+            lineage_output=(
+                []
+                if stage_alive
+                else [_flow_ref("kb_item_published", row.id, label=row.title or "")]
+            ),
+        ),
         "timeline": timeline,
         "next_actions": next_actions,
         "created_at": _iso(row.created_at),
@@ -726,6 +918,55 @@ def _task_promote_packet_from_rows(
         "conflict_with": [],
         "warnings": [],
     }
+    # T3 — Transition Contract for personal-task promotion. The state
+    # pair is `personal_task_draft` → `plan_task_candidate`. Once the
+    # owner accepts the suggestion, the task flips scope='plan' and
+    # the packet drops from projection (a separate "completed"
+    # terminal would require widening the upstream query — skipped
+    # this slice; the lineage lives on as a TaskRow row).
+    contract_required_evidence = [
+        _flow_ref("task", task.id, label=task.title or ""),
+        _flow_ref(
+            "membrane_suggestion",
+            suggestion.id,
+            label="task_promote review",
+        ),
+    ]
+    if diff_summary:
+        contract_required_evidence.append(
+            _flow_ref("diff_summary", suggestion.id, label=diff_summary[:80])
+        )
+    # M3 conflict refs (when the agent flagged any) travel as
+    # required_evidence too; they're already on the suggestion.
+    detail = (proposal or {}).get("detail") if proposal else None
+    if isinstance(detail, dict):
+        for cw in (detail.get("conflict_with") or []):
+            if isinstance(cw, str):
+                contract_required_evidence.append(
+                    _flow_ref("conflict_ref", cw, label="agent flagged")
+                )
+
+    transition_contract = _transition_contract(
+        source_state="personal_task_draft",
+        target_state="plan_task_candidate",
+        # Combined: deterministic Membrane review on the suggestion
+        # accept gate AND the M3 agent semantic review that ran
+        # before the suggestion was created. Both are real today;
+        # we name both so the audit can ask "which review?".
+        review_method="membrane_review",
+        mutation_service="TaskProgressService+MembraneService",
+        status="awaiting_authority",
+        required_evidence=contract_required_evidence,
+        authority_user_ids=list(owner_ids),
+        # Lineage is empty while the packet is alive — the canonical
+        # `plan_task_canonical` lineage row is `TaskRow.scope='plan'`
+        # which only exists post-accept. The packet drops from
+        # projection at that point, so the projection-side
+        # lineage_output stays empty. Audit consumers wanting the
+        # post-accept lineage read TaskRow directly.
+        lineage_output=[],
+    )
+
     return {
         # `task_promote:` namespace mirrors `kb:` / `handoff:` — synthetic
         # ids per spec §11. Suggestion id is the stable source key
@@ -749,6 +990,7 @@ def _task_promote_packet_from_rows(
         "task_id": task.id,
         "im_suggestion_id": suggestion.id,
         "membrane_candidate": membrane_candidate,
+        "transition_contract": transition_contract,
         "timeline": timeline,
         "next_actions": next_actions,
         "created_at": _iso(suggestion.created_at),
@@ -829,6 +1071,33 @@ def _handoff_packet_from_row(
         "graph_refs": [],
         "evidence": _empty_evidence(),
         "handoff_id": row.id,
+        "transition_contract": _transition_contract(
+            # T4 — handoff contract. The state pair is
+            # `handoff_drafted` → `handoff_finalized`. Authority is
+            # the project owners (HandoffService.finalize gates on
+            # owner role).
+            source_state="handoff_drafted",
+            target_state="handoff_finalized",
+            review_method="owner_acceptance",
+            mutation_service="HandoffService",
+            status="awaiting_authority" if stage_alive else "completed",
+            required_evidence=[
+                _flow_ref("handoff", row.id, label=title),
+            ],
+            authority_user_ids=list(owner_ids) if stage_alive else [],
+            lineage_output=(
+                []
+                if stage_alive
+                else [
+                    _flow_ref(
+                        "handoff_finalized",
+                        row.id,
+                        label="finalized",
+                        at=_iso(row.finalized_at),
+                    )
+                ]
+            ),
+        ),
         "timeline": timeline,
         "next_actions": next_actions,
         "created_at": _iso(row.created_at),

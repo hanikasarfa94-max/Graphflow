@@ -11,9 +11,9 @@ and protects shared memory from pollution.
 The product can be understood as three nested graphs:
 
 ```text
-BG Graph   -> where we are, what we know, where we are going, why
-Org Graph  -> who is here, what they can do, what they are responsible for
-Work Graph -> what is moving, who is waiting, what needs to be done
+World Graph -> where we are, what we know, where we are going, why
+Org Graph   -> who is here, what they can do, what they are responsible for
+Work Graph  -> what is moving, who is waiting, what needs to be done
 ```
 
 The Membrane protects the reliability of all three. The Router Agent is
@@ -41,10 +41,14 @@ and leaves traceable graph state behind.
 
 ## The Three Graphs
 
-### BG Graph
+### World Graph
 
-The BG Graph is the background of the organization: what the group knows,
-what it believes, where it is going, and why.
+The World Graph is the shared reality of the organization: what the
+group knows, what it believes, where it is going, and why. Earlier
+drafts called this the "BG Graph" (background graph); we renamed it
+because **World** is the term that travels best across English and
+Chinese product copy and avoids the implication that this layer is
+merely backdrop. It is the shared reality the team operates inside.
 
 It includes:
 
@@ -54,7 +58,7 @@ It includes:
 - rendered documents such as postmortems and handoffs
 - lineage from messages, meetings, external signals, and prior decisions
 
-The BG Graph answers:
+The World Graph answers:
 
 - What do we know?
 - Why did we decide this?
@@ -131,15 +135,16 @@ The three graphs are separate lenses, not separate products. They feed
 each other continuously.
 
 ```text
-BG -> Org
+World -> Org
 The group knows Aiko has been involved in Switch performance decisions.
-That background strengthens her capability profile for performance calls.
+That World context strengthens her capability profile for performance
+calls.
 
 Org -> Work
 The router chooses Aiko because her observed/trusted skill graph says she
 is the right person for a performance feasibility question.
 
-Work -> BG
+Work -> World
 When Aiko replies and Maya accepts, the result can become a decision,
 task update, risk update, or KB note with lineage.
 
@@ -168,8 +173,8 @@ messy signal can become organizational fact.
 
 Membrane protects:
 
-- BG reliability: KB notes, decisions, risks, events, and rendered facts
-  should not pollute shared memory without review.
+- World reliability: KB notes, decisions, risks, events, and rendered
+  facts should not pollute shared memory without review.
 - Org reliability: skill and authority claims should not become trusted
   simply because someone typed them.
 - Work reliability: personal tasks and proposals should not silently
@@ -209,10 +214,10 @@ signals across people and graphs.
 
 It should decide:
 
-- whether the user can be answered directly from BG context
+- whether the user can be answered directly from World context
 - whether a tool call is needed
 - whether a human route is needed
-- who the right target is, using Org Graph evidence and BG context
+- who the right target is, using Org Graph evidence and World context
 - what background and tradeoffs the target needs
 - what happens when the reply returns
 
@@ -234,7 +239,7 @@ with the group through AI.
 
 It should:
 
-- answer from BG Graph when possible
+- answer from World Graph when possible
 - call tools when more graph state is needed
 - propose routes when another human's judgment is required
 - stage tasks and KB candidates without bypassing Membrane
@@ -260,7 +265,7 @@ raw/private
 -> superseded/archived
 ```
 
-Applied to BG:
+Applied to World:
 
 ```text
 private note
@@ -290,7 +295,7 @@ personal task
 -> Membrane review
 -> plan task
 -> completed / blocked / cancelled
--> evidence for BG and Org graphs
+-> evidence for World and Org graphs
 ```
 
 Applied to decisions:
@@ -311,7 +316,7 @@ For competition review, these claims are load-bearing:
 
 - The LLM's context is scoped and retrieval-backed, not arbitrary prompt
   stuffing.
-- Retrieved BG nodes carry provenance and graph relations.
+- Retrieved World nodes carry provenance and graph relations.
 - Routing suggestions are grounded in evidence, not only role names.
 - Membrane blocks or routes uncertain group-context writes before they
   become canonical.
@@ -328,7 +333,8 @@ it is not yet a product invariant.
 
 Working names:
 
-- **BG Graph**: background graph, the group's known world and why-chain.
+- **World Graph**: shared reality, the group's known world and why-chain.
+  Renamed from "BG Graph" in the earlier draft.
 - **Org Graph**: organization graph, members, roles, capabilities,
   authority, and responsibility.
 - **Work Graph**: action graph, tasks, flows, commitments, and routed work.
@@ -344,23 +350,26 @@ system instead of branding around it.
 
 The next specs should make this doctrine testable:
 
-1. BG Graph context contract: what a retrieved node must carry into LLM
+1. World Graph context contract: what a retrieved node must carry into LLM
    pretext.
 2. Org Graph capability contract: how declared, observed, validated, and
    trusted skills are derived.
 3. Work Graph promotion contract: how personal tasks become group plan
    tasks through Membrane.
-4. Membrane Agent contract across BG, Org, and Work: what deterministic
+4. Membrane Agent contract across World, Org, and Work: what deterministic
    checks and LLM checks run per candidate kind.
 5. Router grounding contract: no discovery route without evidence refs.
 
 This is the bar: GraphFlow should not merely show collaboration. It
 should make organizational context governable, routable, and reliable.
 ## Transition Contracts
-GraphFlow does not only store nodes. It governs transitions between states.
+
+GraphFlow does not only store nodes. It governs transitions between
+states.
 
 A useful signal may move through several transitions:
 
+```text
 private thought
 -> routed question
 -> expert reply
@@ -370,12 +379,36 @@ private thought
 -> task graph
 -> completed work
 -> validated memory
+```
 
-Each transition must declare:
-- source state
-- target state
-- required evidence
-- authority
-- review method
-- mutation service
+Each transition declares: source state, target state, required
+evidence, authority, review method, mutation service, lineage output,
+and an honest implementation status.
+
+Implementation status legend (apply per row):
+
+- **real** — every field is derivable from current code today and the
+  test suite proves it.
+- **partial** — most fields are derivable but at least one is best-
+  effort or not exercised end-to-end. Specific gaps named in the row.
+- **aspirational** — concept is in this doc but the corresponding
+  flow packet / mutation surface is not yet projected from code.
+
+| Flow | source_state | target_state | required_evidence | authority | review_method | mutation_service | lineage_output | status |
+|---|---|---|---|---|---|---|---|---|
+| **routed signal (`ask_with_context`)** | `question_unanswered` | `expert_reply_received` → `reply_accepted` | `routing_basis` (from R2) + framing + options + grounding evidence (skills / decisions / tasks the target is close to) | current `target_user_id` (target judges) + project owners (audit) | `routing_reply` | `RoutingService` | `RoutedSignalRow.reply_json` once replied + `routed-reply` message + source-side `edge-reply-frame`; `accept` flips `status='accepted'` | **real** — backend grounding gate + projection; tests cover grounded-vs-rejected dispatch and replied/accepted timeline. |
+| **task promote (`promote_task_to_plan`)** | `personal_task_draft` | `plan_task_candidate` (Membrane staged) → `plan_task_canonical` (owner accept flips `TaskRow.scope='plan'`) | `TaskRow` ref + Membrane deterministic warnings + agent semantic-review verdict (M3) + related tasks + recent decisions | project owners gate the IMSuggestion(membrane_review) accept | `membrane_review` (deterministic) + `agent_semantic_review` (M3) | `TaskProgressService` (`POST /api/tasks/{id}/promote`) → `MembraneService.review` → on accept `IMService._apply_proposal` calls `PlanRepository.promote_personal_to_plan` | `IMSuggestionRow.proposal.detail.task_id` (membrane decision audit) + post-accept `TaskRow.scope='plan'` (the canonical lineage) | **real** — F.1 projection + M3 semantic review + accept path tested. |
+| **KB promote (`promote_to_memory`)** | `personal_kb_draft` or `kb_pending_review` | `canonical_world_memory` | `KbItemRow.id` + Membrane deterministic dup-title check + agent semantic review (M1) + numeric-claim guard | project owners (membrane_review accept) | `membrane_review` + `agent_semantic_review` | `KbItemService.create` / `.promote_to_group` / `.archive` → `MembraneService.review` → on accept `KbItemRepository.update(status='published')` | post-accept `KbItemRow.status='published'` + retained inbox suggestion ref | **real** — M1 + M1.1 + M1.2 archive primitive + M2 audit endpoint, all tested. |
+| **decision crystallize** | `discussion` or `suggestion` | `canonical_decision` | source message + rationale + supersedes ref (when claimed) + recent topical decisions + related KB | varies by path: vote scope (smallest-relevant), gated proposal owner, conflict resolver, scrimmage convergence | `vote` *or* `owner_acceptance` *or* `agent_semantic_review` (M4 — blocks on contradiction without supersede) | `DecisionRepository.create` via `IMService._apply_proposal`, `ConflictService.resolve`, `GatedProposalService.approve`, etc. | `DecisionRow` row + `apply_outcome` + `scope_stream_id` + linked `IMSuggestionRow` | **partial** — M4 semantic gate is real and tested, but no `decision_crystallize` flow packet projects today; the lineage is in DB rows, not in `flow_projection`. Plan: a future slice projects decision packets for the same Active-Flows surface. |
+| **handoff** | `handoff_drafted` | `handoff_finalized` | `HandoffRow` brief + linked routine refs | project owners (finalize gate) | `owner_acceptance` | `HandoffService.finalize` | `HandoffRow.finalized_at` + finalized routine refs | **real** — projection + tests cover draft and finalized states. |
+
+Where a transition is **partial** or **aspirational**, the
+implementation report (R6 / T6) names the missing pieces; the doc
+must not paper over the gap with prose.
+
+Why this matters: a "task" in GraphFlow is **not** a todo item. It is
+a governed state transition. Same shape applies to KB promotes,
+decisions, routes, and handoffs — every load-bearing change to graph
+state crosses one of these contracts. The Membrane is the boundary
+that enforces them.
 - lineage output

@@ -1128,3 +1128,305 @@ async def test_task_promote_packet_drops_when_suggestion_resolves(api_env):
     assert not any(
         p["id"] == f"task_promote:{sug_id}" for p in r.json()["packets"]
     )
+
+
+# ---- T5 — Transition Contract invariants -------------------------------
+
+
+_TRANSITION_REVIEW_METHODS = {
+    "none",
+    "routing_reply",
+    "membrane_review",
+    "vote",
+    "owner_acceptance",
+    "agent_semantic_review",
+}
+
+_TRANSITION_STATUSES = {
+    "satisfied",
+    "awaiting_evidence",
+    "awaiting_authority",
+    "blocked",
+    "completed",
+}
+
+
+def _assert_transition_contract_shape(contract):
+    """Every packet must carry a transition_contract with the canonical
+    field set. Run on every projected packet so any new recipe that
+    forgets the contract trips the test."""
+    assert isinstance(contract, dict), contract
+    assert set(contract.keys()) == {
+        "source_state",
+        "target_state",
+        "required_evidence",
+        "authority_user_ids",
+        "review_method",
+        "mutation_service",
+        "lineage_output",
+        "status",
+    }, contract.keys()
+    assert isinstance(contract["source_state"], str)
+    assert isinstance(contract["target_state"], str)
+    assert contract["review_method"] in _TRANSITION_REVIEW_METHODS, contract
+    assert contract["status"] in _TRANSITION_STATUSES, contract
+    assert isinstance(contract["mutation_service"], str)
+    assert contract["mutation_service"]  # non-empty
+    assert isinstance(contract["required_evidence"], list)
+    assert isinstance(contract["authority_user_ids"], list)
+    assert isinstance(contract["lineage_output"], list)
+
+
+@pytest.mark.asyncio
+async def test_t5_every_packet_has_transition_contract(api_env):
+    """The first invariant the doc claims: every flow packet declares
+    the transition it governs. Seed one of each recipe + assert
+    every projected packet has a well-shaped contract."""
+    client, maker, *_ = api_env
+    owner_id = await _register(client, "tc_all_owner")
+    member_id = await _register(client, "tc_all_member")
+    pid = await _mk_project_with_members(
+        maker, owner_id=owner_id, member_id=member_id
+    )
+
+    # Seed: one route, one KB draft, one task_promote.
+    await _login(client, "tc_all_owner")
+    await client.post(
+        "/api/routing/dispatch",
+        json={
+            "target_user_id": member_id,
+            "project_id": pid,
+            "framing": "Should we drop permadeath for boss rooms?",
+            "background": [],
+            "options": [
+                {"id": "y", "label": "Yes", "kind": "action", "weight": 0.5},
+            ],
+        },
+    )
+    await _seed_kb_draft(
+        maker, project_id=pid, owner_id=owner_id, title="Auth flow notes"
+    )
+    task_id = await _seed_personal_task(
+        maker, project_id=pid, owner_id=member_id, title="OTP polish"
+    )
+    await _seed_task_promote_suggestion(
+        maker, project_id=pid, task_id=task_id, owner_id=owner_id
+    )
+
+    r = await _list_flows(client, pid)
+    assert r.status_code == 200, r.text
+    packets = r.json()["packets"]
+    assert len(packets) >= 3, packets
+    for p in packets:
+        assert "transition_contract" in p, (p["recipe_id"], p["id"])
+        _assert_transition_contract_shape(p["transition_contract"])
+
+
+@pytest.mark.asyncio
+async def test_t5_routed_signal_uses_unknown_to_judged_states(api_env):
+    """A routed performance question is not represented merely as a
+    todo. source_state names the unresolved knowledge state; target
+    names the desired judged state. Review method is routing_reply."""
+    client, maker, *_ = api_env
+    owner_id = await _register(client, "tc_route_owner")
+    member_id = await _register(client, "tc_route_member")
+    pid = await _mk_project_with_members(
+        maker, owner_id=owner_id, member_id=member_id
+    )
+
+    await _login(client, "tc_route_owner")
+    await client.post(
+        "/api/routing/dispatch",
+        json={
+            "target_user_id": member_id,
+            "project_id": pid,
+            "framing": "Switch performance feasibility check",
+            "background": [],
+            "options": [
+                {"id": "y", "label": "Yes", "kind": "action", "weight": 0.5},
+            ],
+        },
+    )
+
+    r = await _list_flows(client, pid)
+    routes = [
+        p for p in r.json()["packets"] if p["recipe_id"] == "ask_with_context"
+    ]
+    assert len(routes) == 1
+    contract = routes[0]["transition_contract"]
+    assert contract["source_state"] == "question_unanswered"
+    assert contract["target_state"] == "expert_reply_received"
+    assert contract["review_method"] == "routing_reply"
+    assert contract["mutation_service"] == "RoutingService"
+    # Awaiting target → authority IS the target.
+    assert contract["status"] == "awaiting_authority"
+    assert contract["authority_user_ids"] == [member_id]
+    # required_evidence carries the framing + the routing_basis envelope
+    # persisted by R2.
+    kinds = {e["kind"] for e in contract["required_evidence"]}
+    assert "framing" in kinds
+    assert "routing_basis" in kinds
+
+
+@pytest.mark.asyncio
+async def test_t5_task_promote_uses_personal_to_plan_states(api_env):
+    """task_promote packets show personal_task_draft → plan_task_candidate
+    with Membrane as the review boundary."""
+    client, maker, *_ = api_env
+    owner_id = await _register(client, "tc_task_owner")
+    member_id = await _register(client, "tc_task_member")
+    pid = await _mk_project_with_members(
+        maker, owner_id=owner_id, member_id=member_id
+    )
+    task_id = await _seed_personal_task(
+        maker, project_id=pid, owner_id=member_id, title="Bug 423 triage"
+    )
+    sug_id = await _seed_task_promote_suggestion(
+        maker, project_id=pid, task_id=task_id, owner_id=owner_id
+    )
+
+    await _login(client, "tc_task_owner")
+    r = await _list_flows(client, pid)
+    pkt = next(
+        p
+        for p in r.json()["packets"]
+        if p["id"] == f"task_promote:{sug_id}"
+    )
+    contract = pkt["transition_contract"]
+    assert contract["source_state"] == "personal_task_draft"
+    assert contract["target_state"] == "plan_task_candidate"
+    assert contract["review_method"] == "membrane_review"
+    assert "MembraneService" in contract["mutation_service"]
+    # Owners gate the accept.
+    assert owner_id in contract["authority_user_ids"]
+    # Required evidence carries the task ref + the membrane suggestion.
+    kinds = {e["kind"] for e in contract["required_evidence"]}
+    assert "task" in kinds
+    assert "membrane_suggestion" in kinds
+
+
+@pytest.mark.asyncio
+async def test_t5_completed_routed_signal_carries_lineage(api_env):
+    """Once the target replies AND the source accepts, the route
+    packet's transition_contract.lineage_output names the reply +
+    source-action audit refs."""
+    client, maker, *_ = api_env
+    owner_id = await _register(client, "tc_lin_owner")
+    member_id = await _register(client, "tc_lin_member")
+    pid = await _mk_project_with_members(
+        maker, owner_id=owner_id, member_id=member_id
+    )
+
+    await _login(client, "tc_lin_owner")
+    r = await client.post(
+        "/api/routing/dispatch",
+        json={
+            "target_user_id": member_id,
+            "project_id": pid,
+            "framing": "Boss rage-quit calibration",
+            "background": [],
+            "options": [
+                {"id": "y", "label": "Yes", "kind": "action", "weight": 0.5},
+            ],
+        },
+    )
+    sid = r.json()["signal"]["id"]
+
+    # Target replies.
+    await _login(client, "tc_lin_member")
+    await client.post(f"/api/routing/{sid}/reply", json={"option_id": "y"})
+
+    # Source accepts via the flow action endpoint.
+    await _login(client, "tc_lin_owner")
+    await client.post(
+        f"/api/projects/{pid}/flows/route:{sid}/actions",
+        json={"action": "accept"},
+    )
+
+    r = await _list_flows(client, pid, status="completed")
+    pkt = next(p for p in r.json()["packets"] if p["id"] == f"route:{sid}")
+    contract = pkt["transition_contract"]
+    assert contract["status"] == "completed"
+    # The terminal target_state names what kind of resolution.
+    assert contract["target_state"] in (
+        "reply_accepted",
+        "reply_countered",
+        "reply_escalated",
+    )
+    # Lineage carries the reply + the source action.
+    lineage_kinds = {e["kind"] for e in contract["lineage_output"]}
+    assert "routed_reply" in lineage_kinds
+    assert any(k.startswith("source_") for k in lineage_kinds)
+
+
+@pytest.mark.asyncio
+async def test_t5_kb_review_packet_names_membrane_authority(api_env):
+    """KB review packet declares membrane_review as the review method
+    and lists project owners as authority while alive."""
+    client, maker, *_ = api_env
+    owner_id = await _register(client, "tc_kb_owner")
+    member_id = await _register(client, "tc_kb_member")
+    pid = await _mk_project_with_members(
+        maker, owner_id=owner_id, member_id=member_id
+    )
+    item_id = await _seed_kb_draft(
+        maker, project_id=pid, owner_id=owner_id, title="KB transition test"
+    )
+
+    await _login(client, "tc_kb_owner")
+    r = await _list_flows(client, pid)
+    pkt = next(p for p in r.json()["packets"] if p["id"] == f"kb:{item_id}")
+    contract = pkt["transition_contract"]
+    assert contract["target_state"] == "canonical_world_memory"
+    assert contract["review_method"] == "membrane_review"
+    assert "MembraneService" in contract["mutation_service"]
+    # While alive (draft / pending-review), authority is the owner pool.
+    assert owner_id in contract["authority_user_ids"]
+
+
+@pytest.mark.asyncio
+async def test_t5_awaiting_human_packet_has_non_empty_authority(api_env):
+    """Invariant: if a packet's transition_contract.status is
+    'awaiting_authority', its authority_user_ids cannot be empty —
+    that would mean we know a human gates this transition but we don't
+    know who. That's a worse failure mode than not declaring the
+    contract at all."""
+    client, maker, *_ = api_env
+    owner_id = await _register(client, "tc_auth_owner")
+    member_id = await _register(client, "tc_auth_member")
+    pid = await _mk_project_with_members(
+        maker, owner_id=owner_id, member_id=member_id
+    )
+
+    # Seed all three packet kinds awaiting authority.
+    await _login(client, "tc_auth_owner")
+    await client.post(
+        "/api/routing/dispatch",
+        json={
+            "target_user_id": member_id,
+            "project_id": pid,
+            "framing": "Boss tuning ask",
+            "background": [],
+            "options": [
+                {"id": "y", "label": "Yes", "kind": "action", "weight": 0.5},
+            ],
+        },
+    )
+    await _seed_kb_draft(
+        maker, project_id=pid, owner_id=owner_id, title="KB auth test"
+    )
+    task_id = await _seed_personal_task(
+        maker, project_id=pid, owner_id=member_id, title="task auth test"
+    )
+    await _seed_task_promote_suggestion(
+        maker, project_id=pid, task_id=task_id, owner_id=owner_id
+    )
+
+    r = await _list_flows(client, pid)
+    for p in r.json()["packets"]:
+        contract = p["transition_contract"]
+        if contract["status"] == "awaiting_authority":
+            assert contract["authority_user_ids"], (
+                f"packet {p['id']} is awaiting_authority but has "
+                f"empty authority_user_ids — that's a contract violation"
+            )
