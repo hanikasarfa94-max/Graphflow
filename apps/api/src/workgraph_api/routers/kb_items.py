@@ -33,6 +33,12 @@
 
   POST   /api/kb-items/{id}/demote
       Group → personal. Project owner only.
+
+  GET    /api/projects/{project_id}/kb-audit
+      M2 — read-only audit. Project owner only. Scans canonical group
+      KB rows pairwise via the Membrane Agent and returns findings
+      (no auto-demote). Owner uses the M1.2 archive flow on each
+      flagged row.
 """
 from __future__ import annotations
 
@@ -243,6 +249,40 @@ async def promote_item(
         )
     except KbItemError as err:
         _raise(err)
+
+
+# ---- M2: KB audit (owner-only, read-only) -----------------------------
+
+
+@router.get("/api/projects/{project_id}/kb-audit")
+async def audit_canonical_kb(
+    project_id: str,
+    request: Request,
+    user: AuthenticatedUser = Depends(require_user),
+    max_rows: int = 50,
+) -> dict[str, Any]:
+    """M2 — read-only sweep of canonical group KB for pairwise conflicts.
+
+    Project owner only. Returns `{ok, findings: [...]}`. Each finding
+    is a row the agent flagged as conflicting with another canonical
+    row. Owner decides what to do with each; the audit never archives
+    or demotes on its own (per spec §M2).
+    """
+    from workgraph_persistence import ProjectMemberRepository, session_scope
+
+    async with session_scope(request.app.state.sessionmaker) as session:
+        rows = await ProjectMemberRepository(session).list_for_project(
+            project_id
+        )
+    is_owner = any(r.user_id == user.id and r.role == "owner" for r in rows)
+    if not is_owner:
+        raise HTTPException(status_code=403, detail="not_a_project_owner")
+
+    membrane_service = request.app.state.membrane_service
+    findings = await membrane_service.audit_canonical_kb(
+        project_id, max_rows=max_rows
+    )
+    return {"ok": True, "findings": findings}
 
 
 @router.post("/api/kb-items/{item_id}/demote")

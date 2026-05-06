@@ -1440,11 +1440,348 @@ class MembraneService:
                     )
                     break  # one collision warning is enough
 
+        # Slice M4 — semantic reviewer as the *last* gate. Same pattern
+        # as M1 (KB) and M3 (task), but the verdict mapping is softer:
+        #
+        # Per spec §M4 / §9: keep human-reviewed decision paths mostly
+        # advisory. The agent's `request_review` becomes a real block
+        # ONLY when the candidate carries no `supersedes` ref in its
+        # metadata. Reasoning: the upstream paths (vote resolve, gated
+        # proposal approve, conflict resolve, scrimmage convergence)
+        # have already been reviewed by humans; blocking again would
+        # second-guess that gate. But if the agent sees a clear
+        # contradiction with prior decisions and the proposer didn't
+        # mark it as a deliberate supersede, that's exactly the
+        # "accidental re-litigation" rule 1 already warns about — and
+        # an explicit block helps the proposer notice before the
+        # decision lands as a load-bearing fact.
+        if self._agent_reviewer is not None:
+            agent_action = await self._agent_review_decision_candidate(
+                candidate=candidate,
+                deterministic_warnings=warnings,
+            )
+            if agent_action is not None:
+                return agent_action
+
         return MembraneReview(
             action="auto_merge",
             reason="advisory_only" if warnings else "no_conflicts",
             warnings=tuple(warnings),
         )
+
+    async def _agent_review_decision_candidate(
+        self,
+        *,
+        candidate: MembraneCandidate,
+        deterministic_warnings: list[str],
+    ) -> MembraneReview | None:
+        """Build a decision review packet (spec §5.4) and run the
+        Membrane Agent. Returns:
+
+          * `None` — let the deterministic auto_merge path proceed.
+            Used when the agent permits the candidate, AND when the
+            agent's review verdict is treated as advisory-only because
+            the candidate carries a supersede marker.
+          * a `MembraneReview` with action != auto_merge — overrides
+            the existing advisory flow with a real block.
+
+        Failure modes return `None` (preserve the advisory pre-M4
+        behavior) since decision crystallization is more sensitive to
+        false-block than KB / task — fail-closed here would surprise
+        established gates (vote resolve, gated proposal approve)
+        that already had human review.
+        """
+        assert self._agent_reviewer is not None
+        try:
+            packet = await self._build_decision_review_packet(
+                candidate=candidate,
+                deterministic_warnings=deterministic_warnings,
+            )
+        except Exception:
+            _log.exception(
+                "membrane.agent_review.decision_pretext_failed",
+                extra={"project_id": candidate.project_id},
+            )
+            return None
+
+        # §7 gate — skip the LLM when nothing to review against.
+        if (
+            not packet["prior_decisions"]
+            and not packet["related_kb"]
+        ):
+            return None
+
+        try:
+            outcome = await self._agent_reviewer.review_candidate(packet)
+        except Exception:
+            _log.exception(
+                "membrane.agent_review.decision_call_failed",
+                extra={"project_id": candidate.project_id},
+            )
+            return None
+
+        review = outcome.review
+        if review.action == "auto_merge":
+            return None
+
+        # M4 softer mapping: only block when there's no supersede
+        # marker. With a supersede ref present, treat the agent's
+        # concern as advisory and let the existing flow proceed
+        # (warning carried through).
+        metadata = candidate.metadata if isinstance(candidate.metadata, dict) else {}
+        has_supersede = bool(
+            metadata.get("supersedes")
+            or metadata.get("supersedes_decision_id")
+            or metadata.get("supersedes_ref")
+        )
+        if has_supersede:
+            return None  # advisory; warnings already carried by caller
+
+        conflict_ids = tuple(
+            ref.partition(":")[2]
+            for ref in review.conflict_with
+            if ref.partition(":")[2]
+        )
+        merged_warnings = list(deterministic_warnings) + list(review.warnings)
+        return MembraneReview(
+            action=review.action,
+            reason=review.reason,
+            diff_summary=review.diff_summary,
+            clarify_question=review.clarify_question,
+            conflict_with=conflict_ids,
+            warnings=tuple(merged_warnings),
+        )
+
+    async def _build_decision_review_packet(
+        self,
+        *,
+        candidate: MembraneCandidate,
+        deterministic_warnings: list[str],
+    ) -> dict[str, Any]:
+        """Build the decision review packet per spec §5.4.
+
+        Inputs:
+          - candidate title / rationale / source
+          - prior decisions filtered by topic-token overlap
+          - related KB items by topic
+          - tasks/risks touched by proposed apply actions (deferred
+            to M4+1 — needs richer apply_actions parsing)
+        """
+        from workgraph_persistence import DecisionRepository, KbItemRepository
+
+        rationale = ""
+        if isinstance(candidate.metadata, dict):
+            rationale = (candidate.metadata.get("rationale") or "").strip()
+        candidate_text = (
+            f"{candidate.title or ''}\n{candidate.content or ''}\n{rationale}"
+        )
+        candidate_tokens = _topic_tokens(candidate_text)
+
+        prior_decisions: list[dict[str, Any]] = []
+        related_kb: list[dict[str, Any]] = []
+        async with session_scope(self._sessionmaker) as session:
+            decisions = await DecisionRepository(session).list_for_project(
+                candidate.project_id, limit=40
+            )
+            kb_rows = await KbItemRepository(session).list_group_for_project(
+                project_id=candidate.project_id, limit=200
+            )
+
+        for d in decisions:
+            d_text = f"{d.custom_text or ''}\n{d.rationale or ''}"
+            if not _topic_tokens(d_text) & candidate_tokens:
+                continue
+            prior_decisions.append(
+                {
+                    "ref": f"decision:{d.id}",
+                    "headline": (d.custom_text or "")[:200],
+                    "rationale": (d.rationale or "")[:600],
+                    "apply_outcome": d.apply_outcome,
+                    "created_at": _iso_or_none(d.created_at),
+                    "scope_stream_id": d.scope_stream_id,
+                }
+            )
+            if len(prior_decisions) >= 8:
+                break
+
+        kb_scored: list[tuple[int, Any]] = []
+        for row in kb_rows:
+            if not is_canonical_kb_row(row):
+                continue
+            row_tokens = _topic_tokens(
+                f"{row.title or ''}\n{row.content_md or ''}"
+            )
+            score = len(candidate_tokens & row_tokens)
+            if score > 0:
+                kb_scored.append((score, row))
+        kb_scored.sort(key=lambda t: t[0], reverse=True)
+        for _, row in kb_scored[:6]:
+            related_kb.append(
+                {
+                    "ref": f"kb:{row.id}",
+                    "title": row.title or "",
+                    "excerpt": (row.content_md or "")[:240],
+                    "status": row.status,
+                    "scope": row.scope,
+                }
+            )
+
+        source = None
+        supersedes = None
+        if isinstance(candidate.metadata, dict):
+            source = candidate.metadata.get("source")
+            supersedes = (
+                candidate.metadata.get("supersedes")
+                or candidate.metadata.get("supersedes_decision_id")
+            )
+
+        return {
+            "candidate": {
+                "kind": "decision_crystallize",
+                "project_id": candidate.project_id,
+                "proposer_user_id": candidate.proposer_user_id,
+                "title": candidate.title,
+                "rationale": rationale,
+                "source": source,
+                "supersedes": supersedes,
+                "metadata": dict(candidate.metadata or {}),
+            },
+            "policy": {
+                "allowed_actions": [
+                    "auto_merge",
+                    "request_review",
+                    "request_clarification",
+                    "reject",
+                ],
+                "write_target": "decision",
+                "shared_context_impact": (
+                    "will_be_visible_to_project_agents_once_crystallized"
+                ),
+            },
+            # `prior_decisions` is the M4 section name (mirrors spec
+            # §5.4); keep it distinct from `recent_decisions` used by
+            # KB / task packets so the agent prompt can disambiguate.
+            "prior_decisions": prior_decisions,
+            "related_kb": related_kb,
+            "warnings_from_fixed_checks": list(deterministic_warnings),
+        }
+
+    # ------------------------------------------------------------------
+    # M2 — existing-pollution audit (read-only)
+    # ------------------------------------------------------------------
+
+    async def audit_canonical_kb(
+        self, project_id: str, *, max_rows: int = 50
+    ) -> list[dict[str, Any]]:
+        """Scan canonical group KB rows in `project_id` for pairwise
+        semantic conflicts. Read-only; returns a list of findings, each
+        a dict shaped:
+
+            {
+              "row_id": "<kb id treated as candidate>",
+              "row_title": "...",
+              "agent_action": "request_review" | "request_clarification" | "reject",
+              "reason": "...",
+              "diff_summary": "...",
+              "conflict_with": ["<kb id>", ...],
+              "warnings": [...],
+            }
+
+        Per spec §M2: produces a report; never auto-demotes. The owner
+        decides what to do with each finding (typically: archive the
+        stale row via the existing M1.2 archive flow). The agent path
+        is the same one M1 uses for new writes — the audit is just
+        running it against rows that landed before M1 shipped.
+
+        Skip rules:
+          * agent reviewer not configured → empty list (caller decides
+            whether to surface "audit unavailable")
+          * row count < 2 → empty list (nothing to compare against)
+          * per-row pretext empty after topic-overlap filtering → skip
+            that row (no signal to review against)
+
+        `max_rows` caps the iteration to keep the LLM cost bounded. The
+        rows are taken in created_at-desc order so a partial audit
+        prefers the most-recent rows.
+        """
+        if self._agent_reviewer is None:
+            return []
+
+        async with session_scope(self._sessionmaker) as session:
+            rows = await KbItemRepository(session).list_group_for_project(
+                project_id=project_id, limit=max_rows * 2
+            )
+
+        canonical = [r for r in rows if is_canonical_kb_row(r)]
+        if len(canonical) < 2:
+            return []
+        canonical = canonical[:max_rows]
+
+        findings: list[dict[str, Any]] = []
+        for row in canonical:
+            # Treat this row AS the candidate; the others are the
+            # "existing" pretext. The agent's logic for new writes
+            # carries over unchanged.
+            synthetic_candidate = MembraneCandidate(
+                kind="kb_item_group",
+                project_id=project_id,
+                proposer_user_id=row.owner_user_id or "",
+                title=row.title or "",
+                content=row.content_md or "",
+                metadata={
+                    "source": "kb_audit",
+                    "audit_row_id": row.id,
+                },
+            )
+            others = [r for r in canonical if r.id != row.id]
+            try:
+                packet = await self._build_kb_review_packet(
+                    candidate=synthetic_candidate, existing=others
+                )
+            except Exception:
+                _log.exception(
+                    "membrane.audit.pretext_failed",
+                    extra={"project_id": project_id, "row_id": row.id},
+                )
+                continue
+
+            # Same §7 gate as the live path: skip the LLM when nothing
+            # to review against.
+            if not packet["retrieved_context"] and not packet[
+                "recent_decisions"
+            ]:
+                continue
+
+            try:
+                outcome = await self._agent_reviewer.review_candidate(packet)
+            except Exception:
+                _log.exception(
+                    "membrane.audit.agent_call_failed",
+                    extra={"project_id": project_id, "row_id": row.id},
+                )
+                continue
+
+            review = outcome.review
+            if review.action == "auto_merge":
+                continue  # no conflict; nothing to surface
+
+            conflict_ids = [
+                ref.partition(":")[2]
+                for ref in review.conflict_with
+                if ref.partition(":")[2]
+            ]
+            findings.append(
+                {
+                    "row_id": row.id,
+                    "row_title": row.title or "",
+                    "agent_action": review.action,
+                    "reason": review.reason,
+                    "diff_summary": review.diff_summary,
+                    "conflict_with": conflict_ids,
+                    "warnings": list(review.warnings),
+                }
+            )
+        return findings
 
     async def notify_clarification(
         self,

@@ -307,6 +307,9 @@ def _extract_pretext_refs(packet: dict[str, Any]) -> set[str]:
         "recent_decisions",
         "related_tasks",
         "tasks_touched",
+        # M4 — decision review packet sections (spec §5.4).
+        "prior_decisions",
+        "related_kb",
     ):
         for entry in packet.get(section) or []:
             ref = entry.get("ref") if isinstance(entry, dict) else None

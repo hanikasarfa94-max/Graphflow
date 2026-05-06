@@ -211,3 +211,231 @@ async def test_conflict_resolve_response_includes_warnings_field(api_env):
     # Warnings field is contractually always present.
     assert "warnings" in body
     assert isinstance(body["warnings"], list)
+
+
+# ---- M4 — Decision Membrane semantic review --------------------------
+
+
+class _StubMembraneReviewer:
+    def __init__(self, review):
+        self._review = review
+        self.calls: list[dict] = []
+
+    async def review_candidate(self, packet):
+        from dataclasses import dataclass
+
+        from workgraph_agents.llm import LLMResult
+
+        @dataclass
+        class _Outcome:
+            review: object
+            result: LLMResult
+            outcome: str
+            attempts: int = 1
+            error: str | None = None
+
+        self.calls.append(packet)
+        return _Outcome(
+            review=self._review,
+            result=LLMResult(
+                content="",
+                model="stub",
+                prompt_tokens=0,
+                completion_tokens=0,
+                latency_ms=0,
+            ),
+            outcome="ok",
+        )
+
+
+def _make_review(action, **kwargs):
+    from workgraph_agents import MembraneAgentReview
+
+    defaults = {
+        "reason": "stub",
+        "diff_summary": None,
+        "clarify_question": None,
+        "conflict_with": [],
+        "warnings": [],
+        "confidence": 0.9,
+    }
+    defaults.update(kwargs)
+    return MembraneAgentReview(action=action, **defaults)
+
+
+@pytest.mark.asyncio
+async def test_m4_agent_blocks_contradiction_without_supersede(api_env):
+    """When the agent flags request_review and the candidate has no
+    supersedes ref, the review surfaces as a real block (not just a
+    warning). This is the M4 contradiction-without-supersede rule."""
+    client, maker, *_ = api_env
+    owner_id = await _register_and_login(client, "dec_m4_a_owner")
+    pid, _ = await _mk_project(maker, owner_id=owner_id)
+    membrane = client._transport.app.state.membrane_service  # type: ignore[attr-defined]
+
+    # Seed a prior decision that shares topic-tokens so the pretext is
+    # non-empty and the §7 gate doesn't skip the agent.
+    async with session_scope(maker) as session:
+        d = await DecisionRepository(session).create(
+            conflict_id=None,
+            project_id=pid,
+            resolver_id=owner_id,
+            option_index=None,
+            custom_text="cut revive from launch",
+            rationale="out of scope",
+            apply_actions=[],
+            apply_outcome="advisory",
+        )
+        prior_decision_id = d.id
+
+    stub = _StubMembraneReviewer(
+        _make_review(
+            "request_review",
+            reason="contradicts_prior_decision",
+            diff_summary="Restores revive after the prior decision cut it.",
+            conflict_with=[f"decision:{prior_decision_id}"],
+            confidence=0.88,
+        )
+    )
+    membrane._agent_reviewer = stub
+
+    review = await membrane.review(
+        MembraneCandidate(
+            kind="decision_crystallize",
+            project_id=pid,
+            proposer_user_id=owner_id,
+            title="restore revive for launch",
+            metadata={
+                "source": "conflict_resolution",
+                "rationale": "we changed our minds",
+                # NO supersedes ref → agent block applies
+            },
+        )
+    )
+    assert review.action == "request_review"
+    assert review.reason == "contradicts_prior_decision"
+    # Agent saw the prior decision in pretext.
+    assert len(stub.calls) == 1
+    refs = [d["ref"] for d in stub.calls[0]["prior_decisions"]]
+    assert f"decision:{prior_decision_id}" in refs
+
+
+@pytest.mark.asyncio
+async def test_m4_supersedes_marker_keeps_block_advisory(api_env):
+    """Same setup as the block test, but the candidate carries a
+    supersedes ref. The agent's request_review is downgraded to
+    advisory; the existing flow auto_merges with the warning carried."""
+    client, maker, *_ = api_env
+    owner_id = await _register_and_login(client, "dec_m4_b_owner")
+    pid, _ = await _mk_project(maker, owner_id=owner_id)
+    membrane = client._transport.app.state.membrane_service  # type: ignore[attr-defined]
+
+    async with session_scope(maker) as session:
+        d = await DecisionRepository(session).create(
+            conflict_id=None,
+            project_id=pid,
+            resolver_id=owner_id,
+            option_index=None,
+            custom_text="cut revive from launch",
+            rationale="out of scope",
+            apply_actions=[],
+            apply_outcome="advisory",
+        )
+        prior_decision_id = d.id
+
+    stub = _StubMembraneReviewer(
+        _make_review(
+            "request_review",
+            reason="contradicts_prior_decision",
+            diff_summary="Restores revive after the prior decision cut it.",
+            conflict_with=[f"decision:{prior_decision_id}"],
+            confidence=0.88,
+        )
+    )
+    membrane._agent_reviewer = stub
+
+    review = await membrane.review(
+        MembraneCandidate(
+            kind="decision_crystallize",
+            project_id=pid,
+            proposer_user_id=owner_id,
+            title="restore revive for launch",
+            metadata={
+                "source": "conflict_resolution",
+                "rationale": "team voted to revisit",
+                "supersedes": prior_decision_id,
+            },
+        )
+    )
+    # With supersedes set, M4 keeps the path advisory.
+    assert review.action == "auto_merge"
+
+
+@pytest.mark.asyncio
+async def test_m4_agent_skipped_when_pretext_empty(api_env):
+    """No prior decisions or related KB → agent not called, advisory
+    auto_merge as before."""
+    client, maker, *_ = api_env
+    owner_id = await _register_and_login(client, "dec_m4_c_owner")
+    pid, _ = await _mk_project(maker, owner_id=owner_id)
+    membrane = client._transport.app.state.membrane_service  # type: ignore[attr-defined]
+
+    sentinel = _StubMembraneReviewer(
+        _make_review("request_review", reason="should_not_fire")
+    )
+    membrane._agent_reviewer = sentinel
+
+    review = await membrane.review(
+        MembraneCandidate(
+            kind="decision_crystallize",
+            project_id=pid,
+            proposer_user_id=owner_id,
+            title="approve OTP migration",
+            metadata={"source": "conflict_resolution", "rationale": "team agreed"},
+        )
+    )
+    assert review.action == "auto_merge"
+    assert sentinel.calls == [], "agent should be skipped for empty pretext"
+
+
+@pytest.mark.asyncio
+async def test_m4_agent_call_failure_falls_back_to_advisory(api_env):
+    """If the agent call raises, the existing advisory flow continues
+    rather than fail-closed (M4 is more sensitive to false-block than
+    M1/M3 because upstream gates already had human review)."""
+    client, maker, *_ = api_env
+    owner_id = await _register_and_login(client, "dec_m4_d_owner")
+    pid, _ = await _mk_project(maker, owner_id=owner_id)
+    membrane = client._transport.app.state.membrane_service  # type: ignore[attr-defined]
+
+    # Seed a prior decision so pretext is non-empty.
+    async with session_scope(maker) as session:
+        await DecisionRepository(session).create(
+            conflict_id=None,
+            project_id=pid,
+            resolver_id=owner_id,
+            option_index=None,
+            custom_text="freeze scope at alpha",
+            rationale="out of scope",
+            apply_actions=[],
+            apply_outcome="advisory",
+        )
+
+    class _ExplodingReviewer:
+        async def review_candidate(self, packet):
+            raise RuntimeError("network down")
+
+    membrane._agent_reviewer = _ExplodingReviewer()
+
+    review = await membrane.review(
+        MembraneCandidate(
+            kind="decision_crystallize",
+            project_id=pid,
+            proposer_user_id=owner_id,
+            title="freeze scope at alpha v2",
+            metadata={"source": "conflict_resolution", "rationale": "team agreed"},
+        )
+    )
+    # Failed agent call → advisory auto_merge with deterministic
+    # warnings preserved (the duplicate-title rule fired here).
+    assert review.action == "auto_merge"

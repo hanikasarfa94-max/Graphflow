@@ -1093,3 +1093,113 @@ async def test_hard_delete_blocked_for_group_scope(api_env):
     # Personal hard-delete still works.
     r = await client.delete(f"/api/kb-items/{personal_id}")
     assert r.status_code == 200
+
+
+# ---- M2 — KB audit endpoint (owner-only, read-only) -------------------
+
+
+@pytest.mark.asyncio
+async def test_m2_audit_owner_only(api_env):
+    client, maker, *_ = api_env
+    owner_id = await _register_and_login(client, "kb_m2_a_owner")
+    member_id = await _register_and_login(client, "kb_m2_a_member")
+    pid = await _mk_project_with_members(
+        maker, owner_id=owner_id, member_id=member_id
+    )
+
+    # Member is forbidden.
+    await _login(client, "kb_m2_a_member")
+    r = await client.get(f"/api/projects/{pid}/kb-audit")
+    assert r.status_code == 403, r.text
+
+    # Owner is allowed (empty audit because no rows yet).
+    await _login(client, "kb_m2_a_owner")
+    r = await client.get(f"/api/projects/{pid}/kb-audit")
+    assert r.status_code == 200, r.text
+    assert r.json() == {"ok": True, "findings": []}
+
+
+@pytest.mark.asyncio
+async def test_m2_audit_surfaces_pairwise_conflicts(api_env):
+    """When the agent flags one canonical row as contradicting another,
+    the audit endpoint returns a finding. Stub the reviewer so the test
+    is deterministic."""
+    from workgraph_api.main import app
+
+    client, maker, *_ = api_env
+    owner_id = await _register_and_login(client, "kb_m2_b_owner")
+    member_id = await _register_and_login(client, "kb_m2_b_member")
+    pid = await _mk_project_with_members(
+        maker, owner_id=owner_id, member_id=member_id
+    )
+
+    # Two canonical group rows that share enough topic tokens to make
+    # the per-row pretext non-empty (the agent's §7 gate would skip
+    # otherwise).
+    await _login(client, "kb_m2_b_owner")
+    r = await client.post(
+        f"/api/projects/{pid}/kb-items",
+        json={
+            "title": "Launch scope — revive cut",
+            "content_md": "Revive was cut from launch.",
+            "scope": "group",
+        },
+    )
+    assert r.status_code == 200, r.text
+    r = await client.post(
+        f"/api/projects/{pid}/kb-items",
+        json={
+            "title": "Launch scope — revive in",
+            "content_md": "Revive is in scope for v1 launch.",
+            "scope": "group",
+        },
+    )
+    assert r.status_code == 200, r.text
+
+    # Stub agent: every call returns request_review.
+    stub = _StubMembraneReviewer(
+        _make_review(
+            "request_review",
+            reason="audit_pairwise_contradiction",
+            diff_summary="One row contradicts the other on launch scope.",
+            confidence=0.85,
+        )
+    )
+    app.state.membrane_service._agent_reviewer = stub
+
+    r = await client.get(f"/api/projects/{pid}/kb-audit")
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["ok"] is True
+    findings = body["findings"]
+    # Each row gets its own finding because the agent flagged both
+    # directions of the pair (row_a as candidate, row_b in pretext;
+    # then row_b as candidate, row_a in pretext).
+    assert len(findings) == 2
+    for f in findings:
+        assert f["agent_action"] == "request_review"
+        assert f["reason"] == "audit_pairwise_contradiction"
+
+
+@pytest.mark.asyncio
+async def test_m2_audit_skips_when_agent_reviewer_unconfigured(api_env):
+    """If the membrane has no reviewer attached, the audit cleanly
+    returns an empty list rather than 500."""
+    from workgraph_api.main import app
+
+    client, maker, *_ = api_env
+    owner_id = await _register_and_login(client, "kb_m2_c_owner")
+    member_id = await _register_and_login(client, "kb_m2_c_member")
+    pid = await _mk_project_with_members(
+        maker, owner_id=owner_id, member_id=member_id
+    )
+
+    saved = app.state.membrane_service._agent_reviewer
+    app.state.membrane_service._agent_reviewer = None
+    try:
+        await _login(client, "kb_m2_c_owner")
+        r = await client.get(f"/api/projects/{pid}/kb-audit")
+        assert r.status_code == 200, r.text
+        assert r.json() == {"ok": True, "findings": []}
+    finally:
+        app.state.membrane_service._agent_reviewer = saved
