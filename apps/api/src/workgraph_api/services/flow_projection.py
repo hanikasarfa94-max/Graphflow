@@ -448,9 +448,20 @@ class FlowProjectionService:
         packets: list[dict[str, Any]] = []
         for sug in pending_rows:
             stream_id: str | None = None
+            upstream_ref: dict[str, Any] | None = None
             try:
                 source_msg = await msg_repo.get(sug.message_id)
-                stream_id = source_msg.stream_id if source_msg else None
+                if source_msg is not None:
+                    stream_id = source_msg.stream_id
+                    # DC.1 follow-up — surface the upstream object the
+                    # source message references. `linked_id` is the
+                    # established way messages point back at the row
+                    # they were posted about (per RoutingService /
+                    # KbItemService / TaskProgressService call sites).
+                    # Map by message kind to the right target_kind so
+                    # the FlowRef is honest about what the id
+                    # references.
+                    upstream_ref = _decision_upstream_ref(source_msg)
             except Exception:
                 stream_id = None
             authority_ids: list[str] = []
@@ -469,6 +480,7 @@ class FlowProjectionService:
                     source_stream_id=stream_id,
                     authority_user_ids=authority_ids,
                     owner_ids=owner_ids,
+                    upstream_ref=upstream_ref,
                 )
             )
 
@@ -1123,12 +1135,53 @@ def _task_promote_packet_from_rows(
     }
 
 
+# Map message.kind → (target_kind, label) for the upstream-lineage edge.
+# Only kinds that produce decision-relevant lineage are listed; an
+# unknown kind on a source message returns None and the projection
+# emits no upstream_ref. This is a closed allow-list by design — we'd
+# rather omit the edge than misclassify it. Extending requires touching
+# this map (a one-line ack of the new lineage shape).
+_DECISION_UPSTREAM_KIND_MAP: dict[str, tuple[str, str]] = {
+    # RoutingService kinds (services/routing.py call sites).
+    "routed-inbound": ("routed_signal", "routed signal (inbound)"),
+    "routed-reply": ("routed_signal", "routed reply"),
+    "routed-prompt": ("routed_signal", "routed prompt (DM)"),
+    "edge-route-proposal": ("routed_signal", "edge route proposal"),
+    "edge-reply-frame": ("routed_signal", "source-side reply frame"),
+    # KbItemService / Membrane review kinds.
+    "membrane-review": ("kb_item", "membrane review (KB)"),
+    "kb-archive-request": ("kb_item", "archive request"),
+    # TaskProgressService.
+    "task-promote": ("task", "task promote review"),
+}
+
+
+def _decision_upstream_ref(message_row: Any) -> dict[str, Any] | None:
+    """Return a `{kind, id, label}` FlowRef for the upstream object a
+    decision-suggestion's source message points at — or None when the
+    message kind has no decision-relevant lineage shape we recognize.
+
+    Read-only: depends only on the existing MessageRow.kind +
+    .linked_id columns; no new schema and no agent rerun.
+    """
+    if not isinstance(message_row.kind, str):
+        return None
+    if not isinstance(message_row.linked_id, str) or not message_row.linked_id:
+        return None
+    mapping = _DECISION_UPSTREAM_KIND_MAP.get(message_row.kind)
+    if mapping is None:
+        return None
+    target_kind, label = mapping
+    return _flow_ref(target_kind, message_row.linked_id, label=label)
+
+
 def _decision_pending_packet_from_suggestion(
     *,
     suggestion: IMSuggestionRow,
     source_stream_id: str | None,
     authority_user_ids: list[str],
     owner_ids: list[str],
+    upstream_ref: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Map a pending IMSuggestion(kind='decision') to a
     `crystallize_decision` packet in its in-flight phase.
@@ -1180,6 +1233,14 @@ def _decision_pending_packet_from_suggestion(
             label="originating message",
         ),
     ]
+    # DC.1 follow-up — upstream lineage. When the source message points
+    # at an upstream row (e.g. a routed-reply pointing at the routed
+    # signal that produced this discussion), surface it as evidence.
+    # Honest-by-design: only known kinds in _DECISION_UPSTREAM_KIND_MAP
+    # produce a ref; unknown kinds are silently omitted rather than
+    # mis-typed.
+    if upstream_ref is not None:
+        required_evidence.append(upstream_ref)
     if source_stream_id:
         required_evidence.append(
             _flow_ref(

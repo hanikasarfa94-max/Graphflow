@@ -1750,3 +1750,172 @@ async def test_dc_decision_packet_satisfies_universal_contract_shape(
             "discussion_or_suggestion"
         )
         assert p["transition_contract"]["target_state"] == "canonical_decision"
+
+
+# ---- DC.1 follow-up — upstream-message linked_id evidence edge ---------
+
+
+@pytest.mark.asyncio
+async def test_dc_pending_decision_carries_upstream_routed_signal_evidence(
+    api_env,
+):
+    """When the decision-suggestion's source message has a linked_id
+    pointing at an upstream RoutedSignalRow (kind 'routed-reply' /
+    'routed-inbound' / 'edge-route-proposal'), the pending packet's
+    transition_contract.required_evidence carries a routed_signal
+    FlowRef to that upstream id."""
+    client, maker, *_ = api_env
+    owner_id = await _register(client, "dc_up_owner")
+    member_id = await _register(client, "dc_up_member")
+    pid = await _mk_project_with_members(
+        maker, owner_id=owner_id, member_id=member_id
+    )
+
+    # Seed a routed signal so we have a real upstream row id to point
+    # at. The linked_id on the source message references this row.
+    routed_signal_id = str(uuid.uuid4())
+    async with session_scope(maker) as session:
+        team_stream = await StreamRepository(session).get_for_project(pid)
+        team_stream_id = team_stream.id
+        # Both source/target streams default to the team stream for the
+        # purposes of this test — we only need the row id, not its
+        # full lifecycle.
+        session.add(
+            RoutedSignalRow(
+                id=routed_signal_id,
+                source_user_id=owner_id,
+                target_user_id=member_id,
+                source_stream_id=team_stream_id,
+                target_stream_id=team_stream_id,
+                project_id=pid,
+                framing="Should we cap pool at 200?",
+                background_json=[],
+                options_json=[],
+                status="replied",
+            )
+        )
+    await _add_to_stream(maker, team_stream_id, [owner_id, member_id])
+
+    # Source message is a 'routed-reply' (the kind RoutingService posts
+    # when a target replies, with linked_id=routed_signal_id). The
+    # IMSuggestion classifies this reply as decision-shaped.
+    msg_id = str(uuid.uuid4())
+    sug_id = str(uuid.uuid4())
+    async with session_scope(maker) as session:
+        session.add(
+            MessageRow(
+                id=msg_id,
+                project_id=pid,
+                stream_id=team_stream_id,
+                author_id=member_id,
+                body="Reply: yes, cap at 200 — confirmed by the perf test.",
+                kind="routed-reply",
+                linked_id=routed_signal_id,
+            )
+        )
+        await session.flush()
+        session.add(
+            IMSuggestionRow(
+                id=sug_id,
+                message_id=msg_id,
+                project_id=pid,
+                kind="decision",
+                confidence=0.82,
+                proposal={
+                    "action": "crystallize_decision",
+                    "summary": "Cap pool at 200",
+                },
+                reasoning="IMAssist flagged the reply as decision-shaped.",
+                status="pending",
+                outcome="ok",
+                attempts=1,
+            )
+        )
+
+    await _login(client, "dc_up_owner")
+    r = await _list_flows(client, pid, recipe="crystallize_decision")
+    assert r.status_code == 200
+    packets = r.json()["packets"]
+    assert len(packets) == 1
+    pkt = packets[0]
+    contract = pkt["transition_contract"]
+
+    # The upstream routed_signal ref is in required_evidence with the
+    # right id and kind.
+    routed_refs = [
+        e for e in contract["required_evidence"] if e["kind"] == "routed_signal"
+    ]
+    assert len(routed_refs) == 1, contract["required_evidence"]
+    assert routed_refs[0]["id"] == routed_signal_id
+    # Plus the source_message + im_suggestion + stream refs we already
+    # had — additive only.
+    kinds = {e["kind"] for e in contract["required_evidence"]}
+    assert "im_suggestion" in kinds
+    assert "source_message" in kinds
+    assert "stream" in kinds
+
+
+@pytest.mark.asyncio
+async def test_dc_unknown_message_kind_does_not_invent_upstream_ref(api_env):
+    """Negative invariant: when the source message kind is not in the
+    decision-relevant lineage allow-list (e.g. plain 'text'), the
+    projection emits NO upstream FlowRef rather than mis-classifying
+    the linked_id as something it isn't. Guards against the closed
+    allow-list silently growing."""
+    client, maker, *_ = api_env
+    owner_id = await _register(client, "dc_unk_owner")
+    member_id = await _register(client, "dc_unk_member")
+    pid = await _mk_project_with_members(
+        maker, owner_id=owner_id, member_id=member_id
+    )
+    async with session_scope(maker) as session:
+        team_stream = await StreamRepository(session).get_for_project(pid)
+        team_stream_id = team_stream.id
+    await _add_to_stream(maker, team_stream_id, [owner_id, member_id])
+
+    # 'text' kind with a stray linked_id is a real shape (e.g. some
+    # legacy paths set linked_id even on plain messages). Projection
+    # must not invent a typed ref for it.
+    stray_link = str(uuid.uuid4())
+    msg_id = str(uuid.uuid4())
+    sug_id = str(uuid.uuid4())
+    async with session_scope(maker) as session:
+        session.add(
+            MessageRow(
+                id=msg_id,
+                project_id=pid,
+                stream_id=team_stream_id,
+                author_id=member_id,
+                body="Just talking — let's cap pool at 200.",
+                kind="text",
+                linked_id=stray_link,  # unknown semantic; must be ignored
+            )
+        )
+        await session.flush()
+        session.add(
+            IMSuggestionRow(
+                id=sug_id,
+                message_id=msg_id,
+                project_id=pid,
+                kind="decision",
+                confidence=0.7,
+                proposal={
+                    "action": "crystallize_decision",
+                    "summary": "Cap pool at 200",
+                },
+                reasoning="IMAssist",
+                status="pending",
+                outcome="ok",
+                attempts=1,
+            )
+        )
+
+    await _login(client, "dc_unk_owner")
+    r = await _list_flows(client, pid, recipe="crystallize_decision")
+    pkt = r.json()["packets"][0]
+    contract = pkt["transition_contract"]
+    # No routed_signal / kb_item / task ref invented.
+    inferred_kinds = {
+        e["kind"] for e in contract["required_evidence"]
+    } & {"routed_signal", "kb_item", "task"}
+    assert inferred_kinds == set(), contract["required_evidence"]

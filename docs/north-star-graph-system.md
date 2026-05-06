@@ -399,12 +399,58 @@ Implementation status legend (apply per row):
 | **routed signal (`ask_with_context`)** | `question_unanswered` | `expert_reply_received` → `reply_accepted` | `routing_basis` (from R2) + framing + options + grounding evidence (skills / decisions / tasks the target is close to) | current `target_user_id` (target judges) + project owners (audit) | `routing_reply` | `RoutingService` | `RoutedSignalRow.reply_json` once replied + `routed-reply` message + source-side `edge-reply-frame`; `accept` flips `status='accepted'` | **real** — backend grounding gate + projection; tests cover grounded-vs-rejected dispatch and replied/accepted timeline. |
 | **task promote (`promote_task_to_plan`)** | `personal_task_draft` | `plan_task_candidate` (Membrane staged) → `plan_task_canonical` (owner accept flips `TaskRow.scope='plan'`) | `TaskRow` ref + Membrane deterministic warnings + agent semantic-review verdict (M3) + related tasks + recent decisions | project owners gate the IMSuggestion(membrane_review) accept | `membrane_review` (deterministic) + `agent_semantic_review` (M3) | `TaskProgressService` (`POST /api/tasks/{id}/promote`) → `MembraneService.review` → on accept `IMService._apply_proposal` calls `PlanRepository.promote_personal_to_plan` | `IMSuggestionRow.proposal.detail.task_id` (membrane decision audit) + post-accept `TaskRow.scope='plan'` (the canonical lineage) | **real** — F.1 projection + M3 semantic review + accept path tested. |
 | **KB promote (`promote_to_memory`)** | `personal_kb_draft` or `kb_pending_review` | `canonical_world_memory` | `KbItemRow.id` + Membrane deterministic dup-title check + agent semantic review (M1) + numeric-claim guard | project owners (membrane_review accept) | `membrane_review` + `agent_semantic_review` | `KbItemService.create` / `.promote_to_group` / `.archive` → `MembraneService.review` → on accept `KbItemRepository.update(status='published')` | post-accept `KbItemRow.status='published'` + retained inbox suggestion ref | **real** — M1 + M1.1 + M1.2 archive primitive + M2 audit endpoint, all tested. |
-| **decision crystallize** | `discussion` or `suggestion` | `canonical_decision` | source message + rationale + supersedes ref (when claimed) + recent topical decisions + related KB | varies by path: vote scope (smallest-relevant), gated proposal owner, conflict resolver, scrimmage convergence | `vote` *or* `owner_acceptance` *or* `agent_semantic_review` (M4 — blocks on contradiction without supersede) | `DecisionRepository.create` via `IMService._apply_proposal`, `ConflictService.resolve`, `GatedProposalService.approve`, etc. | `DecisionRow` row + `apply_outcome` + `scope_stream_id` + linked `IMSuggestionRow` | **partial** — M4 semantic gate is real and tested, but no `decision_crystallize` flow packet projects today; the lineage is in DB rows, not in `flow_projection`. Plan: a future slice projects decision packets for the same Active-Flows surface. |
+| **decision crystallize** | `discussion_or_suggestion` | `canonical_decision` | source message + rationale + supersedes ref (when claimed) + recent topical decisions + related KB | varies by path: vote scope (smallest-relevant), gated proposal owner, conflict resolver, scrimmage convergence | `vote` *or* `owner_acceptance` *or* `agent_semantic_review` (M4 — blocks on contradiction without supersede) | `DecisionRepository.create` via `IMService._apply_proposal`, `ConflictService.resolve`, `GatedProposalService.approve`, etc. | `DecisionRow` row + `apply_outcome` + `scope_stream_id` + linked `IMSuggestionRow` | mixed (granular below) |
+
+**`decision crystallize` granular status** — the doc table's single
+`status` cell can't capture that this transition has multiple
+upstream paths and several enforcement layers. Listed precisely:
+
+- **real** for the IMSuggestion(kind='decision', status='pending')
+  path: pending packets project as `crystallize_decision` with
+  `source_state=discussion_or_suggestion`,
+  `target_state=canonical_decision`, `review_method=owner_acceptance`,
+  authority = scope-stream members (smallest-relevant-vote) + project
+  owners. Tested.
+- **real** for crystallized DecisionRow projection (last 14 days):
+  packets carry `lineage_output` naming the row + `decision_applied`
+  ref when `applied_at` set. `review_method='vote'` when
+  `gated_via_proposal_id` or `scope_stream_id` is set; else
+  `owner_acceptance`. Tested.
+- **partial** for vote-shaped pending decisions: `GatedProposalRow`
+  (gate-keeper sign-off) and silent-consensus ratification windows
+  exist as separate row families and do **not** project as
+  `crystallize_decision` packets in their pending phase. They only
+  appear post-crystallization via DecisionRow. A future slice
+  surfaces them with `review_method='vote'` while still pending.
+- **partial** for `agent_semantic_review` visibility on decision
+  packets: M4 runs in `_review_decision_crystallize` and produces
+  warnings, but those warnings live on `MembraneReview.warnings`
+  (advisory return value), not on `IMSuggestionRow.proposal` or
+  `DecisionRow`. The projection has no persisted ref to surface.
+  Closing this needs either persisted M4 verdicts on the suggestion
+  payload or an on-demand re-run inside the projection (rejected for
+  cost). Today the packet's `required_evidence` lists the structural
+  refs but not the agent's contradiction analysis.
+- **aspirational** for `request_clarification` projection: M4 supports
+  the verdict, but no ref to a clarification question or its proposer
+  reply is persisted in a way the projection can read. The
+  `clarify_question` lives transiently on the agent's returned
+  `MembraneReview` and is dropped after the call.
 | **handoff** | `handoff_drafted` | `handoff_finalized` | `HandoffRow` brief + linked routine refs | project owners (finalize gate) | `owner_acceptance` | `HandoffService.finalize` | `HandoffRow.finalized_at` + finalized routine refs | **real** — projection + tests cover draft and finalized states. |
 
 Where a transition is **partial** or **aspirational**, the
 implementation report (R6 / T6) names the missing pieces; the doc
 must not paper over the gap with prose.
+
+**Flow Packets are active/recent transition projections, not the full
+audit ledger.** The projection surfaces in-flight transitions plus a
+short recency window for completed terminal states (today: 14 days
+for crystallized decisions). Older transitions live in their canonical
+DB rows — `DecisionRow`, `KbItemRow`, `TaskRow`, `RoutedSignalRow`,
+`HandoffRow` — and in the rendered surfaces that read those rows
+(graph view, postmortem, handoff doc). When asking "did transition X
+ever happen?", the projection is the wrong place to look; query the
+canonical row family directly.
 
 Why this matters: a "task" in GraphFlow is **not** a todo item. It is
 a governed state transition. Same shape applies to KB promotes,
