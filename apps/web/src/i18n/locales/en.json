@@ -1192,6 +1192,35 @@
       "title": "Decisions",
       "empty": "No decisions crystallized yet.",
       "viewLineage": "View lineage"
+    },
+    "im": {
+      "ws": {
+        "connecting": "connecting",
+        "open": "open",
+        "closed": "closed"
+      },
+      "messageCount": "{n} messages",
+      "loadFailed": "Load failed ({status})",
+      "emptyMessages": "No messages yet — kick things off below.",
+      "composerPlaceholder": "Send a message… use @username to tag",
+      "send": "Send",
+      "counterToEarlier": "↳ counter to earlier suggestion",
+      "decisionRecorded": "Decision recorded",
+      "statusAccepted": "✓ suggestion accepted",
+      "statusDismissed": "· suggestion dismissed",
+      "statusCountered": "↳ countered",
+      "statusEscalated": "⚠ escalated — awaiting sync",
+      "awaitingSync": "⚠ Awaiting sync",
+      "confidenceSuffix": "confidence",
+      "proposed": "Proposed",
+      "references": "References",
+      "dismiss": "Dismiss",
+      "escalate": "Escalate",
+      "cancel": "Cancel",
+      "counter": "Counter",
+      "accept": "Accept",
+      "counterPlaceholder": "Your counter-framing — posts as a new message.",
+      "sendCounter": "Send counter"
     }
   },
   "inbox": {

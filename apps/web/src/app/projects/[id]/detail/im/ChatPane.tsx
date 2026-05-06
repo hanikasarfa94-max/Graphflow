@@ -53,6 +53,7 @@ export function ChatPane({
   currentUserId: string;
 }) {
   const tErr = useTranslations("errors");
+  const t = useTranslations("detail.im");
   const [messages, setMessages] = useState<Message[]>([]);
   const [composer, setComposer] = useState("");
   const [posting, setPosting] = useState(false);
@@ -71,7 +72,7 @@ export function ChatPane({
         { credentials: "include", cache: "no-store" },
       );
       if (!res.ok) {
-        setError(`load failed (${res.status})`);
+        setError(t("loadFailed", { status: res.status }));
         return;
       }
       const data = await res.json();
@@ -265,9 +266,9 @@ export function ChatPane({
       >
         <span>
           <StatusDot state={wsState} />{" "}
-          <span data-testid="ws-status">{wsState}</span>
+          <span data-testid="ws-status">{t(`ws.${wsState}`)}</span>
         </span>
-        <span>{messages.length} messages</span>
+        <span>{t("messageCount", { n: messages.length })}</span>
       </div>
 
       <div style={{ overflowY: "auto", padding: "14px 14px 4px" }}>
@@ -291,7 +292,7 @@ export function ChatPane({
               padding: 24,
             }}
           >
-            No messages yet — kick things off below.
+            {t("emptyMessages")}
           </div>
         )}
         <div ref={bottomRef} />
@@ -322,7 +323,7 @@ export function ChatPane({
                 postMessage();
               }
             }}
-            placeholder="Send a message… use @username to tag"
+            placeholder={t("composerPlaceholder")}
             style={{
               flex: 1,
               padding: "10px 12px",
@@ -349,7 +350,7 @@ export function ChatPane({
               opacity: !composer.trim() || posting ? 0.6 : 1,
             }}
           >
-            Send
+            {t("send")}
           </button>
         </div>
       </div>
@@ -372,6 +373,7 @@ function MessageRow({
   onCounter: (s: Suggestion, text: string) => Promise<void>;
   onEscalate: (s: Suggestion) => void;
 }) {
+  const t = useTranslations("detail.im");
   const sug = message.suggestion;
   return (
     <div style={{ marginBottom: 10 }} data-testid="im-message-row">
@@ -408,7 +410,7 @@ function MessageRow({
           }}
           data-testid="counter-of-note"
         >
-          ↳ counter to earlier suggestion
+          {t("counterToEarlier")}
         </div>
       )}
       <div
@@ -443,7 +445,7 @@ function MessageRow({
             fontWeight: 600,
           }}
         >
-          <span aria-hidden>⚡</span> Decision recorded
+          <span aria-hidden>⚡</span> {t("decisionRecorded")}
         </div>
       )}
       {sug && sug.kind !== "none" && sug.status === "pending" && (
@@ -457,17 +459,17 @@ function MessageRow({
       )}
       {sug?.status === "accepted" && (
         <div style={suggestionStatusStyle("var(--wg-ok)")}>
-          ✓ suggestion accepted
+          {t("statusAccepted")}
         </div>
       )}
       {sug?.status === "dismissed" && (
         <div style={suggestionStatusStyle("var(--wg-ink-soft)")}>
-          · suggestion dismissed
+          {t("statusDismissed")}
         </div>
       )}
       {sug?.status === "countered" && (
         <div style={suggestionStatusStyle("var(--wg-ink-soft)")}>
-          ↳ countered
+          {t("statusCountered")}
         </div>
       )}
       {sug?.status === "escalated" && (
@@ -481,7 +483,7 @@ function MessageRow({
             marginTop: 4,
           }}
         >
-          ⚠ escalated — awaiting sync
+          {t("statusEscalated")}
         </div>
       )}
     </div>
@@ -501,6 +503,7 @@ function SuggestionCard({
   onCounter: (s: Suggestion, text: string) => Promise<void>;
   onEscalate: (s: Suggestion) => void;
 }) {
+  const t = useTranslations("detail.im");
   const [counterOpen, setCounterOpen] = useState(false);
   const [counterText, setCounterText] = useState("");
   const [sending, setSending] = useState(false);
@@ -549,12 +552,12 @@ function SuggestionCard({
         }}
       >
         {suggestion.kind} · {(suggestion.confidence * 100).toFixed(0)}%
-        confidence
+        {" "}{t("confidenceSuffix")}
       </div>
       {suggestion.proposal && (
         <>
           <div style={{ fontWeight: 600 }}>
-            Proposed: {suggestion.proposal.action}
+            {t("proposed")}: {suggestion.proposal.action}
           </div>
           <div style={{ color: "var(--wg-ink-soft)", marginTop: 2 }}>
             {suggestion.proposal.summary}
@@ -563,7 +566,7 @@ function SuggestionCard({
       )}
       {!suggestion.proposal && suggestion.targets.length > 0 && (
         <div style={{ color: "var(--wg-ink-soft)" }}>
-          references: {suggestion.targets.join(", ")}
+          {t("references")}: {suggestion.targets.join(", ")}
         </div>
       )}
       {escalationRequested ? (
@@ -581,7 +584,7 @@ function SuggestionCard({
           }}
           data-testid="awaiting-sync-badge"
         >
-          ⚠ Awaiting sync
+          {t("awaitingSync")}
         </div>
       ) : (
         <div
@@ -598,7 +601,7 @@ function SuggestionCard({
             onClick={() => onDismiss(suggestion)}
             style={ghostBtn}
           >
-            Dismiss
+            {t("dismiss")}
           </button>
           <button
             type="button"
@@ -606,7 +609,7 @@ function SuggestionCard({
             style={amberBtn}
             data-testid="escalate-btn"
           >
-            Escalate
+            {t("escalate")}
           </button>
           <button
             type="button"
@@ -615,14 +618,14 @@ function SuggestionCard({
             data-testid="counter-btn"
             aria-expanded={counterOpen}
           >
-            {counterOpen ? "Cancel" : "Counter"}
+            {counterOpen ? t("cancel") : t("counter")}
           </button>
           <button
             type="button"
             onClick={() => onAccept(suggestion)}
             style={primaryBtn}
           >
-            Accept
+            {t("accept")}
           </button>
         </div>
       )}
@@ -641,7 +644,7 @@ function SuggestionCard({
                 submitCounter();
               }
             }}
-            placeholder="Your counter-framing — posts as a new message."
+            placeholder={t("counterPlaceholder")}
             rows={3}
             style={{
               width: "100%",
@@ -672,7 +675,7 @@ function SuggestionCard({
               }}
               data-testid="counter-submit"
             >
-              Send counter
+              {t("sendCounter")}
             </button>
           </div>
         </div>

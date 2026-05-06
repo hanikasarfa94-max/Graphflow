@@ -1192,6 +1192,35 @@
       "title": "决策",
       "empty": "尚未生成决策。",
       "viewLineage": "查看来龙去脉"
+    },
+    "im": {
+      "ws": {
+        "connecting": "连接中",
+        "open": "已连接",
+        "closed": "已断开"
+      },
+      "messageCount": "{n} 条消息",
+      "loadFailed": "加载失败（{status}）",
+      "emptyMessages": "还没有消息——在下方开个头吧。",
+      "composerPlaceholder": "发送消息……使用 @用户名 提及成员",
+      "send": "发送",
+      "counterToEarlier": "↳ 对此前建议的反提",
+      "decisionRecorded": "决策已记录",
+      "statusAccepted": "✓ 建议已接受",
+      "statusDismissed": "· 建议已忽略",
+      "statusCountered": "↳ 已反提",
+      "statusEscalated": "⚠ 已上报——等待同步",
+      "awaitingSync": "⚠ 等待同步",
+      "confidenceSuffix": "置信度",
+      "proposed": "建议",
+      "references": "引用",
+      "dismiss": "忽略",
+      "escalate": "上报",
+      "cancel": "取消",
+      "counter": "反提",
+      "accept": "接受",
+      "counterPlaceholder": "你的反向框架——会作为新消息发出。",
+      "sendCounter": "发送反提"
     }
   },
   "inbox": {
