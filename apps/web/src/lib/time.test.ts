@@ -3,37 +3,38 @@ import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 
 import {
-  DISPLAY_TZ_LABEL,
   formatIso,
   formatIsoSeconds,
   formatTime,
   parseServerTime,
 } from "./time";
 
-// M1.1 §4 — GMT+8 hardening regression guard.
+// M1.1 §4 / M1.3 polish — Asia/Shanghai hard-pin regression guard.
 //
-// `formatIso` / `formatIsoSeconds` are the canonical timestamp
-// formatters: they pin Asia/Shanghai and append a literal "GMT+8" so
-// audit copy doesn't read as the browser's local time. Any direct
-// `new Date(...).toLocaleString()` in apps/web outside this lib bypasses
-// those guarantees — that bug shipped to prod once already (Slice D
-// dogfood: tooltips showed local time without a TZ label).
-//
-// This test walks the apps/web source tree and asserts that no file
-// outside lib/time.ts uses the offending pattern. Number formatting via
-// `(0).toLocaleString()` (HealthPanel uses it for thousands separators)
-// is intentionally allowed — it's not a timestamp display.
+// `formatIso` / `formatIsoSeconds` pin Asia/Shanghai so audit copy
+// doesn't read as the browser's local time. The textual "GMT+8" suffix
+// was dropped per 2026-05-06 user feedback ("the GMT three CAPITAL
+// letter still visible to users"); the timezone pin itself stays — every
+// formatted string is implicitly Beijing time. Direct `new
+// Date(...).toLocaleString()` outside this lib bypasses the pin —
+// banned by the walks below.
 
 describe("time formatters output", () => {
-  test("formatIso appends GMT+8 label", () => {
+  test("formatIso renders Asia/Shanghai time without a textual zone suffix", () => {
     const out = formatIso("2026-05-05T10:00:00Z");
-    expect(out.endsWith(DISPLAY_TZ_LABEL)).toBe(true);
-    expect(out).toContain("GMT+8");
+    // 10:00 UTC == 18:00 in Asia/Shanghai. The output should contain
+    // the converted time and END at the time digits — no "GMT+8".
+    expect(out).toContain("18:00");
+    expect(out).not.toContain("GMT");
+    expect(out).not.toContain("UTC");
+    expect(out.endsWith("18:00")).toBe(true);
   });
 
-  test("formatIsoSeconds appends GMT+8 label", () => {
+  test("formatIsoSeconds renders Asia/Shanghai with seconds, no zone suffix", () => {
     const out = formatIsoSeconds("2026-05-05T10:00:00Z");
-    expect(out.endsWith(DISPLAY_TZ_LABEL)).toBe(true);
+    expect(out).toContain("18:00:00");
+    expect(out).not.toContain("GMT");
+    expect(out.endsWith("18:00:00")).toBe(true);
   });
 });
 
@@ -72,11 +73,12 @@ describe("M1.2 — parseServerTime UTC fallback", () => {
     expect(parseServerTime(undefined)).toBe(null);
   });
 
-  test("offsetless ISO formats with GMT+8 label", () => {
+  test("offsetless ISO formats correctly in Asia/Shanghai, no zone suffix", () => {
     // Same input the BE actually emits today.
     const out = formatIso("2026-05-06T06:03:00");
     expect(out).toContain("14:03");
-    expect(out.endsWith(DISPLAY_TZ_LABEL)).toBe(true);
+    expect(out).not.toContain("GMT");
+    expect(out.endsWith("14:03")).toBe(true);
   });
 });
 

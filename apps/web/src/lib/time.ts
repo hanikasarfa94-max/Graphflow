@@ -15,8 +15,19 @@
 // code should import from here, not call `toLocaleString()` directly.
 
 export const DISPLAY_TZ = "Asia/Shanghai";
-export const DISPLAY_TZ_LABEL = "GMT+8";
 export const DISPLAY_LOCALE = "en-CA"; // YYYY-MM-DD ordering, ISO-friendly
+
+// Per-user feedback 2026-05-06: visible "GMT+8" suffix read as too
+// English / acronym-y in zh demo. The hard-pin to Asia/Shanghai stays
+// (SSR/CSR consistency reason from the file header), but we no longer
+// append a textual zone marker. Times read as plain "14:30" / "Yesterday
+// 14:30" — and since every render pulls from this module, every visible
+// time is implicitly Beijing time. Tooltips that need full precision
+// keep formatIsoSeconds, also un-suffixed.
+//
+// Kept as a no-op export so any external import compiles, but new code
+// should not consume it.
+export const DISPLAY_TZ_LABEL = "";
 
 // M1.2 — parse an ISO string honoring "the server emitted offsetless UTC".
 // SQLite + Python `datetime.utcnow().isoformat()` produces strings like
@@ -50,9 +61,9 @@ export function parseServerTime(
   return Number.isFinite(d.getTime()) ? d : null;
 }
 
-// ISO-style absolute. "2026-05-03 14:30" — 24h, hyphenated date, no TZ
-// in the string (the surrounding context establishes "this is GMT+8").
-// Use for tooltips and audit-log rows where ambiguity must be zero.
+// ISO-style absolute. "2026-05-03 14:30" — 24h, hyphenated date,
+// always rendered in Asia/Shanghai. No textual zone marker appended.
+// Use for tooltips and audit-log rows where date precision matters.
 export function formatIso(iso?: string | number | Date | null): string {
   if (iso === undefined) iso = new Date();
   const d = parseServerTime(iso);
@@ -68,7 +79,7 @@ export function formatIso(iso?: string | number | Date | null): string {
     hour12: false,
   })
     .format(d)
-    .replace(",", "") + ` ${DISPLAY_TZ_LABEL}`;
+    .replace(",", "");
 }
 
 // Same as formatIso plus seconds. Reserved for audit / debug surfaces
@@ -88,7 +99,7 @@ export function formatIsoSeconds(iso: string | number | Date | null): string {
     hour12: false,
   })
     .format(d)
-    .replace(",", "") + ` ${DISPLAY_TZ_LABEL}`;
+    .replace(",", "");
 }
 
 // "14:30" clock-only — for in-stream message rows where the date is
