@@ -1147,6 +1147,33 @@ class IMService:
                     "action": "approve_membrane_candidate",
                 }
 
+            if candidate_kind == "kb_archive_request":
+                # M1.2 — owner accepted a member's request to archive a
+                # group-scope KB item. Soft-archive in place; the row
+                # stays in the DB for audit. is_canonical_kb_row excludes
+                # status='archived' so retrieval / kb_search stop using
+                # it immediately.
+                kb_item_id = (
+                    detail.get("kb_item_id")
+                    if isinstance(detail, dict)
+                    else None
+                )
+                if not kb_item_id:
+                    return {"ok": False, "error": "missing_kb_item_id"}
+                from workgraph_persistence import KbItemRepository
+
+                updated = await KbItemRepository(session).update(
+                    item_id=kb_item_id, status="archived"
+                )
+                if updated is None:
+                    return {"ok": False, "error": "kb_item_not_found"}
+                return {
+                    "ok": True,
+                    "graph_touched": True,
+                    "kb_item_id": kb_item_id,
+                    "action": "archive_kb_item",
+                }
+
             if candidate_kind == "task_promote":
                 task_id = (
                     detail.get("task_id")

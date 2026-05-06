@@ -15,7 +15,18 @@
       Edit. Owner of item OR project owner.
 
   DELETE /api/kb-items/{id}
-      Owner of item OR project owner.
+      Hard delete. Personal-scope only — group-scope items must use the
+      archive flow so audit context is preserved (M1.2).
+
+  POST   /api/kb-items/{id}/archive
+      Soft archive. Project owner for group-scope; item owner for
+      personal-scope. Sets status='archived' so the row is excluded
+      from retrieval / kb_search but stays in DB (M1.2).
+
+  POST   /api/kb-items/{id}/archive-request
+      Member-initiated request to archive a group-scope KB item.
+      Posts an IMSuggestion(kind=membrane_review) for the project
+      owner to accept or dismiss (M1.2).
 
   POST   /api/kb-items/{id}/promote
       Personal → group. Owner of item OR project owner.
@@ -49,15 +60,19 @@ _CODE_TO_STATUS: dict[str, int] = {
     "invalid_status": 400,
     "invalid_source": 400,
     "invalid_filename": 400,
+    "invalid_reason": 400,
     "content_too_large": 400,
     "empty_file": 400,
     "file_too_large": 413,
     "storage_failed": 500,
+    "no_team_stream": 500,
     "not_found": 404,
     "no_attachment": 404,
     "attachment_missing": 410,
     "not_a_member": 403,
     "forbidden": 403,
+    "group_use_archive": 400,
+    "not_group_scope": 400,
 }
 
 
@@ -171,6 +186,46 @@ async def delete_item(
     service = _service(request)
     try:
         return await service.delete(item_id=item_id, actor_user_id=user.id)
+    except KbItemError as err:
+        _raise(err)
+
+
+class ArchiveRequestBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    reason: str = Field(min_length=1, max_length=2000)
+    suggested_replacement_id: str | None = Field(default=None, max_length=36)
+
+
+@router.post("/api/kb-items/{item_id}/archive")
+async def archive_item(
+    item_id: str,
+    request: Request,
+    user: AuthenticatedUser = Depends(require_user),
+) -> dict[str, Any]:
+    service = _service(request)
+    try:
+        return await service.archive(
+            item_id=item_id, actor_user_id=user.id
+        )
+    except KbItemError as err:
+        _raise(err)
+
+
+@router.post("/api/kb-items/{item_id}/archive-request")
+async def request_archive_item(
+    item_id: str,
+    body: ArchiveRequestBody,
+    request: Request,
+    user: AuthenticatedUser = Depends(require_user),
+) -> dict[str, Any]:
+    service = _service(request)
+    try:
+        return await service.request_archive(
+            item_id=item_id,
+            actor_user_id=user.id,
+            reason=body.reason,
+            suggested_replacement_id=body.suggested_replacement_id,
+        )
     except KbItemError as err:
         _raise(err)
 

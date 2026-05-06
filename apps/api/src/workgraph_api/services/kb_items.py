@@ -365,6 +365,11 @@ class KbItemService:
                 viewer_user_id=viewer_user_id,
                 limit=limit,
             )
+            # M1.2: archived items disappear from normal KB tree/search.
+            # The row still exists for audit + future-restore but should
+            # not appear in the default listing. A future "show archived"
+            # toggle for owners can opt back in.
+            rows = [r for r in rows if r.status != "archived"]
             return [_serialize(r) for r in rows]
 
     async def get(
@@ -413,6 +418,14 @@ class KbItemService:
             if row is None:
                 raise KbItemError("not_found", status_=404)
             await self._assert_can_edit(session, row, actor_user_id)
+            # M1.2: hard delete is not the right primitive for shared
+            # memory repair — the graph should remember bad memory
+            # existed; agents must just stop using it. Group-scope rows
+            # must go through the archive flow so audit context is
+            # preserved. Personal-scope rows still hard-delete (their
+            # blast radius is one user, no cross-cell audit concern).
+            if row.scope == "group":
+                raise KbItemError("group_use_archive", status_=400)
             had_attachment = bool(row.attachment_filename)
             await KbItemRepository(session).delete(item_id)
         # Clean up the attachment dir on disk after the row is gone.
@@ -704,6 +717,136 @@ class KbItemService:
                 item_id=item_id, scope="personal"
             )
             return _serialize(updated)
+
+    # ---- M1.2: archive + request-archive (memory repair) -------------
+
+    async def archive(
+        self, *, item_id: str, actor_user_id: str
+    ) -> dict[str, Any]:
+        """Soft-archive a KB item.
+
+        Permission model:
+          * Group-scope: project owner only. Members must use the
+            request-archive flow so an owner approval gate stays.
+          * Personal-scope: item owner only.
+
+        Soft-archive sets `status='archived'` so `is_canonical_kb_row`
+        excludes it from retrieval / kb_search / agent pretext, but the
+        row stays in the DB for audit + future-restore. Attachments are
+        NOT deleted on archive (they would be on hard delete).
+        """
+        async with session_scope(self._sessionmaker) as session:
+            row = await KbItemRepository(session).get(item_id)
+            if row is None:
+                raise KbItemError("not_found", status_=404)
+            if row.scope == "group":
+                if not await _is_project_owner(
+                    session, row.project_id, actor_user_id
+                ):
+                    raise KbItemError("forbidden", status_=403)
+            elif row.scope == "personal":
+                if row.owner_user_id != actor_user_id:
+                    raise KbItemError("forbidden", status_=403)
+            else:
+                # department / enterprise — defer to N-Next; not
+                # archivable through this endpoint yet.
+                raise KbItemError("forbidden", status_=403)
+            updated = await KbItemRepository(session).update(
+                item_id=item_id, status="archived"
+            )
+            return _serialize(updated)
+
+    async def request_archive(
+        self,
+        *,
+        item_id: str,
+        actor_user_id: str,
+        reason: str,
+        suggested_replacement_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Member-initiated request to archive a group-scope KB item.
+
+        Posts an `IMSuggestion(kind='membrane_review',
+        proposal.detail.candidate_kind='kb_archive_request')` into the
+        project's team-room stream. Owner sees it in the inbox; on
+        Accept the kb item is archived (im._apply_proposal handles the
+        branch). Owner-only accept is enforced by the existing
+        membrane_review gate in im.py.
+        """
+        reason = (reason or "").strip()
+        if not reason:
+            raise KbItemError("invalid_reason", "reason required")
+        if len(reason) > 2000:
+            reason = reason[:2000]
+        async with session_scope(self._sessionmaker) as session:
+            row = await KbItemRepository(session).get(item_id)
+            if row is None:
+                raise KbItemError("not_found", status_=404)
+            if row.scope != "group":
+                # Personal items don't need the request flow — owners
+                # archive them directly.
+                raise KbItemError("not_group_scope", status_=400)
+            if row.project_id is None:
+                raise KbItemError("forbidden", status_=403)
+            if not await ProjectMemberRepository(session).is_member(
+                row.project_id, actor_user_id
+            ):
+                raise KbItemError("not_a_member", status_=403)
+            if suggested_replacement_id is not None:
+                replacement = await KbItemRepository(session).get(
+                    suggested_replacement_id
+                )
+                if replacement is None or replacement.project_id != row.project_id:
+                    # Soft-validate; don't fail loud if the replacement
+                    # disappeared between picker and submit. Drop it.
+                    suggested_replacement_id = None
+            team_stream = await StreamRepository(session).get_for_project(
+                row.project_id
+            )
+            if team_stream is None:
+                raise KbItemError("no_team_stream", status_=500)
+            body = (
+                f"📥 Member requested archive of group KB '{row.title}'. "
+                f"Reason: {reason}"
+            )
+            if suggested_replacement_id:
+                body = f"{body}\n→ Suggested replacement: kb/{suggested_replacement_id[:8]}…"
+            msg = await MessageRepository(session).append(
+                project_id=row.project_id,
+                author_id=EDGE_AGENT_SYSTEM_USER_ID,
+                body=body,
+                stream_id=team_stream.id,
+                kind="kb-archive-request",
+                linked_id=item_id,
+            )
+            suggestion = await IMSuggestionRepository(session).append(
+                project_id=row.project_id,
+                message_id=msg.id,
+                kind="membrane_review",
+                confidence=1.0,
+                targets=None,
+                proposal={
+                    "action": "archive_kb_item",
+                    "summary": f"Archive '{row.title}'",
+                    "detail": {
+                        "candidate_kind": "kb_archive_request",
+                        "kb_item_id": item_id,
+                        "reason": reason,
+                        "suggested_replacement_id": suggested_replacement_id,
+                        "requested_by": actor_user_id,
+                    },
+                },
+                reasoning=reason,
+                prompt_version=None,
+                outcome="ok",
+                attempts=1,
+            )
+            return {
+                "ok": True,
+                "suggestion_id": suggestion.id,
+                "kb_item_id": item_id,
+                "message_id": msg.id,
+            }
 
     # ---- internals -----------------------------------------------------
 

@@ -874,3 +874,222 @@ async def test_kb_detail_payload_field_names_match_fe_contract(api_env):
     assert isinstance(payload["summary"], str)
     assert "auth rewrite plan" in payload["summary"]
     assert isinstance(payload["tags"], list)
+
+
+# ---- M1.2 KB memory repair (archive + request-archive) ----------------
+
+
+@pytest.mark.asyncio
+async def test_owner_can_archive_group_kb(api_env):
+    client, maker, *_ = api_env
+    owner_id = await _register_and_login(client, "kb_arc_owner")
+    member_id = await _register_and_login(client, "kb_arc_member")
+    pid = await _mk_project_with_members(
+        maker, owner_id=owner_id, member_id=member_id
+    )
+
+    # Owner creates a group-scope KB row.
+    await _login(client, "kb_arc_owner")
+    r = await client.post(
+        f"/api/projects/{pid}/kb-items",
+        json={"title": "stale level count", "content_md": "5 levels", "scope": "group"},
+    )
+    assert r.status_code == 200, r.text
+    item_id = r.json()["id"]
+
+    # Owner archives — succeeds; status flips to archived.
+    r = await client.post(f"/api/kb-items/{item_id}/archive")
+    assert r.status_code == 200, r.text
+    assert r.json()["status"] == "archived"
+
+
+@pytest.mark.asyncio
+async def test_member_cannot_archive_group_kb_directly(api_env):
+    client, maker, *_ = api_env
+    owner_id = await _register_and_login(client, "kb_arc2_owner")
+    member_id = await _register_and_login(client, "kb_arc2_member")
+    pid = await _mk_project_with_members(
+        maker, owner_id=owner_id, member_id=member_id
+    )
+
+    # Owner creates the group row.
+    await _login(client, "kb_arc2_owner")
+    r = await client.post(
+        f"/api/projects/{pid}/kb-items",
+        json={"title": "shared spec", "scope": "group"},
+    )
+    item_id = r.json()["id"]
+
+    # Member tries to archive directly → 403.
+    await _login(client, "kb_arc2_member")
+    r = await client.post(f"/api/kb-items/{item_id}/archive")
+    assert r.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_member_can_request_archive_group_kb(api_env):
+    from workgraph_persistence import StreamRepository
+
+    client, maker, *_ = api_env
+    owner_id = await _register_and_login(client, "kb_arc3_owner")
+    member_id = await _register_and_login(client, "kb_arc3_member")
+    pid = await _mk_project_with_members(
+        maker, owner_id=owner_id, member_id=member_id
+    )
+    async with session_scope(maker) as session:
+        await StreamRepository(session).create(type="project", project_id=pid)
+
+    # Owner creates the group row.
+    await _login(client, "kb_arc3_owner")
+    r = await client.post(
+        f"/api/projects/{pid}/kb-items",
+        json={"title": "obsolete plan", "content_md": "old", "scope": "group"},
+    )
+    item_id = r.json()["id"]
+
+    # Member files an archive request.
+    await _login(client, "kb_arc3_member")
+    r = await client.post(
+        f"/api/kb-items/{item_id}/archive-request",
+        json={"reason": "Conflicts with the new spec"},
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["ok"] is True
+    assert body["kb_item_id"] == item_id
+    assert isinstance(body["suggestion_id"], str)
+
+
+@pytest.mark.asyncio
+async def test_accepted_archive_request_sets_status_archived(api_env):
+    from workgraph_persistence import StreamRepository
+
+    client, maker, *_ = api_env
+    owner_id = await _register_and_login(client, "kb_arc4_owner")
+    member_id = await _register_and_login(client, "kb_arc4_member")
+    pid = await _mk_project_with_members(
+        maker, owner_id=owner_id, member_id=member_id
+    )
+    async with session_scope(maker) as session:
+        await StreamRepository(session).create(type="project", project_id=pid)
+
+    # Owner creates the group row.
+    await _login(client, "kb_arc4_owner")
+    r = await client.post(
+        f"/api/projects/{pid}/kb-items",
+        json={"title": "doomed row", "scope": "group"},
+    )
+    item_id = r.json()["id"]
+
+    # Member files request.
+    await _login(client, "kb_arc4_member")
+    r = await client.post(
+        f"/api/kb-items/{item_id}/archive-request",
+        json={"reason": "wrong number"},
+    )
+    suggestion_id = r.json()["suggestion_id"]
+
+    # Member tries to accept their own request → owner_only (403).
+    # The membrane_review owner-gate (im.py) blocks proposer self-accept.
+    r = await client.post(f"/api/im_suggestions/{suggestion_id}/accept")
+    assert r.status_code == 403
+    assert r.json()["message"] == "owner_only"
+
+    # Owner accepts → kb item archives.
+    await _login(client, "kb_arc4_owner")
+    r = await client.post(f"/api/im_suggestions/{suggestion_id}/accept")
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body.get("ok") is True
+    assert body.get("applied", {}).get("action") == "archive_kb_item"
+
+    # Confirm status flipped to archived.
+    r = await client.get(f"/api/kb-items/{item_id}")
+    assert r.status_code == 200
+    assert r.json()["status"] == "archived"
+
+
+@pytest.mark.asyncio
+async def test_archived_kb_not_in_list_or_search(api_env):
+    """Archived rows must disappear from the KB tree listing AND from
+    is_canonical_kb_row, which is the single gate retrieval / kb_search
+    use to decide what's shared-memory-visible."""
+    client, maker, *_ = api_env
+    owner_id = await _register_and_login(client, "kb_arc5_owner")
+    member_id = await _register_and_login(client, "kb_arc5_member")
+    pid = await _mk_project_with_members(
+        maker, owner_id=owner_id, member_id=member_id
+    )
+
+    await _login(client, "kb_arc5_owner")
+    r = await client.post(
+        f"/api/projects/{pid}/kb-items",
+        json={"title": "live row", "scope": "group"},
+    )
+    live_id = r.json()["id"]
+    r = await client.post(
+        f"/api/projects/{pid}/kb-items",
+        json={"title": "soon to be archived", "scope": "group"},
+    )
+    arc_id = r.json()["id"]
+
+    # Pre-archive both visible.
+    r = await client.get(f"/api/projects/{pid}/kb-items")
+    titles = [i["title"] for i in r.json()["items"]]
+    assert "live row" in titles
+    assert "soon to be archived" in titles
+
+    # Archive one.
+    r = await client.post(f"/api/kb-items/{arc_id}/archive")
+    assert r.status_code == 200
+
+    # List excludes the archived one.
+    r = await client.get(f"/api/projects/{pid}/kb-items")
+    titles = [i["title"] for i in r.json()["items"]]
+    assert "live row" in titles
+    assert "soon to be archived" not in titles
+
+    # is_canonical_kb_row excludes archived directly.
+    from workgraph_api.services._kb_visibility import is_canonical_kb_row
+    from workgraph_persistence import KbItemRepository, session_scope
+
+    async with session_scope(maker) as session:
+        archived = await KbItemRepository(session).get(arc_id)
+        live = await KbItemRepository(session).get(live_id)
+    assert archived is not None and archived.status == "archived"
+    assert is_canonical_kb_row(archived) is False
+    assert is_canonical_kb_row(live) is True
+
+
+@pytest.mark.asyncio
+async def test_hard_delete_blocked_for_group_scope(api_env):
+    """M1.2: hard delete is reserved for personal-scope rows. Group-
+    scope must use the archive flow so audit context survives."""
+    client, maker, *_ = api_env
+    owner_id = await _register_and_login(client, "kb_arc6_owner")
+    member_id = await _register_and_login(client, "kb_arc6_member")
+    pid = await _mk_project_with_members(
+        maker, owner_id=owner_id, member_id=member_id
+    )
+
+    await _login(client, "kb_arc6_owner")
+    r = await client.post(
+        f"/api/projects/{pid}/kb-items",
+        json={"title": "group row", "scope": "group"},
+    )
+    group_id = r.json()["id"]
+
+    r = await client.post(
+        f"/api/projects/{pid}/kb-items",
+        json={"title": "personal row", "scope": "personal"},
+    )
+    personal_id = r.json()["id"]
+
+    # Group hard-delete blocked.
+    r = await client.delete(f"/api/kb-items/{group_id}")
+    assert r.status_code == 400
+    assert r.json()["message"] == "group_use_archive"
+
+    # Personal hard-delete still works.
+    r = await client.delete(f"/api/kb-items/{personal_id}")
+    assert r.status_code == 200
