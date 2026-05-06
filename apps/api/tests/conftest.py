@@ -627,6 +627,11 @@ async def api_env():
     im_service.attach_membrane(membrane_service)
     # Stage A: silent-consensus ratify also through membrane.
     silent_consensus_service.attach_membrane(membrane_service)
+    # M5: manual_room candidate gate. Non-owner room creates land in
+    # the owner inbox as IMSuggestion(membrane_review,
+    # candidate_kind=manual_room); accept replays via IMService.
+    stream_service.attach_membrane(membrane_service)
+    im_service.attach_stream_service(stream_service)
     render_agent = _StubRenderAgent()
     render_service = RenderService(maker, render_agent)
 

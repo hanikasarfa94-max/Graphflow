@@ -60,6 +60,19 @@ class StreamService:
         # `/ws/streams/{id}` for every post. When absent the broadcast is
         # a no-op.
         self._hub = hub
+        # M5 — late-bound. When set, create_room() routes through the
+        # Membrane gate for non-owner creators (request_review). When
+        # None, behavior is identical to pre-M5 (any project member
+        # can create a room directly). Tests that don't want the gate
+        # leave it unattached.
+        self._membrane_service = None
+
+    def attach_membrane(self, membrane_service) -> None:
+        """Late-bind the Membrane gate. Without this attach, room
+        creates skip the gate (legacy behavior); production wiring
+        in main.py must call attach_membrane for the invariant to
+        hold."""
+        self._membrane_service = membrane_service
 
     async def create_or_get_dm(
         self, *, user_id: str, other_user_id: str
@@ -256,6 +269,7 @@ class StreamService:
         creator_user_id: str,
         name: str,
         member_user_ids: list[str],
+        _skip_membrane: bool = False,
     ) -> dict[str, Any]:
         """Create a new 'room' stream inside a cell.
 
@@ -263,6 +277,14 @@ class StreamService:
         all be project members of the same cell — rooms cannot exfiltrate
         cell-scoped state to outsiders. The creator is implicitly added
         if not already in `member_user_ids`.
+
+        M5 — Membrane gate. When `self._membrane_service` is attached,
+        non-owner creators land as `request_review` (an IMSuggestion
+        is queued for project owner approval; the room is NOT created
+        yet). Owner creators auto_merge through to direct creation
+        with audit. `_skip_membrane=True` is the back-channel the
+        accept handler (im._apply_proposal) uses to actually create
+        the room after owner approval — bypasses recursion.
         """
         name = (name or "").strip()
         if not name:
@@ -284,6 +306,46 @@ class StreamService:
                 if not await project_member_repo.is_member(project_id, uid):
                     return {"ok": False, "error": "non_cell_member"}
 
+            # M5 — owner check for the gate decision. Owners can
+            # auto_merge a room create; non-owners get request_review.
+            members = await project_member_repo.list_for_project(project_id)
+            is_owner = any(
+                m.user_id == creator_user_id and m.role == "owner"
+                for m in members
+            )
+            owner_ids = [m.user_id for m in members if m.role == "owner"]
+
+        if (
+            self._membrane_service is not None
+            and not _skip_membrane
+            and not is_owner
+        ):
+            # Non-owner trying to create a shared room → run the gate.
+            review = await self._membrane_service.review_manual_room(
+                project_id=project_id,
+                proposer_user_id=creator_user_id,
+                name=name,
+                member_user_ids=list(member_user_ids),
+                owner_ids=owner_ids,
+            )
+            if review.action == "reject":
+                return {
+                    "ok": False,
+                    "error": "membrane_rejected",
+                    "reason": review.reason,
+                }
+            if review.action in ("request_review", "request_clarification"):
+                return {
+                    "ok": True,
+                    "deferred": True,
+                    "reason": review.reason,
+                    "suggestion_id": review.suggestion_id,
+                    "stream": None,
+                }
+
+        # Owner-direct path OR membrane auto_merge path OR _skip_membrane
+        # (accept-handler reentry). Materialize the room.
+        async with session_scope(self._sessionmaker) as session:
             stream_repo = StreamRepository(session)
             stream = await stream_repo.create(
                 type="room", project_id=project_id, name=name

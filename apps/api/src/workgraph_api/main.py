@@ -554,6 +554,11 @@ async def lifespan(app: FastAPI):
     # for advisory review (the "decision" kind suggestion crystallizes
     # a DecisionRow on accept; review captures dup-decision warnings).
     im_service.attach_membrane(membrane_service)
+    # M5 — manual_room candidate gate. StreamService routes non-owner
+    # `create_room` calls through MembraneService; on accept, IMService
+    # replays the args via StreamService. Both wires must be live.
+    stream_service.attach_membrane(membrane_service)
+    im_service.attach_stream_service(stream_service)
     # silent_consensus_service is constructed further down (line ~544);
     # its attach_membrane() call lives down there to satisfy ordering.
 

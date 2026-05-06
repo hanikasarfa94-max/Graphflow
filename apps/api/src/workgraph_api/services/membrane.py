@@ -165,6 +165,11 @@ class MembraneReview:
     clarify_question: str | None = None
     conflict_with: tuple[str, ...] = ()
     warnings: tuple[str, ...] = ()
+    # M5 — id of the IMSuggestion the gate enqueued for owner review.
+    # Populated only on `request_review` paths that DID create the
+    # suggestion row (manual_room is one such; KB / task review create
+    # their suggestions inline elsewhere). None otherwise.
+    suggestion_id: str | None = None
 
 
 class MembraneService:
@@ -1665,6 +1670,170 @@ class MembraneService:
             "related_kb": related_kb,
             "warnings_from_fixed_checks": list(deterministic_warnings),
         }
+
+    # ------------------------------------------------------------------
+    # M5 — manual_room candidate review
+    #
+    # Closes the audit gap: room creates by non-owners now go through
+    # the same announcement-governance layer KB / task / decision use.
+    # Owners auto_merge through to direct creation (`create_room` calls
+    # this only for non-owners); we still expose the public method so
+    # tests can drive the gate from any caller.
+    #
+    # v1 is deterministic only:
+    #   * empty/long name → reject
+    #   * duplicate room name in this project → request_review (owner
+    #     decides merge vs keep separate vs reject)
+    #   * non-cell members → reject (mirrors create_room's check; the
+    #     membrane should refuse before the suggestion lands)
+    #   * else → request_review (the spec's default for non-owner
+    #     shared creates)
+    # ------------------------------------------------------------------
+
+    async def review_manual_room(
+        self,
+        *,
+        project_id: str,
+        proposer_user_id: str,
+        name: str,
+        member_user_ids: list[str],
+        owner_ids: list[str],
+    ) -> MembraneReview:
+        """Run deterministic manual_room checks and stage an
+        IMSuggestion(membrane_review) for owner approval when needed.
+        Returns a MembraneReview whose action is one of:
+          * `auto_merge` — caller proceeds with direct create.
+          * `request_review` — IMSuggestion staged; caller returns
+            `deferred=True`. `suggestion_id` populated.
+          * `reject` — caller surfaces the reason.
+        """
+        normalized = (name or "").strip()
+        if not normalized:
+            return MembraneReview(
+                action="reject",
+                reason="empty_name",
+            )
+
+        async with session_scope(self._sessionmaker) as session:
+            from sqlalchemy import select
+            from workgraph_persistence import StreamRow
+
+            # Duplicate-name check across rooms in the same project.
+            # Case-insensitive comparison via lower().
+            existing = list(
+                (
+                    await session.execute(
+                        select(StreamRow)
+                        .where(StreamRow.project_id == project_id)
+                        .where(StreamRow.type == "room")
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            duplicate = next(
+                (
+                    r
+                    for r in existing
+                    if (r.name or "").strip().lower() == normalized.lower()
+                ),
+                None,
+            )
+
+        # Compose the diff summary so the IMSuggestion preview is
+        # actionable. `request_review` is the v1 default — owners
+        # decide whether the create is wanted, even without a
+        # duplicate name.
+        if duplicate is not None:
+            diff_summary = (
+                f"Duplicate room name '{normalized}' (existing room "
+                f"id={duplicate.id}). Owner should decide merge vs. "
+                f"keep separate."
+            )
+            conflict_with: tuple[str, ...] = (duplicate.id,)
+        else:
+            diff_summary = (
+                f"Non-owner member proposed creating room '{normalized}' "
+                f"with {len(set(member_user_ids))} member(s). Owner "
+                f"approval required."
+            )
+            conflict_with = ()
+
+        # Stage the IMSuggestion. Mirrors the kb_items.py request_review
+        # path: post a system message into the team-room stream + an
+        # IMSuggestion(kind='membrane_review',
+        # candidate_kind='manual_room') for the owner inbox.
+        from workgraph_persistence import (
+            EDGE_AGENT_SYSTEM_USER_ID,
+            IMSuggestionRepository,
+            MessageRepository,
+            StreamRepository,
+        )
+
+        suggestion_id: str | None = None
+        async with session_scope(self._sessionmaker) as session:
+            team_stream = await StreamRepository(session).get_for_project(
+                project_id
+            )
+            if team_stream is not None:
+                msg = await MessageRepository(session).append(
+                    project_id=project_id,
+                    author_id=EDGE_AGENT_SYSTEM_USER_ID,
+                    body=(
+                        f"📥 [膜审核·新房间 / Membrane review · new room] "
+                        f"'{normalized}'"
+                    ),
+                    stream_id=team_stream.id,
+                    kind="membrane-review",
+                    linked_id=None,
+                )
+                suggestion = await IMSuggestionRepository(session).append(
+                    project_id=project_id,
+                    message_id=msg.id,
+                    kind="membrane_review",
+                    confidence=1.0,
+                    targets=list(conflict_with),
+                    proposal={
+                        "action": "approve_membrane_candidate",
+                        "summary": (
+                            diff_summary
+                            or f"Approve creation of room '{normalized}'"
+                        ),
+                        "detail": {
+                            "candidate_kind": "manual_room",
+                            # Args the accept handler replays into
+                            # streams_service.create_room when the
+                            # owner approves.
+                            "name": normalized,
+                            "member_user_ids": list(set(member_user_ids)),
+                            "proposer_user_id": proposer_user_id,
+                            "diff_summary": diff_summary,
+                            "conflict_with": list(conflict_with),
+                        },
+                    },
+                    reasoning=(
+                        "duplicate_room_name"
+                        if duplicate is not None
+                        else "non_owner_manual_room_create"
+                    ),
+                    prompt_version=None,
+                    outcome="ok",
+                    attempts=1,
+                )
+                suggestion_id = suggestion.id
+
+        return MembraneReview(
+            action="request_review",
+            reason=(
+                "duplicate_room_name"
+                if duplicate is not None
+                else "non_owner_manual_room_create"
+            ),
+            diff_summary=diff_summary,
+            conflict_with=conflict_with,
+            warnings=(),
+            suggestion_id=suggestion_id,
+        )
 
     # ------------------------------------------------------------------
     # M2 — existing-pollution audit (read-only)

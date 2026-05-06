@@ -2405,3 +2405,256 @@ async def test_e4_capability_projection_does_not_claim_trusted_from_self_declare
     assert cap["level"] == "declared"
     assert cap["epistemic"]["status"] == "proposed", cap
     assert cap["epistemic"]["accepted_scope"] is None
+
+
+# ---- M5 — manual_room Membrane gate -----------------------------------
+
+
+async def _invite_user_to_project(
+    maker, project_id: str, user_id: str, role: str = "member"
+) -> None:
+    async with session_scope(maker) as session:
+        await ProjectMemberRepository(session).add(
+            project_id=project_id, user_id=user_id, role=role
+        )
+
+
+@pytest.mark.asyncio
+async def test_m5_owner_room_create_auto_merges(api_env):
+    """Project owner creating a room goes straight through — no gate
+    deferral, response carries the stream payload as before."""
+    client, maker, *_ = api_env
+    owner_id = await _register(client, "m5_om_owner")
+    member_id = await _register(client, "m5_om_member")
+    pid = await _mk_project_with_members(
+        maker, owner_id=owner_id, member_id=member_id
+    )
+
+    await _login(client, "m5_om_owner")
+    r = await client.post(
+        f"/api/projects/{pid}/rooms",
+        json={"name": "Owner room", "member_user_ids": [member_id]},
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body.get("deferred") is not True
+    assert body["stream"] is not None
+    assert body["stream"]["type"] == "room"
+
+
+@pytest.mark.asyncio
+async def test_m5_non_owner_room_create_is_deferred(api_env):
+    """Non-owner member creating a room gets `deferred=True`; no
+    StreamRow exists yet; an IMSuggestion(membrane_review,
+    candidate_kind=manual_room) is queued for owner approval."""
+    from sqlalchemy import select
+    from workgraph_persistence import StreamRow
+
+    client, maker, *_ = api_env
+    owner_id = await _register(client, "m5_nom_owner")
+    member_id = await _register(client, "m5_nom_member")
+    pid = await _mk_project_with_members(
+        maker, owner_id=owner_id, member_id=member_id
+    )
+
+    await _login(client, "m5_nom_member")
+    r = await client.post(
+        f"/api/projects/{pid}/rooms",
+        json={"name": "Member-proposed room", "member_user_ids": [owner_id]},
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["ok"] is True
+    assert body["deferred"] is True, body
+    assert body["stream"] is None
+    sug_id = body["suggestion_id"]
+    assert sug_id is not None
+
+    # No StreamRow with this name materialized yet.
+    async with session_scope(maker) as session:
+        rooms = list(
+            (
+                await session.execute(
+                    select(StreamRow)
+                    .where(StreamRow.project_id == pid)
+                    .where(StreamRow.type == "room")
+                    .where(StreamRow.name == "Member-proposed room")
+                )
+            )
+            .scalars()
+            .all()
+        )
+    assert rooms == [], "StreamRow must not exist before owner approval"
+
+    # The pending packet is in /flows under the new recipe.
+    await _login(client, "m5_nom_owner")
+    r = await _list_flows(client, pid, recipe="manual_create_room")
+    pkts = r.json()["packets"]
+    assert len(pkts) == 1
+    pkt = pkts[0]
+    assert pkt["id"] == f"manual_room:{sug_id}"
+    assert pkt["recipe_id"] == "manual_create_room"
+    # Transition contract.
+    tc = pkt["transition_contract"]
+    assert tc["source_state"] == "room_proposed"
+    assert tc["target_state"] == "canonical_room"
+    assert tc["review_method"] == "membrane_review"
+    assert owner_id in tc["authority_user_ids"]
+    # Epistemic event.
+    ev = pkt["epistemic_event"]
+    assert ev["kind"] == "proposal"
+    assert ev["status"] == "review_pending"
+    assert ev["membrane_policy"] == "request_review"
+    assert owner_id in ev["authority_required"]
+    # next_actions[0] points at the review surface.
+    assert pkt["next_actions"][0]["href"] == f"/projects/{pid}/detail/im"
+
+
+@pytest.mark.asyncio
+async def test_m5_owner_accept_materializes_room(api_env):
+    """When the owner accepts the IMSuggestion, the StreamRow lands.
+    Verifies the round-trip: non-owner proposal → owner accept →
+    canonical room exists with the requested name + members."""
+    from sqlalchemy import select
+    from workgraph_persistence import StreamRow
+
+    client, maker, *_ = api_env
+    owner_id = await _register(client, "m5_acc_owner")
+    member_id = await _register(client, "m5_acc_member")
+    pid = await _mk_project_with_members(
+        maker, owner_id=owner_id, member_id=member_id
+    )
+
+    await _login(client, "m5_acc_member")
+    r = await client.post(
+        f"/api/projects/{pid}/rooms",
+        json={"name": "Accept-test room", "member_user_ids": [owner_id]},
+    )
+    sug_id = r.json()["suggestion_id"]
+
+    # Owner accepts.
+    await _login(client, "m5_acc_owner")
+    r = await client.post(f"/api/im_suggestions/{sug_id}/accept")
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["ok"] is True
+
+    # StreamRow now exists.
+    async with session_scope(maker) as session:
+        rooms = list(
+            (
+                await session.execute(
+                    select(StreamRow)
+                    .where(StreamRow.project_id == pid)
+                    .where(StreamRow.type == "room")
+                    .where(StreamRow.name == "Accept-test room")
+                )
+            )
+            .scalars()
+            .all()
+        )
+    assert len(rooms) == 1, "owner accept must materialize the StreamRow"
+
+    # Pending packet is gone (suggestion resolved).
+    r = await _list_flows(client, pid, recipe="manual_create_room")
+    assert not any(
+        p["id"] == f"manual_room:{sug_id}" for p in r.json()["packets"]
+    )
+
+
+@pytest.mark.asyncio
+async def test_m5_dm_creation_unaffected(api_env):
+    """Personal/private creates (DM streams) are NOT affected by the
+    gate — the constraint only applies to shared-scope `room` creates."""
+    client, maker, *_ = api_env
+    await _register(client, "m5_dm_a")
+    a_id = (await client.get("/api/auth/me")).json()["id"]
+    await _register(client, "m5_dm_b")
+    b_id = (await client.get("/api/auth/me")).json()["id"]
+    await _login(client, "m5_dm_a")
+    r = await client.post(
+        "/api/streams/dm",
+        json={"other_user_id": b_id},
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["ok"] is True
+    # DM is materialized directly — no deferred flag, no suggestion.
+    assert body.get("deferred") is not True
+
+
+@pytest.mark.asyncio
+async def test_m5_review_pending_packet_has_authority_required(api_env):
+    """Universal Epistemic-Event invariant — review_pending implies
+    non-empty authority_required. Re-checked specifically for the
+    manual_room packet kind (caught here in case a future refactor
+    drops the field)."""
+    client, maker, *_ = api_env
+    owner_id = await _register(client, "m5_auth_owner")
+    member_id = await _register(client, "m5_auth_member")
+    pid = await _mk_project_with_members(
+        maker, owner_id=owner_id, member_id=member_id
+    )
+    await _login(client, "m5_auth_member")
+    await client.post(
+        f"/api/projects/{pid}/rooms",
+        json={"name": "Authority test", "member_user_ids": [owner_id]},
+    )
+    await _login(client, "m5_auth_owner")
+    r = await _list_flows(client, pid, recipe="manual_create_room")
+    pkt = r.json()["packets"][0]
+    ev = pkt["epistemic_event"]
+    assert ev["status"] == "review_pending"
+    assert ev["authority_required"], ev
+
+
+@pytest.mark.asyncio
+async def test_m5_no_direct_stream_row_created_on_non_owner_post(api_env):
+    """Negative invariant — no manual_room bypass remains. After a
+    non-owner POST, the only artifacts are an IMSuggestionRow and a
+    membrane-review system message; no StreamRow with the proposed
+    name exists in the DB."""
+    from sqlalchemy import select
+    from workgraph_persistence import StreamRow, IMSuggestionRow
+
+    client, maker, *_ = api_env
+    owner_id = await _register(client, "m5_no_byp_owner")
+    member_id = await _register(client, "m5_no_byp_member")
+    pid = await _mk_project_with_members(
+        maker, owner_id=owner_id, member_id=member_id
+    )
+    await _login(client, "m5_no_byp_member")
+    await client.post(
+        f"/api/projects/{pid}/rooms",
+        json={"name": "Bypass attempt", "member_user_ids": [owner_id]},
+    )
+    async with session_scope(maker) as session:
+        rooms = list(
+            (
+                await session.execute(
+                    select(StreamRow)
+                    .where(StreamRow.project_id == pid)
+                    .where(StreamRow.type == "room")
+                    .where(StreamRow.name == "Bypass attempt")
+                )
+            )
+            .scalars()
+            .all()
+        )
+        sugs = list(
+            (
+                await session.execute(
+                    select(IMSuggestionRow)
+                    .where(IMSuggestionRow.project_id == pid)
+                    .where(IMSuggestionRow.kind == "membrane_review")
+                )
+            )
+            .scalars()
+            .all()
+        )
+    assert rooms == []
+    assert any(
+        (s.proposal or {}).get("detail", {}).get("candidate_kind")
+        == "manual_room"
+        for s in sugs
+    )

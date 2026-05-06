@@ -82,11 +82,20 @@ class IMService:
         # the membrane for advisory review (Stage A). When None, the
         # crystallization proceeds without review (existing behavior).
         self._membrane_service: Any = None
+        # M5 — late-bound StreamService for the manual_room accept
+        # branch in `_apply_proposal`. When None, manual_room
+        # candidates can't be approved (return clean error).
+        self._stream_service: Any = None
         # Keep in-flight classification tasks so tests + shutdown can await.
         self._pending: set[asyncio.Task] = set()
 
     def attach_membrane(self, membrane_service: Any) -> None:
         self._membrane_service = membrane_service
+
+    def attach_stream_service(self, stream_service: Any) -> None:
+        """M5 — late-bind StreamService so the accept handler can
+        materialize manual_room candidates after owner approval."""
+        self._stream_service = stream_service
 
     async def post_message(
         self,
@@ -1205,6 +1214,43 @@ class IMService:
                     "ok": True,
                     "graph_touched": True,
                     "task_id": task_id,
+                    "action": "approve_membrane_candidate",
+                }
+
+            if candidate_kind == "manual_room":
+                # M5 — owner accepted a non-owner's room-create
+                # candidate. Replay the args via stream_service.
+                # _skip_membrane=True bypasses the gate (we're past
+                # the owner approval — re-running review would loop).
+                if self._stream_service is None:
+                    return {
+                        "ok": False,
+                        "error": "stream_service_unavailable",
+                    }
+                if not isinstance(detail, dict):
+                    return {"ok": False, "error": "missing_manual_room_detail"}
+                name = detail.get("name") or ""
+                member_user_ids = detail.get("member_user_ids") or []
+                proposer_user_id = (
+                    detail.get("proposer_user_id") or actor_id
+                )
+                result = await self._stream_service.create_room(
+                    project_id=row.project_id,
+                    creator_user_id=proposer_user_id,
+                    name=name,
+                    member_user_ids=list(member_user_ids),
+                    _skip_membrane=True,
+                )
+                if not result.get("ok"):
+                    return {
+                        "ok": False,
+                        "error": result.get("error", "manual_room_create_failed"),
+                    }
+                stream = result.get("stream") or {}
+                return {
+                    "ok": True,
+                    "graph_touched": True,
+                    "stream_id": stream.get("id"),
                     "action": "approve_membrane_candidate",
                 }
 
