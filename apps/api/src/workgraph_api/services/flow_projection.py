@@ -32,11 +32,14 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from workgraph_persistence import (
+    DecisionRow,
     HandoffRow,
     IMSuggestionRow,
     KbItemRow,
+    MessageRepository,
     ProjectMemberRepository,
     RoutedSignalRow,
+    StreamMemberRepository,
     TaskRow,
     UserRepository,
     session_scope,
@@ -195,6 +198,12 @@ class FlowProjectionService:
                         session, project_id, owner_ids
                     )
                 )
+            if recipe in (None, "crystallize_decision"):
+                packets.extend(
+                    await self._derive_decision_packets(
+                        session, project_id, owner_ids
+                    )
+                )
 
             # Visibility filter first — never let a non-participant member
             # read past it via a status / bucket / recipe combination.
@@ -350,6 +359,122 @@ class FlowProjectionService:
             packets.append(
                 _task_promote_packet_from_rows(task, sug, owner_ids)
             )
+        return packets
+
+    # ------------------------------------------------------------------
+    # crystallize_decision — IMSuggestionRow(kind=decision) [pending] +
+    #                        DecisionRow [recently crystallized]
+    #
+    # Decision Flow Packet Projection (DC slice). Closes the doc table's
+    # `partial` row: makes conversation → decision → graph state
+    # inspectable as Active Flows packets without a new mutation
+    # surface.
+    #
+    # Two source families:
+    #   * Pending — IMSuggestionRow(kind='decision', status='pending').
+    #     The suggestion's source message lives in some stream
+    #     (DM / room / project). Smallest-relevant-vote: members of
+    #     that stream are the authority. status='awaiting_authority'.
+    #   * Crystallized — DecisionRow rows from the last 14 days. The
+    #     row IS the lineage_output. status='completed'. Visibility
+    #     is project-public for completed decisions (the audit
+    #     surface judges and dogfooders need to inspect).
+    #
+    # Gated proposals (GatedProposalRow → DecisionRow with
+    # decision_class set) and conflict-resolution decisions are NOT
+    # projected separately in v1; they show up via the same
+    # DecisionRow row. Future slices can split out their own packets
+    # if the FE needs to surface gate state.
+    # ------------------------------------------------------------------
+
+    async def _derive_decision_packets(
+        self, session, project_id: str, owner_ids: list[str]
+    ) -> list[dict[str, Any]]:
+        from datetime import datetime, timedelta, timezone
+
+        # Pending — IMSuggestion(kind=decision, status=pending).
+        pending_rows = list(
+            (
+                await session.execute(
+                    select(IMSuggestionRow)
+                    .where(IMSuggestionRow.project_id == project_id)
+                    .where(IMSuggestionRow.kind == "decision")
+                    .where(IMSuggestionRow.status == "pending")
+                    .order_by(IMSuggestionRow.created_at.desc())
+                    .limit(50)
+                )
+            )
+            .scalars()
+            .all()
+        )
+
+        # Crystallized — last 14 days. Same window the `recent` bucket
+        # uses for completed packets. Exclude rejected/skipped outcomes
+        # so the projection focuses on actual graph state changes.
+        window_start = datetime.now(timezone.utc) - timedelta(days=14)
+        crystallized_rows = list(
+            (
+                await session.execute(
+                    select(DecisionRow)
+                    .where(DecisionRow.project_id == project_id)
+                    .where(DecisionRow.created_at >= window_start)
+                    .order_by(DecisionRow.created_at.desc())
+                    .limit(50)
+                )
+            )
+            .scalars()
+            .all()
+        )
+
+        # Resolve scope-stream membership for each pending suggestion's
+        # source message. Cache stream → member ids so we don't
+        # re-query per packet.
+        msg_repo = MessageRepository(session)
+        sm_repo = StreamMemberRepository(session)
+        stream_members_by_id: dict[str, list[str]] = {}
+
+        async def _stream_members(stream_id: str) -> list[str]:
+            if stream_id in stream_members_by_id:
+                return stream_members_by_id[stream_id]
+            try:
+                members = await sm_repo.list_for_stream(stream_id)
+            except Exception:
+                stream_members_by_id[stream_id] = []
+                return []
+            ids = [m.user_id for m in members]
+            stream_members_by_id[stream_id] = ids
+            return ids
+
+        packets: list[dict[str, Any]] = []
+        for sug in pending_rows:
+            stream_id: str | None = None
+            try:
+                source_msg = await msg_repo.get(sug.message_id)
+                stream_id = source_msg.stream_id if source_msg else None
+            except Exception:
+                stream_id = None
+            authority_ids: list[str] = []
+            if stream_id:
+                authority_ids = await _stream_members(stream_id)
+            # Owners always part of the authority pool — the
+            # crystallization-accept path goes through im._apply_proposal
+            # which any project member can hit, but we surface owners
+            # specifically so bucket=needs_me works for them.
+            for oid in owner_ids:
+                if oid not in authority_ids:
+                    authority_ids.append(oid)
+            packets.append(
+                _decision_pending_packet_from_suggestion(
+                    suggestion=sug,
+                    source_stream_id=stream_id,
+                    authority_user_ids=authority_ids,
+                    owner_ids=owner_ids,
+                )
+            )
+
+        for d in crystallized_rows:
+            packets.append(_decision_crystallized_packet_from_row(d))
+
         return packets
 
     # ------------------------------------------------------------------
@@ -998,6 +1123,278 @@ def _task_promote_packet_from_rows(
     }
 
 
+def _decision_pending_packet_from_suggestion(
+    *,
+    suggestion: IMSuggestionRow,
+    source_stream_id: str | None,
+    authority_user_ids: list[str],
+    owner_ids: list[str],
+) -> dict[str, Any]:
+    """Map a pending IMSuggestion(kind='decision') to a
+    `crystallize_decision` packet in its in-flight phase.
+
+    The suggestion has been classified by IMAssist as decision-shaped
+    but no DecisionRow has been written yet — owner / scoped voters
+    decide whether to crystallize. Visible to: authority pool +
+    project owners, same as task_promote.
+    """
+    proposal = (
+        suggestion.proposal if isinstance(suggestion.proposal, dict) else None
+    ) or {}
+    summary = (proposal.get("summary") or suggestion.reasoning or "")[:240]
+    title = summary or "Decision suggestion"
+    if len(title) > 120:
+        title = title[:117] + "…"
+
+    timeline = [
+        {
+            "at": _iso(suggestion.created_at),
+            "actor": "im_assist_agent",
+            "kind": "decision_suggestion_pending",
+            "summary": "IMAssist classified a turn as decision-shaped.",
+            "refs": [
+                _flow_ref(
+                    "im_suggestion", suggestion.id, label="decision suggestion"
+                )
+            ],
+        }
+    ]
+
+    next_actions: list[dict[str, Any]] = [
+        {
+            "id": "review",
+            "label": "Open review",
+            "kind": "open",
+            "requires_membrane": False,
+            "href": f"/projects/{suggestion.project_id}/detail/im",
+        }
+    ]
+
+    required_evidence = [
+        _flow_ref(
+            "im_suggestion", suggestion.id, label="decision suggestion"
+        ),
+        _flow_ref(
+            "source_message",
+            suggestion.message_id,
+            label="originating message",
+        ),
+    ]
+    if source_stream_id:
+        required_evidence.append(
+            _flow_ref(
+                "stream",
+                source_stream_id,
+                label="scope stream (smallest-relevant-vote)",
+            )
+        )
+    # Confidence is not strictly evidence but it shapes the agent's
+    # certainty floor. Surface it as a typed ref so audit can read it.
+    if isinstance(suggestion.confidence, (int, float)):
+        required_evidence.append(
+            _flow_ref(
+                "confidence",
+                None,
+                label=f"agent confidence={suggestion.confidence:.2f}",
+            )
+        )
+
+    transition_contract = _transition_contract(
+        source_state="discussion_or_suggestion",
+        target_state="canonical_decision",
+        # owner_acceptance is the operative method on the
+        # IMSuggestion-pending path — a project owner accepts and
+        # `_apply_proposal` calls DecisionRepository.create. Vote
+        # paths come from gated_proposals / silent_consensus rather
+        # than from this row family. Honest naming.
+        review_method="owner_acceptance",
+        mutation_service="DecisionRepository+IMService+MembraneService",
+        status="awaiting_authority",
+        required_evidence=required_evidence,
+        authority_user_ids=list(authority_user_ids),
+        # Lineage is empty while pending — no DecisionRow yet.
+        lineage_output=[],
+    )
+
+    return {
+        "id": f"decision_pending:{suggestion.id}",
+        "project_id": suggestion.project_id,
+        "recipe_id": "crystallize_decision",
+        "stage": "awaiting_crystallization",
+        "status": "active",
+        "source_user_id": None,
+        "target_user_ids": [],
+        "current_target_user_ids": list(authority_user_ids),
+        "authority_user_ids": list(authority_user_ids),
+        "title": title,
+        "summary": summary,
+        "intent": (
+            "Crystallize a discussion turn into a canonical decision."
+        ),
+        "source_refs": [
+            _flow_ref(
+                "im_suggestion", suggestion.id, label="decision suggestion"
+            )
+        ],
+        "graph_refs": [],
+        "evidence": _empty_evidence(),
+        "im_suggestion_id": suggestion.id,
+        "decision_id": None,
+        "transition_contract": transition_contract,
+        "timeline": timeline,
+        "next_actions": next_actions,
+        "created_at": _iso(suggestion.created_at),
+        "updated_at": _iso(suggestion.created_at),
+    }
+
+
+def _decision_crystallized_packet_from_row(
+    row: DecisionRow,
+) -> dict[str, Any]:
+    """Map a crystallized DecisionRow to a completed
+    `crystallize_decision` packet. The row IS the lineage_output —
+    consumers can dereference DecisionRow.id for the full audit
+    record."""
+    headline = (row.custom_text or row.rationale or "Decision")[:200]
+    title = headline.splitlines()[0] if headline else "Decision"
+    if len(title) > 120:
+        title = title[:117] + "…"
+
+    timeline: list[dict[str, Any]] = []
+    if row.source_suggestion_id:
+        timeline.append(
+            {
+                "at": _iso(row.created_at),
+                "actor": "im_assist_agent",
+                "kind": "decision_suggestion_pending",
+                "summary": "Decision originated as an IMAssist suggestion.",
+                "refs": [
+                    _flow_ref(
+                        "im_suggestion",
+                        row.source_suggestion_id,
+                        label="source suggestion",
+                    )
+                ],
+            }
+        )
+    timeline.append(
+        {
+            "at": _iso(row.created_at),
+            "actor": "human",
+            "actor_user_id": row.resolver_id,
+            "kind": "decision_crystallized",
+            "summary": "Decision crystallized into the graph.",
+            "refs": [
+                _flow_ref(
+                    "decision",
+                    row.id,
+                    label=row.custom_text or "decision",
+                )
+            ],
+        }
+    )
+
+    # review_method discriminates by upstream path. The DecisionRow
+    # carries the breadcrumbs:
+    #   * gated_via_proposal_id set → gated/vote path
+    #   * scope_stream_id set + no gated_via_proposal_id → smallest-
+    #     relevant-vote path
+    #   * else → owner_acceptance (the IMSuggestion accept gate)
+    if row.gated_via_proposal_id:
+        review_method: ReviewMethod = "vote"
+    elif row.scope_stream_id:
+        review_method = "vote"
+    else:
+        review_method = "owner_acceptance"
+
+    required_evidence: list[dict[str, Any]] = []
+    if row.source_suggestion_id:
+        required_evidence.append(
+            _flow_ref(
+                "im_suggestion",
+                row.source_suggestion_id,
+                label="source suggestion",
+            )
+        )
+    if row.conflict_id:
+        required_evidence.append(
+            _flow_ref("conflict", row.conflict_id, label="originating conflict")
+        )
+    if row.gated_via_proposal_id:
+        required_evidence.append(
+            _flow_ref(
+                "gated_proposal",
+                row.gated_via_proposal_id,
+                label="gated proposal",
+            )
+        )
+    if row.scope_stream_id:
+        required_evidence.append(
+            _flow_ref(
+                "stream", row.scope_stream_id, label="scope stream (vote)"
+            )
+        )
+
+    lineage_output = [
+        _flow_ref(
+            "decision",
+            row.id,
+            label=row.custom_text or "decision",
+            apply_outcome=row.apply_outcome,
+        )
+    ]
+    if row.applied_at:
+        lineage_output.append(
+            _flow_ref(
+                "decision_applied",
+                row.id,
+                label="apply executed",
+                at=_iso(row.applied_at),
+                apply_outcome=row.apply_outcome,
+            )
+        )
+
+    transition_contract = _transition_contract(
+        source_state="discussion_or_suggestion",
+        target_state="canonical_decision",
+        review_method=review_method,
+        mutation_service="DecisionRepository+IMService+MembraneService",
+        status="completed",
+        required_evidence=required_evidence,
+        authority_user_ids=[],
+        lineage_output=lineage_output,
+    )
+
+    return {
+        "id": f"decision:{row.id}",
+        "project_id": row.project_id,
+        "recipe_id": "crystallize_decision",
+        "stage": "completed",
+        "status": "completed",
+        "source_user_id": row.resolver_id,
+        "target_user_ids": [],
+        "current_target_user_ids": [],
+        "authority_user_ids": [],
+        "title": title,
+        "summary": headline[:240],
+        "intent": (
+            "Decision crystallized — canonical graph state."
+        ),
+        "source_refs": [
+            _flow_ref("decision", row.id, label="decision row"),
+        ],
+        "graph_refs": [],
+        "evidence": _empty_evidence(),
+        "im_suggestion_id": row.source_suggestion_id,
+        "decision_id": row.id,
+        "transition_contract": transition_contract,
+        "timeline": timeline,
+        "next_actions": [],
+        "created_at": _iso(row.created_at),
+        "updated_at": _iso(row.applied_at) or _iso(row.created_at),
+    }
+
+
 def _handoff_packet_from_row(
     row: HandoffRow, owner_ids: list[str]
 ) -> dict[str, Any]:
@@ -1231,6 +1628,16 @@ def _visible_to(
     if viewer_user_id in (packet.get("current_target_user_ids") or []):
         return True
     if viewer_user_id in (packet.get("authority_user_ids") or []):
+        return True
+    # DC slice — completed decisions are project-public. The
+    # `list_for_project` route already gates project membership before
+    # calling the projection, so any viewer reaching this filter is a
+    # member; surfacing crystallized decisions to all of them matches
+    # how DecisionRow rows render elsewhere (graph view, postmortem).
+    if (
+        packet.get("recipe_id") == "crystallize_decision"
+        and packet.get("status") == "completed"
+    ):
         return True
     return False
 

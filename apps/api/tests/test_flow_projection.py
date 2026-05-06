@@ -19,6 +19,7 @@ import pytest
 from sqlalchemy import select
 
 from workgraph_persistence import (
+    DecisionRow,
     HandoffRow,
     IMSuggestionRow,
     KbItemRow,
@@ -26,6 +27,7 @@ from workgraph_persistence import (
     ProjectMemberRepository,
     ProjectRow,
     RoutedSignalRow,
+    StreamMemberRepository,
     StreamRepository,
     TaskRow,
     backfill_streams_from_projects,
@@ -1430,3 +1432,321 @@ async def test_t5_awaiting_human_packet_has_non_empty_authority(api_env):
                 f"packet {p['id']} is awaiting_authority but has "
                 f"empty authority_user_ids — that's a contract violation"
             )
+
+
+# ---- DC — Decision Flow Packet Projection ------------------------------
+
+
+async def _seed_decision_pending_suggestion(
+    maker,
+    *,
+    project_id: str,
+    project_stream_id: str,
+    proposer_id: str,
+    summary: str = "Cut revive from launch",
+) -> str:
+    """Stage an IMSuggestion(kind='decision', status='pending') with a
+    real source message in the project stream so the projection's
+    smallest-relevant-vote membership lookup returns non-empty."""
+    msg_id = str(uuid.uuid4())
+    sug_id = str(uuid.uuid4())
+    async with session_scope(maker) as session:
+        session.add(
+            MessageRow(
+                id=msg_id,
+                project_id=project_id,
+                stream_id=project_stream_id,
+                author_id=proposer_id,
+                body="Looking at Sofia's report — let's cut revive.",
+                kind="text",
+                linked_id=None,
+            )
+        )
+        await session.flush()
+        session.add(
+            IMSuggestionRow(
+                id=sug_id,
+                message_id=msg_id,
+                project_id=project_id,
+                kind="decision",
+                confidence=0.78,
+                proposal={
+                    "action": "crystallize_decision",
+                    "summary": summary,
+                    "detail": {
+                        "decision_class": "scope_cut",
+                    },
+                },
+                reasoning="IMAssist flagged decision-shaped turn",
+                status="pending",
+                outcome="ok",
+                attempts=1,
+            )
+        )
+    return sug_id
+
+
+async def _seed_decision_row(
+    maker,
+    *,
+    project_id: str,
+    resolver_id: str,
+    custom_text: str = "Cut revive from launch",
+    rationale: str = "Out of scope for the 6-week alpha.",
+    source_suggestion_id: str | None = None,
+    scope_stream_id: str | None = None,
+    apply_outcome: str = "advisory",
+) -> str:
+    from datetime import datetime, timezone
+
+    decision_id = str(uuid.uuid4())
+    async with session_scope(maker) as session:
+        session.add(
+            DecisionRow(
+                id=decision_id,
+                project_id=project_id,
+                resolver_id=resolver_id,
+                custom_text=custom_text,
+                rationale=rationale,
+                source_suggestion_id=source_suggestion_id,
+                scope_stream_id=scope_stream_id,
+                apply_actions=[],
+                apply_outcome=apply_outcome,
+                created_at=datetime.now(timezone.utc),
+            )
+        )
+    return decision_id
+
+
+async def _add_to_stream(maker, stream_id: str, user_ids: list[str]) -> None:
+    async with session_scope(maker) as session:
+        sm_repo = StreamMemberRepository(session)
+        for uid in user_ids:
+            try:
+                await sm_repo.upsert(stream_id=stream_id, user_id=uid)
+            except AttributeError:
+                # Fallback shape — different repos use different add APIs.
+                await sm_repo.add(stream_id=stream_id, user_id=uid)
+
+
+@pytest.mark.asyncio
+async def test_dc_pending_decision_suggestion_projects(api_env):
+    """A pending IMSuggestion(kind='decision') projects as a
+    crystallize_decision packet with awaiting_authority status and
+    discussion_or_suggestion → canonical_decision states."""
+    client, maker, *_ = api_env
+    owner_id = await _register(client, "dc_pend_owner")
+    member_id = await _register(client, "dc_pend_member")
+    pid = await _mk_project_with_members(
+        maker, owner_id=owner_id, member_id=member_id
+    )
+
+    # The project stream needs to exist + have the proposer as a
+    # member so smallest-relevant-vote authority resolves.
+    async with session_scope(maker) as session:
+        team_stream = await StreamRepository(session).get_for_project(pid)
+        assert team_stream is not None
+        team_stream_id = team_stream.id
+    await _add_to_stream(maker, team_stream_id, [owner_id, member_id])
+
+    sug_id = await _seed_decision_pending_suggestion(
+        maker,
+        project_id=pid,
+        project_stream_id=team_stream_id,
+        proposer_id=member_id,
+    )
+
+    await _login(client, "dc_pend_owner")
+    r = await _list_flows(client, pid)
+    assert r.status_code == 200, r.text
+    decisions = [
+        p
+        for p in r.json()["packets"]
+        if p["recipe_id"] == "crystallize_decision"
+    ]
+    assert len(decisions) == 1
+    pkt = decisions[0]
+    assert pkt["id"] == f"decision_pending:{sug_id}"
+    assert pkt["status"] == "active"
+    contract = pkt["transition_contract"]
+    assert contract["source_state"] == "discussion_or_suggestion"
+    assert contract["target_state"] == "canonical_decision"
+    assert contract["status"] == "awaiting_authority"
+    assert contract["review_method"] == "owner_acceptance"
+    # Authority pool includes scope-stream members (smallest-relevant
+    # vote) plus owners.
+    assert owner_id in contract["authority_user_ids"]
+    assert member_id in contract["authority_user_ids"]
+
+
+@pytest.mark.asyncio
+async def test_dc_crystallized_decision_carries_lineage(api_env):
+    """A recent DecisionRow projects as a completed crystallize_decision
+    packet whose lineage_output names the DecisionRow itself."""
+    client, maker, *_ = api_env
+    owner_id = await _register(client, "dc_xtl_owner")
+    member_id = await _register(client, "dc_xtl_member")
+    pid = await _mk_project_with_members(
+        maker, owner_id=owner_id, member_id=member_id
+    )
+
+    # Seed a source suggestion so the lineage carries it.
+    async with session_scope(maker) as session:
+        team_stream = await StreamRepository(session).get_for_project(pid)
+        team_stream_id = team_stream.id
+    sug_id = await _seed_decision_pending_suggestion(
+        maker,
+        project_id=pid,
+        project_stream_id=team_stream_id,
+        proposer_id=member_id,
+        summary="Adopt the new auth pool sizing",
+    )
+    decision_id = await _seed_decision_row(
+        maker,
+        project_id=pid,
+        resolver_id=owner_id,
+        source_suggestion_id=sug_id,
+        custom_text="Adopt the new auth pool sizing",
+    )
+
+    await _login(client, "dc_xtl_owner")
+    r = await _list_flows(client, pid)
+    decisions = [
+        p
+        for p in r.json()["packets"]
+        if p["id"] == f"decision:{decision_id}"
+    ]
+    assert len(decisions) == 1
+    pkt = decisions[0]
+    assert pkt["status"] == "completed"
+    contract = pkt["transition_contract"]
+    assert contract["status"] == "completed"
+    # Lineage_output names the DecisionRow.
+    lineage_kinds = [e["kind"] for e in contract["lineage_output"]]
+    assert "decision" in lineage_kinds
+    decision_ref = next(
+        e for e in contract["lineage_output"] if e["kind"] == "decision"
+    )
+    assert decision_ref["id"] == decision_id
+    # Required evidence carries the source suggestion ref.
+    ev_kinds = [e["kind"] for e in contract["required_evidence"]]
+    assert "im_suggestion" in ev_kinds
+
+
+@pytest.mark.asyncio
+async def test_dc_scope_stream_decision_uses_vote_method(api_env):
+    """When the crystallized DecisionRow has scope_stream_id set
+    (smallest-relevant-vote), the contract names review_method='vote'."""
+    client, maker, *_ = api_env
+    owner_id = await _register(client, "dc_scope_owner")
+    member_id = await _register(client, "dc_scope_member")
+    pid = await _mk_project_with_members(
+        maker, owner_id=owner_id, member_id=member_id
+    )
+    async with session_scope(maker) as session:
+        team_stream = await StreamRepository(session).get_for_project(pid)
+        scope_stream_id = team_stream.id
+
+    decision_id = await _seed_decision_row(
+        maker,
+        project_id=pid,
+        resolver_id=owner_id,
+        scope_stream_id=scope_stream_id,
+        custom_text="Voted: cap pool at 200",
+    )
+
+    await _login(client, "dc_scope_owner")
+    r = await _list_flows(client, pid)
+    pkt = next(
+        p for p in r.json()["packets"] if p["id"] == f"decision:{decision_id}"
+    )
+    contract = pkt["transition_contract"]
+    assert contract["review_method"] == "vote"
+    # The scope_stream ref is in required_evidence.
+    assert any(
+        e["kind"] == "stream" and e["id"] == scope_stream_id
+        for e in contract["required_evidence"]
+    )
+
+
+@pytest.mark.asyncio
+async def test_dc_completed_decision_visible_to_non_owner_member(api_env):
+    """Completed decisions are project-public — a non-owner non-resolver
+    member must still see the packet, because decisions are the
+    canonical record."""
+    client, maker, *_ = api_env
+    owner_id = await _register(client, "dc_vis_owner")
+    member_id = await _register(client, "dc_vis_member")
+    bystander_id = await _register(client, "dc_vis_bystander")
+    pid = str(uuid.uuid4())
+    async with session_scope(maker) as session:
+        session.add(ProjectRow(id=pid, title="DC visibility"))
+        await session.flush()
+        await ProjectMemberRepository(session).add(
+            project_id=pid, user_id=owner_id, role="owner"
+        )
+        await ProjectMemberRepository(session).add(
+            project_id=pid, user_id=member_id, role="member"
+        )
+        await ProjectMemberRepository(session).add(
+            project_id=pid, user_id=bystander_id, role="member"
+        )
+    await backfill_streams_from_projects(maker)
+
+    decision_id = await _seed_decision_row(
+        maker,
+        project_id=pid,
+        resolver_id=member_id,  # not the bystander
+        custom_text="Picked option B",
+    )
+
+    # Bystander (non-owner, non-resolver) should still see it.
+    await _login(client, "dc_vis_bystander")
+    r = await _list_flows(client, pid)
+    assert any(
+        p["id"] == f"decision:{decision_id}" for p in r.json()["packets"]
+    )
+
+
+@pytest.mark.asyncio
+async def test_dc_decision_packet_satisfies_universal_contract_shape(
+    api_env,
+):
+    """Smoke: the universal transition_contract shape invariant from
+    T5 holds for the new decision packets too — both pending and
+    crystallized."""
+    client, maker, *_ = api_env
+    owner_id = await _register(client, "dc_uni_owner")
+    member_id = await _register(client, "dc_uni_member")
+    pid = await _mk_project_with_members(
+        maker, owner_id=owner_id, member_id=member_id
+    )
+    async with session_scope(maker) as session:
+        team_stream = await StreamRepository(session).get_for_project(pid)
+        team_stream_id = team_stream.id
+
+    await _seed_decision_pending_suggestion(
+        maker,
+        project_id=pid,
+        project_stream_id=team_stream_id,
+        proposer_id=member_id,
+    )
+    await _seed_decision_row(
+        maker,
+        project_id=pid,
+        resolver_id=owner_id,
+        custom_text="Crystallized record",
+    )
+
+    await _login(client, "dc_uni_owner")
+    r = await _list_flows(client, pid, recipe="crystallize_decision")
+    assert r.status_code == 200
+    packets = r.json()["packets"]
+    assert len(packets) == 2
+    for p in packets:
+        _assert_transition_contract_shape(p["transition_contract"])
+        # Decision contracts always have the same source/target axis.
+        assert p["transition_contract"]["source_state"] == (
+            "discussion_or_suggestion"
+        )
+        assert p["transition_contract"]["target_state"] == "canonical_decision"
