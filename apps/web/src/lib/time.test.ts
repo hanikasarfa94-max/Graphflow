@@ -2,7 +2,13 @@ import { describe, expect, test } from "bun:test";
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 
-import { DISPLAY_TZ_LABEL, formatIso, formatIsoSeconds } from "./time";
+import {
+  DISPLAY_TZ_LABEL,
+  formatIso,
+  formatIsoSeconds,
+  formatTime,
+  parseServerTime,
+} from "./time";
 
 // M1.1 §4 — GMT+8 hardening regression guard.
 //
@@ -27,6 +33,49 @@ describe("time formatters output", () => {
 
   test("formatIsoSeconds appends GMT+8 label", () => {
     const out = formatIsoSeconds("2026-05-05T10:00:00Z");
+    expect(out.endsWith(DISPLAY_TZ_LABEL)).toBe(true);
+  });
+});
+
+// M1.2 — offsetless UTC parsing.
+//
+// SQLite + Python `datetime.utcnow().isoformat()` emits strings with no
+// `Z` and no `±HH:MM` offset (e.g. "2026-05-06T01:41:45.811226"). Naïve
+// `new Date(s)` parses those as the BROWSER's local time, which on a
+// CN machine drifts every chat-row timestamp by -8h. parseServerTime
+// detects the missing TZ suffix and treats it as UTC.
+describe("M1.2 — parseServerTime UTC fallback", () => {
+  test("offsetless ISO is parsed as UTC, not local", () => {
+    // 06:03 UTC == 14:03 GMT+8.
+    const out = formatTime("2026-05-06T06:03:00");
+    expect(out).toBe("14:03");
+  });
+
+  test("explicit Z suffix is honored as UTC", () => {
+    expect(formatTime("2026-05-06T06:03:00Z")).toBe("14:03");
+  });
+
+  test("explicit +08:00 offset is honored", () => {
+    // 14:03 in +08:00 IS already 14:03 GMT+8 — no drift.
+    expect(formatTime("2026-05-06T14:03:00+08:00")).toBe("14:03");
+  });
+
+  test("explicit -05:00 offset is honored (NYC summer)", () => {
+    // 06:03 -05:00 == 11:03 UTC == 19:03 GMT+8.
+    expect(formatTime("2026-05-06T06:03:00-05:00")).toBe("19:03");
+  });
+
+  test("parseServerTime returns null on garbage", () => {
+    expect(parseServerTime("not a date")).toBe(null);
+    expect(parseServerTime("")).toBe(null);
+    expect(parseServerTime(null)).toBe(null);
+    expect(parseServerTime(undefined)).toBe(null);
+  });
+
+  test("offsetless ISO formats with GMT+8 label", () => {
+    // Same input the BE actually emits today.
+    const out = formatIso("2026-05-06T06:03:00");
+    expect(out).toContain("14:03");
     expect(out.endsWith(DISPLAY_TZ_LABEL)).toBe(true);
   });
 });

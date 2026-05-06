@@ -18,14 +18,45 @@ export const DISPLAY_TZ = "Asia/Shanghai";
 export const DISPLAY_TZ_LABEL = "GMT+8";
 export const DISPLAY_LOCALE = "en-CA"; // YYYY-MM-DD ordering, ISO-friendly
 
+// M1.2 — parse an ISO string honoring "the server emitted offsetless UTC".
+// SQLite + Python `datetime.utcnow().isoformat()` produces strings like
+// "2026-05-06T01:41:45.811226" with NO timezone suffix. `new Date(s)` then
+// interprets them as the BROWSER's local time, which on a CN machine
+// shifts every timestamp by -8h: "01:41 UTC" gets read as "01:41 CST",
+// formatted into Shanghai TZ as "01:41 GMT+8" — wrong by exactly one
+// timezone. This is the dogfood drift point.
+//
+// Fix: any ISO string lacking a TZ marker (`Z` or `±HH[:MM]`) is treated
+// as UTC by appending `Z` before construction. All formatters in this
+// module funnel through here. Strings that already carry a TZ are
+// passed through untouched.
+const _TZ_SUFFIX = /([Zz]|[+-]\d{2}:?\d{2})$/;
+
+export function parseServerTime(
+  iso: string | number | Date | null | undefined,
+): Date | null {
+  if (iso == null) return null;
+  if (iso instanceof Date) {
+    return Number.isFinite(iso.getTime()) ? iso : null;
+  }
+  if (typeof iso === "number") {
+    const d = new Date(iso);
+    return Number.isFinite(d.getTime()) ? d : null;
+  }
+  const s = iso.trim();
+  if (!s) return null;
+  const normalized = _TZ_SUFFIX.test(s) ? s : `${s}Z`;
+  const d = new Date(normalized);
+  return Number.isFinite(d.getTime()) ? d : null;
+}
+
 // ISO-style absolute. "2026-05-03 14:30" — 24h, hyphenated date, no TZ
 // in the string (the surrounding context establishes "this is GMT+8").
 // Use for tooltips and audit-log rows where ambiguity must be zero.
 export function formatIso(iso?: string | number | Date | null): string {
   if (iso === undefined) iso = new Date();
-  if (iso == null) return "";
-  const d = iso instanceof Date ? iso : new Date(iso);
-  if (!Number.isFinite(d.getTime())) return "";
+  const d = parseServerTime(iso);
+  if (!d) return "";
   // en-CA gives "YYYY-MM-DD, HH:mm" format which is ISO-friendly.
   return new Intl.DateTimeFormat(DISPLAY_LOCALE, {
     timeZone: DISPLAY_TZ,
@@ -44,9 +75,8 @@ export function formatIso(iso?: string | number | Date | null): string {
 // where second-precision matters. Most user-visible chrome should use
 // formatIso (minute precision is the chat rhythm).
 export function formatIsoSeconds(iso: string | number | Date | null): string {
-  if (iso == null) return "";
-  const d = iso instanceof Date ? iso : new Date(iso);
-  if (!Number.isFinite(d.getTime())) return "";
+  const d = parseServerTime(iso);
+  if (!d) return "";
   return new Intl.DateTimeFormat(DISPLAY_LOCALE, {
     timeZone: DISPLAY_TZ,
     year: "numeric",
@@ -64,9 +94,8 @@ export function formatIsoSeconds(iso: string | number | Date | null): string {
 // "14:30" clock-only — for in-stream message rows where the date is
 // implied by the message group divider above.
 export function formatTime(iso: string | number | Date | null): string {
-  if (iso == null) return "";
-  const d = iso instanceof Date ? iso : new Date(iso);
-  if (!Number.isFinite(d.getTime())) return "";
+  const d = parseServerTime(iso);
+  if (!d) return "";
   return new Intl.DateTimeFormat(DISPLAY_LOCALE, {
     timeZone: DISPLAY_TZ,
     hour: "2-digit",
@@ -77,9 +106,8 @@ export function formatTime(iso: string | number | Date | null): string {
 
 // "2026-05-03" — date-only, ISO-formatted, in GMT+8.
 export function formatDate(iso: string | number | Date | null): string {
-  if (iso == null) return "";
-  const d = iso instanceof Date ? iso : new Date(iso);
-  if (!Number.isFinite(d.getTime())) return "";
+  const d = parseServerTime(iso);
+  if (!d) return "";
   return new Intl.DateTimeFormat(DISPLAY_LOCALE, {
     timeZone: DISPLAY_TZ,
     year: "numeric",
@@ -90,9 +118,8 @@ export function formatDate(iso: string | number | Date | null): string {
 
 // "May 3" — short date for narrow chips. Locale-independent.
 export function formatShortDate(iso: string | number | Date | null): string {
-  if (iso == null) return "";
-  const d = iso instanceof Date ? iso : new Date(iso);
-  if (!Number.isFinite(d.getTime())) return "";
+  const d = parseServerTime(iso);
+  if (!d) return "";
   return new Intl.DateTimeFormat("en-US", {
     timeZone: DISPLAY_TZ,
     month: "short",

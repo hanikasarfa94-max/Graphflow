@@ -18,7 +18,13 @@ export const MESSAGE_BODY_MAX_LENGTH = 4000;
 // is additive.
 
 import type { Decision, IMMessage, IMSuggestion } from "@/lib/api";
-import { formatDate, formatTime, gmt8DayKey } from "@/lib/time";
+import {
+  DISPLAY_TZ_LABEL,
+  formatDate,
+  formatTime,
+  gmt8DayKey,
+  parseServerTime,
+} from "@/lib/time";
 
 export type StreamMember = {
   user_id: string;
@@ -117,23 +123,25 @@ export function relativeTime(iso: string, now: number = Date.now()): string {
 // All times rendered in Asia/Shanghai (GMT+8) — see lib/time.ts for
 // the timezone-pinning rationale.
 //
-// Output by message age:
-//   < today       → "14:30"
-//   yesterday     → "Yesterday 14:30"
-//   < 7 days      → "Mon 14:30"
-//   older         → "2026-04-22 14:30"
+// Output by message age (M1.2: GMT+8 label appended inline so users
+// can verify the chat row time matches Beijing time without hovering):
+//   < today       → "14:30 GMT+8"
+//   yesterday     → "Yesterday 14:30 GMT+8"
+//   < 7 days      → "Mon 14:30 GMT+8"
+//   older         → "2026-04-22 14:30 GMT+8"
 export function formatMessageTime(
   iso: string,
   now: number = Date.now(),
 ): string {
-  const t = new Date(iso);
-  if (!Number.isFinite(t.getTime())) return "";
+  const t = parseServerTime(iso);
+  if (!t) return "";
   const time = formatTime(t);
   const todayKey = gmt8DayKey(now);
   const tKey = gmt8DayKey(t);
-  if (tKey === todayKey) return time;
+  const suffix = ` ${DISPLAY_TZ_LABEL}`;
+  if (tKey === todayKey) return `${time}${suffix}`;
   const yesterdayKey = gmt8DayKey(now - 86_400_000);
-  if (tKey === yesterdayKey) return `Yesterday ${time}`;
+  if (tKey === yesterdayKey) return `Yesterday ${time}${suffix}`;
   const daysDiff = (now - t.getTime()) / 86_400_000;
   if (daysDiff < 7) {
     // Weekday name in GMT+8.
@@ -141,9 +149,9 @@ export function formatMessageTime(
       timeZone: "Asia/Shanghai",
       weekday: "short",
     }).format(t);
-    return `${wd} ${time}`;
+    return `${wd} ${time}${suffix}`;
   }
-  return `${formatDate(t)} ${time}`;
+  return `${formatDate(t)} ${time}${suffix}`;
 }
 
 export function presenceDotColor(p?: StreamMember["presence"]): string {
