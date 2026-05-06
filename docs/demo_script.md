@@ -14,20 +14,20 @@
 打开终端，确认以下 4 件事，**任何一件未准备好就别开录**。
 
 ```bash
-# (a) 给 cookie 续命，登录态新鲜 — 用 maya（项目 owner）
+# (a) 给 cookie 续命，登录态新鲜 — 用 maya_zh（zh demo 项目 owner）
 PROD=https://graphflow.flyflow.love
-curl -c /tmp/cast_cookie.txt -b /tmp/cast_cookie.txt -L -d 'username=maya&password=...' "$PROD/api/auth/login"
-PID=627e5ae2-296e-4b54-85ae-a643d0537f34
+curl -c /tmp/cast_cookie.txt -b /tmp/cast_cookie.txt -L -d 'username=maya_zh&password=...' "$PROD/api/auth/login"
+PID=e749cfad-304f-436e-843e-04df8e1f3355
 
 # (b) 暖一下 postmortem render 缓存（首次生成调 LLM ~30s，不能让评委看进度条）
 curl -b /tmp/cast_cookie.txt "$PROD/api/projects/$PID/renders/postmortem" -m 120 -o /dev/null
 
 # (c) 暖一下 handoff 文档缓存（第二个 render 切片）
-JAMES_ID=$(curl -sb /tmp/cast_cookie.txt "$PROD/api/projects/$PID/state" | python -c "import sys,json;print([m for m in json.load(sys.stdin)['members'] if m.get('username')=='james'][0]['user_id'])")
+JAMES_ID=$(curl -sb /tmp/cast_cookie.txt "$PROD/api/projects/$PID/state" | python -c "import sys,json;print([m for m in json.load(sys.stdin)['members'] if m.get('username')=='james_zh'][0]['user_id'])")
 curl -b /tmp/cast_cookie.txt "$PROD/api/projects/$PID/renders/handoff/$JAMES_ID" -m 120 -o /dev/null
 
 # (d) 给个人任务列表加 1-2 条，避免 /detail/tasks 完全空白
-# （走 chat 让 Edge agent 自己提议，更自然；详见 Scene 4 备用脚本）
+# （走 chat 让项目助手自己提议，更自然；详见 Scene 4 备用脚本）
 ```
 
 ### 0.2 浏览器准备
@@ -132,12 +132,12 @@ Aspect ratio: 16:9. Duration: 20 seconds. Loopable in last 2 seconds for safety.
 >
 > 不是 7 万条消息的红点提醒，是 3 件按"系统认为你最适合"路由给她的具体待办：第一件是 Sofia 提交的玩家试玩报告，第二件是 James 在群组讨论的 NAT 回退方案，第三件是合规组对 Switch 性能预算的反馈。
 >
-> 每一条都已经被 Edge Agent 预处理：包含上下文、关联节点、建议动作。
+> 每一条都已经被项目助手预处理：包含上下文、关联节点、建议动作。
 
 ### 3.3 关键截图点
 
 - 首页 hero 的 "{count} 项待确认" 数字（突出"系统脉搏"）
-- 路由收件箱中"路由给你的"区，显示"EDGE · 路由"标签
+- 路由收件箱中"路由给你的"区，显示"智能路由"标签
 
 ### 3.4 备用文案（如果 routed inbox 是 0）
 
@@ -165,7 +165,7 @@ Aspect ratio: 16:9. Duration: 20 seconds. Loopable in last 2 seconds for safety.
 
 > 团队会议室是项目里最重要的协作面。但和 Slack 频道不同的是——这里每条对话都不会消失，IMAssist Agent 在后台读每条消息，识别出哪些是闲聊、哪些是值得记录的决策。
 >
-> 看 Aiko 这条消息：她对 Sofia 的玩家报告做出了诊断——Boss 战的永久死亡机制对新手玩家过于严苛。这不是闲聊，这是一个值得记录的设计判断。
+> 看中村爱子这条消息：她对 Sofia 的玩家报告做出了诊断——Boss 战的永久死亡机制对新手玩家过于严苛。这不是闲聊，这是一个值得记录的设计判断。
 >
 > IMAssist 已经识别出这条消息的决策含义，团队的某位 Owner 在审核 inbox 里 Accept 了它，DecisionRow 已经写入。看消息底下的 ⚡ 已生成决策 芯片——这是图谱节点的入口。
 >
@@ -192,19 +192,22 @@ Aspect ratio: 16:9. Duration: 20 seconds. Loopable in last 2 seconds for safety.
 
 ### 5.1 录制前 30 秒预热（重要！）
 
-这一 Scene 需要 **一个待审 KB 草稿**才能演示。建议在录制前手动触发一次 save-to-wiki，让 IMSuggestion 出现在 Membrane 队列：
+这一 Scene 需要 **一个待审 KB 草稿**才能演示。**不要靠 `@edge` 这种聊天命令** —— 没有专门的 mention 解析器，项目助手是否真的调用 `propose_wiki_entry` 取决于它自己的判断。可靠做法是走 FE 的 Save-to-Wiki 真实路径：
+
+```text
+录制前手动操作：
+1. 登录 maya_zh，进入团队会议室 /projects/$PID/team
+2. Hover 在罗西·索菲亚的"外部试玩"那条消息上
+3. 点出现的「保存到 Wiki」按钮（💾 图标）
+4. 浮层 → 确认
+5. 切到 /projects/$PID/kb，确认 KB 树里出现「待审 / 去审批 →」chip
+```
+
+如果想程序化校验队列，可用：
 
 ```bash
-# 用 chat API 让 Edge agent 提议把 Sofia 的玩家报告保存到 wiki
 PROD=https://graphflow.flyflow.love
-PID=627e5ae2-296e-4b54-85ae-a643d0537f34
-
-curl -b /tmp/cast_cookie.txt -X POST -H "Content-Type: application/json" \
-  "$PROD/api/projects/$PID/messages" \
-  -d '{"body":"@edge save sofia 的玩家试玩总结到 wiki，title 用「外部试玩 Wave A 总结」"}'
-
-# 等 ~10s 让 Edge agent 处理 + propose_wiki_entry 调用，然后查
-sleep 10
+PID=e749cfad-304f-436e-843e-04df8e1f3355
 curl -b /tmp/cast_cookie.txt "$PROD/api/projects/$PID/membrane/notes" | python -m json.tool
 ```
 
@@ -219,16 +222,16 @@ curl -b /tmp/cast_cookie.txt "$PROD/api/projects/$PID/membrane/notes" | python -
 5. 镜头切到 `/projects/{PID}/kb`。
 6. 在 KB 树里找到刚创建的草稿，标签是 **🔶 待审 · 去审批 →**。
 7. 点这个 chip。跳转到 `/projects/{PID}/detail/im`。
-8. 镜头停 3 秒看 Membrane 审核面板：title + summary + diff + Accept/Dismiss/Counter/Escalate 4 个动作。
-9. 点 **Accept**。
-10. 状态卡片出现 "✓ suggestion accepted"。
+8. 镜头停 3 秒看 Membrane 审核面板：title + summary + diff + 接受 / 忽略 / 反提 / 上报 4 个动作（zh-locale 按钮文案）。
+9. 点 **接受**。
+10. 状态卡片出现 "✓ 建议已接受"。
 11. 切回 KB tree，刷新（或自动刷新），刚才那条没了草稿芯片，显示为正式条目。
 
 ### 5.3 旁白（zh，约 70s）
 
-> 现在 Maya 想把 Sofia 的报告升级为团队知识。
+> 现在陈梅雅想把罗西·索菲亚的报告升级为团队知识。
 >
-> 她点 "保存到 Wiki"——但 GraphFlow 不会直接写入。Edge Agent 把它包装成"候选"，送进 Membrane 审核队列。
+> 她点 "保存到 Wiki"——但 GraphFlow 不会直接写入。项目助手把它包装成"候选"，送进 Membrane 审核队列。
 >
 > Membrane 是 GraphFlow 的核心架构不变式：**所有进入团队共享上下文的内容，必须经过同一个边界**。无论是 LLM 提议、用户保存、还是外部信号摄入——一个入口，一种审核。
 >
@@ -241,8 +244,8 @@ curl -b /tmp/cast_cookie.txt "$PROD/api/projects/$PID/membrane/notes" | python -
 ### 5.4 关键截图点
 
 - KB 草稿的 🔶 待审 · 去审批 → chip
-- Membrane 审核面板的 4 个动作按钮（Accept / Dismiss / Counter / Escalate）
-- "✓ suggestion accepted" 翻转效果
+- Membrane 审核面板的 4 个动作按钮（zh: 接受 / 忽略 / 反提 / 上报；en: Accept / Dismiss / Counter / Escalate）
+- "✓ 建议已接受" 翻转效果
 
 ### 5.5 技术细节（背景，不要说）
 
@@ -257,11 +260,11 @@ curl -b /tmp/cast_cookie.txt "$PROD/api/projects/$PID/membrane/notes" | python -
 
 ### 6.1 屏幕动作
 
-1. 在 KB tree 里点刚 Accept 的那条新条目（"外部试玩 Wave A 总结"）。
+1. 在 KB tree 里点刚接受的那条新条目（"外部试玩 Wave A 总结"）。
 2. 跳到 `/projects/{PID}/kb/{item_id}`。
-3. 镜头停 4 秒看页面：完整 title + 完整 content_md（**不是空态！**）+ 右侧 meta panel（来源 llm / 录入者 maya / 状态 published / 分类标签）。
+3. 镜头停 4 秒看页面：完整 title + 完整 content_md（**不是空态！**）+ 右侧 meta panel（来源 llm / 录入者 陈梅雅 / 状态 published / 分类标签）+ "记忆修复"卡片（owner 可见 Archive 按钮）。
 4. 滚动看内容，停在"## 待决议：是否引入中盘纪念品复活机制？"那段。
-5. 切到 `/projects/{PID}/detail/decisions`，找之前 Aiko 消息结晶出的那条决策（关于 Boss 难度取舍）。
+5. 切到 `/projects/{PID}/detail/decisions`，找之前中村爱子消息结晶出的那条决策（关于 Boss 难度取舍）。
 6. 镜头停在决策卡片，特别是 lineage 板块——显示决策的来龙去脉：来源消息 → 提议 → 投票 → 结晶。
 7. 点 lineage 中的来源消息引用，跳回团队会议室对应消息（demo 这条引用闭环）。
 
@@ -269,11 +272,11 @@ curl -b /tmp/cast_cookie.txt "$PROD/api/projects/$PID/membrane/notes" | python -
 
 > 进入条目详情。注意：每条 KB 条目都包含 source（来源 chat / wiki / git / RSS）、ingested_by（哪位成员 / Agent 录入）、classification（自动打标签）。
 >
-> 这不是简单的笔记应用——这是带元数据的图谱节点。
+> 这不是简单的笔记应用——这是带元数据的图谱节点。Owner 还可以在右侧"记忆修复"卡片上一键归档过时的条目，归档后立即从 Agent 上下文里淡出，但完整审计记录仍然保留——这是 GraphFlow 的"记忆是可修复的"承诺。
 >
 > 任何后续的 Agent 推理、决策结晶、风险检测，都可以引用这个节点。
 >
-> 看这条决策——它的来龙去脉清晰可见：起源于 Sofia 的玩家报告，进入 Membrane 审核，通过后成为 KB 条目，再被 Aiko 的设计讨论引用，最终结晶为团队决策。
+> 看这条决策——它的来龙去脉清晰可见：起源于罗西·索菲亚的玩家报告，进入 Membrane 审核，通过后成为 KB 条目，再被中村爱子的设计讨论引用，最终结晶为团队决策。
 >
 > 这就是 "Graph IS the state"——不是给状态加列，状态本身就是图。
 
@@ -479,7 +482,7 @@ Aspect: 16:9. Duration: 30 seconds. Last 3 seconds reserved for logo lockup.
 
 ### Q3：Demo 数据是真实的吗？
 
-> 所有数据落到真实 SQLite 数据库。22 条 KB、7 条决策、7 个成员、1 条 conflict、5 条 chat 历史，全部走真实的 KB Service / Membrane Service / Decision Service。其中 KB 内容是用 DeepSeek 生成的 zh-native 文本，模拟真实游戏开发场景。代码完全可重现：`scripts/demo/seed_moonshot_zh.py`。
+> 所有数据落到真实 SQLite 数据库。zh demo 项目 26 条 KB、3 条决策、6 个成员、5 条 chat 历史，全部走真实的 KB Service / Membrane Service / Decision Service。其中 KB 内容是用 DeepSeek 生成的 zh-native 文本，模拟真实游戏开发场景。代码完全可重现：`scripts/demo/seed_moonshot_zh.py`。
 
 ### Q4：技术栈？
 
