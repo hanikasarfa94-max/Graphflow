@@ -911,11 +911,240 @@ class MembraneService:
                     "an external collaborator."
                 )
 
+        # Slice M3 — semantic reviewer as the *last* gate before
+        # auto_merge. Same pattern as M1 for KB: the deterministic
+        # checks above already caught duplicate-title / budget overflow
+        # / orphan-with-downstream / role-coverage. The agent is here
+        # to catch what those checks can't see — semantic duplicates
+        # under a different title, contradictions with recent decisions,
+        # reopening intentionally-closed work.
+        #
+        # Per spec §7: only call the LLM when the candidate is
+        # otherwise headed for auto_merge AND the pretext has
+        # something for the agent to reason against. If both
+        # related_tasks and recent_decisions are empty there's
+        # nothing for the agent to compare to; skip the round-trip.
+        if self._agent_reviewer is not None:
+            agent_action = await self._agent_review_task_candidate(
+                candidate=candidate,
+                existing=existing,
+                requirement=latest,
+                deterministic_warnings=warnings,
+            )
+            if agent_action is not None:
+                return agent_action
+
         return MembraneReview(
             action="auto_merge",
             reason="no_conflicts",
             warnings=tuple(warnings),
         )
+
+    async def _agent_review_task_candidate(
+        self,
+        *,
+        candidate: MembraneCandidate,
+        existing: list[Any],
+        requirement: Any,
+        deterministic_warnings: list[str],
+    ) -> MembraneReview | None:
+        """Build a task review packet (spec §5.3) and run the Membrane
+        Agent. Returns a MembraneReview that overrides auto_merge when
+        the agent flags a conflict, or `None` when the agent permits
+        auto_merge so the caller's existing flow (with its accumulated
+        deterministic warnings) continues.
+
+        Failure modes return MembraneReview directly with
+        `request_review` (fail-closed) — never raise into the caller.
+        """
+        assert self._agent_reviewer is not None
+        try:
+            packet = await self._build_task_review_packet(
+                candidate=candidate,
+                existing=existing,
+                requirement=requirement,
+                deterministic_warnings=deterministic_warnings,
+            )
+        except Exception:
+            _log.exception(
+                "membrane.agent_review.task_pretext_failed",
+                extra={"project_id": candidate.project_id},
+            )
+            return MembraneReview(
+                action="request_review",
+                reason="agent_review_pretext_failed",
+                diff_summary=(
+                    "Membrane semantic-review pretext failed to build. "
+                    "Holding candidate for owner review as a safety default."
+                ),
+                warnings=tuple(deterministic_warnings),
+            )
+
+        # Skip when nothing to review against — same gate as KB.
+        if not packet["related_tasks"] and not packet["recent_decisions"]:
+            return None
+
+        try:
+            outcome = await self._agent_reviewer.review_candidate(packet)
+        except Exception:
+            _log.exception(
+                "membrane.agent_review.task_call_failed",
+                extra={"project_id": candidate.project_id},
+            )
+            return MembraneReview(
+                action="request_review",
+                reason="agent_review_call_failed",
+                diff_summary=(
+                    "Membrane semantic reviewer failed to run. "
+                    "Holding candidate for owner review as a safety default."
+                ),
+                warnings=tuple(deterministic_warnings),
+            )
+
+        review = outcome.review
+        if review.action == "auto_merge":
+            return None  # let the caller's auto_merge path proceed
+
+        # Map agent's ref strings back to bare ids for the public shape.
+        # Mix in the deterministic warnings the agent didn't see so the
+        # caller's eventual review row carries both signals.
+        conflict_ids = tuple(
+            ref.partition(":")[2]
+            for ref in review.conflict_with
+            if ref.partition(":")[2]
+        )
+        merged_warnings = list(deterministic_warnings) + list(review.warnings)
+        return MembraneReview(
+            action=review.action,
+            reason=review.reason,
+            diff_summary=review.diff_summary,
+            clarify_question=review.clarify_question,
+            conflict_with=conflict_ids,
+            warnings=tuple(merged_warnings),
+        )
+
+    async def _build_task_review_packet(
+        self,
+        *,
+        candidate: MembraneCandidate,
+        existing: list[Any],
+        requirement: Any,
+        deterministic_warnings: list[str],
+    ) -> dict[str, Any]:
+        """Build the task review packet per spec §5.3.
+
+        Inputs:
+          - candidate title / description / estimate / role
+          - active plan tasks topically similar to the candidate
+          - done / cancelled tasks topically similar (so the agent can
+            reason about reopen-intent)
+          - latest requirement context
+          - recent decisions topically similar (so the agent can flag
+            contradictions / supersession)
+        """
+        candidate_text = f"{candidate.title or ''}\n{candidate.content or ''}"
+        candidate_tokens = _topic_tokens(candidate_text)
+
+        # Topic-overlap-rank existing plan tasks. Cap at 8 like KB.
+        scored: list[tuple[int, Any]] = []
+        for row in existing:
+            row_text = f"{row.title or ''}\n{row.description or ''}"
+            row_tokens = _topic_tokens(row_text)
+            score = len(candidate_tokens & row_tokens)
+            if score > 0:
+                scored.append((score, row))
+        scored.sort(key=lambda t: t[0], reverse=True)
+        top_tasks = [row for _, row in scored[:8]]
+
+        related_tasks = [
+            {
+                "ref": f"task:{row.id}",
+                "title": row.title or "",
+                "description": (row.description or "")[:240],
+                "status": row.status,
+                "scope": row.scope,
+                "assignee_role": row.assignee_role,
+                "estimate_hours": row.estimate_hours,
+            }
+            for row in top_tasks
+        ]
+
+        recent_decisions: list[dict[str, Any]] = []
+        async with session_scope(self._sessionmaker) as session:
+            decisions = await DecisionRepository(session).list_for_project(
+                candidate.project_id, limit=20
+            )
+        for d in decisions:
+            d_text = f"{d.custom_text or ''}\n{d.rationale or ''}"
+            if not _topic_tokens(d_text) & candidate_tokens:
+                continue
+            recent_decisions.append(
+                {
+                    "ref": f"decision:{d.id}",
+                    "headline": (d.custom_text or "")[:200],
+                    "rationale": (d.rationale or "")[:600],
+                    "apply_outcome": d.apply_outcome,
+                    "created_at": _iso_or_none(d.created_at),
+                    "scope_stream_id": d.scope_stream_id,
+                }
+            )
+            if len(recent_decisions) >= 5:
+                break
+
+        # Plan context — budget + current estimate total so the agent
+        # can reason about scope creep contextually (the deterministic
+        # check already raised a warning; the agent may still want to
+        # block if the new task ALSO contradicts a decision, etc.).
+        current_estimate_total = sum(
+            (t.estimate_hours or 0)
+            for t in existing
+            if t.status not in ("cancelled",)
+        )
+
+        proposed_estimate = candidate.metadata.get("estimate_hours")
+        proposed_role = candidate.metadata.get("assignee_role")
+
+        return {
+            "candidate": {
+                "kind": "task_promote",
+                "project_id": candidate.project_id,
+                "proposer_user_id": candidate.proposer_user_id,
+                "title": candidate.title,
+                "description": candidate.content,
+                "estimate_hours": proposed_estimate,
+                "assignee_role": proposed_role,
+                "metadata": dict(candidate.metadata or {}),
+            },
+            "plan_context": {
+                "requirement_id": requirement.id,
+                # `text` was the spec's name; the actual column is
+                # `raw_text` (RequirementRow). Be defensive about both
+                # so a future column rename doesn't take this packet
+                # builder down with it.
+                "requirement_title": (
+                    getattr(requirement, "raw_text", None)
+                    or getattr(requirement, "text", None)
+                    or ""
+                )[:200],
+                "budget_hours": getattr(requirement, "budget_hours", None),
+                "current_estimate_total": current_estimate_total,
+            },
+            "policy": {
+                "allowed_actions": [
+                    "auto_merge",
+                    "request_review",
+                    "request_clarification",
+                    "reject",
+                ],
+                "write_target": "plan_task",
+                "shared_context_impact": (
+                    "will_be_visible_to_project_agents_if_promoted"
+                ),
+            },
+            "related_tasks": related_tasks,
+            "recent_decisions": recent_decisions,
+            "warnings_from_fixed_checks": list(deterministic_warnings),
+        }
 
     async def handle_clarification_reply(
         self,

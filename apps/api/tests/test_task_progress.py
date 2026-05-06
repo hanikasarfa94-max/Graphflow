@@ -308,3 +308,297 @@ async def test_perf_includes_task_quality_payload(api_env):
     assert assignee_row["task_quality"]["good"] == 1
     assert assignee_row["task_quality"]["total"] == 1
     assert assignee_row["task_quality"]["quality_index"] == 1.0
+
+
+# ---- M3 — Task Membrane Agent (semantic review) ------------------------
+
+
+class _StubMembraneReviewer:
+    """Stub copy of the M1 fixture from test_kb_items.py — duplicated
+    here to keep that module's private helpers private. Returns a
+    pre-canned review without calling an LLM and records every packet
+    it received so tests can inspect the pretext shape too."""
+
+    def __init__(self, review):
+        self._review = review
+        self.calls: list[dict] = []
+
+    async def review_candidate(self, packet):
+        from dataclasses import dataclass
+
+        from workgraph_agents.llm import LLMResult
+
+        @dataclass
+        class _Outcome:
+            review: object
+            result: LLMResult
+            outcome: str
+            attempts: int = 1
+            error: str | None = None
+
+        self.calls.append(packet)
+        return _Outcome(
+            review=self._review,
+            result=LLMResult(
+                content="",
+                model="stub",
+                prompt_tokens=0,
+                completion_tokens=0,
+                latency_ms=0,
+            ),
+            outcome="ok",
+        )
+
+
+def _make_review(action, **kwargs):
+    from workgraph_agents import MembraneAgentReview
+
+    defaults = {
+        "reason": "stub_test",
+        "diff_summary": None,
+        "clarify_question": None,
+        "conflict_with": [],
+        "warnings": [],
+        "confidence": 0.9,
+    }
+    defaults.update(kwargs)
+    return MembraneAgentReview(action=action, **defaults)
+
+
+async def _seed_personal_task_for_promote(
+    maker, *, project_id: str, owner_id: str, title: str, description: str = ""
+) -> str:
+    """Add a personal-scope task this owner can promote. Reuses the
+    project's existing requirement (created by _seed_project_with_task)."""
+    tid = str(uuid.uuid4())
+    async with session_scope(maker) as session:
+        session.add(
+            TaskRow(
+                id=tid,
+                project_id=project_id,
+                requirement_id=None,
+                owner_user_id=owner_id,
+                title=title,
+                description=description,
+                status="open",
+                scope="personal",
+                sort_order=0,
+            )
+        )
+    return tid
+
+
+@pytest.mark.asyncio
+async def test_m3_agent_blocks_decision_contradicting_task(api_env):
+    """M3 integration: deterministic checks pass (no title dup, no
+    budget overflow), but the agent flags a contradiction with a recent
+    decision. Promote should defer with deferred=True."""
+    from workgraph_api.main import app
+
+    client, maker, *_ = api_env
+    owner_id = await _register_and_login(client, "tp_m3_a_owner")
+    member_id = await _register_and_login(client, "tp_m3_a_member")
+    pid, _existing_tid = await _seed_project_with_task(
+        maker, owner_id=owner_id, assignee_id=member_id
+    )
+
+    # Seed a recent decision so the pretext has a related_decisions
+    # entry to point at. Keywords overlap with the candidate title so
+    # the topic-token filter retains it.
+    from workgraph_persistence import DecisionRow
+    from datetime import datetime, timezone
+
+    decision_id = str(uuid.uuid4())
+    async with session_scope(maker) as session:
+        session.add(
+            DecisionRow(
+                id=decision_id,
+                project_id=pid,
+                resolver_id=owner_id,
+                custom_text="Cut revive from launch.",
+                rationale="Out of scope for the 6-week alpha.",
+                created_at=datetime.now(timezone.utc),
+            )
+        )
+
+    # Member files a personal task whose topic touches the decision.
+    member_task_id = await _seed_personal_task_for_promote(
+        maker,
+        project_id=pid,
+        owner_id=member_id,
+        title="Implement revive system",
+        description="Add revive on player death — 3 charges per run.",
+    )
+
+    # Stub: agent flags the contradiction.
+    stub_review = _make_review(
+        "request_review",
+        reason="task_contradicts_recent_decision",
+        diff_summary=(
+            "Candidate restores revive after the launch-scope decision "
+            "cut it. Owner should reconsider supersession explicitly."
+        ),
+        conflict_with=[f"decision:{decision_id}"],
+        confidence=0.88,
+    )
+    stub = _StubMembraneReviewer(stub_review)
+    app.state.membrane_service._agent_reviewer = stub
+
+    await _login(client, "tp_m3_a_member")
+    r = await client.post(f"/api/tasks/{member_task_id}/promote")
+    assert r.status_code == 200, r.text
+    body = r.json()
+    # request_review verdict surfaces as deferred=True per task_progress.
+    assert body["deferred"] is True, body
+    assert body["task"] is None
+    # Agent was actually called + saw a related_decisions packet entry.
+    assert len(stub.calls) == 1
+    packet = stub.calls[0]
+    assert packet["candidate"]["kind"] == "task_promote"
+    assert packet["candidate"]["title"] == "Implement revive system"
+    decision_refs = [d["ref"] for d in packet["recent_decisions"]]
+    assert f"decision:{decision_id}" in decision_refs
+
+
+@pytest.mark.asyncio
+async def test_m3_agent_permits_compatible_task(api_env):
+    """M3: agent says auto_merge → the task promotes normally and
+    lands as scope='plan'."""
+    from workgraph_api.main import app
+
+    client, maker, *_ = api_env
+    owner_id = await _register_and_login(client, "tp_m3_b_owner")
+    member_id = await _register_and_login(client, "tp_m3_b_member")
+    pid, _existing_tid = await _seed_project_with_task(
+        maker, owner_id=owner_id, assignee_id=member_id
+    )
+
+    member_task_id = await _seed_personal_task_for_promote(
+        maker,
+        project_id=pid,
+        owner_id=member_id,
+        title="Polish OTP UX",
+        description="Tighten the OTP entry flow",
+    )
+
+    stub_review = _make_review(
+        "auto_merge",
+        reason="no_semantic_conflicts",
+        confidence=0.78,
+    )
+    stub = _StubMembraneReviewer(stub_review)
+    app.state.membrane_service._agent_reviewer = stub
+
+    await _login(client, "tp_m3_b_member")
+    r = await client.post(f"/api/tasks/{member_task_id}/promote")
+    assert r.status_code == 200, r.text
+    body = r.json()
+    # auto_merge — task promoted, response carries the plan task.
+    assert body.get("deferred") is not True, body
+    assert body["task"] is not None
+    assert body["task"]["scope"] == "plan"
+
+
+@pytest.mark.asyncio
+async def test_m3_agent_skipped_when_pretext_empty(api_env):
+    """Spec §7: don't burn an LLM call when there's nothing to review
+    against (no related tasks, no related decisions). The candidate
+    auto-merges via the deterministic path without invoking the agent."""
+    from workgraph_api.main import app
+
+    client, maker, *_ = api_env
+    owner_id = await _register_and_login(client, "tp_m3_c_owner")
+    member_id = await _register_and_login(client, "tp_m3_c_member")
+    pid, _existing_tid = await _seed_project_with_task(
+        maker, owner_id=owner_id, assignee_id=member_id
+    )
+
+    # Personal task whose topic-tokens don't overlap with any plan task
+    # or decision in this project. The seeded existing task is "Wire
+    # OTP" — pick a wholly unrelated topic.
+    member_task_id = await _seed_personal_task_for_promote(
+        maker,
+        project_id=pid,
+        owner_id=member_id,
+        title="Submit GDC presentation",
+        description="Prepare slides for indie showcase track.",
+    )
+
+    # Stub raises if called — we want to assert the agent is NOT called.
+    sentinel = _StubMembraneReviewer(
+        _make_review("request_review", reason="should_not_fire")
+    )
+    app.state.membrane_service._agent_reviewer = sentinel
+
+    await _login(client, "tp_m3_c_member")
+    r = await client.post(f"/api/tasks/{member_task_id}/promote")
+    assert r.status_code == 200, r.text
+    body = r.json()
+    # Pretext was empty — agent skipped, deterministic auto_merge.
+    assert sentinel.calls == [], "agent should be skipped for empty pretext"
+    assert body["task"] is not None
+    assert body["task"]["scope"] == "plan"
+
+
+@pytest.mark.asyncio
+async def test_m3_agent_invented_ref_dropped_and_review_proceeds(api_env):
+    """M1 invariant carried forward: refs the agent invents that don't
+    appear in the pretext are dropped silently. Concretely: the agent
+    flags `decision:does-not-exist` along with a real `decision:<id>` —
+    the invented ref is filtered, the real one survives, the verdict
+    still applies."""
+    from workgraph_api.main import app
+    from workgraph_persistence import DecisionRow
+    from datetime import datetime, timezone
+
+    client, maker, *_ = api_env
+    owner_id = await _register_and_login(client, "tp_m3_d_owner")
+    member_id = await _register_and_login(client, "tp_m3_d_member")
+    pid, _existing_tid = await _seed_project_with_task(
+        maker, owner_id=owner_id, assignee_id=member_id
+    )
+
+    real_decision_id = str(uuid.uuid4())
+    async with session_scope(maker) as session:
+        session.add(
+            DecisionRow(
+                id=real_decision_id,
+                project_id=pid,
+                resolver_id=owner_id,
+                custom_text="Lock the OTP design.",
+                rationale="Avoid late churn.",
+                created_at=datetime.now(timezone.utc),
+            )
+        )
+
+    member_task_id = await _seed_personal_task_for_promote(
+        maker,
+        project_id=pid,
+        owner_id=member_id,
+        title="Rewrite OTP design",
+        description="Switch OTP from email to push.",
+    )
+
+    stub_review = _make_review(
+        "request_review",
+        reason="contradicts_locked_design",
+        diff_summary="Candidate rewrites a design we just locked.",
+        conflict_with=[
+            f"decision:{real_decision_id}",
+            "decision:does-not-exist",
+        ],
+        confidence=0.9,
+    )
+    stub = _StubMembraneReviewer(stub_review)
+    app.state.membrane_service._agent_reviewer = stub
+
+    await _login(client, "tp_m3_d_member")
+    r = await client.post(f"/api/tasks/{member_task_id}/promote")
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["deferred"] is True
+    # The agent saw both refs but only the real one was in the pretext.
+    sent_packet = stub.calls[0]
+    decision_refs = [d["ref"] for d in sent_packet["recent_decisions"]]
+    assert f"decision:{real_decision_id}" in decision_refs
+    assert "decision:does-not-exist" not in decision_refs

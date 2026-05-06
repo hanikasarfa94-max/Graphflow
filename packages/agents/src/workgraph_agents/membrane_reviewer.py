@@ -293,19 +293,25 @@ class MembraneAgentReviewer:
 
 def _extract_pretext_refs(packet: dict[str, Any]) -> set[str]:
     """Collect every `ref` string the pretext exposed so we can filter
-    hallucinated refs from `conflict_with`. Looks at the two sections
-    that carry refs in the M1 KB packet (`retrieved_context`,
-    `recent_decisions`); future packets can extend.
+    hallucinated refs from `conflict_with`.
+
+    Scans every packet section that carries ref-bearing entries:
+      * `retrieved_context` — KB review (M1).
+      * `recent_decisions`  — both KB (M1) and task (M3) reviews.
+      * `related_tasks`     — task review (M3, spec §5.3).
+      * `tasks_touched`     — decision review (M4, reserved).
     """
     refs: set[str] = set()
-    for entry in packet.get("retrieved_context") or []:
-        ref = entry.get("ref") if isinstance(entry, dict) else None
-        if isinstance(ref, str):
-            refs.add(ref)
-    for entry in packet.get("recent_decisions") or []:
-        ref = entry.get("ref") if isinstance(entry, dict) else None
-        if isinstance(ref, str):
-            refs.add(ref)
+    for section in (
+        "retrieved_context",
+        "recent_decisions",
+        "related_tasks",
+        "tasks_touched",
+    ):
+        for entry in packet.get(section) or []:
+            ref = entry.get("ref") if isinstance(entry, dict) else None
+            if isinstance(ref, str):
+                refs.add(ref)
     return refs
 
 
