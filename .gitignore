@@ -114,10 +114,16 @@ scripts/demo/_deepseek_cache.json
 
 # Demo recording assets — the .mp4 files are 185 MB and not suitable
 # for git (would bloat clone size). Track them via release attachments
-# or object storage instead. The poster .jpg covers ARE small enough
-# to track if needed.
-feishudemo/*.mp4
-飞书demo/*.mp4
+# or object storage instead. Whole dirs ignored: poster .jpg covers
+# stay local; users who want to ship them should commit explicitly
+# from another path.
+feishudemo/
+飞书demo/
+
+# Software copyright filing materials — local PII / legal artifacts,
+# never push. Includes drafts, formal submissions, environment
+# screenshots, and analysis used for the 软件著作权 application.
+软件著作权申请资料/
 
 # One-off prototype HTML preview — local design exploration scratch.
 prototype_extra_preview.html
