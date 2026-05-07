@@ -12,22 +12,24 @@
 // FlowActionService. The empty-state copy is intentionally specific
 // to each bucket so an empty workbench reads as quietness, not as
 // "this feature is broken."
+//
+// Phase E (Architecture Organization Pass v1) — the per-row renderer
+// and the empty/error placeholder were extracted into
+// `@/features/flows`. The fetch/state-machine + bucket-section header
+// stay here; they're tied to the panel's lifecycle and don't have a
+// clean lift target without a hook extraction (deferred).
 
 import { useCallback, useEffect, useState, type CSSProperties } from "react";
 import { useTranslations } from "next-intl";
 
 import {
   BUCKETS,
-  RECIPE_ICON,
   listFlows,
   type FlowBucket,
   type FlowPacket,
   type ParticipantInfo,
 } from "@/lib/flows";
-import { formatIso } from "@/lib/time";
-
-import { EvidenceBlock } from "./EvidenceBlock";
-import { FlowRowActions } from "./FlowRowActions";
+import { FlowEmptyState, FlowPacketRow } from "@/features/flows";
 
 interface Props {
   projectId: string;
@@ -169,14 +171,14 @@ function BucketSection({
         </span>
       </header>
       {state.loading ? (
-        <Empty text={t("loading")} />
+        <FlowEmptyState text={t("loading")} />
       ) : state.error ? (
-        <Empty text={t("error")} variant="error" />
+        <FlowEmptyState text={t("error")} variant="error" />
       ) : state.packets.length === 0 ? (
-        <Empty text={t(`empty.${labelKey}`)} />
+        <FlowEmptyState text={t(`empty.${labelKey}`)} />
       ) : (
         state.packets.map((p) => (
-          <FlowRow
+          <FlowPacketRow
             key={p.id}
             packet={p}
             participants={state.participants}
@@ -186,132 +188,6 @@ function BucketSection({
         ))
       )}
     </section>
-  );
-}
-
-function FlowRow({
-  packet,
-  participants,
-  onActed,
-  viewerUserId,
-}: {
-  packet: FlowPacket;
-  participants: Record<string, ParticipantInfo>;
-  onActed: () => void;
-  viewerUserId?: string;
-}) {
-  const t = useTranslations("flows");
-  // Spec §6: drawer reads `current_target_user_ids` for who is
-  // currently blocking, not `target_user_ids`. We surface the count
-  // as a tiny meta chip; resolving user_ids → display_names is a
-  // Slice D concern (members hook would add a client-side lookup).
-  const currentBlocking = packet.current_target_user_ids.length;
-  const recipeLabel = t(`recipes.${packet.recipe_id}`);
-  const stageLabel = stageDisplay(packet.stage, t);
-  const updated = packet.updated_at ?? packet.created_at;
-  return (
-    <div
-      data-testid="flow-row"
-      data-recipe={packet.recipe_id}
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        gap: 4,
-        padding: "8px 10px",
-        border: "1px solid var(--wg-line)",
-        borderRadius: "var(--wg-radius)",
-        background: "#fff",
-      }}
-    >
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "auto 1fr auto",
-          alignItems: "start",
-          gap: 8,
-        }}
-      >
-      <span
-        aria-hidden
-        style={{ fontSize: 16, lineHeight: "20px", marginTop: 2 }}
-      >
-        {RECIPE_ICON[packet.recipe_id] ?? "•"}
-      </span>
-      <div style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0 }}>
-        <strong
-          style={{
-            fontSize: 13,
-            color: "var(--wg-ink)",
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap",
-          }}
-          title={packet.title}
-        >
-          {packet.title}
-        </strong>
-        <span
-          style={{
-            fontSize: 11,
-            color: "var(--wg-ink-soft)",
-            display: "flex",
-            gap: 6,
-            flexWrap: "wrap",
-          }}
-        >
-          <span style={metaChipStyle}>{recipeLabel}</span>
-          <span style={metaChipStyle}>{stageLabel}</span>
-          {currentBlocking > 0 ? (
-            <span style={metaChipStyle}>
-              {currentBlocking === 1 ? "1 actor" : `${currentBlocking} actors`}
-            </span>
-          ) : null}
-          <span style={{ color: "var(--wg-ink-faint)" }}>
-            {t("metaUpdated", { time: formatIso(updated) })}
-          </span>
-        </span>
-      </div>
-      {/* C.1.c — action surface. Reads packet.next_actions and renders
-          Open + Accept + More-menu compactly. Form for counter_back /
-          custom_followup expands inline. Read-only Open and unsupported
-          recipes both fall through to the FlowRowActions empty state. */}
-      <FlowRowActions packet={packet} onActed={onActed} />
-      </div>
-      {/* Slice D — compact evidence: Asked / Replied / Closed. Toggled
-          per-row so default is calm; participants come from the panel
-          state via the bucket's sidecar map. */}
-      <EvidenceBlock
-        packet={packet}
-        participants={participants}
-        viewerUserId={viewerUserId}
-      />
-    </div>
-  );
-}
-
-function Empty({
-  text,
-  variant,
-}: {
-  text: string;
-  variant?: "error";
-}) {
-  return (
-    <p
-      data-testid={variant === "error" ? "flows-bucket-error" : "flows-bucket-empty"}
-      style={{
-        margin: 0,
-        padding: "8px 10px",
-        fontSize: 12,
-        color: variant === "error" ? "var(--wg-accent)" : "var(--wg-ink-soft)",
-        fontStyle: variant === "error" ? "normal" : "italic",
-        background: "var(--wg-surface, #fafafa)",
-        border: "1px dashed var(--wg-line)",
-        borderRadius: "var(--wg-radius)",
-      }}
-    >
-      {text}
-    </p>
   );
 }
 
@@ -328,38 +204,10 @@ function camelBucket(b: FlowBucket): "needsMe" | "waitingOnOthers" | "awaitingMe
   }
 }
 
-function stageDisplay(
-  stage: string,
-  t: ReturnType<typeof useTranslations>,
-): string {
-  // Stage values are open-vocabulary on the BE; fall through to the
-  // raw value when we don't have a translation. Spec §4 — stage is a
-  // display label, not source of truth, so this is intentional.
-  const known = new Set([
-    "awaiting_target",
-    "awaiting_membrane",
-    "awaiting_owner",
-    "completed",
-    "published",
-  ]);
-  if (known.has(stage)) return t(`stage.${stage}`);
-  return stage;
-}
-
 const bucketHeaderStyle: CSSProperties = {
   display: "flex",
   alignItems: "baseline",
   justifyContent: "space-between",
   paddingBottom: 4,
   borderBottom: "1px solid var(--wg-line-faint, #f0f0f0)",
-};
-
-const metaChipStyle: CSSProperties = {
-  padding: "1px 6px",
-  fontSize: 10,
-  fontFamily: "var(--wg-font-mono)",
-  background: "var(--wg-surface, #fafafa)",
-  border: "1px solid var(--wg-line)",
-  borderRadius: 10,
-  color: "var(--wg-ink-soft)",
 };

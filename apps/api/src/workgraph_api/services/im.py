@@ -47,6 +47,7 @@ from workgraph_persistence import (
 
 from .collab import MessageService, NotificationService
 from .collab_hub import CollabHub
+from .proposal_handlers import HandlerServices, ProposalHandler, default_registry
 
 _log = logging.getLogger("workgraph.api.im")
 
@@ -89,6 +90,10 @@ class IMService:
         # M5.1 — late-bound ProjectService for manual_skill_change /
         # manual_invite accept replays.
         self._project_service: Any = None
+        # Phase C — candidate_kind → handler registry. The membrane-
+        # review accept branch dispatches through this dict instead of
+        # the legacy if/elif chain. See services/proposal_handlers/.
+        self._handler_registry: dict[str, ProposalHandler] = default_registry()
         # Keep in-flight classification tasks so tests + shutdown can await.
         self._pending: set[asyncio.Task] = set()
 
@@ -1169,10 +1174,11 @@ class IMService:
         ):
             # Stage 4 of docs/membrane-reorg.md. The membrane staged a
             # candidate + queued this suggestion; the owner just clicked
-            # accept. Branch on candidate_kind because the cell-side
-            # write differs:
-            #   * kb_item_group  → flip the linked draft to published
-            #   * task_promote   → promote the personal task to plan
+            # accept. Phase C — dispatch by candidate_kind through the
+            # `proposal_handlers` registry instead of an inline if/elif
+            # chain. Each handler owns the cell-side mutation for one
+            # kind; common concerns (status persistence, event/message
+            # emission, decision crystallization) stay here.
             candidate_kind = (
                 detail.get("candidate_kind")
                 if isinstance(detail, dict)
@@ -1180,209 +1186,25 @@ class IMService:
             ) or "kb_item_group"  # legacy: pre-T+1 only kb_item_group
                                   # ever queued, no field was set.
 
-            if candidate_kind == "kb_item_group":
-                kb_item_id = (
-                    detail.get("kb_item_id")
-                    if isinstance(detail, dict)
-                    else None
-                )
-                if not kb_item_id:
-                    return {"ok": False, "error": "missing_kb_item_id"}
-                from workgraph_persistence import KbItemRepository
-
-                updated = await KbItemRepository(session).update(
-                    item_id=kb_item_id, status="published"
-                )
-                if updated is None:
-                    return {"ok": False, "error": "kb_item_not_found"}
+            handler = self._handler_registry.get(candidate_kind)
+            if handler is None:
                 return {
-                    "ok": True,
-                    "graph_touched": True,
-                    "kb_item_id": kb_item_id,
-                    "action": "approve_membrane_candidate",
+                    "ok": False,
+                    "error": f"unknown_candidate_kind:{candidate_kind}",
                 }
-
-            if candidate_kind == "kb_archive_request":
-                # M1.2 — owner accepted a member's request to archive a
-                # group-scope KB item. Soft-archive in place; the row
-                # stays in the DB for audit. is_canonical_kb_row excludes
-                # status='archived' so retrieval / kb_search stop using
-                # it immediately.
-                kb_item_id = (
-                    detail.get("kb_item_id")
-                    if isinstance(detail, dict)
-                    else None
-                )
-                if not kb_item_id:
-                    return {"ok": False, "error": "missing_kb_item_id"}
-                from workgraph_persistence import KbItemRepository
-
-                updated = await KbItemRepository(session).update(
-                    item_id=kb_item_id, status="archived"
-                )
-                if updated is None:
-                    return {"ok": False, "error": "kb_item_not_found"}
-                return {
-                    "ok": True,
-                    "graph_touched": True,
-                    "kb_item_id": kb_item_id,
-                    "action": "archive_kb_item",
-                }
-
-            if candidate_kind == "task_promote":
-                task_id = (
-                    detail.get("task_id")
-                    if isinstance(detail, dict)
-                    else None
-                )
-                if not task_id:
-                    return {"ok": False, "error": "missing_task_id"}
-                req = await RequirementRepository(session).latest_for_project(
-                    row.project_id
-                )
-                if req is None:
-                    return {"ok": False, "error": "no_requirement_to_attach_to"}
-                existing = await PlanRepository(session).list_tasks(req.id)
-                next_sort = (
-                    max((t.sort_order or 0) for t in existing) + 1
-                    if existing
-                    else 0
-                )
-                promoted = await PlanRepository(session).promote_personal_to_plan(
-                    task_id=task_id,
-                    requirement_id=req.id,
-                    sort_order=next_sort,
-                )
-                if promoted is None:
-                    return {"ok": False, "error": "promote_failed"}
-                return {
-                    "ok": True,
-                    "graph_touched": True,
-                    "task_id": task_id,
-                    "action": "approve_membrane_candidate",
-                }
-
-            if candidate_kind == "manual_room":
-                # M5 — owner accepted a non-owner's room-create
-                # candidate. Replay the args via stream_service.
-                # _skip_membrane=True bypasses the gate (we're past
-                # the owner approval — re-running review would loop).
-                if self._stream_service is None:
-                    return {
-                        "ok": False,
-                        "error": "stream_service_unavailable",
-                    }
-                if not isinstance(detail, dict):
-                    return {"ok": False, "error": "missing_manual_room_detail"}
-                name = detail.get("name") or ""
-                member_user_ids = detail.get("member_user_ids") or []
-                proposer_user_id = (
-                    detail.get("proposer_user_id") or actor_id
-                )
-                result = await self._stream_service.create_room(
-                    project_id=row.project_id,
-                    creator_user_id=proposer_user_id,
-                    name=name,
-                    member_user_ids=list(member_user_ids),
-                    _skip_membrane=True,
-                )
-                if not result.get("ok"):
-                    return {
-                        "ok": False,
-                        "error": result.get("error", "manual_room_create_failed"),
-                    }
-                stream = result.get("stream") or {}
-                return {
-                    "ok": True,
-                    "graph_touched": True,
-                    "stream_id": stream.get("id"),
-                    "action": "approve_membrane_candidate",
-                }
-
-            if candidate_kind == "manual_skill_change":
-                # M5.1 — owner accepted a non-owner's skill_tags edit.
-                # Replay through ProjectService with _skip_membrane=True.
-                if self._project_service is None:
-                    return {
-                        "ok": False,
-                        "error": "project_service_unavailable",
-                    }
-                if not isinstance(detail, dict):
-                    return {
-                        "ok": False,
-                        "error": "missing_manual_skill_change_detail",
-                    }
-                target_user_id = detail.get("target_user_id")
-                proposer_user_id = (
-                    detail.get("proposer_user_id") or actor_id
-                )
-                new_skill_tags = detail.get("new_skill_tags") or []
-                if not target_user_id:
-                    return {"ok": False, "error": "missing_target_user_id"}
-                result = await self._project_service.set_member_skill_tags(
-                    project_id=row.project_id,
-                    actor_user_id=proposer_user_id,
-                    target_user_id=target_user_id,
-                    skill_tags=list(new_skill_tags),
-                    _skip_membrane=True,
-                )
-                if not result.get("ok"):
-                    return {
-                        "ok": False,
-                        "error": result.get(
-                            "error", "manual_skill_change_failed"
-                        ),
-                    }
-                return {
-                    "ok": True,
-                    "graph_touched": True,
-                    "user_id": target_user_id,
-                    "skill_tags": result.get("skill_tags"),
-                    "action": "approve_membrane_candidate",
-                }
-
-            if candidate_kind == "manual_invite":
-                # M5.1 — owner accepted a non-owner's member-invite
-                # proposal. Replay add_member through the gated
-                # service path with _skip_membrane=True.
-                if self._project_service is None:
-                    return {
-                        "ok": False,
-                        "error": "project_service_unavailable",
-                    }
-                if not isinstance(detail, dict):
-                    return {
-                        "ok": False,
-                        "error": "missing_manual_invite_detail",
-                    }
-                target_username = detail.get("target_username") or ""
-                proposer_user_id = (
-                    detail.get("proposer_user_id") or actor_id
-                )
-                if not target_username:
-                    return {"ok": False, "error": "missing_target_username"}
-                result = await self._project_service.add_member(
-                    project_id=row.project_id,
-                    username=target_username,
-                    invited_by=proposer_user_id,
-                    _skip_membrane=True,
-                )
-                if not result.get("ok"):
-                    return {
-                        "ok": False,
-                        "error": result.get(
-                            "error", "manual_invite_failed"
-                        ),
-                    }
-                return {
-                    "ok": True,
-                    "graph_touched": True,
-                    "user_id": result.get("user_id"),
-                    "username": target_username,
-                    "action": "approve_membrane_candidate",
-                }
-
-            return {"ok": False, "error": f"unknown_candidate_kind:{candidate_kind}"}
+            services = HandlerServices(
+                kb_item_service=self._kb_item_service,
+                stream_service=self._stream_service,
+                project_service=self._project_service,
+                membrane_service=self._membrane_service,
+            )
+            return await handler.accept(
+                session=session,
+                row=row,
+                detail=detail if isinstance(detail, dict) else {},
+                actor_id=actor_id,
+                services=services,
+            )
 
         # tag or `none` kinds have nothing to apply.
         return {"ok": True, "graph_touched": False, "action": action or "noop"}

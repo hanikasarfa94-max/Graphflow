@@ -2,6 +2,8 @@
 
 **Status:** written 2026-04-18. This is the current product intent. `dev.md`, `PLAN.md`, and `AGENT.md` are MVP-era artifacts; treat them as historical record, not as current spec. `docs/vision.md` remains the depth doc — this file is the short operational distillation.
 
+**Companion:** `docs/architecture-organization.md` — how the code's package layout maps to the concepts in this doc.
+
 ---
 
 ## The one true thing

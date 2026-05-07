@@ -3,6 +3,8 @@
 **Single page, visually structured, current as of V4.**
 One-line purpose: an AI-native operating graph for a team — humans are nodes, sub-agents metabolize signals on edges, the graph is the shared nervous system.
 
+**Companion:** `docs/architecture-organization.md` — how the code's package layout maps to the concepts diagrammed here.
+
 ---
 
 ## 0. Whole-system layout (one diagram)
