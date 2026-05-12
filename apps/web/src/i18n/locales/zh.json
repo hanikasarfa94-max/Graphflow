@@ -1970,5 +1970,47 @@
       "label": "凝结为决议",
       "hint": "把已经趋于一致的讨论沉淀为正式决议。"
     }
+  },
+  "shellV062": {
+    "nav": {
+      "myAi": "我的 AI",
+      "conversations": "会话",
+      "tasks": "任务",
+      "docs": "文档 · 知识库",
+      "flowCenter": "流转中心"
+    },
+    "scopeBand": {
+      "label": "项目焦点",
+      "allAccessible": "全部可访问",
+      "noFocus": "无焦点",
+      "switch": "切换项目"
+    },
+    "createMenu": {
+      "label": "新建",
+      "conversation": "新建会话",
+      "document": "新建文档",
+      "upload": "上传",
+      "projectScope": "新建项目范围",
+      "taskExcluded": "任务由上下文生成",
+      "topicExcluded": "话题源自会话",
+      "flowExcluded": "流转始于某个源头",
+      "memoryExcluded": "记忆源于审核"
+    },
+    "drawer": {
+      "close": "关闭",
+      "flowRequest": "流转请求",
+      "memoryPrompt": "记忆候选",
+      "memoryReview": "审核记忆",
+      "editRequest": "发送前编辑",
+      "notification": "通知"
+    },
+    "doctrine": {
+      "projectScope": "项目是范围，不是页面。",
+      "memorySeparate": "记忆固化是一次独立的判断。",
+      "proposalsOnly": "AI 辅助仅生成提议。"
+    },
+    "empty": {
+      "myAi": "从这里开始。先与 AI 共思，准备好再分享。"
+    }
   }
 }

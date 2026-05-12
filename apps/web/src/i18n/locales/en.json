@@ -1970,5 +1970,47 @@
       "label": "Crystallize decision",
       "hint": "Turn a thread of agreement into a recorded decision."
     }
+  },
+  "shellV062": {
+    "nav": {
+      "myAi": "My AI",
+      "conversations": "Conversations",
+      "tasks": "Tasks",
+      "docs": "Documents · KB",
+      "flowCenter": "Flow Center"
+    },
+    "scopeBand": {
+      "label": "Project focus",
+      "allAccessible": "All accessible",
+      "noFocus": "No focus",
+      "switch": "Switch project"
+    },
+    "createMenu": {
+      "label": "New",
+      "conversation": "New conversation",
+      "document": "New document",
+      "upload": "Upload",
+      "projectScope": "New project scope",
+      "taskExcluded": "Tasks come from context",
+      "topicExcluded": "Topics come from conversations",
+      "flowExcluded": "Flows come from a source",
+      "memoryExcluded": "Memory comes from review"
+    },
+    "drawer": {
+      "close": "Close",
+      "flowRequest": "Flow request",
+      "memoryPrompt": "Memory candidate",
+      "memoryReview": "Review memory",
+      "editRequest": "Edit before sending",
+      "notification": "Notifications"
+    },
+    "doctrine": {
+      "projectScope": "Project is scope, not page.",
+      "memorySeparate": "Memory crystallization is a separate decision.",
+      "proposalsOnly": "AI Assistance creates proposals only."
+    },
+    "empty": {
+      "myAi": "Start here. Think with AI first. Share when ready."
+    }
   }
 }
