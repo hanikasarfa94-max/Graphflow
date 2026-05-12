@@ -1,0 +1,110 @@
+{
+  "PrimaryNav": [
+    "My AI",
+    "Conversations",
+    "Tasks",
+    "Documents / KB",
+    "Flow Center"
+  ],
+  "RetrievalScopeMode": [
+    "current_focus",
+    "all_accessible",
+    "no_focus"
+  ],
+  "ConversationType": [
+    "direct",
+    "room",
+    "topic"
+  ],
+  "TopicStatus": [
+    "open",
+    "needs_input",
+    "waiting",
+    "resolved",
+    "archived"
+  ],
+  "ProposalType": [
+    "routing_suggestion",
+    "task_candidate",
+    "document_draft",
+    "topic_suggestion",
+    "memory_candidate",
+    "impact_analysis",
+    "capability_explanation",
+    "topic_closure"
+  ],
+  "ShareableDraftStatus": [
+    "fresh",
+    "stale",
+    "dismissed",
+    "sent",
+    "archived"
+  ],
+  "FlowRequestType": [
+    "confirm",
+    "feedback",
+    "review",
+    "clarification",
+    "handoff",
+    "accept_task",
+    "delegate",
+    "approval"
+  ],
+  "MemoryCandidateStatus": [
+    "draft",
+    "prompted",
+    "deferred",
+    "review_pending",
+    "accepted",
+    "rejected",
+    "skipped",
+    "reopened",
+    "expired",
+    "superseded"
+  ],
+  "AuthorityRole": [
+    "project_owner",
+    "pricing_owner",
+    "document_owner",
+    "task_owner",
+    "domain_reviewer",
+    "admin"
+  ],
+  "AllowedAction": [
+    "accept",
+    "revise",
+    "reject",
+    "defer",
+    "skip",
+    "request_review",
+    "comment",
+    "reopen"
+  ],
+  "TaskRecognitionPolicy": [
+    "none",
+    "assignee_accept",
+    "project_owner_confirm",
+    "flow_required",
+    "review_required"
+  ],
+  "TaskStatus": [
+    "personal_draft",
+    "candidate",
+    "confirmation_pending",
+    "accepted_personal",
+    "team_confirmed",
+    "in_progress",
+    "blocked",
+    "waiting_for_feedback",
+    "ready_for_review",
+    "done",
+    "archived"
+  ],
+  "RightRailSpine": [
+    "context",
+    "related_work",
+    "evidence_sources",
+    "ai_assistance",
+    "primary_action"
+  ]
+}

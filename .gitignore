@@ -127,3 +127,9 @@ feishudemo/
 
 # One-off prototype HTML preview — local design exploration scratch.
 prototype_extra_preview.html
+
+# v0.6.2 handoff + design prototype zips — duplicates of the unpacked
+# directories which are tracked. Keep the zips local in case someone
+# wants the bundled artefact, but don't ship them.
+graphflow_design_prototype.zip
+graphflow_v062_engineering_handoff.zip

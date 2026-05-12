@@ -1,0 +1,478 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>GraphFlow v0.6.2 — Adjustable Layout Prototype</title>
+<style>
+:root{
+  --primary:#4f6896; --bg:#fafdff; --surface:#ffffff; --surface2:#f5f8fc; --text:#0f172a; --muted:#64748b; --line:#d8e2ef;
+  --soft:rgba(79,104,150,.10); --success:#16a34a; --warning:#d97706; --danger:#dc2626; --violet:#6d5bd0;
+  --radius:8px; --gap:8px; --pad:12px; --font:12px; --sidebar:221px; --right:401px; --shadow:0 10px 28px rgba(15,23,42,.07);
+}
+*{box-sizing:border-box} body{margin:0;color:var(--text);font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",Arial,sans-serif;font-size:var(--font);background:linear-gradient(180deg,#fff,var(--bg))}
+button,input,textarea,select{font:inherit} button{cursor:pointer}
+.app{min-height:100vh;display:grid;grid-template-columns:var(--sidebar) 1fr}
+.sidebar{height:100vh;position:sticky;top:0;background:#fff;border-right:1px solid var(--line);padding:14px 10px;display:flex;flex-direction:column;z-index:5}
+.brand{display:flex;gap:10px;align-items:center;padding:8px 8px 18px;font-weight:850;font-size:17px}.logo{width:28px;height:28px;border-radius:8px;background:linear-gradient(135deg,var(--primary),#91acd8);display:grid;place-items:center;color:#fff;font-weight:900}
+.nav{display:flex;flex-direction:column;gap:4px}.nav button{border:0;background:transparent;text-align:left;color:#334155;padding:9px 10px;border-radius:var(--radius);display:flex;gap:9px;align-items:center}.nav button.active{background:var(--soft);color:var(--primary);font-weight:850}
+.nav .mini{font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:850;padding:12px 10px 4px}.badge{margin-left:auto;background:var(--soft);color:var(--primary);border-radius:999px;padding:1px 6px;font-size:11px}.bottom{margin-top:auto;border-top:1px solid var(--line);padding-top:10px}
+.main{min-width:0;padding:0 16px 28px}.topbar{height:46px;display:flex;gap:8px;align-items:center}.search{height:34px;max-width:540px;flex:1;background:#fff;border:1px solid var(--line);border-radius:var(--radius);padding:0 11px;color:var(--muted)}
+.scopeband{margin:0 -16px 8px;padding:8px 16px;background:linear-gradient(90deg,rgba(79,104,150,.18),rgba(79,104,150,.06));border-top:1px solid #cbd8ee;border-bottom:1px solid #cbd8ee;display:flex;align-items:center;justify-content:space-between;gap:12px;color:#243a5e}.scopeband b{font-weight:850}.scopeband select{border:1px solid #cbd8ee;background:#fff;color:#243a5e;border-radius:var(--radius);padding:6px 9px;font-weight:800}
+.iconbtn,.secondary,.primary,.ghost{border-radius:var(--radius);padding:8px 10px;border:1px solid var(--line);background:#fff;color:#334155}.primary{background:var(--primary);border-color:var(--primary);color:#fff}.ghost{border:0;background:transparent;color:var(--muted)}
+.page{display:none}.page.active{display:block}.layout{display:grid;grid-template-columns:minmax(0,1fr) var(--right);gap:var(--gap)}.panel{background:rgba(255,255,255,.96);border:1px solid var(--line);border-radius:var(--radius);box-shadow:0 4px 14px rgba(15,23,42,.04)}.pad{padding:var(--pad)}.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:var(--pad)}
+.h1{font-size:24px;font-weight:850;margin:0 0 4px}.h2{font-size:17px;font-weight:850;margin:0 0 8px}.h3{font-size:14px;font-weight:850;margin:0 0 6px}.muted{color:var(--muted)}.small{font-size:11px;color:var(--muted);line-height:1.45}
+.row{display:flex;align-items:center;gap:8px}.between{display:flex;align-items:center;justify-content:space-between;gap:8px}.grid2{display:grid;grid-template-columns:1fr 1fr;gap:var(--gap)}.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:var(--gap)}
+.pill{display:inline-flex;align-items:center;gap:5px;border-radius:999px;background:var(--soft);color:var(--primary);font-size:11px;font-weight:850;padding:3px 7px}.pill.green{background:#e9f8ef;color:var(--success)}.pill.amber{background:#fff6e8;color:#b45309}.pill.red{background:#fff1f2;color:#be123c}.pill.gray{background:#f1f5f9;color:#475569}
+.avatar{width:28px;height:28px;border-radius:50%;background:linear-gradient(135deg,#dce8fa,#8faad9);display:grid;place-items:center;color:#21385c;font-weight:850;flex:0 0 auto}.avatar.sm{width:22px;height:22px;font-size:10px}
+.list{display:flex;flex-direction:column;gap:6px}.item{display:flex;gap:8px;align-items:center;background:#fff;border:1px solid var(--line);border-radius:var(--radius);padding:9px}.item:hover{border-color:rgba(79,104,150,.45);box-shadow:0 3px 10px rgba(79,104,150,.08)}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--primary);flex:0 0 auto}.dot.green{background:var(--success)}.dot.amber{background:var(--warning)}.dot.red{background:var(--danger)}.dot.violet{background:var(--violet)}.dot.gray{background:#94a3b8}
+.rail{display:flex;flex-direction:column;gap:var(--gap);position:relative}.rail-body{display:flex;flex-direction:column;gap:var(--gap);padding-bottom:62px}.rail-cta{position:sticky;bottom:0;background:rgba(255,255,255,.96);border:1px solid var(--line);border-radius:var(--radius);padding:10px;box-shadow:0 -6px 18px rgba(15,23,42,.05)}
+.section-title{font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:850;margin:2px 0 6px}.kv{display:grid;grid-template-columns:94px 1fr;gap:8px;padding:7px 0;border-bottom:1px solid var(--line)}.kv:last-child{border-bottom:0}
+.chat-shell{height:calc(100vh - 132px);min-height:650px;display:grid;grid-template-rows:auto 1fr auto;overflow:hidden}.chat-head{padding:11px 13px;border-bottom:1px solid var(--line);background:#fff}.messages{padding:14px;overflow:auto;display:flex;flex-direction:column;gap:10px}.msg{display:flex;gap:8px;max-width:760px}.msg.me{align-self:flex-end;flex-direction:row-reverse}.bubble{background:#fff;border:1px solid var(--line);border-radius:12px;padding:10px 12px;line-height:1.6}.msg.me .bubble{background:var(--primary);color:#fff;border-color:var(--primary)}
+.ai-card{border:1px solid #cbd8ee;background:linear-gradient(180deg,#f8fbff,#fff);border-radius:var(--radius);padding:var(--pad)}.inputbar{padding:10px;border-top:1px solid var(--line);background:#fff}.inputline{display:flex;align-items:center;gap:8px;border:1px solid var(--line);border-radius:var(--radius);padding:6px;background:#fff}.inputline input{border:0;outline:0;flex:1;background:transparent;padding:8px}.quick{display:flex;gap:6px;flex-wrap:wrap}.quick button{border:1px solid var(--line);background:#fff;border-radius:999px;padding:6px 9px;color:#334155}
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin:6px 0 10px}.tabs button{border:0;background:transparent;color:var(--muted);padding:8px 9px;border-radius:6px 6px 0 0}.tabs button.active{color:var(--primary);font-weight:850;border-bottom:2px solid var(--primary)}
+.table{width:100%;border-collapse:separate;border-spacing:0;border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;background:#fff}.table th,.table td{padding:10px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}.table th{background:var(--surface2);font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}.table tr:last-child td{border-bottom:0}
+.conv-grid{display:grid;grid-template-columns:260px minmax(0,1fr) var(--right);gap:var(--gap)}.conv-list{height:calc(100vh - 132px);overflow:auto}.conv-row{display:grid;grid-template-columns:22px 1fr auto;gap:8px;align-items:center;padding:8px;border-radius:var(--radius);border:1px solid transparent}.conv-row.active,.conv-row:hover{background:#fff;border-color:var(--line)}
+.mode-dm .chat-head{border-top:3px solid #94a3b8}.mode-room .chat-head{border-top:3px solid var(--primary)}.mode-topic .chat-head{border-top:3px solid var(--violet)}
+.doc-body{background:#fff;border:1px solid var(--line);border-radius:var(--radius);padding:22px 30px;line-height:1.75}.doc-body h1{font-size:24px;margin:0 0 8px}.doc-body h2{font-size:18px;margin-top:22px}
+.drawer,.settings{position:fixed;right:0;top:0;width:min(500px,96vw);height:100vh;background:rgba(255,255,255,.97);border-left:1px solid var(--line);box-shadow:-16px 0 46px rgba(15,23,42,.14);z-index:40;transform:translateX(105%);transition:.22s ease;display:flex;flex-direction:column}.drawer.open,.settings.open{transform:translateX(0)}.drawer-head{padding:13px;border-bottom:1px solid var(--line)}.drawer-body{padding:13px;overflow:auto;display:flex;flex-direction:column;gap:8px}.drawer-foot{padding:10px;border-top:1px solid var(--line);display:flex;gap:8px;background:#fff}.overlay{position:fixed;inset:0;background:rgba(15,23,42,.18);z-index:30;display:none}.overlay.open{display:block}
+.attach{display:flex;align-items:center;gap:8px;border:1px solid var(--line);padding:8px;border-radius:var(--radius);background:#fff}.attach button{margin-left:auto;border:0;background:#f1f5f9;border-radius:6px;color:#475569;padding:3px 6px}.diff{display:grid;grid-template-columns:1fr 1fr;gap:8px}.diff .old{background:#fff7ed;border:1px solid #fed7aa}.diff .new{background:#f0fdf4;border:1px solid #bbf7d0}mark{background:#fde68a;border-radius:3px;padding:0 2px}.warnbox{background:#fffbeb;border:1px solid #fde68a;border-radius:var(--radius);padding:10px}
+.fab{position:fixed;right:18px;bottom:18px;z-index:50;border:0;background:#0f172a;color:#fff;border-radius:999px;padding:10px 13px;box-shadow:var(--shadow)}.control{display:grid;grid-template-columns:110px 1fr 50px;gap:8px;align-items:center;margin:7px 0}.control input[type="range"]{width:100%}.control input[type="color"]{width:42px;height:30px;border:1px solid var(--line);border-radius:6px;background:#fff}.codebox{width:100%;height:122px;border:1px solid var(--line);border-radius:var(--radius);padding:8px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px}.toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:#0f172a;color:white;border-radius:999px;padding:10px 14px;display:none;z-index:80}.toast.show{display:block}
+
+.auth-disabled{opacity:.58;cursor:not-allowed;background:#eef2f7!important;color:#64748b!important;border-color:#cbd5e1!important}
+.auth-note{background:#f8fafc;border:1px dashed #cbd5e1;border-radius:var(--radius);padding:8px;color:#475569}
+.timeline{display:flex;flex-direction:column;gap:6px}
+.timeline-step{display:grid;grid-template-columns:82px 1fr;gap:8px;border:1px solid var(--line);background:#fff;border-radius:var(--radius);padding:8px}
+.status-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.status-card{border:1px solid var(--line);background:#fff;border-radius:var(--radius);padding:8px}
+.method-tag{font-size:10px;background:#f1f5f9;color:#475569;border-radius:999px;padding:2px 6px;font-weight:800}
+
+
+/* v0.6.2 adjustable layout */
+.sidebar{transition:width .18s ease, padding .18s ease}
+.app.nav-collapsed{grid-template-columns:64px 1fr}
+.app.nav-collapsed .sidebar{padding-left:8px;padding-right:8px}
+.app.nav-collapsed .sidebar .label,
+.app.nav-collapsed .sidebar .brand span,
+.app.nav-collapsed .sidebar .mini,
+.app.nav-collapsed .sidebar .badge{display:none}
+.app.nav-collapsed .nav button{justify-content:center}
+.app.nav-collapsed .bottom button{text-align:center!important}
+.nav-toggle{
+  width:30px;height:30px;border:1px solid var(--line);border-radius:var(--radius);background:#fff;color:#334155;
+  display:grid;place-items:center;margin-left:auto;
+}
+.app.nav-collapsed .nav-toggle{margin-left:0;width:100%}
+.resize-handle{
+  position:fixed;top:0;height:100vh;width:7px;z-index:35;cursor:col-resize;
+  background:transparent;
+}
+.resize-handle:hover{background:rgba(79,104,150,.10)}
+#leftResize{left:calc(var(--sidebar) - 4px)}
+#rightResize{right:calc(var(--right) + 16px)}
+.app.nav-collapsed #leftResize{left:60px}
+body.resizing{user-select:none;cursor:col-resize}
+.layout,.conv-grid{transition:grid-template-columns .12s ease}
+.rail-resize-local{
+  width:100%;height:8px;border-radius:999px;background:linear-gradient(90deg,transparent,rgba(79,104,150,.20),transparent);
+  cursor:col-resize;margin:-2px 0 2px;
+}
+.panel-toolbar{
+  display:flex;gap:6px;align-items:center;justify-content:flex-end;
+}
+.panel-toolbar button{
+  border:1px solid var(--line);background:#fff;border-radius:6px;color:#475569;padding:4px 6px;font-size:11px;
+}
+@media(max-width:1180px){
+  #leftResize,#rightResize{display:none}
+}
+
+@media(max-width:1180px){.layout,.conv-grid{grid-template-columns:1fr}.rail{display:none}.app{grid-template-columns:74px 1fr}.sidebar .label,.brand span{display:none}.nav button{justify-content:center}.scopeband{margin:0 -16px 8px}}
+</style>
+</head>
+<body>
+<div class="app" id="appRoot">
+  <div id="leftResize" class="resize-handle" title="Drag to resize navigation"></div>
+  <div id="rightResize" class="resize-handle" title="Drag to resize right rail"></div>
+  <aside class="sidebar">
+    <div class="brand"><div class="logo">G</div><span>GraphFlow</span><button class="nav-toggle" onclick="toggleNavCollapse()" title="Collapse navigation">☰</button></div>
+    <nav class="nav">
+      <div class="mini">Primary</div>
+      <button class="active" data-page="myai">✦ <span class="label">My AI</span></button>
+      <button data-page="conversations">◌ <span class="label">Conversations</span><span class="badge">9</span></button>
+      <button data-page="tasks">☑ <span class="label">Tasks</span><span class="badge">5</span></button>
+      <button data-page="docs">▤ <span class="label">Documents / KB</span></button>
+      <button data-page="flow">⇄ <span class="label">Flow Center</span><span class="badge">12</span></button>
+    </nav>
+    <div class="bottom">
+      <button class="ghost" style="width:100%;text-align:left" onclick="toggleSettings()">⚙ <span class="label">Design Parameters</span></button>
+      <button class="ghost" style="width:100%;text-align:left" onclick="copyParams()">⧉ <span class="label">Copy Params</span></button>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div class="topbar">
+      <input class="search" placeholder="Search conversations, topics, tasks, docs, people…"/>
+      <button class="iconbtn" onclick="openCreate()">＋ Create</button>
+      <button class="iconbtn" onclick="openFlowDrawer()">🔔 <span class="badge">3</span></button>
+      <button class="iconbtn" onclick="toggleNavCollapse()">Toggle nav</button>
+      <button class="iconbtn" onclick="cycleRailWidth()">Rail width</button>
+    </div>
+    <div class="scopeband">
+      <div><b>Focused on TikHub API Evaluation</b> · AI retrieval, tasks, documents, and flows are scoped to this focus.</div>
+      <select onchange="toast('Focus changed to '+this.value)">
+        <option>TikHub API Evaluation</option><option>GraphFlow Product Design</option><option>All projects</option><option>No focus</option>
+      </select>
+    </div>
+
+    <section id="myai" class="page active">
+      <div class="layout">
+        <div class="panel chat-shell">
+          <div class="chat-head between">
+            <div><div class="row"><h1 class="h1">My AI</h1><span class="pill">Landing Surface</span></div><div class="muted">Private reasoning becomes shareable work. Think with AI first; share when ready.</div></div>
+            <button class="secondary">Retrieval mode: Current focus</button>
+          </div>
+          <div class="messages">
+            <div class="ai-card">
+              <div class="between">
+                <div><b>Focused on TikHub API Evaluation.</b> Three grounded items need attention: Wang Fang replied, the cost-model task is due tomorrow, and the document-cache topic is still open.</div>
+                <div class="row"><button class="secondary" onclick="openFlowDrawer()">Review</button><button class="ghost">Dismiss</button></div>
+              </div>
+            </div>
+            <div class="ai-card">
+              <div class="between"><div><b>Ready to share</b><div class="small">High-signal items only. Drafts older than 7 days move to Drafts.</div></div><span class="pill">3 fresh</span></div>
+              <div class="list" style="margin-top:8px">
+                <div class="item"><span class="dot"></span><div><b>Flow request draft to Wang Fang</b><div class="muted">Fresh · expires from strip in 6 days</div></div><button class="secondary" onclick="openEdit()">Edit</button><button class="primary" onclick="openFlowDrawer()">Send</button></div>
+                <div class="item"><span class="dot violet"></span><div><b>Task candidate: TikHub API cost evaluation work package</b><div class="muted">Needs team recognition</div></div><button class="secondary">Review</button></div>
+                <div class="item"><span class="dot green"></span><div><b>Topic summary ready: document cache layer</b><div class="muted">Can be posted to topic</div></div><button class="secondary">Post</button></div>
+              </div>
+            </div>
+            <div class="msg me"><div class="avatar sm">林</div><div class="bubble">Search Video has two price versions, $0.005 and $0.003. This affects the cost model. Which one should be the baseline?</div></div>
+            <div class="msg"><div class="avatar sm">AI</div><div class="bubble">This likely needs confirmation from Wang Fang. She owns vendor pricing for this project and has validated similar pricing questions before.</div></div>
+            <div class="ai-card">
+              <div class="between"><div><div class="h3">Routing suggestion</div><div class="muted">AI recommends a person, while preserving your message as a human request.</div></div><span class="pill green">Capability evidence available</span></div>
+              <div class="grid2" style="margin-top:8px">
+                <div class="card"><b>Suggested recipient</b><div class="row" style="margin-top:8px"><div class="avatar">王</div><div><b>Wang Fang</b><div class="muted">Commercial & pricing owner</div></div></div><ul class="muted"><li>Handled 4 vendor-pricing confirmations</li><li>Validated Search Content pricing last week</li><li>Project-scoped capability: API pricing judgment</li></ul></div>
+                <div class="card"><b>Draft message</b><p>Wang Fang, Search Video seems to have two price versions, $0.005 and $0.003. Could you help confirm which one should be used as the cost-model baseline?</p><div class="row"><button class="primary" onclick="openFlowDrawer()">Send directly</button><button class="secondary" onclick="openEdit()">Edit first</button><button class="ghost">Change person</button></div></div>
+              </div>
+            </div>
+          </div>
+          <div class="inputbar">
+            <div class="quick" style="margin-bottom:8px"><button>Summarize pending work</button><button>Think through a decision</button><button>Draft a message</button><button>Create doc draft</button></div>
+            <div class="inputline"><button class="iconbtn">＋</button><input placeholder="Think with AI first…"/><button class="primary">Send</button></div>
+          </div>
+        </div>
+        <aside class="rail"><div class="rail-resize-local" title="Drag the right page handle to resize the rail"></div>
+          <div class="rail-body">
+            <div class="panel pad"><div class="section-title">Context</div><div class="kv"><span>Mode</span><b>Current focus</b></div><div class="kv"><span>Scope</span><b>TikHub API Evaluation</b></div><div class="kv"><span>Retrieval</span><b>Project + accepted memory</b></div></div>
+            <div class="panel pad"><div class="section-title">Related Work</div><div class="list"><div class="item"><span class="dot amber"></span><div><b>Cost-model task</b><div class="muted">Due tomorrow</div></div></div><div class="item"><span class="dot"></span><div><b>Search Video pricing</b><div class="muted">Flow replied</div></div></div></div></div>
+            <div class="panel pad"><div class="section-title">Evidence / Sources</div><div class="list"><div class="item">TikHub pricing table</div><div class="item">Vendor quote record</div><div class="item">Cost model draft v2.1</div></div></div>
+            <div class="panel pad"><div class="section-title">AI Assistance</div><div class="small">Proposals only. No state changes happen here.</div><button class="secondary" style="width:100%;margin-top:6px">Suggest recipient</button><button class="secondary" style="width:100%;margin-top:6px">Draft task candidate</button></div>
+          </div>
+          <div class="rail-cta"><button class="primary" style="width:100%" onclick="openEdit()">Send collaboration request</button></div>
+        </aside>
+      </div>
+    </section>
+
+    <section id="conversations" class="page">
+      <div class="conv-grid">
+        <div class="panel pad conv-list">
+          <div class="between"><h2 class="h2">Conversations</h2><span class="pill">Topics separate</span></div>
+          <div class="tabs"><button class="active">All</button><button>DMs</button><button>Rooms</button><button>Topics</button></div>
+          <div class="section-title">Recent DMs & Rooms</div>
+          <div class="conv-row" onclick="setConvMode('dm')"><span class="dot gray"></span><div><b>Wang Fang</b><div class="muted">DM · pricing reply</div></div><span class="pill gray">DM</span></div>
+          <div class="conv-row" onclick="setConvMode('room')"><span class="dot"></span><div><b>TikHub / General discussion</b><div class="muted">Room · 6 members</div></div><span class="pill">Room</span></div>
+          <div class="section-title">TikHub API Evaluation</div>
+          <div class="conv-row" onclick="setConvMode('room')"><span class="dot"></span><div><b>General discussion</b><div class="muted">Project room</div></div></div>
+          <div class="conv-row" onclick="setConvMode('room')"><span class="dot"></span><div><b>Cost model</b><div class="muted">Room</div></div></div>
+          <div class="section-title">Active Topics</div>
+          <div class="conv-row active" onclick="setConvMode('topic')"><span class="dot violet"></span><div><b>Search Video pricing</b><div class="muted">Waiting · 4 participants</div></div><span class="pill amber">Waiting</span></div>
+          <div class="conv-row" onclick="setConvMode('topic')"><span class="dot violet"></span><div><b>Cost model assumptions</b><div class="muted">Open · 4 participants</div></div></div>
+          <div class="conv-row" onclick="setConvMode('topic')"><span class="dot violet"></span><div><b>Report section 3 review</b><div class="muted">Needs input</div></div></div>
+        </div>
+        <div id="conversationPanel" class="panel chat-shell mode-topic">
+          <div class="chat-head between">
+            <div><div class="row"><h1 class="h2" id="convTitle">Search Video pricing</h1><span class="pill" id="convMode">Topic</span><span class="pill amber">Waiting</span></div><div class="muted" id="convSub">Focused issue context · visibility: topic participants</div></div>
+            <button class="secondary">Project Brief</button>
+          </div>
+          <div class="messages">
+            <div class="msg"><div class="avatar sm">张</div><div class="bubble">There are two prices for Search Video. Which one should we use in the baseline model?</div></div>
+            <div class="msg me"><div class="avatar sm">林</div><div class="bubble">I think we need Wang Fang’s confirmation, otherwise the procurement recommendation may be wrong.</div></div>
+            <div class="ai-card"><b>AI topic summary</b><p class="muted">The topic is waiting on a pricing confirmation. If confirmed, it will update the cost-model task and report section 3.2.</p><div class="row"><button class="secondary" onclick="openFlowDrawer()">Open related flow</button><button class="secondary">Draft closure proposal</button></div></div>
+          </div>
+          <div class="inputbar"><div class="inputline"><button class="iconbtn">＋</button><input placeholder="Message this topic…"/><button class="primary">Send</button></div></div>
+        </div>
+        <aside class="rail"><div class="rail-resize-local" title="Drag the right page handle to resize the rail"></div>
+          <div class="rail-body">
+            <div class="panel pad"><div class="section-title">Context</div><div id="railContext"><div class="kv"><span>Type</span><b>Topic</b></div><div class="kv"><span>Status</span><b>Waiting</b></div><div class="kv"><span>Visibility</span><b>Topic participants</b></div></div></div>
+            <div class="panel pad"><div class="section-title">Related Work</div><div class="list"><div class="item">Cost-model task</div><div class="item">Search Video price flow</div><div class="item">Report section 3.2</div></div></div>
+            <div class="panel pad"><div class="section-title">Evidence / Sources</div><div class="list"><div class="item">Vendor quote record</div><div class="item">Pricing table</div></div></div>
+            <div class="panel pad"><div class="section-title">AI Assistance</div><div class="small">Proposals only.</div><button class="secondary" style="width:100%;margin-top:6px">Summarize disagreement</button><button class="secondary" style="width:100%;margin-top:6px">Draft closure proposal</button></div>
+          </div>
+          <div class="rail-cta"><button class="primary" style="width:100%">Resolve topic</button></div>
+        </aside>
+      </div>
+    </section>
+
+    <section id="tasks" class="page">
+      <div class="layout">
+        <div class="panel pad">
+          <div class="between"><div><h1 class="h1">Tasks</h1><p class="muted">Execution commitments. Personal tasks are free; team tasks need recognition.</p></div><span class="pill gray">Scoped: TikHub</span></div>
+          <div class="tabs"><button class="active">My tasks</button><button>Team tasks</button><button>Candidates</button><button>Waiting for me</button><button>Blocked</button></div>
+          <div class="list">
+            <div class="item"><span class="dot amber"></span><div><b>TikHub API cost evaluation work package</b><div class="muted">Team confirmed · owner: Lin · 4 linked tasks</div></div><span class="pill green">Team</span></div>
+            <div class="item"><span class="dot"></span><div><b>Collect API pricing and quota information</b><div class="muted">Accepted personal · source: work package</div></div><span class="pill">In progress</span></div>
+            <div class="item"><span class="dot red"></span><div><b>Confirm Search Video baseline price</b><div class="muted">Blocked by pricing flow request</div></div><span class="pill red">Blocked</span></div>
+            <div class="item"><span class="dot violet"></span><div><b>Write procurement recommendation paragraph</b><div class="muted">Candidate · needs team recognition</div></div><span class="pill amber">Candidate</span></div>
+          </div>
+        </div>
+        <aside class="rail"><div class="rail-resize-local" title="Drag the right page handle to resize the rail"></div>
+          <div class="rail-body">
+            <div class="panel pad"><div class="section-title">Context</div><h2 class="h2">Confirm Search Video baseline price</h2><span class="pill red">Blocked</span><div class="kv"><span>Source</span><b>Topic: Search Video pricing</b></div><div class="kv"><span>Owner</span><b>Wang Fang</b></div><div class="kv"><span>Policy</span><b>assignee_accept</b></div></div>
+            <div class="panel pad"><div class="section-title">Related Work</div><div class="list"><div class="item">Pricing flow request</div><div class="item">Report section 3.2</div></div></div>
+            <div class="panel pad"><div class="section-title">Evidence / Sources</div><div class="list"><div class="item">Vendor quote</div><div class="item">Cost model draft</div></div></div>
+            <div class="panel pad"><div class="section-title">AI Assistance</div><div class="small">Proposals only.</div><button class="secondary" style="width:100%;margin-top:6px">Generate blocker analysis</button><button class="secondary" style="width:100%;margin-top:6px">Suggest recipient</button></div>
+          </div>
+          <div class="rail-cta"><button class="primary" style="width:100%" onclick="openFlowDrawer()">Request help</button></div>
+        </aside>
+      </div>
+    </section>
+
+    <section id="docs" class="page">
+      <div class="layout">
+        <div class="panel pad">
+          <div class="between"><div><h1 class="h1">Documents / KB</h1><p class="muted">Stable human-readable knowledge. Project Briefs live here as pinned KB documents.</p></div><button class="primary">New document</button></div>
+          <div class="tabs"><button class="active">Pinned</button><button>Reports</button><button>Briefs</button><button>Decisions</button><button>Manuals</button></div>
+          <div class="grid2">
+            <div class="card"><span class="pill green">Pinned Project Brief</span><h2 class="h2">TikHub API Evaluation — Project Brief</h2><p class="muted">Canonical answer to “what is this project?” Includes live accepted state and key open questions.</p><button class="secondary">Open brief</button></div>
+            <div class="card"><span class="pill">Report</span><h2 class="h2">TikHub API Cost Evaluation Report</h2><p class="muted">Draft v2.1 · pending pricing confirmation.</p><button class="secondary">Open report</button></div>
+          </div>
+          <div class="doc-body" style="margin-top:8px">
+            <div class="between"><div><span class="pill green">Project Brief</span><h1>TikHub API Evaluation — Brief</h1></div><button class="secondary">Edit</button></div>
+            <h2>Purpose</h2><p>Evaluate TikHub API coverage, pricing, and procurement feasibility for KOC discovery and content analysis workflows.</p>
+            <h2>Current accepted state</h2><ul><li>Content search APIs are required for candidate discovery.</li><li>Search Video pricing remains unresolved until Wang Fang confirms the baseline.</li><li>The cost model should include conservative and discount scenarios.</li></ul>
+            <h2>Open questions</h2><ul><li>Is $0.003 a long-term discounted price or temporary quote?</li><li>Which endpoints are required for MVP delivery?</li></ul>
+          </div>
+        </div>
+        <aside class="rail"><div class="rail-resize-local" title="Drag the right page handle to resize the rail"></div>
+          <div class="rail-body">
+            <div class="panel pad"><div class="section-title">Context</div><div class="kv"><span>Type</span><b>Project Brief</b></div><div class="kv"><span>Status</span><b>Published with live sections</b></div><div class="kv"><span>Version</span><b>v1.4</b></div></div>
+            <div class="panel pad"><div class="section-title">Related Work</div><div class="list"><div class="item">Cost-model task</div><div class="item">Search Video pricing topic</div></div></div>
+            <div class="panel pad"><div class="section-title">Evidence / Sources</div><div class="list"><div class="item">Pricing table</div><div class="item">Prior flow response</div></div></div>
+            <div class="panel pad"><div class="section-title">AI Assistance</div><div class="small">Proposals only.</div><button class="secondary" style="width:100%;margin-top:6px">Check outdated sections</button><button class="secondary" style="width:100%;margin-top:6px" onclick="openMemoryDrawer()">Preview memory impact</button></div>
+          </div>
+          <div class="rail-cta"><button class="primary" style="width:100%" onclick="openMemoryDrawer()">Request review</button></div>
+        </aside>
+      </div>
+    </section>
+
+    <section id="flow" class="page">
+      <div class="layout">
+        <div class="panel pad">
+          <div class="between"><div><h1 class="h1">Flow Center</h1><p class="muted">Centralized governance for collaboration requests. Default handling still happens in drawers and conversations.</p></div><span class="pill gray">Scoped: TikHub</span></div>
+          <div class="grid3" style="margin-bottom:8px"><div class="card"><div class="muted">Pending</div><div style="font-size:26px;font-weight:850">12</div></div><div class="card"><div class="muted">Due soon</div><div style="font-size:26px;font-weight:850">4</div></div><div class="card"><div class="muted">Memory review</div><div style="font-size:26px;font-weight:850">3</div><div class="small">1 assigned · 1 deferred · 1 awaiting authority</div></div></div>
+          <div class="tabs"><button class="active">Assigned to me</button><button>Initiated by me</button><button>Memory review</button><button>All</button></div>
+          <table class="table">
+            <thead><tr><th>Request</th><th>Type</th><th>Initiator</th><th>Source</th><th>Status</th><th>Risk</th></tr></thead>
+            <tbody>
+              <tr onclick="openFlowDrawer()"><td><b>Confirm Search Video baseline price</b></td><td>Confirm</td><td>Zhang Ting</td><td>My AI → Task</td><td><span class="pill amber">Pending</span></td><td>Medium</td></tr>
+              <tr onclick="openMemoryDrawer()"><td><b>Memory candidate: Search Video baseline</b></td><td>Memory review</td><td>AI</td><td>Flow response</td><td><span class="pill amber">Deferred</span></td><td>High</td></tr>
+              <tr onclick="openMemoryDrawer('noauth')"><td><b>Memory candidate: Discount clause</b></td><td>Memory review</td><td>AI</td><td>Document publish</td><td><span class="pill red">Awaiting authority</span></td><td>High</td></tr>
+              <tr onclick="openMemoryDrawer()"><td><b>Memory candidate: API category scope</b></td><td>Memory review</td><td>AI</td><td>Topic closure</td><td><span class="pill">Review pending</span></td><td>Medium</td></tr>
+              <tr><td><b>Review cost report section 3.2</b></td><td>Review</td><td>Lin</td><td>Document</td><td><span class="pill">In progress</span></td><td>Medium</td></tr>
+            </tbody>
+          </table>
+          </div>
+        <aside class="rail"><div class="rail-resize-local" title="Drag the right page handle to resize the rail"></div>
+          <div class="rail-body">
+            <div class="panel pad"><div class="section-title">Context</div><h2 class="h2">Memory Candidate</h2><span class="pill amber">Deferred</span><div class="kv"><span>Claim</span><b>Use $0.005 as conservative Search Video baseline.</b></div><div class="kv"><span>Authority</span><b>pricing_owner</b></div><div class="kv"><span>Allowed</span><b>review · defer · request authority</b></div></div>
+            <div class="panel pad"><div class="section-title">Related Work</div><div class="list"><div class="item">Pricing confirmation flow</div><div class="item">Cost report section 3.2</div></div></div>
+            <div class="panel pad"><div class="section-title">Evidence / Sources</div><div class="list"><div class="item">Wang Fang verbatim reply</div><div class="item">Vendor quote</div></div></div>
+            <div class="panel pad"><div class="section-title">AI Assistance</div><div class="small">Proposals only.</div><button class="secondary" style="width:100%;margin-top:6px">Explain governance rule</button></div>
+          </div>
+          <div class="rail-cta"><button class="primary" style="width:100%" onclick="openMemoryDrawer()">Review lineage</button></div>
+        </aside>
+      </div>
+    </section>
+  </main>
+</div>
+
+<div class="overlay" id="overlay" onclick="closeAll()"></div>
+
+<aside class="drawer" id="flowDrawer">
+  <div class="drawer-head between"><div><h2 class="h2">Collaboration Request</h2><span class="pill amber">Pending</span></div><button class="iconbtn" onclick="closeAll()">×</button></div>
+  <div class="drawer-body">
+    <div class="card" style="background:#eef4ff"><b>Original human message</b><p>Wang Fang, Search Video seems to have two price versions, $0.005 and $0.003. Could you help confirm which one should be used as the cost-model baseline?</p></div>
+    <div class="card"><div class="section-title">Context</div><div class="kv"><span>Source</span><b>My AI conversation</b></div><div class="kv"><span>Project</span><b>TikHub API Evaluation</b></div><div class="kv"><span>Needed</span><b>Baseline price judgment</b></div><div class="kv"><span>Write-back</span><b>Cost-model task + topic</b></div></div>
+    <div class="card"><div class="section-title">Evidence / Sources</div><div class="list"><div class="item">TikHub pricing table</div><div class="item">Vendor quote record</div><div class="item">Cost-model draft v2.1</div></div></div>
+    <div class="card"><div class="section-title">AI Assistance</div><div class="small">Reply suggestions only. State changes happen through Actions.</div><div class="list" style="margin-top:8px"><div class="item"><div><b>Conditional confirmation</b><div class="muted">Use $0.005; treat $0.003 as discount scenario.</div></div><button class="secondary">Use</button></div><div class="item"><div><b>Request clarification</b><div class="muted">Ask for original quote screenshot.</div></div><button class="secondary">Use</button></div></div></div>
+    <div class="card"><div class="section-title">Reversibility</div><div class="small">If a memory candidate was previously skipped, the accepted flow response keeps a reversible affordance.</div><button class="secondary" style="margin-top:8px" onclick="openMemoryPrompt()">Generate memory candidate</button></div>
+  </div>
+  <div class="drawer-foot"><button class="primary" onclick="openMemoryPrompt()">Accept with condition</button><button class="secondary">Edit reply</button><button class="secondary">Open conversation</button></div>
+</aside>
+
+<aside class="drawer" id="memoryPrompt" style="width:min(430px,96vw)">
+  <div class="drawer-head between"><h2 class="h2">Possible Memory Candidate</h2><button class="iconbtn" onclick="closeAll()">×</button></div>
+  <div class="drawer-body">
+    <div class="card"><b>Flow response accepted.</b><p class="muted">This response contains a possible project memory claim. Memory crystallization is a separate decision.</p></div>
+    <div class="card"><div class="section-title">Proposed claim</div><p>Use $0.005 as conservative Search Video baseline; treat $0.003 as discount scenario.</p></div>
+    <div class="small">Choosing Later creates a deferred memory candidate in Flow Center. Skip is reversible from the accepted flow response. Nothing is silently dropped.</div>
+  </div>
+  <div class="drawer-foot"><button class="primary" onclick="openMemoryDrawer()">Review now</button><button class="secondary" onclick="toast('Deferred to Flow Center Memory Review.');closeAll()">Later</button><button class="secondary" onclick="toast('Skipped. You can regenerate from the accepted flow response.');closeAll()">Skip</button></div>
+</aside>
+
+<aside class="drawer" id="memoryDrawer" style="width:min(700px,96vw)">
+  <div class="drawer-head between"><div><h2 class="h2">Memory Candidate Review</h2><span class="pill amber">Review pending</span></div><button class="iconbtn" onclick="closeAll()">×</button></div>
+  <div class="drawer-body">
+    <div class="warnbox">
+      <div class="between"><b>Compression analysis: 2 warnings flagged</b><span class="method-tag">pattern + semantic</span></div>
+      <ul>
+        <li><b>Temporal qualifier dropped:</b> “for now” <span class="method-tag">rule-based</span></li>
+        <li><b>Conditional clause dropped:</b> “unless procurement confirms it is long-term” <span class="method-tag">AI semantic check</span></li>
+      </ul>
+      <div class="small">No warning does not guarantee faithful distillation. Review the source before accepting.</div>
+      
+    </div>
+    <div class="card"><div class="section-title">Distillation Chain</div><div class="diff"><div class="card old"><b>1. Verbatim source</b><p>“Use $0.005 as the conservative baseline <mark>for now</mark>. $0.003 should be listed as a discount scenario <mark>unless procurement confirms it is long-term</mark>.”</p></div><div class="card new"><b>2. AI extracted claim</b><p>Search Video baseline price should use $0.005; $0.003 is a discount scenario.</p></div></div></div>
+    <div class="card"><div class="section-title">Reviewer Revision</div><div class="kv"><span>Final claim</span><b>For the current TikHub cost model, use $0.005 as conservative Search Video baseline unless procurement confirms $0.003 is long-term.</b></div><div class="kv"><span>Revised by</span><b>Lin Xiaoman</b></div><div class="kv"><span>Based on</span><b>AI distillation from Wang Fang’s reply</b></div><div class="kv"><span>Authority</span><b>pricing_owner required · server enforced</b></div></div>
+    <div class="card"><div class="section-title">Lifecycle audit</div><div class="timeline"><div class="timeline-step"><b>Prompted</b><span>Created from accepted flow response</span></div><div class="timeline-step"><b>Skipped</b><span>User skipped crystallization at first prompt</span></div><div class="timeline-step"><b>Reopened</b><span>Reopened from accepted flow response</span></div><div class="timeline-step"><b>Review</b><span>Current candidate awaiting authority decision</span></div></div></div>
+    <div class="card" id="authorityCard"><div class="section-title">Authority check</div><div class="kv"><span>Can accept</span><b id="canAcceptText">true</b></div><div class="kv"><span>Required</span><b>pricing_owner</b></div><div class="kv"><span>Your roles</span><b id="userRolesText">pricing_owner · project_member</b></div><div class="auth-note" id="authNote">Server-computed allowed actions: accept, revise, reject, defer.</div></div>
+    <div class="card"><div class="section-title">Outbound lineage preview</div><div class="list"><div class="item">Will cite: Cost model v2.1</div><div class="item">Will cite: Report section 3.2</div><div class="item">Will unblock: Search Video pricing topic</div></div></div>
+  </div>
+  <div class="drawer-foot"><button id="acceptMemoryBtn" class="primary" onclick="toast('Memory accepted with inbound and outbound lineage.');closeAll()">Accept memory</button><button class="secondary">Revise claim</button><button class="secondary">Reject</button><button id="requestAuthorityBtn" class="secondary" style="display:none" onclick="toast('Review request sent to pricing owner.')">Request authority review</button></div>
+</aside>
+
+<aside class="drawer" id="editDrawer" style="width:min(640px,96vw)">
+  <div class="drawer-head between"><h2 class="h2">Edit request before sending</h2><button class="iconbtn" onclick="closeAll()">×</button></div>
+  <div class="drawer-body">
+    <div class="row"><span class="muted">To</span><div class="avatar sm">王</div><b>Wang Fang</b><span class="pill">Pricing owner</span></div>
+    <textarea class="codebox" style="height:150px;font-size:12px;line-height:1.7">Wang Fang, Search Video seems to have two price versions, $0.005 and $0.003.
+Could you help confirm which one should be used as the cost-model baseline?</textarea>
+    <div class="card">
+      <div class="section-title">AI-attached context — user controls this package</div>
+      <div class="attach">Pricing table <span class="muted">visible</span><button>×</button></div>
+      <div class="attach">Vendor quote record <span class="muted">visible</span><button>×</button></div>
+      <div class="attach">Cost model draft v2.1 <span class="muted">summary only</span><button>×</button></div>
+      <button class="secondary" style="margin-top:8px">+ Add evidence</button>
+    </div>
+    <div class="card"><div class="kv"><span>Visibility</span><b>Private to Wang Fang</b></div><div class="kv"><span>Write-back</span><b>Cost-model task</b></div></div>
+  </div>
+  <div class="drawer-foot"><button class="primary" onclick="toast('Request sent to Wang Fang.');closeAll()">Send</button><button class="secondary">Save draft</button></div>
+</aside>
+
+<aside class="drawer" id="createDrawer" style="width:min(420px,96vw)">
+  <div class="drawer-head between"><h2 class="h2">Create</h2><button class="iconbtn" onclick="closeAll()">×</button></div>
+  <div class="drawer-body">
+    <p class="small">Only blank-start objects live here. Tasks, topics, flow requests, and memory candidates should be born from context.</p>
+    <div class="list"><div class="item"><span class="dot"></span><div><b>New conversation</b><div class="muted">DM, room, or topic shell</div></div></div><div class="item"><span class="dot green"></span><div><b>New document</b><div class="muted">Report, brief, KB entry, decision record</div></div></div><div class="item"><span class="dot amber"></span><div><b>Upload file</b><div class="muted">Source document or evidence</div></div></div><div class="item"><span class="dot violet"></span><div><b>New project scope</b><div class="muted">Create collaboration boundary, not a page</div></div></div></div>
+  </div>
+</aside>
+
+<button class="fab" onclick="toggleSettings()">Design Parameters</button>
+<aside class="settings" id="settings">
+  <div class="drawer-head between"><h2 class="h2">Design Parameters</h2><button class="iconbtn" onclick="toggleSettings()">×</button></div>
+  <div class="drawer-body">
+    <div class="control"><label>Primary</label><input type="color" id="cPrimary" value="#4f6896"><span></span></div>
+    <div class="control"><label>Background</label><input type="color" id="cBg" value="#fafdff"><span></span></div>
+    <div class="control"><label>Surface</label><input type="color" id="cSurface" value="#ffffff"><span></span></div>
+    <div class="control"><label>Text</label><input type="color" id="cText" value="#0f172a"><span></span></div>
+    <div class="control"><label>Radius</label><input type="range" id="rRadius" min="4" max="24" value="8"><span id="vRadius">8</span></div>
+    <div class="control"><label>Gap</label><input type="range" id="rGap" min="4" max="28" value="8"><span id="vGap">8</span></div>
+    <div class="control"><label>Padding</label><input type="range" id="rPad" min="8" max="28" value="12"><span id="vPad">12</span></div>
+    <div class="control"><label>Font</label><input type="range" id="rFont" min="11" max="16" value="12"><span id="vFont">12</span></div>
+    <div class="control"><label>Sidebar</label><input type="range" id="rSidebar" min="180" max="280" value="221"><span id="vSidebar">221</span></div>
+    <div class="control"><label>Right rail</label><input type="range" id="rRight" min="300" max="460" value="401"><span id="vRight">401</span></div>
+    <div class="row"><button class="primary" onclick="copyParams()">Copy parameters</button><button class="secondary" onclick="resetParams()">Reset</button></div>
+    <textarea id="paramBox" class="codebox"></textarea>
+    <div class="row"><button class="secondary" onclick="applyFromBox()">Apply pasted JSON</button><button class="secondary" onclick="downloadHTML()">Download current HTML</button></div>
+  </div>
+</aside>
+<div class="toast" id="toast"></div>
+
+<script>
+const defaultParams={"primary":"#4f6896","bg":"#fafdff","surface":"#ffffff","text":"#0f172a","radius":8,"gap":8,"pad":12,"font":12,"sidebar":221,"right":401};
+let params={...defaultParams};const root=document.documentElement;
+function rgba(hex,a){const n=parseInt(hex.slice(1),16);return`rgba(${(n>>16)&255},${(n>>8)&255},${n&255},${a})`}
+function apply(){root.style.setProperty('--primary',params.primary);root.style.setProperty('--soft',rgba(params.primary,.10));root.style.setProperty('--bg',params.bg);root.style.setProperty('--surface',params.surface);root.style.setProperty('--text',params.text);root.style.setProperty('--radius',params.radius+'px');root.style.setProperty('--gap',params.gap+'px');root.style.setProperty('--pad',params.pad+'px');root.style.setProperty('--font',params.font+'px');root.style.setProperty('--sidebar',navCollapsed?'64px':params.sidebar+'px');root.style.setProperty('--right',params.right+'px');cPrimary.value=params.primary;cBg.value=params.bg;cSurface.value=params.surface;cText.value=params.text;rRadius.value=params.radius;vRadius.textContent=params.radius;rGap.value=params.gap;vGap.textContent=params.gap;rPad.value=params.pad;vPad.textContent=params.pad;rFont.value=params.font;vFont.textContent=params.font;rSidebar.value=params.sidebar;vSidebar.textContent=params.sidebar;rRight.value=params.right;vRight.textContent=params.right;paramBox.value=JSON.stringify(params,null,2)}
+function bind(id,key,type='num'){document.getElementById(id).oninput=e=>{params[key]=type==='color'?e.target.value:+e.target.value;apply()}}
+bind('cPrimary','primary','color');bind('cBg','bg','color');bind('cSurface','surface','color');bind('cText','text','color');bind('rRadius','radius');bind('rGap','gap');bind('rPad','pad');bind('rFont','font');bind('rSidebar','sidebar');bind('rRight','right');
+function showPage(id){document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));document.getElementById(id).classList.add('active');document.querySelectorAll('.nav button[data-page]').forEach(b=>b.classList.toggle('active',b.dataset.page===id))}
+document.querySelectorAll('.nav button[data-page]').forEach(b=>b.onclick=()=>showPage(b.dataset.page));
+function closeAll(){document.querySelectorAll('.drawer').forEach(d=>d.classList.remove('open'));overlay.classList.remove('open')}
+function openDrawer(id){closeAll();document.getElementById(id).classList.add('open');overlay.classList.add('open')}
+function openFlowDrawer(){openDrawer('flowDrawer')} function openMemoryPrompt(){openDrawer('memoryPrompt')} 
+function openMemoryDrawer(mode){
+  openDrawer('memoryDrawer');
+  const noauth = mode === 'noauth';
+  if (document.getElementById('acceptMemoryBtn')) {
+    acceptMemoryBtn.disabled = noauth;
+    acceptMemoryBtn.classList.toggle('auth-disabled', noauth);
+    requestAuthorityBtn.style.display = noauth ? 'inline-block' : 'none';
+    canAcceptText.textContent = noauth ? 'false' : 'true';
+    userRolesText.textContent = noauth ? 'project_member' : 'pricing_owner · project_member';
+    authNote.textContent = noauth 
+      ? 'You lack pricing_owner authority for this scope. Server-computed allowed actions: request_review, comment, defer, skip.' 
+      : 'Server-computed allowed actions: accept, revise, reject, defer.';
+  }
+}
+function openEdit(){openDrawer('editDrawer')} function openCreate(){openDrawer('createDrawer')}
+function toggleSettings(){settings.classList.toggle('open')}
+function copyParams(){paramBox.value=JSON.stringify(params,null,2);navigator.clipboard&&navigator.clipboard.writeText(paramBox.value);toast('Parameters copied.')}
+function resetParams(){params={...defaultParams};apply();toast('Parameters reset.')}
+function applyFromBox(){try{params={...params,...JSON.parse(paramBox.value)};apply();toast('Parameters applied.')}catch(e){toast('Invalid JSON.')}}
+function downloadHTML(){const blob=new Blob([document.documentElement.outerHTML],{type:'text/html;charset=utf-8'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='graphflow_v062_current.html';a.click()}
+function toast(t){const el=document.getElementById('toast');el.textContent=t;el.classList.add('show');setTimeout(()=>el.classList.remove('show'),2200)}
+function setConvMode(mode){const p=document.getElementById('conversationPanel');p.className='panel chat-shell mode-'+mode;if(mode==='dm'){convTitle.textContent='Wang Fang';convMode.textContent='DM';convSub.textContent='Private conversation · durable human context';railContext.innerHTML='<div class="kv"><span>Type</span><b>Direct message</b></div><div class="kv"><span>Visibility</span><b>Private</b></div><div class="kv"><span>Shared</span><b>3 objects</b></div>'}if(mode==='room'){convTitle.textContent='TikHub / General discussion';convMode.textContent='Room';convSub.textContent='Project room · ambient synchronization';railContext.innerHTML='<div class="kv"><span>Type</span><b>Room</b></div><div class="kv"><span>Members</span><b>6</b></div><div class="kv"><span>Role</span><b>Sync, then create topics</b></div>'}if(mode==='topic'){convTitle.textContent='Search Video pricing';convMode.textContent='Topic';convSub.textContent='Focused issue context · visibility: topic participants';railContext.innerHTML='<div class="kv"><span>Type</span><b>Topic</b></div><div class="kv"><span>Status</span><b>Waiting</b></div><div class="kv"><span>Visibility</span><b>Topic participants</b></div>'}}
+
+let navCollapsed=false;
+function toggleNavCollapse(){
+  navCollapsed=!navCollapsed;
+  document.getElementById('appRoot').classList.toggle('nav-collapsed', navCollapsed);
+  document.documentElement.style.setProperty('--sidebar', navCollapsed ? '64px' : params.sidebar+'px');
+}
+function cycleRailWidth(){
+  const widths=[320,360,401,440];
+  const current=params.right;
+  const next=widths[(widths.findIndex(w=>w>=current)+1)%widths.length] || 401;
+  params.right=next;
+  apply();
+  toast('Right rail width: '+next+'px');
+}
+function startResize(kind,e){
+  e.preventDefault();
+  document.body.classList.add('resizing');
+  const onMove=(ev)=>{
+    if(kind==='left' && !navCollapsed){
+      const w=Math.max(180,Math.min(320,ev.clientX));
+      params.sidebar=w;
+      document.documentElement.style.setProperty('--sidebar',w+'px');
+      if (typeof vSidebar!=='undefined') { rSidebar.value=w; vSidebar.textContent=w; }
+    }
+    if(kind==='right'){
+      const w=Math.max(300,Math.min(520,window.innerWidth-ev.clientX-16));
+      params.right=w;
+      document.documentElement.style.setProperty('--right',w+'px');
+      if (typeof vRight!=='undefined') { rRight.value=w; vRight.textContent=w; }
+    }
+  };
+  const onUp=()=>{
+    document.body.classList.remove('resizing');
+    window.removeEventListener('mousemove',onMove);
+    window.removeEventListener('mouseup',onUp);
+    apply();
+  };
+  window.addEventListener('mousemove',onMove);
+  window.addEventListener('mouseup',onUp);
+}
+document.addEventListener('DOMContentLoaded',()=>{
+  const l=document.getElementById('leftResize');
+  const r=document.getElementById('rightResize');
+  if(l) l.addEventListener('mousedown',e=>startResize('left',e));
+  if(r) r.addEventListener('mousedown',e=>startResize('right',e));
+});
+
+apply();
+</script>
+</body>
+</html>
