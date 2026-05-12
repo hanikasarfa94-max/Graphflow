@@ -1,77 +1,80 @@
-/* WorkGraph design tokens — per DESIGN.md v2 (cool-clinical / blueprint).
-   Type: Instrument Serif (display), General Sans (UI), JetBrains Mono
-   (graph labels, IDs, code). Surface: blueprint paper, near-white with
-   blue-tinted grid texture. Accent: single blue. No purple/indigo, no
-   gratuitous gradients except the system-pulse hero. */
+/* WorkGraph design tokens — v3 (paper + accent + violet, post v0.6.2 pivot).
+   Spec: DESIGN.md at repo root (rewritten 2026-05-12).
+   Type: Instrument Serif (display), General Sans (UI), JetBrains Mono.
 
-@import url("https://api.fontshare.com/v2/css?f[]=general-sans@400,600&display=swap");
-@import url("https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&display=swap");
-/* Instrument Serif — display only (hero, node-detail titles). Loaded via
-   Bunny Fonts so we keep the same @import pattern as General Sans and
-   don't cross the Google telemetry line for a purely decorative face. */
+   Migration policy (2026-05-12):
+   * Token NAMES are preserved across v2 → v3 wherever code still
+     references them. Values swap to the v3 palette. New tokens are
+     additive (--wg-ai, --wg-paper-tint, --wg-radius-xs, etc.).
+   * Legacy aliases (--wg-radius, --wg-radius-sm, --wg-shadow,
+     --wg-motion-fast, --wg-motion-base, --wg-paper-grain) are kept
+     so the 88 callsites that reference them don't break on swap.
+     They map to their v3 nearest equivalents.
+   * Surface texture: blueprint-grid body::before is REMOVED per
+     DESIGN.md v3 "Drop paper grain + blueprint grid". A single
+     soft radial wash on body replaces it. Less is more. */
+
+@import url("https://api.fontshare.com/v2/css?f[]=general-sans@400,500,600&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap");
 @import url("https://fonts.bunny.net/css2?family=Instrument+Serif:ital@0;1&display=swap");
 
 :root {
-  /* Surface + ink — blueprint paper. Cool whites with a blue undertone
-     so the graph + the chrome feel of the same instrument family.
-     Keys align with DESIGN.md §Color (v2 = blue/white pass).
+  /* ---------- Surface + ink ---------- */
+  --wg-paper: #F7F6F2;             /* Warm paper neutral */
+  --wg-paper-tint: #FBFAF7;        /* Gradient top-stop */
+  --wg-surface: #FFFFFF;
+  --wg-surface-raised: #FFFFFF;
+  --wg-surface-sunk: #F1EFEA;      /* Scope band, nav rails */
 
-     Migration note 2026-04-26: swapped from terracotta/warm-industrial
-     (DESIGN.md v1) to blue/white/clinical per user direction. Token
-     NAMES unchanged so component code stays untouched — only values
-     shift. The original v1 palette is in git history if we ever need
-     to compare. */
-  --wg-paper: #f5f8ff;
-  --wg-surface: #ffffff;
-  --wg-surface-raised: #ffffff;
-  --wg-surface-sunk: #f3f7ff;
-  --wg-ink: #172033;
-  --wg-ink-soft: #667085;
-  --wg-ink-faint: #9aa8bd;
+  --wg-ink: #14171F;               /* Near-black, cool tone */
+  --wg-ink-soft: #5A6172;
+  --wg-ink-faint: #95A0B5;
+  --wg-line: #E4E2DC;              /* Warm taupe-gray hairlines */
+  --wg-line-soft: #EFEDE7;
 
-  /* Single accent — blue. Brand colour, primary buttons, decision-
-     crystallization moment, accent rings on focus. */
-  --wg-accent: #2563eb;
-  --wg-accent-soft: rgba(37, 99, 235, 0.08);
-  --wg-accent-ring: rgba(37, 99, 235, 0.24);
+  /* ---------- Accent — Blue (canonical / primary) ---------- */
+  --wg-accent: #2864E8;
+  --wg-accent-soft: rgba(40, 100, 232, 0.08);
+  --wg-accent-ring: rgba(40, 100, 232, 0.24);
+  --wg-accent-hover: #1F52C7;
 
-  /* Checkpoint / manual_review state — clean amber. */
-  --wg-amber: #d97706;
-  --wg-amber-soft: rgba(217, 119, 6, 0.1);
+  /* ---------- Secondary — Violet (AI-proposed / pre-canonical) ---------- */
+  --wg-ai: #6E59E8;
+  --wg-ai-soft: rgba(110, 89, 232, 0.10);
+  --wg-ai-ring: rgba(110, 89, 232, 0.22);
+  --wg-ai-hover: #5B47D0;
 
-  /* Success — clean green. */
-  --wg-ok: #16a34a;
-  --wg-ok-soft: rgba(22, 163, 74, 0.1);
+  /* ---------- Status colours ---------- */
+  --wg-ok: #1F9D7A;
+  --wg-ok-soft: rgba(31, 157, 122, 0.10);
 
-  /* Danger — reserved; use sparingly. Irreversible actions only. */
-  --wg-danger: #dc2626;
+  --wg-amber: #D08A1E;
+  --wg-amber-soft: rgba(208, 138, 30, 0.12);
 
-  /* Hairlines + dividers — cool blue-gray instead of warm beige. */
-  --wg-line: #d9e3f4;
-  --wg-line-soft: #eef3fb;
+  --wg-danger: #C2362B;
+  --wg-danger-soft: rgba(194, 54, 43, 0.10);
 
-  /* Border-radius scale — chip 12px, card 18px, hero/modal 26px, pill full.
-     Variation signals hierarchy (DESIGN.md §Layout). Bumped 2026-04-27
-     to match html2 prototype (sidebar-first blue/white surface): the
-     softer corner radius is what makes the layout feel like a paper
-     blueprint rather than a Material slab. Legacy aliases --wg-radius
-     / --wg-radius-sm stay as-is for existing callers. */
-  --wg-radius-sm: 12px;
-  --wg-radius-md: 18px;
-  --wg-radius-lg: 26px;
+  /* ---------- Border radius (v3 scale) ---------- */
+  --wg-radius-xs: 8px;       /* chips, tags, badges */
+  --wg-radius-sm: 12px;      /* buttons, inputs, small cards (88 callsites — preserved) */
+  --wg-radius-md: 16px;      /* cards, panels (down 2px from v2's 18px) */
+  --wg-radius-lg: 20px;      /* primary cards, drawer panels */
+  --wg-radius-xl: 28px;      /* hero cards, modals */
   --wg-radius-full: 9999px;
-  --wg-radius: 18px;
+  /* Legacy alias — code still uses `--wg-radius` directly (216 callsites).
+     Resolves to the md scale per v3. */
+  --wg-radius: 16px;
   --wg-dot: 4px;
 
-  /* Elevation — blue-tinted shadows that sit on the cool-white surface
-     without muddying it. The tints come from html2; layered so cards
-     can opt into a heavier resting elevation when they need to read as
-     "sheet of paper" rather than "card on grid." */
-  --wg-shadow-sm: 0 4px 12px rgba(30, 64, 175, 0.05);
-  --wg-shadow: 0 8px 22px rgba(30, 64, 175, 0.055);
-  --wg-shadow-lg: 0 18px 45px rgba(30, 64, 175, 0.08);
+  /* ---------- Elevation — accent-tinted shadows ---------- */
+  --wg-shadow-xs: 0 1px 2px rgba(20, 23, 31, 0.04);
+  --wg-shadow-sm: 0 4px 12px rgba(40, 100, 232, 0.06);
+  --wg-shadow: 0 4px 12px rgba(40, 100, 232, 0.06);    /* Legacy alias = --wg-shadow-sm */
+  --wg-shadow-md: 0 8px 24px rgba(40, 100, 232, 0.08);
+  --wg-shadow-lg: 0 16px 48px rgba(40, 100, 232, 0.10);
+  --wg-shadow-xl: 0 24px 72px rgba(40, 100, 232, 0.12);
 
-  /* Spacing scale (4px base). */
+  /* ---------- Spacing ---------- */
   --wg-s-1: 4px;
   --wg-s-2: 8px;
   --wg-s-3: 12px;
@@ -79,112 +82,136 @@
   --wg-s-5: 24px;
   --wg-s-6: 32px;
   --wg-s-7: 48px;
+  --wg-s-8: 64px;
+  --wg-s-9: 96px;
 
-  /* Type stack — Instrument Serif for display only; General Sans for
-     UI; JetBrains Mono for IDs, timestamps, eyebrows. No Inter. */
+  /* ---------- Type stack ---------- */
   --wg-font-display:
     "Instrument Serif", ui-serif, Georgia, "Times New Roman", serif;
   --wg-font-sans:
     "General Sans", ui-sans-serif, system-ui, -apple-system, sans-serif;
   --wg-font-mono:
     "JetBrains Mono", ui-monospace, "Cascadia Code", "SF Mono", Menlo, monospace;
+  /* Legacy aliases — a few v2 files reference these directly. */
+  --wg-font-serif: var(--wg-font-display);
+  --wg-font-body: var(--wg-font-sans);
 
-  /* Motion tokens — tokens only in this pass. Component-level motion
-     (the 5 load-bearing moments) lands in a later phase. */
+  /* ---------- Type scale ---------- */
+  --wg-fs-display: 56px;     /* Hero display, serif only, one per page */
+  --wg-fs-hero: 40px;        /* H1 on inner pages */
+  --wg-fs-h1: 28px;          /* down from v2's 32px — tighter rhythm */
+  --wg-fs-h2: 20px;          /* up from v2's 18px */
+  --wg-fs-h3: 16px;          /* up from v2's 14px */
+  --wg-fs-body: 14px;        /* up from v2's 13px — comfortable density */
+  --wg-fs-label: 13px;
+  --wg-fs-caption: 11px;
+  --wg-lh-display: 1.05;
+  --wg-lh-tight: 1.25;
+  --wg-lh-normal: 1.55;
+
+  /* ---------- Motion ---------- */
   --wg-ease-enter: cubic-bezier(0.2, 0.8, 0.2, 1);
   --wg-ease-exit: cubic-bezier(0.4, 0, 1, 1);
   --wg-ease-move: cubic-bezier(0.4, 0, 0.2, 1);
+  --wg-ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
   --wg-dur-micro: 80ms;
   --wg-dur-short: 180ms;
   --wg-dur-medium: 320ms;
   --wg-dur-long: 560ms;
-  /* Legacy aliases kept for callers that already reference them. */
+  /* Legacy aliases (2 callsites — ConsoleShell.tsx + AgentLogDrawer.tsx). */
   --wg-motion-fast: 120ms ease-out;
   --wg-motion-base: 200ms ease-out;
 
-  /* Type scale — single source of truth. Numbers match DESIGN.md.
-     Hero + h1 bumped 2026-04-27 to match html2's larger-display rhythm
-     (54/38 in the mockup; we land slightly tighter to keep
-     existing layouts intact). Body/label/caption unchanged so dense
-     surfaces (tables, lists) keep their ratios. */
-  --wg-fs-hero: 48px;
-  --wg-fs-h1: 32px;
-  --wg-fs-h2: 18px;
-  --wg-fs-h3: 14px;
-  --wg-fs-body: 13px;
-  --wg-fs-label: 12px;
-  --wg-fs-caption: 11px;
-  --wg-lh-tight: 1.25;
-  --wg-lh-normal: 1.5;
-  --wg-lh-display: 1.1;
-
-  /* Background texture — blueprint grid + dot pattern instead of paper
-     noise. The grid signals "structured surface, this is a graph
-     instrument" without going full graph paper. 36px square grid +
-     72px-spaced anchor dots, ~5% opacity blue lines. Static SVG —
-     no animation, no reduced-motion concern. Token name kept from
-     v1 so html/body styles below don't need to change. */
-  --wg-paper-grain: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='72' height='72'><g stroke='rgba(37,99,235,0.045)' stroke-width='1' fill='none'><path d='M0 36H72M36 0V72'/><path d='M0 0H72M0 0V72M72 0V72M0 72H72' opacity='0.6'/></g><circle cx='0' cy='0' r='1.2' fill='rgba(37,99,235,0.08)'/></svg>");
+  /* ---------- Surface texture ---------- */
+  /* Blueprint grid REMOVED in v3 (DESIGN.md: "Drop paper grain + blueprint
+     grid; single radial wash"). The token name is kept as an empty value
+     so any code still referencing it short-circuits silently. */
+  --wg-paper-grain: none;
 }
 
-/* Dark mode (v2) — deep navy surfaces with brighter blue accents.
-   Designed independently rather than inverted (per DESIGN.md principle).
-   The v1 dark palette was warm-charcoal terracotta; this one is
-   night-blueprint: deep navy paper, off-white ink, brighter blue and
-   green accents that read on dark backgrounds. Both the media query
-   and the [data-theme="dark"] selector are covered so a future manual
-   toggle has a foundation. Component-level dark-mode polish stays a
-   separate phase. */
+/* ---------- Dark mode — authored independently, not inverted ---------- */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --wg-paper: #0b1224;
-    --wg-surface: #111a2e;
-    --wg-surface-raised: #16213a;
-    --wg-surface-sunk: #0a1020;
+    --wg-paper: #0D1018;
+    --wg-paper-tint: #11151F;
+    --wg-surface: #141823;
+    --wg-surface-raised: #1A1F2D;
+    --wg-surface-sunk: #0A0D14;
 
-    --wg-ink: #e6ecf7;
-    --wg-ink-soft: #a3afc4;
-    --wg-ink-faint: #6d7a8f;
-    --wg-line: #1e2a44;
-    --wg-line-soft: #182039;
+    --wg-ink: #ECEEF3;
+    --wg-ink-soft: #A2A9BA;
+    --wg-ink-faint: #6A7287;
+    --wg-line: #1F2533;
+    --wg-line-soft: #181C28;
 
-    --wg-accent: #3b82f6;
-    --wg-accent-soft: rgba(59, 130, 246, 0.18);
-    --wg-accent-ring: rgba(59, 130, 246, 0.35);
+    --wg-accent: #4F86F3;
+    --wg-accent-soft: rgba(79, 134, 243, 0.16);
+    --wg-accent-ring: rgba(79, 134, 243, 0.32);
+    --wg-accent-hover: #6C9BFB;
 
-    --wg-amber: #f59e0b;
-    --wg-amber-soft: rgba(245, 158, 11, 0.18);
+    --wg-ai: #9582F3;
+    --wg-ai-soft: rgba(149, 130, 243, 0.18);
+    --wg-ai-ring: rgba(149, 130, 243, 0.30);
+    --wg-ai-hover: #A998F5;
 
-    --wg-ok: #22c55e;
-    --wg-ok-soft: rgba(34, 197, 94, 0.18);
+    --wg-ok: #2BBF8E;
+    --wg-ok-soft: rgba(43, 191, 142, 0.18);
 
-    --wg-danger: #ef4444;
+    --wg-amber: #E8A53E;
+    --wg-amber-soft: rgba(232, 165, 62, 0.20);
+
+    --wg-danger: #E25B4F;
+    --wg-danger-soft: rgba(226, 91, 79, 0.18);
+
+    /* Dark-mode shadows — neutral, not accent-tinted (the accent ring
+       would compete with focus states on dark surfaces). */
+    --wg-shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.20);
+    --wg-shadow-sm: 0 4px 12px rgba(0, 0, 0, 0.28);
+    --wg-shadow: 0 4px 12px rgba(0, 0, 0, 0.28);
+    --wg-shadow-md: 0 8px 24px rgba(0, 0, 0, 0.32);
+    --wg-shadow-lg: 0 16px 48px rgba(0, 0, 0, 0.36);
+    --wg-shadow-xl: 0 24px 72px rgba(0, 0, 0, 0.40);
   }
 }
 
 [data-theme="dark"] {
-  --wg-paper: #0b1224;
-  --wg-surface: #111a2e;
-  --wg-surface-raised: #16213a;
-  --wg-surface-sunk: #0a1020;
+  --wg-paper: #0D1018;
+  --wg-paper-tint: #11151F;
+  --wg-surface: #141823;
+  --wg-surface-raised: #1A1F2D;
+  --wg-surface-sunk: #0A0D14;
 
-  --wg-ink: #e6ecf7;
-  --wg-ink-soft: #a3afc4;
-  --wg-ink-faint: #6d7a8f;
-  --wg-line: #1e2a44;
-  --wg-line-soft: #182039;
+  --wg-ink: #ECEEF3;
+  --wg-ink-soft: #A2A9BA;
+  --wg-ink-faint: #6A7287;
+  --wg-line: #1F2533;
+  --wg-line-soft: #181C28;
 
-  --wg-accent: #3b82f6;
-  --wg-accent-soft: rgba(59, 130, 246, 0.18);
-  --wg-accent-ring: rgba(59, 130, 246, 0.35);
+  --wg-accent: #4F86F3;
+  --wg-accent-soft: rgba(79, 134, 243, 0.16);
+  --wg-accent-ring: rgba(79, 134, 243, 0.32);
+  --wg-accent-hover: #6C9BFB;
 
-  --wg-amber: #f59e0b;
-  --wg-amber-soft: rgba(245, 158, 11, 0.18);
+  --wg-ai: #9582F3;
+  --wg-ai-soft: rgba(149, 130, 243, 0.18);
+  --wg-ai-ring: rgba(149, 130, 243, 0.30);
+  --wg-ai-hover: #A998F5;
 
-  --wg-ok: #22c55e;
-  --wg-ok-soft: rgba(34, 197, 94, 0.18);
+  --wg-ok: #2BBF8E;
+  --wg-ok-soft: rgba(43, 191, 142, 0.18);
 
-  --wg-danger: #ef4444;
+  --wg-amber: #E8A53E;
+  --wg-amber-soft: rgba(232, 165, 62, 0.20);
+
+  --wg-danger: #E25B4F;
+  --wg-danger-soft: rgba(226, 91, 79, 0.18);
+
+  --wg-shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.20);
+  --wg-shadow-sm: 0 4px 12px rgba(0, 0, 0, 0.28);
+  --wg-shadow: 0 4px 12px rgba(0, 0, 0, 0.28);
+  --wg-shadow-md: 0 8px 24px rgba(0, 0, 0, 0.32);
+  --wg-shadow-lg: 0 16px 48px rgba(0, 0, 0, 0.36);
+  --wg-shadow-xl: 0 24px 72px rgba(0, 0, 0, 0.40);
 }
 
 * {
@@ -195,57 +222,32 @@ html,
 body {
   margin: 0;
   padding: 0;
-  /* Layered surface — radial accents at top corners + horizontal wash
-     to keep the eye moving from sidebar → main without a flat slab.
-     Tokens above keep the colour values centralised; this rule just
-     composes them. */
+  /* Single radial wash from top-left, fading to paper. Replaces v2's
+     three-layer gradient + blueprint grid. The product reads as "paper,
+     considered" instead of "graph product, look it's a grid." */
   background-color: var(--wg-paper);
   background-image:
-    radial-gradient(circle at 18% 0, rgba(37, 99, 235, 0.10), transparent 32%),
-    radial-gradient(circle at 82% 8%, rgba(14, 165, 233, 0.08), transparent 30%),
-    linear-gradient(90deg, #ffffff 0%, var(--wg-paper) 48%, #eef5ff 100%);
+    radial-gradient(circle at 18% 0%, rgba(40, 100, 232, 0.06), transparent 38%),
+    linear-gradient(180deg, var(--wg-paper-tint) 0%, var(--wg-paper) 60%);
   background-attachment: fixed;
   color: var(--wg-ink);
   font-family: var(--wg-font-sans);
   font-weight: 400;
-  font-size: 15px;
-  line-height: 1.55;
+  font-size: var(--wg-fs-body);
+  line-height: var(--wg-lh-normal);
+  font-feature-settings: "tnum" 1;
 }
 
-/* Blueprint grid overlay — sits behind everything, fades out in the
-   bottom half so dense content stays legible. Static SVG-equivalent
-   via gradients; no animation, no a11y impact. */
-body::before {
-  content: "";
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  z-index: -1;
-  background-image:
-    linear-gradient(rgba(37, 99, 235, 0.04) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(37, 99, 235, 0.04) 1px, transparent 1px),
-    radial-gradient(circle at 18px 18px, rgba(37, 99, 235, 0.07) 1.2px, transparent 1.4px);
-  background-size: 36px 36px, 36px 36px, 72px 72px;
-  -webkit-mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 0.85), rgba(0, 0, 0, 0.18));
-  mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 0.85), rgba(0, 0, 0, 0.18));
-}
-
+/* Dark-mode body wash. */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) body {
     background-image:
-      radial-gradient(circle at 18% 0, rgba(59, 130, 246, 0.18), transparent 30%),
-      radial-gradient(circle at 80% 8%, rgba(14, 165, 233, 0.14), transparent 30%),
-      linear-gradient(180deg, #0a1326 0%, var(--wg-paper) 60%);
-  }
-  :root:not([data-theme="light"]) body::before {
-    background-image:
-      linear-gradient(rgba(255, 255, 255, 0.04) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(255, 255, 255, 0.04) 1px, transparent 1px),
-      radial-gradient(circle at 18px 18px, rgba(56, 189, 248, 0.10) 1.2px, transparent 1.4px);
+      radial-gradient(circle at 18% 0%, rgba(79, 134, 243, 0.14), transparent 36%),
+      linear-gradient(180deg, var(--wg-paper-tint) 0%, var(--wg-paper) 60%);
   }
 }
 
-/* Dot motif — 4px filled circle, used at graph nodes, bullets, status. */
+/* Dot motif — 4px filled circle. Used at graph nodes, bullets, status. */
 .wg-dot {
   display: inline-block;
   width: var(--wg-dot);
@@ -254,66 +256,34 @@ body::before {
   background: var(--wg-accent);
 }
 
-/* Pulse — used on the active graph node during agent runs. */
+/* ============================================================
+   Motion — 5 load-bearing moments per DESIGN.md v3 §Motion.
+   Each opt-in via class. Reduced-motion respected at the bottom.
+   ============================================================ */
+
+/* Pulse — active graph node during agent runs. (Pre-v3, kept.) */
 @keyframes wg-pulse {
-  0% {
-    box-shadow: 0 0 0 0 var(--wg-accent-ring);
-  }
-  70% {
-    box-shadow: 0 0 0 6px rgba(37, 99, 235, 0);
-  }
-  100% {
-    box-shadow: 0 0 0 0 rgba(37, 99, 235, 0);
-  }
+  0%   { box-shadow: 0 0 0 0 var(--wg-accent-ring); }
+  70%  { box-shadow: 0 0 0 6px rgba(40, 100, 232, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(40, 100, 232, 0); }
 }
+.wg-pulse { animation: wg-pulse 1.6s ease-out infinite; }
 
-.wg-pulse {
-  animation: wg-pulse 1.6s ease-out infinite;
-}
-
-/* Fade-in for graph nodes entering the scene. Opacity ONLY — never touch
-   `transform` here. React Flow sets an inline `transform: translate(...)`
-   to position each node, and a keyframe animating `transform` will
-   override that forever (animations win over inline for animated
-   properties, and fill-mode=both keeps the final animated state). That
-   pins every node to translateY(0) and all cards pile at one spot. */
-@keyframes wg-fade-in {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
-}
-
-.wg-fade-in {
-  animation: wg-fade-in 360ms ease-out both;
-}
+/* Fade-in for graph nodes entering. Opacity ONLY — never touch
+   transform here. React Flow sets inline transform for node position;
+   animating transform pins every node to the same origin. (v2 lesson,
+   re-asserted in DESIGN.md v3 restraint rules.) */
+@keyframes wg-fade-in { from { opacity: 0; } to { opacity: 1; } }
+.wg-fade-in { animation: wg-fade-in 360ms ease-out both; }
 
 /* Flow-dash — animates dashed edges so work feels in-flight. */
-@keyframes wg-dash-flow {
-  to {
-    stroke-dashoffset: -12;
-  }
-}
-
+@keyframes wg-dash-flow { to { stroke-dashoffset: -12; } }
 .wg-edge-flow {
   stroke-dasharray: 4 4;
   animation: wg-dash-flow 1.2s linear infinite;
 }
 
-/* Stroke-draw — used to sketch the canonical graph preview on mount. */
-@keyframes wg-stroke-draw {
-  from {
-    stroke-dashoffset: var(--wg-draw-len, 200);
-  }
-  to {
-    stroke-dashoffset: 0;
-  }
-}
-
-/* React Flow edge animation — upgrade the default blue stroke to our accent
-   and keep the animated dash flowing at a pace that doesn't distract. */
+/* React Flow edge animation — accent stroke + animated dash. */
 .react-flow__edge-path {
   stroke: var(--wg-ink-faint);
   stroke-width: 1.5;
@@ -324,20 +294,91 @@ body::before {
   animation: wg-dash-flow 0.9s linear infinite;
 }
 
-/* Nodes fade in when the graph first paints — makes the arrival feel
-   composed, not a flashbulb. DO NOT add `transition: transform` here —
-   React Flow sets inline `transform: translate(...)` for node position
-   and a CSS transition on that fights RF's render cycle, leaving every
-   node stuck mid-animation at the same interpolated position (cards
-   pile). Likewise, never use `transform` in a :hover rule — it replaces
-   the positioning transform with translateY(-1px), snapping nodes to
-   the origin on hover. Use box-shadow for hover feedback instead. */
 .react-flow__node {
   animation: wg-fade-in 320ms ease-out both;
   transition: box-shadow 200ms ease-out;
 }
 .react-flow__node:hover {
-  box-shadow: 0 4px 12px rgba(15, 14, 13, 0.08);
+  box-shadow: var(--wg-shadow-md);
+}
+
+/* MOTION MOMENT 1 — ⚡ Decision crystallization.
+   Blue ring pulse + scale-up. Once, on mount, never on replay. */
+@keyframes wg-decision-crystallize {
+  0%   { transform: scale(0.97); box-shadow: 0 0 0 0 var(--wg-accent-ring); }
+  60%  { transform: scale(1);    box-shadow: 0 0 0 8px rgba(40, 100, 232, 0); }
+  100% { transform: scale(1);    box-shadow: 0 0 0 0 rgba(40, 100, 232, 0); }
+}
+.wg-motion-crystallize {
+  animation: wg-decision-crystallize var(--wg-dur-long) var(--wg-ease-enter) both;
+  transform-origin: left center;
+  will-change: transform, box-shadow;
+}
+
+/* MOTION MOMENT 2 — 🧬 Memory acceptance.
+   Mint ring sweep + 0.97 → 1.0 scale on the proposed atom card when
+   it moves review_pending → accepted in MemoryReviewDrawer. */
+@keyframes wg-memory-accept {
+  0%   { transform: scale(0.97); box-shadow: 0 0 0 0 var(--wg-ok-soft); }
+  60%  { transform: scale(1);    box-shadow: 0 0 0 10px rgba(31, 157, 122, 0); }
+  100% { transform: scale(1);    box-shadow: 0 0 0 0 rgba(31, 157, 122, 0); }
+}
+.wg-motion-memory-accept {
+  animation: wg-memory-accept var(--wg-dur-long) var(--wg-ease-enter) both;
+  will-change: transform, box-shadow;
+}
+
+/* MOTION MOMENT 3 — ✈ Flow request sent.
+   Title glides left + fade-out as drawer auto-dismisses. */
+@keyframes wg-flow-send {
+  0%   { transform: translateX(0);     opacity: 1; }
+  100% { transform: translateX(-24px); opacity: 0; }
+}
+.wg-motion-flow-send {
+  animation: wg-flow-send 240ms var(--wg-ease-exit) both;
+}
+
+/* MOTION MOMENT 4 — 🪟 Right rail content reveal.
+   Sections fade-up 8px with 60ms stagger via inline --wg-motion-index. */
+@keyframes wg-rail-reveal {
+  0%   { opacity: 0; transform: translateY(8px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+.wg-motion-rail-reveal {
+  animation: wg-rail-reveal var(--wg-dur-medium) var(--wg-ease-enter) both;
+  animation-delay: calc(var(--wg-motion-index, 0) * 60ms);
+  will-change: opacity, transform;
+}
+
+/* MOTION MOMENT 5 — Drawer enter. (Implemented in DrawerHost.tsx as a
+   scoped style block — keyframes inlined there so the chrome stays
+   self-contained. Documented here for completeness.) */
+
+/* Citation chip glow (kept from v2; still used by EdgeReplyCard). */
+@keyframes wg-citation-glow {
+  0%   {
+    background: var(--wg-amber-soft);
+    border-color: var(--wg-amber);
+    box-shadow: 0 0 0 2px var(--wg-amber-soft);
+  }
+  100% {
+    background: var(--wg-surface-sunk);
+    border-color: var(--wg-line);
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+.wg-motion-citation-glow {
+  animation: wg-citation-glow var(--wg-dur-short) var(--wg-ease-exit) both;
+}
+
+/* Brief outline pulse after click-to-scroll lands on a target card. */
+@keyframes wg-flash-focus-kf {
+  0%   { box-shadow: 0 0 0 0 rgba(40, 100, 232, 0.55); }
+  40%  { box-shadow: 0 0 0 6px rgba(40, 100, 232, 0.20); }
+  100% { box-shadow: 0 0 0 0 rgba(40, 100, 232, 0); }
+}
+.wg-flash-focus {
+  animation: wg-flash-focus-kf 1.6s var(--wg-ease-enter) both;
 }
 
 /* Public split — landing + login side-by-side, stacks on narrow. */
@@ -367,25 +408,17 @@ body::before {
   background: var(--wg-surface);
 }
 @media (max-width: 960px) {
-  .wg-public-split {
-    flex-direction: column;
-  }
+  .wg-public-split { flex-direction: column; }
   .wg-public-display {
     border-right: none;
     border-bottom: 1px solid var(--wg-line);
     padding: 32px 24px;
   }
-  .wg-public-auth {
-    width: 100%;
-    padding: 32px 24px;
-  }
+  .wg-public-auth { width: 100%; padding: 32px 24px; }
 }
 
-/* Scrollbar — charcoal, not default chrome. */
-::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
-}
+/* Scrollbar — token-aware, not default chrome. */
+::-webkit-scrollbar { width: 10px; height: 10px; }
 ::-webkit-scrollbar-thumb {
   background: var(--wg-line);
   border-radius: 4px;
@@ -394,192 +427,25 @@ body::before {
   background: var(--wg-ink-faint);
 }
 
-/* --------------------------------------------------------------------------
-   Load-bearing motion — the 5 moments from DESIGN.md §Motion.
-   Each moment uses the --wg-ease-* / --wg-dur-* tokens above. No new
-   easings or durations introduced. Every effect is opt-in via a class
-   (or an inline `animation:` referencing the keyframe name) and drops
-   to no-op under prefers-reduced-motion: reduce.
-   -------------------------------------------------------------------------- */
-
-/* 1 — Decision crystallization. Terracotta ring pulse + scale-up once,
-   when a DecisionRow is minted. Never on replays: the class is applied
-   on mount only. */
-@keyframes wg-decision-crystallize {
-  0% {
-    transform: scale(0.97);
-    box-shadow: 0 0 0 0 var(--wg-accent-ring);
-  }
-  60% {
-    transform: scale(1);
-    box-shadow: 0 0 0 8px rgba(59, 130, 246, 0);
-  }
-  100% {
-    transform: scale(1);
-    box-shadow: 0 0 0 0 rgba(59, 130, 246, 0);
-  }
-}
-.wg-motion-crystallize {
-  animation: wg-decision-crystallize var(--wg-dur-long) var(--wg-ease-enter) both;
-  transform-origin: left center;
-  will-change: transform, box-shadow;
-}
-
-/* Brief outline pulse used after a click-to-scroll lands the user on a
-   target card (e.g. VoteGroupCard → matching proposal). Tells the eye
-   "this is what you just jumped to" without being a load-bearing motion. */
-@keyframes wg-flash-focus-kf {
-  0%   { box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.55); }
-  40%  { box-shadow: 0 0 0 6px rgba(37, 99, 235, 0.20); }
-  100% { box-shadow: 0 0 0 0 rgba(37, 99, 235, 0); }
-}
-.wg-flash-focus {
-  animation: wg-flash-focus-kf 1.6s var(--wg-ease-enter, ease-out) both;
-}
-@media (prefers-reduced-motion: reduce) {
-  .wg-flash-focus { animation: none; }
-}
-
-/* 2 — Drift emergence. Float up from the affected node: subtle translate
-   + opacity + shadow expansion. Feels like the organism noticing. One
-   shot, on mount. */
-@keyframes wg-drift-emerge {
-  0% {
-    opacity: 0;
-    transform: translateY(6px);
-    box-shadow: 0 0 0 0 rgba(59, 130, 246, 0);
-  }
-  60% {
-    opacity: 1;
-    transform: translateY(0);
-    box-shadow: 0 6px 18px rgba(59, 130, 246, 0.14);
-  }
-  100% {
-    opacity: 1;
-    transform: translateY(0);
-    box-shadow: 0 2px 6px rgba(15, 14, 13, 0.04);
-  }
-}
-.wg-motion-drift-emerge {
-  animation: wg-drift-emerge var(--wg-dur-long) var(--wg-ease-enter) both;
-  will-change: opacity, transform, box-shadow;
-}
-
-/* 3 — Citation chip activation. Brief amber glow as each chip enters,
-   then settles to neutral. Staggered by caller via animation-delay. */
-@keyframes wg-citation-glow {
-  0% {
-    background: var(--wg-amber-soft);
-    border-color: var(--wg-amber);
-    box-shadow: 0 0 0 2px var(--wg-amber-soft);
-  }
-  100% {
-    background: var(--wg-surface-sunk, #faf8f4);
-    border-color: var(--wg-line);
-    box-shadow: 0 0 0 0 transparent;
-  }
-}
-.wg-motion-citation-glow {
-  animation: wg-citation-glow var(--wg-dur-short) var(--wg-ease-exit) both;
-}
-
-/* 4 — Scrimmage glyphs. Two small circles orbit a central axis while
-   agents debate. Stops naturally when the component unmounts (converged
-   proposal replaces the running card). Uses `move` easing because this
-   is continuous motion, not an enter/exit. */
-@keyframes wg-scrimmage-orbit-a {
-  from {
-    transform: rotate(0deg) translateX(5px) rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg) translateX(5px) rotate(-360deg);
-  }
-}
-@keyframes wg-scrimmage-orbit-b {
-  from {
-    transform: rotate(180deg) translateX(5px) rotate(-180deg);
-  }
-  to {
-    transform: rotate(540deg) translateX(5px) rotate(-540deg);
-  }
-}
-.wg-motion-scrimmage {
-  position: relative;
-  display: inline-block;
-  width: 16px;
-  height: 16px;
-  flex-shrink: 0;
-  vertical-align: middle;
-}
-.wg-motion-scrimmage::before,
-.wg-motion-scrimmage::after {
-  content: "";
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 6px;
-  height: 6px;
-  margin: -3px 0 0 -3px;
-  border-radius: 50%;
-  border: 1.5px solid var(--wg-accent);
-}
-.wg-motion-scrimmage::before {
-  background: var(--wg-accent);
-  animation: wg-scrimmage-orbit-a 1.6s var(--wg-ease-move) infinite;
-}
-.wg-motion-scrimmage::after {
-  background: transparent;
-  animation: wg-scrimmage-orbit-b 1.6s var(--wg-ease-move) infinite;
-}
-
-/* 5 — Silent-consensus avatar assembly. Members converge from slightly
-   outward positions into their final cluster. Stagger 60ms per avatar
-   via inline --wg-motion-index on each chip. */
-@keyframes wg-consensus-assemble {
-  0% {
-    opacity: 0;
-    transform: translate(
-      calc(var(--wg-motion-dx, 0) * 1px),
-      calc(var(--wg-motion-dy, 6) * 1px)
-    )
-      scale(0.9);
-  }
-  100% {
-    opacity: 1;
-    transform: translate(0, 0) scale(1);
-  }
-}
-.wg-motion-consensus-chip {
-  animation: wg-consensus-assemble var(--wg-dur-medium) var(--wg-ease-enter) both;
-  animation-delay: calc(var(--wg-motion-index, 0) * 60ms);
-  will-change: opacity, transform;
-}
-
-/* Reduced-motion — drop animated treatments to opacity-only fades.
-   Paper grain is static and unaffected; only keyframe-driven things
-   go silent. */
+/* Reduced-motion — drop animated treatments to opacity-only fades. */
 @media (prefers-reduced-motion: reduce) {
   .wg-pulse,
   .wg-edge-flow,
   .react-flow__edge.animated .react-flow__edge-path,
   .react-flow__node,
   .wg-motion-crystallize,
-  .wg-motion-drift-emerge,
+  .wg-motion-memory-accept,
+  .wg-motion-flow-send,
+  .wg-motion-rail-reveal,
   .wg-motion-citation-glow,
-  .wg-motion-scrimmage::before,
-  .wg-motion-scrimmage::after,
-  .wg-motion-consensus-chip {
+  .wg-flash-focus {
     animation: none !important;
   }
   .wg-motion-crystallize,
-  .wg-motion-drift-emerge {
-    /* Fall back to instant final state — no transform, no shadow pulse. */
+  .wg-motion-memory-accept,
+  .wg-motion-rail-reveal {
     transform: none !important;
     box-shadow: none !important;
     opacity: 1 !important;
-  }
-  .wg-motion-consensus-chip {
-    opacity: 1 !important;
-    transform: none !important;
   }
 }

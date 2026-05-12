@@ -29,11 +29,11 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  // Warm paper / amber — matches --wg-paper / --wg-amber in globals.css.
-  // Chrome uses themeColor for the Android status bar once installed.
+  // v3 palette — paper + accent blue. Matches --wg-paper / --wg-accent
+  // in globals.css (light) and the dark-mode paper (dark).
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#d97706" },
-    { media: "(prefers-color-scheme: dark)", color: "#0f0e0d" },
+    { media: "(prefers-color-scheme: light)", color: "#F7F6F2" },
+    { media: "(prefers-color-scheme: dark)", color: "#0D1018" },
   ],
   width: "device-width",
   initialScale: 1,
