@@ -1,6 +1,8 @@
 # CLAUDE.md — project conventions for AI agents
 
-Read `docs/north-star.md` before any product-shaping work. Read `docs/architecture.md` for the visual summary of what the system is.
+**Current spec (2026-05-12 pivot):** Read `graphflow_handoff_v062/DESIGN_LOCK.md` for product doctrine, `graphflow_handoff_v062/API_CONTRACT.md` for backend contract, `graphflow_handoff_v062/FRONTEND_IMPLEMENTATION.md` for routes + components, `BUILD-v062.md` for the phased build plan, and `DESIGN.md` for the visual system v3.
+
+`docs/north-star.md` and `docs/architecture.md` are **superseded on IA and shell** but still authoritative on product thesis (decision crystallization, three-graph framing, memory atoms, signal chain). Read them for the *why*, not the *what*.
 
 ## Codebase map
 
@@ -50,15 +52,19 @@ First perform a graph-based diagnosis:
 
 ## Plans
 
-- `PLAN-v3.md` and `PLAN-v4.md` — completed build plans, historical record.
-- `docs/north-star.md` — current product intent.
-- `docs/architecture.md` — current-state visual summary, image-gen friendly.
-- `docs/competition.zh-CN.md` — ByteDance competition submission (final-round ready).
+- `BUILD-v062.md` — **current build plan** (Phase A → F, written 2026-05-12).
+- `graphflow_handoff_v062/` — locked v0.6.2 spec bundle (DESIGN_LOCK, API_CONTRACT, FRONTEND_IMPLEMENTATION, INVARIANT_TESTS, BUILD_PLAN, PRODUCTION_GAP_LIST, schemas).
+- `DESIGN.md` — visual system v3 (rewritten 2026-05-12).
+- `docs/north-star.md` — product thesis (IA superseded; thesis stands).
+- `docs/architecture.md` — three-graph framing reference (IA superseded; framing stands).
+- `PLAN-v3.md`, `PLAN-v4.md` — completed build plans, historical record.
+- `docs/competition.zh-CN.md` — ByteDance competition submission (competition over).
 
 ## Archived docs (do not read as current spec)
 
 - `docs/dev.md`, `docs/eng_backlog.md`, `docs/prompt-contracts.md`, `docs/resume.md`, `docs/signal-chain-plan.md`
 - `PLAN.md`, `PLAN-v2.md`
 - `AGENT.md`
+- `docs/shell-v-next.txt` (v-Next direction abandoned; superseded by v0.6.2 pivot)
 
 All carry archive banners. Treat as historical.

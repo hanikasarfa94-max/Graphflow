@@ -1,6 +1,12 @@
 # WorkGraph — North Star
 
-**Status:** written 2026-04-18. This is the current product intent. `dev.md`, `PLAN.md`, and `AGENT.md` are MVP-era artifacts; treat them as historical record, not as current spec. `docs/vision.md` remains the depth doc — this file is the short operational distillation.
+> **⚠ Archive banner (2026-05-12)** — This file is **superseded on IA and shell** by the v0.6.2 pivot. The five-surface IA (My AI · Conversations · Tasks · Documents/KB · Flow Center) replaces the project-stream-centered surface described below. Read `graphflow_handoff_v062/DESIGN_LOCK.md` for the current spec and `BUILD-v062.md` for the migration plan.
+>
+> The **product thesis** below — decision crystallization, signal chain, memory atoms, response profiles, three-graph framing, group-as-subject positioning — is unchanged. Read this doc for the *why*; read the v062 bundle for the *what*.
+
+---
+
+**Status:** written 2026-04-18. Historical record of product thesis. `dev.md`, `PLAN.md`, and `AGENT.md` are MVP-era artifacts; treat them as historical record, not as current spec. `docs/vision.md` remains the depth doc — this file is the short operational distillation.
 
 **Companion:** `docs/architecture-organization.md` — how the code's package layout maps to the concepts in this doc.
 

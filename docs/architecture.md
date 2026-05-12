@@ -1,5 +1,11 @@
 # WorkGraph — Architecture (image-gen friendly)
 
+> **⚠ Archive banner (2026-05-12)** — Diagrams below show the V4 stream-centered shell. The actual shipping IA is now the v0.6.2 five-surface model (My AI · Conversations · Tasks · Documents/KB · Flow Center). Backend layout (graph, agents, primitives) is still authoritative.
+>
+> Read `graphflow_handoff_v062/DESIGN_LOCK.md` for current IA. Read `BUILD-v062.md` for the migration. Use this doc for the three-graph framing, the agent inventory, and the ORM map.
+
+---
+
 **Single page, visually structured, current as of V4.**
 One-line purpose: an AI-native operating graph for a team — humans are nodes, sub-agents metabolize signals on edges, the graph is the shared nervous system.
 

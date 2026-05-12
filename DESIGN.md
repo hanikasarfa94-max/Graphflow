@@ -1,246 +1,336 @@
-# Design System — WorkGraph
+# Design System — GraphFlow v3
 
-Opinionated visual + motion system for the final-round competition pass. Every choice here has a reason. Deviation requires explicit user approval.
+Visual + motion system locked 2026-05-12. Paired with `BUILD-v062.md` (build plan) and `graphflow_handoff_v062/DESIGN_LOCK.md` (product doctrine).
 
----
-
-## Product Context
-
-- **What this is:** AI-native operating graph for a team. Humans are nodes, sub-agents metabolize signals on edges, the graph is the shared nervous system. Decisions crystallize as first-class nodes with lineage.
-- **Who it's for:** 10–30-person knowledge-dense teams — indie game studios, early startups, creative agencies, research groups.
-- **Space / industry:** AI-native collaboration. Competing against Slack, Lark, Feishu, Notion, DingTalk, Wukong. All visually interchangeable. Our lane: *group-as-subject* rather than individual-copilot.
-- **Project type:** Chat-centered web app with graph-audit surfaces + rendered artifacts. Desktop-first. Bilingual zh + en.
+**This is a full refresh.** v2 (cool-clinical blueprint) is retired. Every choice below has a reason. Deviation requires explicit user approval; flag in code review.
 
 ---
 
-## Aesthetic Direction
+## Product context
 
-- **Direction:** *Cool-clinical / blueprint paper.* Clean blue-on-white, structured grid undertones, generous whitespace. The graph is a precise instrument; the chrome around it should read as the same family — engineered, scannable, deliberately calm. (v2, 2026-04-26 — see Decisions Log for the shift from v1 warm-industrial.)
-- **Decoration level:** **Intentional.** Subtle blueprint-grid texture on surfaces (~5% opacity, 36px grid + 72px anchor dots). Soft blue radial accents on hero surfaces. Hand-weighted line icons. Ambient motion on organism-level events. Never decorative blobs, never purple gradients, never centered-everything-in-a-grid-of-three.
-- **Mood:** Crisp and observant. The product should feel like a clean instrument panel — readable at a glance, structured by intent, paying attention even when idle. The graph breathes; the chrome doesn't fight it.
-- **Category break:** Everyone else is cold enterprise chrome with no opinion (Slack), literary minimal (Notion), or AI-purple-soup (every 2025 launch). We're a blueprint instrument: blue, but not generic-SaaS blue — paired with serif display headlines, mono data, and graph-paper backgrounds that signal "this is a structured workspace, not a feed." Remembered within 2 seconds.
+GraphFlow is an AI-native operating graph for a team. Five primary surfaces — My AI · Conversations · Tasks · Documents/KB · Flow Center. Project is scope, not page. Memory is what the team accepts as canonical. AI proposes; authority accepts.
+
+The chrome must read as **a calm, trustworthy instrument**. Not a chat app. Not a Notion clone. Not a Slack-with-AI bolt-on. The serif headlines and the lineage-rich surfaces are the visual proof that this is a different kind of tool.
+
+---
+
+## Aesthetic direction
+
+- **Direction:** *Quiet instrument, warm paper, sharp graph.* Cooler than v1 (warm-terracotta), warmer than v2 (cool-clinical blueprint). Surface neutrals drift slightly warm so the product reads as paper-considered rather than enterprise-clinical. Accent geometry is sharper, line weights thinner, shadows lighter. The graph is the precision instrument; the chrome breathes around it.
+- **Decoration level:** **Restrained.** No paper grain. No blueprint grid. Surface texture is a single soft radial wash from top-left of the page (~6% accent at 18%, fading to transparent). One wash, not three. Cards sit on the paper like sheets, not like Material slabs.
+- **Mood:** Considered, observant, never anxious. The product should feel like a research notebook held by someone who is paying attention.
+- **Category break:** Slack is enterprise-chrome. Notion is literary-minimal. Linear is dark-precision. ChatGPT is stark-white-utilitarian. We are **paper-and-accent**: warm paper, serif headlines, blue+violet duo accent, mint confirmations. Read as "thoughtful working surface for serious teams" within 2 seconds.
 
 ---
 
 ## Typography
 
-Loaded via Bunny Fonts CDN (no Google telemetry) or self-hosted from `apps/web/public/fonts`.
+Three faces. No Inter. No SF Pro. No Roboto. The display serif is the highest-leverage taste lever and stays.
 
-- **Display / Hero:** `Instrument Serif`, weights 400 + 400 italic.
-  - *Why:* Everyone in the category uses Inter / sans. A serif at hero scale signals "thoughtful instrument," not "messaging app." This is the biggest single taste lever.
-  - *Where:* H1 on landing + marketing pages, empty-state headlines, book-render section titles, node-detail primary title. Never at body scale.
-- **Body / UI:** `General Sans`, weights 400 + 500 + 600.
-  - *Why:* Already in the repo, already working, distinct from Inter while remaining scannable. Keep it.
-  - *Where:* All body copy, buttons, form inputs, card contents.
-- **Mono / data / eyebrows:** `JetBrains Mono`, weights 400 + 500, with `font-feature-settings: "tnum"` for tables.
-  - *Why:* Already in. Provides tabular numerals for the perf panel + counts throughout. Signals "this is a real instrument."
-  - *Where:* Timestamps, node IDs, perf columns, code in KB items, section eyebrows (11px uppercase caps), citation chips.
+- **Display / Hero:** `Instrument Serif`, 400 + 400 italic. Bunny Fonts CDN.
+  - *Where:* H1 on `/my-ai` landing, empty-state headlines, node-detail primary title, document-view titles, memory-atom titles, marketing surfaces.
+  - *Why:* Categorical break. Every competitor uses Inter at hero. A serif at hero scale signals "this is an instrument considered by someone with taste."
 
-**Type scale (tokens, use these — no inline sizes):**
+- **Body / UI:** `General Sans`, 400 + 500 + 600. Fontshare CDN.
+  - *Where:* All body copy, buttons, form inputs, table cells, card content.
+  - *Why:* Already in repo, already loved. Cleaner geometry than Inter; ligatures + dlig features make number-heavy tables read better.
+
+- **Mono / data / eyebrows:** `JetBrains Mono`, 400 + 500. Google Fonts CDN.
+  - *Where:* Timestamps, IDs (`D-102`, `M-213`), eyebrows (10–11px caps), table numerics, code in KB items, citation chips.
+  - Apply `font-feature-settings: "tnum", "zero"` globally on mono so columns align and `0` reads as zero.
+
+**Type scale tokens — single source of truth. Inline sizes are a code-smell.**
 
 ```
---wg-fs-hero:    48px  /  3rem      (serif display only)
---wg-fs-h1:      32px  /  2rem       (serif or sans)
---wg-fs-h2:      18px  /  1.125rem
---wg-fs-h3:      14px  /  0.875rem
---wg-fs-body:    13px  /  0.8125rem
---wg-fs-label:   12px  /  0.75rem
---wg-fs-caption: 11px  /  0.6875rem  (mono, caps, tracking 0.06em)
+--wg-fs-display: 56px / 3.5rem      (serif only; one per page)
+--wg-fs-hero:    40px / 2.5rem      (serif or sans, H1 on inner pages)
+--wg-fs-h1:      28px / 1.75rem
+--wg-fs-h2:      20px / 1.25rem
+--wg-fs-h3:      16px / 1rem
+--wg-fs-body:    14px / 0.875rem    (bumped from 13px — comfortable density)
+--wg-fs-label:   13px / 0.8125rem
+--wg-fs-caption: 11px / 0.6875rem   (mono, caps, tracking 0.08em)
+
+--wg-lh-display: 1.05
 --wg-lh-tight:   1.25
---wg-lh-normal:  1.5
---wg-lh-display: 1.1
+--wg-lh-normal:  1.55
 ```
 
 ---
 
 ## Color
 
-All surfaces, text, accents reference variables. No inline hex outside `globals.css` (and this doc).
+All colors via CSS variables. **No hex outside `globals.css` and this doc.** ESLint rule + review flag.
 
-### Light mode (default — v2 blue/white)
-
-```
---wg-paper:         #f5f8ff   /* page background — pale blueprint */
---wg-surface:       #ffffff   /* card surface */
---wg-surface-raised:#ffffff
---wg-surface-sunk:  #f3f7ff   /* subtle sunk surface — nav rails */
-
---wg-ink:           #172033   /* deep navy — readable, not pure black */
---wg-ink-soft:      #667085
---wg-ink-faint:     #9aa8bd
---wg-line:          #d9e3f4   /* cool blue-gray hairlines */
---wg-line-soft:     #eef3fb
-
---wg-accent:        #2563eb   /* blue — crystallization / primary */
---wg-accent-soft:   rgba(37,99,235,0.08)
---wg-accent-ring:   rgba(37,99,235,0.24)
-
---wg-amber:         #d97706   /* escalation / medium severity / clarifier */
---wg-amber-soft:    rgba(217,119,6,0.10)
-
---wg-ok:            #16a34a   /* clean green — supported / healthy */
---wg-ok-soft:       rgba(22,163,74,0.10)
-
---wg-danger:        #dc2626   /* reserved; use sparingly */
-```
-
-**Surface texture** (token `--wg-paper-grain`): blueprint grid + anchor dots, ~5% opacity blue lines, 72px tile. Applied via `background-image` on `body`. The grid is the structural metaphor — the chrome reads as the same surface as the graph, not as a separate "container" wrapping it.
-
-### Dark mode (full redesign — not inversion — v2)
+### Light mode
 
 ```
---wg-paper:         #0b1224   /* night blueprint */
---wg-surface:       #111a2e
---wg-surface-raised:#16213a
---wg-surface-sunk:  #0a1020
+--wg-paper:          #F7F6F2   /* slightly warm cool neutral — the "paper" */
+--wg-paper-tint:     #FBFAF7   /* gradient top-stop */
+--wg-surface:        #FFFFFF
+--wg-surface-raised: #FFFFFF
+--wg-surface-sunk:   #F1EFEA   /* sunk panels, scope-band, nav rails */
 
---wg-ink:           #e6ecf7
---wg-ink-soft:      #a3afc4
---wg-ink-faint:     #6d7a8f
---wg-line:          #1e2a44
---wg-line-soft:     #182039
+--wg-ink:            #14171F   /* near-black, cool tone */
+--wg-ink-soft:       #5A6172
+--wg-ink-faint:      #95A0B5   /* uncited, passive, placeholder */
+--wg-line:           #E4E2DC   /* hairlines — warm taupe-gray */
+--wg-line-soft:      #EFEDE7
 
---wg-accent:        #3b82f6   /* brighter blue for dark surfaces */
---wg-accent-soft:   rgba(59,130,246,0.18)
---wg-accent-ring:   rgba(59,130,246,0.35)
+/* Primary — Blue. Decision crystallization, primary CTAs, focus rings. */
+--wg-accent:         #2864E8
+--wg-accent-soft:    rgba(40, 100, 232, 0.08)
+--wg-accent-ring:    rgba(40, 100, 232, 0.24)
+--wg-accent-hover:   #1F52C7
 
---wg-amber:         #f59e0b
---wg-amber-soft:    rgba(245,158,11,0.18)
+/* Secondary — Violet. AI Assistance, proposal cards, routing suggestions.
+   Semantically distinct from primary blue: blue = canonical / accepted,
+   violet = AI-proposed / not-yet-canonical. Never use violet for a
+   primary action — proposals are by definition not authoritative. */
+--wg-ai:             #6E59E8
+--wg-ai-soft:        rgba(110, 89, 232, 0.10)
+--wg-ai-ring:        rgba(110, 89, 232, 0.22)
 
---wg-ok:            #22c55e
---wg-ok-soft:       rgba(34,197,94,0.18)
+/* Confirmed / supported / healthy. Mint, not pure green. */
+--wg-ok:             #1F9D7A
+--wg-ok-soft:        rgba(31, 157, 122, 0.10)
 
---wg-danger:        #ef4444
+/* Review pending, needs attention, drift. Amber, slightly muted from v2. */
+--wg-amber:          #D08A1E
+--wg-amber-soft:     rgba(208, 138, 30, 0.12)
+
+/* Irreversible only — reject, destroy. Used sparingly. */
+--wg-danger:         #C2362B
+--wg-danger-soft:    rgba(194, 54, 43, 0.10)
 ```
 
-Dark-mode grid stays but at lower opacity. Every component must be authored with both modes in mind, not inversion-tested.
+### Dark mode (authored independently, not inverted)
 
-### Semantic usage (never break these)
+```
+--wg-paper:          #0D1018
+--wg-paper-tint:     #11151F
+--wg-surface:        #141823
+--wg-surface-raised: #1A1F2D
+--wg-surface-sunk:   #0A0D14
 
-- **Blue (`--wg-accent`)** = a decision moment, a crystallized fact, a primary affordance, a routing target. Used *sparingly* — scarcity is the product's accent. (v1 used terracotta for this slot — same semantic role, different colour.)
-- **Amber** = something needs attention / clarification. Escalation, drift alerts, clarifier turns, medium-severity risks.
-- **Green (`--wg-ok`)** = confirmed / supported / healthy / "ok" state. Dissent `supported`, member online, commitment on-track.
-- **Ink-faint** = ambient / uncited / passive. Uncited claims, read messages, observer-tier restricted placeholders.
+--wg-ink:            #ECEEF3
+--wg-ink-soft:       #A2A9BA
+--wg-ink-faint:      #6A7287
+--wg-line:           #1F2533
+--wg-line-soft:      #181C28
+
+--wg-accent:         #4F86F3
+--wg-accent-soft:    rgba(79, 134, 243, 0.16)
+--wg-accent-ring:    rgba(79, 134, 243, 0.32)
+--wg-accent-hover:   #6C9BFB
+
+--wg-ai:             #9582F3
+--wg-ai-soft:        rgba(149, 130, 243, 0.18)
+--wg-ai-ring:        rgba(149, 130, 243, 0.30)
+
+--wg-ok:             #2BBF8E
+--wg-ok-soft:        rgba(43, 191, 142, 0.18)
+
+--wg-amber:          #E8A53E
+--wg-amber-soft:     rgba(232, 165, 62, 0.20)
+
+--wg-danger:         #E25B4F
+--wg-danger-soft:    rgba(226, 91, 79, 0.18)
+```
+
+### Semantic rules — never break these
+
+| Token | Meaning | Used in |
+|---|---|---|
+| `--wg-accent` (blue) | Canonical · accepted · primary action · focus | Decision crystallizations, primary buttons, focus rings, the "accepted memory" pill |
+| `--wg-ai` (violet) | AI-proposed · pre-canonical · routing | Proposal cards, AI Assistance buttons, route-suggestion chips, draft memory atoms |
+| `--wg-ok` (mint) | Confirmed · supported · healthy | Online presence, on-track commitments, "accepted" state on a candidate after the action |
+| `--wg-amber` | Review pending · drift · needs attention | Review-pending memory candidates, drift cards, clarification turns |
+| `--wg-danger` | Irreversible · reject · destroy | Reject candidate, delete document, archive memory |
+| `--wg-ink-faint` | Ambient · uncited · passive | Uncited claims, read messages, observer-scope placeholders |
+
+**Scarcity is the product's accent.** Primary blue on screen ≤ 5% of pixels at any time. Two violet pills per surface max. Mint only on confirmed states. Amber draws the eye — use when the eye is actually wanted.
 
 ---
 
 ## Spacing
 
-- **Base unit:** 4px.
-- **Scale:** `--wg-space-1 4px · -2 8px · -3 12px · -4 16px · -5 24px · -6 32px · -7 48px · -8 64px · -9 96px`
-- **Density:** Comfortable. Stream message card padding **14px** (up from 10px — kills the "stream is 2x denser than rest of app" audit finding). Status / perf / profile cards stay at 16–20px. Difference is intentional: stream optimizes for information flow, dashboards for breathing.
+4px base. Scale unchanged from v2.
+
+```
+--wg-s-1: 4px   · --wg-s-2: 8px   · --wg-s-3: 12px  · --wg-s-4: 16px
+--wg-s-5: 24px  · --wg-s-6: 32px  · --wg-s-7: 48px  · --wg-s-8: 64px
+--wg-s-9: 96px
+```
+
+Density rules:
+- **Conversations + stream surfaces:** comfortable. Card padding 16px, message gap 12px.
+- **Tasks / Flow Center tables:** dense. Row padding 12px vertical, 14px horizontal.
+- **My AI landing + Documents:** generous. Section gap 32px+, hero margin-top 48px.
+- **Right rail:** dense but breathable. Section padding 14px.
 
 ---
 
 ## Layout
 
-- **App shell:** Fixed left sidebar 240px (collapsible to 60px at <960px). Main pane fluid to 1280px max. Right rail optional for routed-inbox.
-- **Stream (primary surface):** Single column max-width 820px centered. User messages right-aligned 70% max-width, agent turns flowing left-flat. **No cards for agent turns — only for structural events** (⚡ decision, drift, scrimmage result, silent-consensus proposal, routed-inbound).
-- **Audit views (`/detail/*`):** Grid-disciplined, dense, minimum chrome.
-- **Landing page:** Creative-editorial. Hero uses serif display at 40px. Asymmetric grid. This is the "first 3 seconds" surface.
-- **Border radius scale:** `sm: 12px · md: 18px · lg: 26px · full: 9999px`. No uniform-bubble radius everywhere — chip 12px, card 18px, hero/modal 26px, avatar full. Variation signals hierarchy. Bumped 2026-04-27 from the prior 4/6/12 scale to align with the html2 sidebar-first prototype: softer corners read as "blueprint paper" rather than "Material slab."
+- **App shell:** Sidebar fixed 240px (collapsible 64px at < 1100px). Topbar 56px. Scope band 40px when active. Main pane fluid to 1320px max-width centered.
+- **Right rail:** 360px optional. Drag-resizable between 320–480px. Persists per surface.
+- **Drawer host:** right-side overlay drawer, 520px default, opens above main pane with backdrop scrim at 30% black.
+- **Hero / landing:** asymmetric grid, max-width 920px centered, generous side padding 96px+.
+
+### Border radius (bumped from v2)
+
+```
+--wg-radius-xs:   8px    /* chips, tags, badges */
+--wg-radius-sm:   12px   /* buttons, inputs, small cards */
+--wg-radius-md:   16px   /* cards, panels */
+--wg-radius-lg:   20px   /* primary cards, drawer panels */
+--wg-radius-xl:   28px   /* hero cards, modals */
+--wg-radius-full: 9999px /* avatars, pills, kbd */
+```
+
+### Elevation
+
+Light shadows, accent-tinted on light mode (the cool tint reads as "considered" rather than "lifted"). Dark mode uses neutral shadows so the surface depth reads without competing with the accent rings.
+
+```
+--wg-shadow-xs:  0 1px 2px   rgba(20, 23, 31, 0.04)
+--wg-shadow-sm:  0 4px 12px  rgba(40, 100, 232, 0.06)
+--wg-shadow:     0 8px 24px  rgba(40, 100, 232, 0.08)
+--wg-shadow-lg:  0 16px 48px rgba(40, 100, 232, 0.10)
+--wg-shadow-xl:  0 24px 72px rgba(40, 100, 232, 0.12)
+```
+
+Cards default to `--wg-shadow-sm`. Drawer + modal use `--wg-shadow-lg`. Hover transitions shadow up one step, never `transform: translateY`.
 
 ---
 
 ## Motion
 
-Motion is how the organism thesis goes from metaphor to visceral. Five moments are load-bearing; the rest is restraint.
+Five load-bearing moments wired to v0.6.2 surfaces. The rest is restraint. `prefers-reduced-motion: reduce` respected everywhere — drops to opacity-only.
 
-**Easing + duration tokens:**
+### Tokens
 
 ```
 --wg-ease-enter: cubic-bezier(0.2, 0.8, 0.2, 1)
 --wg-ease-exit:  cubic-bezier(0.4, 0, 1, 1)
 --wg-ease-move:  cubic-bezier(0.4, 0, 0.2, 1)
---wg-dur-micro:  80ms
---wg-dur-short:  180ms
---wg-dur-medium: 320ms
---wg-dur-long:   560ms
+--wg-ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1)
+
+--wg-dur-micro:  80ms     /* hover, focus */
+--wg-dur-short:  180ms    /* button press, tooltip */
+--wg-dur-medium: 320ms    /* card enter, drawer open */
+--wg-dur-long:   560ms    /* decision crystallization */
 ```
 
 ### The 5 load-bearing moments
 
-1. **⚡ Decision crystallization.** When a `DecisionRow` lands in-stream: blue (`--wg-accent`) ring pulse (320ms), card scale from 0.97 → 1.0, accompanying graph-view node drop-in if graph is visible. Once per decision, never on replays.
-2. **Drift alert emergence.** Don't pop from corner. Float up from the affected node with a subtle shadow expansion. Feels like the organism noticing.
-3. **Citation chip activation.** When the edge LLM emits a cited claim, each chip does a brief amber glow (180ms) as the text types in, then settles to neutral. Evidence lighting up in sequence.
-4. **Scrimmage running card.** Two small glyphs (filled circle + empty circle) rotating around a central axis while agents debate. Stops on convergence with a soft click-in of the proposal card.
-5. **Silent-consensus proposal assembly.** Member avatars converge from their positions in the graph into a cluster above the proposal text. Stagger 60ms per avatar. Confirms the behavioral-agreement thesis visually.
+1. **⚡ Decision crystallization (memory accepted, decision crystallized).** Blue ring pulse from card edge, 560ms, plus a brief Instrument-Serif italic eyebrow that fades in `accepted` over 320ms. Once. Never on replay.
+
+2. **🧬 Memory acceptance.** When a candidate moves `review_pending → accepted` in `MemoryReviewDrawer`: the proposed atom card scales from 0.97 → 1.0, mint ring sweeps once around the perimeter, lineage timeline reveals the new node with a 180ms stagger per lineage step.
+
+3. **✈ Flow request sent.** When a flow_request goes draft → sent: the drawer's primary action glides the card title left 24px, fades opacity to 0 over 240ms, drawer auto-dismisses 80ms after.
+
+4. **🪟 Right rail content reveal.** When a primary object loads, right-rail sections fade-up 8px with 60ms stagger between Context → Related Work → Evidence → AI Assistance → Primary Action. Total: 600ms. Skipped on `prefers-reduced-motion`.
+
+5. **🎚 Drawer enter.** Drawer slides in from right 24px + 0 → 1 opacity, 320ms, spring easing. Backdrop scrim fades 0 → 0.30, 180ms. Closing reverses in 220ms with exit easing.
 
 ### Restraint rules
 
-- Never animate primary text size/position after mount.
-- `prefers-reduced-motion: reduce` respected everywhere — drops to opacity-only fades.
-- No scroll-triggered animations except the ambient organism pulse (see below).
-- Page transitions are instant. No spinner-between-routes theatre.
+- No scroll-triggered animations. Period.
+- No spinner-between-routes. Page transitions are instant; skeleton loaders only inside content.
+- No bouncing arrows, no pulsing CTAs except the decision-crystallization moment.
+- Never animate primary text size or position after mount. Layout shift is a bug.
+- Never animate `transform` on React Flow nodes — RF sets inline `transform: translate(...)` for positioning; animating it pins every node to the same origin. Use `box-shadow` for hover/active states on graph nodes. (Preserved from v2 hard-won lesson.)
 
-### Ambient "breathing" pulse (optional, feature-flag)
+### Ambient pulse — removed
 
-Tiny indicator (8px dot) in the sidebar footer that pulses at ~60 BPM (1000ms cycle). Only when WS connected. Off on `prefers-reduced-motion`. Taste call: decide during final polish whether this is magic or kitsch.
+The v2 sidebar-footer breathing pulse is **out**. Taste call: when the chrome is restrained and the graph is rich, the ambient pulse competes for attention rather than ground it.
 
 ---
 
 ## Iconography
 
-- **Library:** `lucide-react`. Not Phosphor, not Feather, not Heroicons.
-- **Stroke width:** 1.5 (not the default 2). Thinner strokes feel hand-drawn, organism-adjacent.
-- **Size scale:** 14px (inline), 16px (button), 20px (nav), 24px (hero). No other sizes.
-- **Color:** `currentColor` always. Icons inherit from context, never declare their own hue.
-- **Critical icons keep a consistent role:**
-  - ⚡ (built-in glyph, not lucide) — decision crystallization, only
-  - 🤖 — edge agent (one robot in the chip, not decorative — the agent's voice, not its brand)
-  - ❓ — clarifier sub-agent turn
-  - ⚖ — conflict / scrimmage
-  - ⚠ — escalation / drift / amber states
+- **Library:** `lucide-react`. Not Phosphor, not Feather.
+- **Stroke width:** 1.5 globally. Thinner than default 2; reads as "hand-drawn instrument" rather than "icon font."
+- **Sizes:** 14 (inline) · 16 (button) · 18 (nav) · 20 (section heading) · 24 (hero icon, rare).
+- **Color:** `currentColor` always. Icons inherit; no hue declared on the icon itself.
 
-Never use emoji outside these five signal roles.
+Reserved glyphs (use only for the listed role; never decoratively):
+
+| Glyph | Role |
+|---|---|
+| ⚡ | Decision crystallization (built-in glyph, not lucide — needs to stand apart) |
+| 🧬 | Memory atom acceptance (one place: the crystallized-memory line in MemoryReviewDrawer) |
+| 🤖 | Edge sub-agent voice attribution |
+| ❓ | Clarifier sub-agent turn |
+| ⚖ | Conflict / scrimmage result |
+| ⚠ | Drift / escalation / amber states |
+
+No other emoji in copy. ESLint rule.
 
 ---
 
-## Components (the floor)
+## Components — the floor
 
-Every primary-route component must use the `apps/web/src/components/ui/` primitives. Inline `style=` is a code-smell — flag in review.
+All primary-route components must use primitives in `apps/web/src/components/ui/`. Inline `style={{}}` is a code-smell; flag in review.
 
-- `<Button>` — variant: `primary | ghost | amber | danger | link`. Size: `sm | md`. No other buttons.
-- `<Card>` — variant: `default | raised | sunk`. Accent: `accent | amber | ok | null` (the `accent` slot is now blue per v2; the prop name `accent` survived the v1→v2 rename). Never hand-rolled borders.
-- `<Heading>` — level `1 | 2 | 3`. Uses `--wg-fs-h1/2/3`. Serif variant for level 1 on landing + node detail.
-- `<Text>` — variant: `body | label | caption | mono`. Muted boolean.
-- `<EmptyState>` — dashed border, centered muted text + optional CTA. Consistent across every empty list.
-- `<CitedClaimList>` — chips with deep-link to `/projects/[id]/nodes/[nodeId]`. Uncited claims render `--wg-ink-faint` italic.
+- `<Button>` — variants: `primary | secondary | ai | ghost | amber | danger | link`. Sizes: `sm | md | lg`. `ai` variant uses `--wg-ai` for the AI-Assistance-buttons-return-proposals-only rule.
+- `<Card>` — variants: `default | raised | sunk`. Accent prop: `accent | ai | ok | amber | danger | null`. Header / body / footer slots.
+- `<Heading>` — levels 1–3. `serif` boolean for the display face (default true on level 1).
+- `<Text>` — variants: `body | label | caption | mono`. `muted` boolean.
+- `<EmptyState>` — centered illustration + serif headline + muted subtitle + optional CTA. Consistent across every empty list.
+- `<Pill>` — tones from the semantic table above (`accent | ai | ok | amber | danger | slate`). Pills carry meaning; do not use as decoration.
+- `<CitedClaim>` — chip with deep-link to `/nodes/[id]` etc. (post Phase E URL migration). Uncited claims render `--wg-ink-faint` italic.
+- `<AuthorityBadge>` — renders from server `authority_check`. Never infers from local role strings.
+- `<CompressionWarning>` — yellow-bordered panel inside MemoryReviewDrawer. Must render the `caveat` string verbatim from server.
+- `<LineageTimeline>` — vertical timeline: verbatim → distillation → revision → accepted, with relative-time stamps in mono.
 
 ---
 
 ## Copy voice
 
-- **Tone:** Instrument, not butler. "Drift detected on Stellar Drift" beats "Oops! We noticed something." No emoji in copy outside the signal-role set above.
-- **Button labels:** Verb + noun ("Accept decision", "Record dissent", "Publish to project"). Never bare verbs ("Submit").
-- **Empty states:** Teach the product's shape. "No decisions yet — ask your edge agent something worth crystallizing." Every empty state is a micro-tutorial.
-- **Error states:** Name what happened + what the organism is doing about it. "Can't reach DeepSeek — retrying every 30s" beats "Something went wrong."
+- **Tone:** Instrument, not butler. *"Drift detected on Stellar Drift"* beats *"Oops! We noticed something."*
+- **Button labels:** Verb + object. *"Accept memory"*, *"Send flow request"*, *"Crystallize decision"*. Never bare verbs (*"Submit"*, *"Save"*).
+- **Empty states:** Teach the product's shape. *"No memories yet. AI will propose them as your team works — you'll decide what becomes canonical."* Each empty state is a micro-tutorial.
+- **Error states:** Name what happened + what the organism is doing. *"Can't reach DeepSeek — retrying in 30s"* beats *"Something went wrong."*
+- **Authority failures:** Direct. *"You don't have authority to accept this memory. Request review from a pricing owner."* — never hide the constraint.
 
 ---
 
-## Decisions Log
+## Bilingual zh + en
 
-| Date       | Decision                                              | Rationale                                                                 |
-|------------|-------------------------------------------------------|---------------------------------------------------------------------------|
-| 2026-04-22 | Initial design system created                         | Final-round competition polish. Established warm-industrial + bio undertones. |
-| 2026-04-22 | Instrument Serif for display                          | Category-break taste lever. Everyone else uses Inter. We use a serif.       |
-| 2026-04-22 | Keep General Sans + JetBrains Mono                    | Already working, already in repo. Only replace display.                     |
-| 2026-04-22 | Warmer neutrals (`#0f0e0d`/`#f7f2e8`)                  | Reinforces lab-notebook vs. sterile enterprise.                             |
-| 2026-04-22 | 5 load-bearing motion moments, rest restrained        | Motion is how "organism" stops being metaphor. Scarcity keeps them magic.   |
-| 2026-04-22 | Dark mode = full redesign, not inversion              | Prod demo URL will be visited on both modes. Inversion always looks cheap. |
-| 2026-04-22 | Icon stroke 1.5 on lucide                             | Thinner strokes feel hand-drawn, match biological undertones.               |
-| 2026-04-26 | **v2 — switch palette to blue/white (cool-clinical)** | Per user direction. v1 warm-industrial was a deliberate category-break, but the user wants the product to read as a clean collaboration instrument rather than a literary lab notebook. Token NAMES unchanged in `globals.css` (so component code is untouched) — only HEX values shifted. Surface texture moves from noise grain to blueprint grid: same "structured surface" intent, on-theme for the graph instrument. v1 palette preserved in git history if we ever need to compare. Type stack (Instrument Serif / General Sans / JetBrains Mono) unchanged — the serif headline is still the highest-leverage taste lever and pairs well with cool blues. |
-| 2026-04-26 | **v2 — keep Instrument Serif over Georgia**            | The reference HTML uses Georgia, but Instrument Serif is the genuine differentiator vs. category defaults. Switching to Georgia would weaken the "thoughtful instrument" signal for no gain. |
-| 2026-04-26 | **v2 — surface texture = blueprint grid, not noise**   | Noise grain was for the lab-notebook mood. Blueprint grid signals "this surface is structured, this is where the graph lives." Same a11y profile (static SVG, mask-faded). |
+Every string ships through `next-intl`. Doctrine strings require careful translation — these phrases carry the product's argument and a sloppy translation breaks the thesis. Reviewed before merge:
+
+- "Memory crystallization is a separate decision." / 「记忆固化是一次独立的判断。」
+- "AI Assistance creates proposals only." / 「AI 辅助仅生成提议。」
+- "Project is scope, not page." / 「项目是范围，不是页面。」
+- "Only blank-start objects live in Create." / 「创建菜单只接收无锚点对象。」
+- "No warning does not guarantee faithful distillation." / 「没有警告不代表蒸馏完全准确。」
 
 ---
 
-## What's next (implementation priorities — not this doc's job to dictate)
+## Decisions log
 
-1. Add the new tokens to `apps/web/src/app/globals.css`.
-2. Wire Instrument Serif via Bunny Fonts in `apps/web/src/app/layout.tsx`.
-3. Build the 5 motion moments in order of demo visibility: **decision crystallization → citation activation → drift emergence → scrimmage running → silent-consensus assembly**.
-4. Dark mode sweep across the 5 primary routes.
-5. QA pass via `/design-review` once the above lands.
+| Date | Decision | Rationale |
+|---|---|---|
+| 2026-05-12 | **v3 full refresh** — palette + typography + motion all retired from v2 | Competition over; user direction is "finally beautiful." v2's cool-clinical austerity left no warmth; the product needs to feel considered, not antiseptic. |
+| 2026-05-12 | **Two-accent palette (blue + violet)** | Blue = canonical, violet = AI-proposed. The proposal/action split in v0.6.2's API contract is the product's most load-bearing distinction; the palette must carry it. v2's single-blue collapsed both into one signal. |
+| 2026-05-12 | **Warmer paper (#F7F6F2)** | v2's `#F5F8FF` read as enterprise-clinical. Drift slightly warm — paper, not screen. |
+| 2026-05-12 | **Drop paper grain + blueprint grid** | v2's grid was too literal: "look, it's a graph product, here's a grid." The graph itself is the metaphor; the chrome around it should not also be the metaphor. Single radial wash replaces all texture. |
+| 2026-05-12 | **Larger radii (12/16/20/28 from 12/18/26)** | v0.6.2 prototype reads as paper-blueprint with softer corners; aligns. |
+| 2026-05-12 | **Keep Instrument Serif** | Highest-leverage taste lever. Every competitor's H1 is Inter. Don't blink. |
+| 2026-05-12 | **Keep General Sans body** | Already loaded, working, distinct. The display face is the differentiator. |
+| 2026-05-12 | **Ambient pulse removed** | Compete for attention with the graph itself, not the sidebar. |
+| 2026-05-12 | **5 motion moments rebound to v0.6.2 surfaces** | v2's moments (scrimmage glyphs, silent-consensus assembly) targeted features that aren't primary in the v0.6.2 surface set. New moments hit the surfaces users actually live in: memory acceptance, flow send, right rail reveal, drawer enter, decision crystallization. |
 
-All of the above is out of scope for this DESIGN.md — it defines the spec; implementation is separate work.
+---
+
+## What's next (out of scope for this doc)
+
+1. Apply tokens to `apps/web/src/app/globals.css` (Phase A.3 of `BUILD-v062.md`)
+2. Wire Instrument Serif via Bunny Fonts in `layout.tsx`
+3. Update `<Card>`, `<Button>`, `<Pill>`, `<Heading>` primitives with new variants
+4. Build the 5 motion moments — order of demo visibility: decision crystallize → memory accept → flow send → drawer enter → right rail reveal
+5. Dark mode QA pass across the 5 primary surfaces
+6. `/design-review` pass after Phase A lands
