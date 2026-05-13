@@ -1,10 +1,18 @@
 ================================================================
-  SHELL v-NEXT — APP SHELL SPEC FOR THE PROTOTYPE-FAITHFUL UI
+  SHELL v-NEXT — APP SHELL SPEC (ARCHIVED 2026-05-13)
 ================================================================
+
+⚠ ARCHIVE BANNER (2026-05-13) — This spec is SUPERSEDED by the
+v0.6.2 pivot. The 5-surface IA (My AI / Conversations / Tasks /
+Documents · KB / Flow Center) and AppShellV3 replace the vNext
+shell described below. The vnext_prefs.py and vnext_streams.py
+routers have been deleted. The associated FE prototypes never
+shipped. Read graphflow_handoff_v062/DESIGN_LOCK.md + BUILD-v062.md
+for the current spec.
 
 Author      : SWQY + Claude Opus 4.7 working session
 Written     : 2026-05-01
-Status      : SPEC — implementation deferred to a follow-up plan
+Status      : ARCHIVED — replaced by v0.6.2 pivot 2026-05-13
 Supersedes  : the per-project shell pattern in apps/web/src/components/shell/
               AppSidebar.tsx + apps/web/src/app/projects/[id]/layout.tsx
               (those stay as a fallback during transition; do NOT delete)

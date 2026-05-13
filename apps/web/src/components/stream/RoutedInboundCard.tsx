@@ -34,7 +34,7 @@ import {
   type RoutingSignal,
 } from "@/lib/api";
 import { formatIso } from "@/lib/time";
-import { useAppShell } from "@/components/shell/AppShellClient";
+import { useDrawer } from "@/components/shell/v062/DrawerHost";
 
 import type { StreamMember } from "./types";
 import { relativeTime,
@@ -79,7 +79,7 @@ const ghostBtn: CSSProperties = {
  */
 export function RoutedInboundCard({ message, memberById }: StreamProps) {
   const t = useTranslations("personal");
-  const shell = useAppShell();
+  const drawer = useDrawer();
 
   // routed-inbound MessageRow.author_id is EDGE_AGENT_SYSTEM_USER_ID;
   // the actual source human lives on the linked RoutedSignalRow. The
@@ -142,7 +142,7 @@ export function RoutedInboundCard({ message, memberById }: StreamProps) {
         </span>
         <button
           type="button"
-          onClick={shell.openInbox}
+          onClick={() => drawer.open({ type: "notification" })}
           data-testid="personal-inbound-open-drawer"
           style={{
             ...primaryBtn,
