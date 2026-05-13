@@ -2,19 +2,18 @@
 
 // ConversationList — left pane of the Conversations surface.
 //
-// Phase D scaffold (2026-05-13). Two visually separate groups:
+// Phase RW-1.2 wiring (2026-05-13): the page's server component
+// fetches `GET /api/conversations` and passes the result in as
+// `data`. The mock useConversations() hook is gone. Two visually
+// separate groups:
 //
 //   1. Recent          — DMs + Rooms (ConversationType in {direct,room})
 //   2. Active Topics   — Topics with status ∈ {open, needs_input, waiting}
 //
 // INVARIANT (INVARIANT_TESTS.md §"Topic deduplication"): the same id
-// never appears in both groups. The server partitions the response and
-// we render it as-given; this file additionally asserts the invariant
-// at render time so a regression on the wire is caught visibly.
-//
-// Phase D.2 swap-in: replace useConversations() with a real fetch
-// against `GET /api/conversations?scope_id=...`. Today the hook
-// returns a deterministic stub so the surface eyeballs end-to-end.
+// never appears in both groups. The server partitions the response;
+// this file asserts the invariant again at render time so a wire
+// regression is caught visibly.
 
 import { useMemo } from "react";
 
@@ -25,70 +24,6 @@ import type {
   ConversationIndexResponse,
   RecentConversationSummary,
 } from "./types";
-
-// TODO(phase-d.2): replace with real fetch against
-//   `GET /api/conversations?scope_id=<active>`
-// Phase D returns a deterministic stub keyed off no input so the
-// styling renders in isolation. Includes at least one DM, one Room,
-// and one Active Topic so the grouping grammar is exercised.
-export function useConversations(): ConversationIndexResponse {
-  return {
-    recent: [
-      {
-        id: "conv_dm_mei",
-        type: "direct",
-        title: "Mei",
-        scope_id: null,
-        last_message_at: "2026-05-13T14:32:00Z",
-        unread_count: 2,
-      },
-      {
-        id: "conv_dm_ravi",
-        type: "direct",
-        title: "Ravi",
-        scope_id: null,
-        last_message_at: "2026-05-13T11:08:00Z",
-        unread_count: 0,
-      },
-      {
-        id: "conv_room_launch",
-        type: "room",
-        title: "Q3 Launch Room",
-        scope_id: "scope_tikhub",
-        last_message_at: "2026-05-13T13:55:00Z",
-        unread_count: 5,
-      },
-      {
-        id: "conv_room_growth",
-        type: "room",
-        title: "Growth Weekly",
-        scope_id: "scope_growth",
-        last_message_at: "2026-05-12T22:40:00Z",
-        unread_count: 0,
-      },
-    ],
-    active_topics: [
-      {
-        id: "topic_launch_date",
-        type: "topic",
-        title: "Should Q3 launch slip to Sep 18?",
-        scope_id: "scope_tikhub",
-        last_message_at: "2026-05-13T15:02:00Z",
-        unread_count: 1,
-        topic_status: "needs_input",
-      },
-      {
-        id: "topic_pricing_floor",
-        type: "topic",
-        title: "Pricing floor for the SMB tier",
-        scope_id: "scope_tikhub",
-        last_message_at: "2026-05-13T09:14:00Z",
-        unread_count: 0,
-        topic_status: "waiting",
-      },
-    ],
-  };
-}
 
 // TODO(i18n): shellV062.conversations.list.* keys
 const RECENT_LABEL = "Recent";
@@ -109,13 +44,14 @@ const TOPIC_STATUS_LABEL: Record<string, string> = {
 };
 
 export function ConversationList({
+  data,
   selectedId,
   onSelect,
 }: {
+  data: ConversationIndexResponse;
   selectedId: string | null;
   onSelect: (id: string) => void;
 }) {
-  const data = useConversations();
 
   // Defensive: assert the topic dedup invariant at render time. If the
   // server ever regresses and emits the same id in both groups, drop

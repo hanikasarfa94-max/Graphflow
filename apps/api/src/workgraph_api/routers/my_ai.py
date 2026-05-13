@@ -24,9 +24,18 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, ConfigDict, Field
 
 from workgraph_api.deps import require_user
-from workgraph_api.services import AuthenticatedUser, PersonalStreamService
+from workgraph_api.services import (
+    AuthenticatedUser,
+    PersonalStreamService,
+    RoutingService,
+)
 
 router = APIRouter(prefix="/api/my-ai", tags=["my-ai"])
+
+# Cap for the grounded re-entry list. The FE Ready-to-Share strip is
+# spec'd at 3 visible items; the grounded list is wider but still
+# bounded so a noisy inbox doesn't blow up the landing payload.
+_GROUNDED_LIMIT = 12
 
 
 # ---- response shapes ------------------------------------------------------
@@ -91,6 +100,21 @@ def _get_personal_service(request: Request) -> PersonalStreamService:
     return request.app.state.personal_service
 
 
+def _get_routing_service(request: Request) -> RoutingService:
+    return request.app.state.routing_service
+
+
+def _routed_signal_title(signal: dict) -> str:
+    """Title shown on a grounded item card. Prefer the source's own
+    framing (a routed-signal's free-text); fall back to a generic
+    label so we never render an empty string."""
+    framing = (signal.get("framing") or "").strip()
+    if framing:
+        # Keep cards compact — first 140 chars is enough at h3 size.
+        return framing[:140] + ("…" if len(framing) > 140 else "")
+    return "Pending routed signal"
+
+
 # ---- endpoints ------------------------------------------------------------
 
 
@@ -102,15 +126,45 @@ async def get_landing(
 ) -> MyAILandingResponse:
     """Landing view for the My AI surface.
 
-    Phase B.1 wires the contract shape with empty lists. Phase B.2
-    populates from PersonalStreamService when the surface lands real
-    grounded re-entry items (recent decisions / waiting flow requests /
-    open Ready-to-Share drafts).
+    Reality-wiring (Phase RW-1.1, 2026-05-13): grounded_items now
+    pulls real pending routed signals via RoutingService.get_for_user
+    so the FE can render non-mock cards. ready_to_share stays empty
+    until the source-of-truth surface lands (private drafts ledger);
+    honest empty is preferred over fabricated content.
+
+    Each grounded item is a real object the user can re-enter — a
+    routed signal with framing + source/target stream IDs. The
+    object_url today deep-links to /flow-center (where pending
+    signals live in the v0.6.2 IA); a richer routing view follows
+    in RW-2.
     """
-    # Phase B.2 populates grounded_items from PersonalStreamService
-    # when the surface lands real content.
+    routing_service = _get_routing_service(request)
+    signals = await routing_service.get_for_user(
+        user.id, kind="inbound", status="pending", limit=_GROUNDED_LIMIT
+    )
+    # Optional scope filter: when the user has a focused scope, only
+    # surface signals tied to that scope. `scope_id=None` falls through
+    # as "no filter" so the home stays useful for cross-scope review.
+    if scope_id:
+        signals = [s for s in signals if s.get("project_id") == scope_id]
+
+    grounded = [
+        GroundedItem(
+            id=str(s["id"]),
+            kind="flow_request",
+            title=_routed_signal_title(s),
+            scope_id=s.get("project_id"),
+            object_url="/flow-center",
+        )
+        for s in signals
+    ]
+
     return MyAILandingResponse(
-        grounded_items=[],
+        grounded_items=grounded,
+        # Ready to Share stays honest-empty for now. The surface that
+        # owns "drafts the user prepared but hasn't sent" doesn't exist
+        # yet; populating with anything else would be the mock-data
+        # anti-pattern RW explicitly bans.
         ready_to_share=[],
         scope_id=scope_id,
     )

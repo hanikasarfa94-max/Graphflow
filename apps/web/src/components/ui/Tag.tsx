@@ -7,7 +7,7 @@
 
 import type { CSSProperties, ReactNode } from "react";
 
-type Tone = "neutral" | "accent" | "amber" | "ok" | "danger";
+type Tone = "neutral" | "accent" | "ai" | "amber" | "ok" | "danger";
 type Size = "sm" | "md";
 
 const TINT: Record<Tone, { bg: string; fg: string; border: string }> = {
@@ -21,6 +21,14 @@ const TINT: Record<Tone, { bg: string; fg: string; border: string }> = {
     fg: "var(--wg-accent)",
     border: "transparent",
   },
+  // v3 doctrine: AI-proposed / pre-canonical / not-yet-authoritative.
+  // Distinct from `accent` (blue = canonical) so the UI can carry the
+  // proposal-vs-decision distinction the API_CONTRACT bakes in.
+  ai: {
+    bg: "var(--wg-ai-soft)",
+    fg: "var(--wg-ai)",
+    border: "transparent",
+  },
   amber: {
     bg: "var(--wg-amber-soft)",
     fg: "var(--wg-amber)",
@@ -32,7 +40,7 @@ const TINT: Record<Tone, { bg: string; fg: string; border: string }> = {
     border: "transparent",
   },
   danger: {
-    bg: "rgba(220, 38, 38, 0.10)",
+    bg: "var(--wg-danger-soft)",
     fg: "var(--wg-danger)",
     border: "transparent",
   },

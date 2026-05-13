@@ -28,10 +28,16 @@ import { PageHeader } from "@/components/ui";
 
 import { ConversationList } from "./ConversationList";
 import { ConversationShell } from "./ConversationShell";
+import type { ConversationIndexResponse } from "./types";
 
 export function Conversations({
+  data,
   initialSelectedId = null,
 }: {
+  // Phase RW-1.2 — data is fetched server-side in page.tsx via
+  // `GET /api/conversations` and passed in as a prop. There is no
+  // mock fallback; an empty server response renders an empty UI.
+  data: ConversationIndexResponse;
   initialSelectedId?: string | null;
 }) {
   const [selectedId, setSelectedId] = useState<string | null>(initialSelectedId);
@@ -65,7 +71,11 @@ export function Conversations({
           borderTop: "1px solid var(--wg-line)",
         }}
       >
-        <ConversationList selectedId={selectedId} onSelect={setSelectedId} />
+        <ConversationList
+          data={data}
+          selectedId={selectedId}
+          onSelect={setSelectedId}
+        />
         <ConversationShell selectedId={selectedId} />
       </div>
     </main>

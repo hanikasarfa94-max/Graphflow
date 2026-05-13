@@ -1,23 +1,23 @@
 // /conversations/[id] — deep-link to a specific conversation.
 //
-// Phase D scaffold (2026-05-13). Thin server wrapper: requires auth,
-// then renders the client-side `<Conversations />` feature with the
-// requested conversation pre-selected. The client component owns the
-// detail fetch (Phase D.2 wires
-//   `GET /api/conversations/:id`
-// against the live router in
-//   apps/api/src/workgraph_api/routers/conversations.py).
-//
-// We deliberately don't pre-fetch + render server-side here — the
-// list pane is interactive (selection state, mark-as-read, etc.) and
-// the deep-link is just a starting point. Treating the URL as
-// `initialSelectedId` keeps the page reactive once the user clicks
-// around without forcing a server roundtrip per selection.
+// Phase RW-1.2 wiring (2026-05-13): same server-side load as the
+// index, with the requested id pre-selected. The detail-pane body
+// stays minimal in RW-1; the `GET /api/conversations/:id` fetcher
+// for the right pane lands in RW-3.
 
 import { Conversations } from "@/features/conversations/Conversations";
-import { requireUser } from "@/lib/auth";
+import type { ConversationIndexResponse } from "@/features/conversations/types";
+import { requireUser, serverFetch } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
+
+async function loadConversations(): Promise<ConversationIndexResponse> {
+  try {
+    return await serverFetch<ConversationIndexResponse>("/api/conversations");
+  } catch {
+    return { recent: [], active_topics: [] };
+  }
+}
 
 export default async function ConversationDetailPage({
   params,
@@ -27,5 +27,6 @@ export default async function ConversationDetailPage({
 }) {
   const { id } = await params;
   await requireUser(`/conversations/${id}`);
-  return <Conversations initialSelectedId={id} />;
+  const data = await loadConversations();
+  return <Conversations data={data} initialSelectedId={id} />;
 }
