@@ -15,10 +15,18 @@
 
 import { cookies } from "next/headers";
 
-import { ApiError, type ProjectSummary, type User } from "@/lib/api";
+import { ApiError, type User } from "@/lib/api";
 
 import { AppShellClientV3 } from "./AppShellClientV3";
 import type { Scope } from "./ScopeBand";
+
+// Server response shape for GET /api/scopes (Phase B.1).
+type ScopeApiRow = {
+  id: string;
+  title: string;
+  role: string;
+  tier: "personal" | "cell" | "department" | "enterprise";
+};
 
 const API_BASE =
   process.env.WORKGRAPH_API_BASE_SERVER ??
@@ -39,8 +47,11 @@ async function fetchSession(cookieHeader: string): Promise<User | null> {
 }
 
 async function fetchScopes(cookieHeader: string): Promise<Scope[]> {
+  // Phase B.1 endpoint — `/api/scopes` is the v0.6.2 alias for the
+  // project membership list, shaped to the Scope contract (id,
+  // title, role, tier).
   try {
-    const res = await fetch(`${API_BASE}/api/projects`, {
+    const res = await fetch(`${API_BASE}/api/scopes`, {
       headers: cookieHeader ? { cookie: cookieHeader } : undefined,
       cache: "no-store",
     });
@@ -50,8 +61,8 @@ async function fetchScopes(cookieHeader: string): Promise<Scope[]> {
       // Network failures also fall through with an empty scope list.
       return [];
     }
-    const projects = (await res.json()) as ProjectSummary[];
-    return projects.map((p) => ({ id: p.id, title: p.title }));
+    const rows = (await res.json()) as ScopeApiRow[];
+    return rows.map((r) => ({ id: r.id, title: r.title }));
   } catch (err) {
     if (err instanceof ApiError) throw err;
     return [];
