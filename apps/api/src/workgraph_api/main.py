@@ -67,6 +67,7 @@ from workgraph_api.routers import intake as intake_router
 from workgraph_api.routers import kb as kb_router
 from workgraph_api.routers import meetings as meetings_router
 from workgraph_api.routers import membrane as membrane_router
+from workgraph_api.routers import my_ai as my_ai_router
 from workgraph_api.routers import observability as observability_router
 from workgraph_api.routers import onboarding as onboarding_router
 from workgraph_api.routers import personal as personal_router
@@ -74,6 +75,7 @@ from workgraph_api.routers import plan as plan_router
 from workgraph_api.routers import projects as projects_router
 from workgraph_api.routers import render as render_router
 from workgraph_api.routers import routing as routing_router
+from workgraph_api.routers import scopes as scopes_router
 from workgraph_api.routers import scrimmage as scrimmage_router
 from workgraph_api.routers import silent_consensus as silent_consensus_router
 from workgraph_api.routers import flows as flows_router
@@ -911,6 +913,7 @@ app.include_router(intake_router.router)
 app.include_router(kb_router.router)
 app.include_router(meetings_router.router)
 app.include_router(membrane_router.router)
+app.include_router(my_ai_router.router)
 app.include_router(clarification_router.router)
 app.include_router(graph_router.router)
 app.include_router(plan_router.router)
@@ -941,6 +944,7 @@ app.include_router(onboarding_router.router)
 app.include_router(personal_router.router)
 app.include_router(render_router.router)
 app.include_router(routing_router.router)
+app.include_router(scopes_router.router)
 app.include_router(scrimmage_router.router)
 app.include_router(silent_consensus_router.router)
 app.include_router(streams_router.router)
