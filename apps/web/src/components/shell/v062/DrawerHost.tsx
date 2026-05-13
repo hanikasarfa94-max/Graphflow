@@ -27,6 +27,10 @@ import {
   type ReactNode,
 } from "react";
 
+import { FlowDrawer } from "@/features/flow-center/FlowDrawer";
+import { MemoryPromptDrawer } from "@/features/flow-center/MemoryPromptDrawer";
+import { MemoryReviewDrawer } from "@/features/flow-center/MemoryReviewDrawer";
+
 // Drawer type registry. Adding a new drawer = adding a value here +
 // a feature component that returns the body for that type. The drawer
 // chrome (header, close, footer slot) is shared.
@@ -243,6 +247,22 @@ function DrawerOverlay({
 }
 
 function DrawerBodyStub({ request }: { request: DrawerRequest }) {
+  // Phase C routes flow_request / memory_prompt / memory_review to
+  // their real feature components. edit_request / create_menu /
+  // notification still render the stub copy until their respective
+  // phases land.
+  const props = (request.props ?? {}) as Record<string, string>;
+
+  if (request.type === "flow_request") {
+    return <FlowDrawer flow_id={props.flow_id ?? ""} />;
+  }
+  if (request.type === "memory_prompt") {
+    return <MemoryPromptDrawer candidate_id={props.candidate_id ?? ""} />;
+  }
+  if (request.type === "memory_review") {
+    return <MemoryReviewDrawer candidate_id={props.candidate_id ?? ""} />;
+  }
+
   return (
     <div
       style={{
@@ -257,14 +277,8 @@ function DrawerBodyStub({ request }: { request: DrawerRequest }) {
       </p>
       <p style={{ marginTop: 12 }}>
         Real drawer body wires in Phase{" "}
-        {request.type === "memory_review" || request.type === "memory_prompt"
-          ? "C"
-          : request.type === "flow_request" || request.type === "edit_request"
-            ? "C"
-            : request.type === "create_menu"
-              ? "A.4"
-              : "B"}{" "}
-        per <code>BUILD-v062.md</code>.
+        {request.type === "create_menu" ? "A.4" : "B"} per{" "}
+        <code>BUILD-v062.md</code>.
       </p>
     </div>
   );

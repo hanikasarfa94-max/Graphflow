@@ -2011,6 +2011,26 @@
     },
     "empty": {
       "myAi": "Start here. Think with AI first. Share when ready."
+    },
+    "flowCenter": {
+      "metrics": {
+        "needsMe": "Needs me",
+        "waiting": "Waiting on others",
+        "awaitingMembrane": "Awaiting Membrane",
+        "completed": "Recently completed"
+      },
+      "actions": {
+        "send": "Send",
+        "counter": "Counter",
+        "escalate": "Escalate",
+        "decline": "Decline"
+      },
+      "memory": {
+        "detected": "Memory candidate detected",
+        "review": "Review",
+        "skip": "Skip",
+        "later": "Later"
+      }
     }
   }
 }

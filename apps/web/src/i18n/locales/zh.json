@@ -2011,6 +2011,26 @@
     },
     "empty": {
       "myAi": "从这里开始。先与 AI 共思，准备好再分享。"
+    },
+    "flowCenter": {
+      "metrics": {
+        "needsMe": "待我处理",
+        "waiting": "等待对方",
+        "awaitingMembrane": "审核中",
+        "completed": "已完成"
+      },
+      "actions": {
+        "send": "发送",
+        "counter": "反提",
+        "escalate": "升级",
+        "decline": "拒绝"
+      },
+      "memory": {
+        "detected": "发现记忆候选",
+        "review": "审核",
+        "skip": "跳过",
+        "later": "稍后"
+      }
     }
   }
 }
