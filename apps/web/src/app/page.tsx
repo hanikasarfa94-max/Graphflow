@@ -1,89 +1,38 @@
-import { Suspense } from "react";
+// `/` — root route after the v0.6.2 pivot.
+//
+// Two modes:
+//   * Logged out: public split (morphing-graph demo + inline login).
+//   * Logged in:  redirect to /my-ai per the v0.6.2 IA. The landing
+//                 surface is the user's private AI conversation; the
+//                 cross-project home dashboard is gone (its work moved
+//                 into /my-ai's grounded greeting + /conversations'
+//                 recent + /flow-center's needs-me bucket).
+//
+// INVARIANT_TESTS.md §"Project not routable as page" applies one step
+// up — every /projects/* route 404s. This file controls only /.
 
-import { ApprovalsSection } from "@/components/home/ApprovalsSection";
-import { loadHomeData } from "@/components/home/data";
-import { DMsSection } from "@/components/home/DMsSection";
-import { HomeHero } from "@/components/home/HomeHero";
-import { HomeMiniGraph } from "@/components/home/HomeMiniGraph";
-import { HomeNeedsCard } from "@/components/home/HomeNeedsCard";
-import { ProjectsSection } from "@/components/home/ProjectsSection";
+import { Suspense } from "react";
+import { redirect } from "next/navigation";
+
 import { PublicSplit } from "@/components/public/PublicSplit";
 import { optionalUser } from "@/lib/auth";
-// Migration note: the home `<main>` intentionally keeps one inline style
-// — it's a one-shot layout container (max-width + page padding) and
-// wrapping it in a primitive would add a file for ~3 props. Every
-// descendant section now uses the `Card` / `Heading` / `Text` / `Button`
-// primitives; see components/home/*.
 
 import { LoginForm } from "./login/LoginForm";
 
-// `/` has two modes:
-//   - Logged out: public split (morphing-graph demo + inline login).
-//   - Logged in:  personal home (Phase F of the chat-centered surface).
-//
-// Logged-in sections (vertically):
-//   1. Header strip (welcome + language + sign-out)
-//   2. Needs-your-response — pending signals across all project streams
-//   3. Gated approvals — placeholder for admin-tier users (v2 routing)
-//   4. Active task context — the "quiet period" UX (north-star §"Quiet
-//      period — corrected framing"): home is never empty.
-//   5. Your projects — with unread badges + "+ new project" modal
-//   6. Messages — 1:1 DM streams
-//
-// Data is composed server-side from the existing backend primitives. See
-// components/home/data.ts for the aggregation contract.
 export const dynamic = "force-dynamic";
 
-export default async function Home() {
+export default async function Root() {
   const user = await optionalUser();
 
-  if (!user) {
-    return (
-      <PublicSplit>
-        <Suspense fallback={null}>
-          <LoginForm />
-        </Suspense>
-      </PublicSplit>
-    );
+  if (user) {
+    redirect("/my-ai");
   }
 
-  const data = await loadHomeData(user);
-
   return (
-    <main
-      style={{
-        maxWidth: 1180,
-        margin: "0 auto",
-        padding: "32px 28px 80px",
-      }}
-    >
-      <HomeHero
-        displayName={user.display_name}
-        pendingCount={data.pending.length}
-        pulse={data.pulse}
-        topProject={data.top_project}
-      />
-
-      <section
-        id="pending"
-        style={{
-          display: "grid",
-          gridTemplateColumns: "minmax(0, 1.1fr) minmax(0, 0.9fr)",
-          gap: 18,
-          marginBottom: 24,
-        }}
-      >
-        <HomeNeedsCard pending={data.pending} active={data.active} />
-        <HomeMiniGraph snapshot={data.top_project} />
-      </section>
-
-      {data.is_admin_anywhere ? (
-        <ApprovalsSection projects={data.projects} />
-      ) : null}
-
-      <ProjectsSection projects={data.projects} />
-
-      <DMsSection dms={data.dms} />
-    </main>
+    <PublicSplit>
+      <Suspense fallback={null}>
+        <LoginForm />
+      </Suspense>
+    </PublicSplit>
   );
 }

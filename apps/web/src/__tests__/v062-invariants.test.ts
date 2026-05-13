@@ -138,18 +138,24 @@ describe("v0.6.2 — conversations dedupe active topics from recent", () => {
 });
 
 describe("v0.6.2 — project is not routable as a page", () => {
-  // Activates in Phase A.4 (cutover gate). Today /projects/[id] still works
-  // — that's why this is `test.skip` with a comment, not a real test.
-  // When Phase A.4 removes the page, flip this to a real test:
-  //   - GET /projects/scope_xxx must 404
-  //   - GET /api/scopes/{id}/project-brief returns the document_id where
-  //     the brief now lives
-  test.skip(
-    "GET /projects/{scope_id} returns 404 after Phase A.4 cutover",
-    () => {
-      // intentionally empty — see comment above
-    },
-  );
+  // Activated 2026-05-13 by the Phase A.4 cutover. The /projects/[id]
+  // tree was deleted entirely; any request must return 404. This test
+  // can't make a live HTTP request from bun:test (no test server), so
+  // it asserts the file-system invariant: no /projects/[id] route
+  // exists in the Next.js app/ directory. The build itself enforces
+  // the runtime 404 — if any project page.tsx came back, this would
+  // fail.
+  test("no /projects/[id] route file exists after the Phase A.4 cutover", async () => {
+    const { glob } = await import("bun");
+    const matches: string[] = [];
+    for await (const file of glob.scan({
+      cwd: "apps/web/src/app",
+      glob: "projects/**/page.tsx",
+    })) {
+      matches.push(file);
+    }
+    expect(matches).toEqual([]);
+  });
   test.todo(
     "GET /api/scopes/{scope_id}/project-brief returns a document_id (Phase B.6)",
   );

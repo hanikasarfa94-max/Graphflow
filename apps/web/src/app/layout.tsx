@@ -2,7 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { NextIntlClientProvider } from "next-intl";
 import { getLocale, getMessages } from "next-intl/server";
 
-import { AppShell } from "@/components/shell/AppShell";
+import { AppShellV3 } from "@/components/shell/v062/AppShellV3";
 import { ServiceWorkerRegister } from "@/components/pwa/ServiceWorkerRegister";
 
 import "./globals.css";
@@ -55,10 +55,12 @@ export default async function RootLayout({
       <body>
         <ServiceWorkerRegister />
         <NextIntlClientProvider locale={locale} messages={messages}>
-          {/* AppShell wraps the entire app under the i18n provider.
-              Detects auth via /api/auth/me and falls through to plain
-              children on /login and /register. */}
-          <AppShell>{children}</AppShell>
+          {/* AppShellV3 — v0.6.2 5-surface IA. Replaces the project-
+              centered AppShell. Detects auth via /api/auth/me and
+              falls through to plain children on /login and /register.
+              The old AppShell + AppSidebar files remain in the tree
+              for Phase F cleanup; they are no longer mounted. */}
+          <AppShellV3>{children}</AppShellV3>
         </NextIntlClientProvider>
       </body>
     </html>

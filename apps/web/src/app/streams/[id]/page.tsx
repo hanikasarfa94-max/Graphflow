@@ -38,8 +38,11 @@ export default async function StreamPage({
 
   const stream = list?.streams.find((s) => s.id === id) ?? null;
 
+  // v0.6.2 pivot — projects are no longer pages. Project-type streams
+  // route to the user's personal landing; /conversations/[id] absorbs
+  // this surface entirely in Phase D.
   if (stream?.type === "project" && stream.project_id) {
-    redirect(`/projects/${stream.project_id}`);
+    redirect(`/my-ai`);
   }
 
   const tDm = await getTranslations("dm");
