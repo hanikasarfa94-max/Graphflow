@@ -9,6 +9,58 @@
 // extend `CandidateKind` in the canonical lib and import. (CLAUDE.md
 // invariant: "Membrane is one boundary.")
 
+// ── Live flow packet wire (RW-2.1) ───────────────────────────────────
+//
+// These mirror the wire shape from GET /api/flow-requests?scope_id=…
+// (which wraps FlowProjectionService.list_for_project). The FE
+// FlowTable consumes these directly.
+
+export type FlowPacketRecipe =
+  | "ask_with_context"
+  | "promote_to_memory"
+  | "promote_task_to_plan"
+  | "crystallize_decision"
+  | "manual_create_room"
+  | "manual_skill_change"
+  | "manual_invite"
+  | "review"
+  | "handoff"
+  | "meeting_metabolism";
+
+export type FlowPacketStatus =
+  | "active"
+  | "blocked"
+  | "completed"
+  | "rejected"
+  | "expired";
+
+export interface FlowPacket {
+  id: string;
+  project_id: string;
+  recipe_id: FlowPacketRecipe;
+  stage: string;
+  status: FlowPacketStatus;
+  source_user_id: string | null;
+  target_user_ids: string[];
+  current_target_user_ids: string[];
+  authority_user_ids: string[];
+  title: string | null;
+  summary: string | null;
+  intent: string | null;
+}
+
+export interface FlowParticipant {
+  user_id: string;
+  display_name: string;
+  username?: string | null;
+  avatar_url?: string | null;
+}
+
+export interface FlowListResponse {
+  packets: FlowPacket[];
+  participants: Record<string, FlowParticipant>;
+}
+
 // ── Flow Requests ────────────────────────────────────────────────────
 
 export type FlowRequestType =

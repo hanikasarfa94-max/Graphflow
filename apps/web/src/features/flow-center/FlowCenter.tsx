@@ -2,39 +2,62 @@
 
 // FlowCenter — the doctrine-load-bearing surface for v0.6.2.
 //
-// Phase C scaffold (2026-05-13). Renders the Flow Center page body:
-// PageHeader + 4-tile metric strip + FlowTable. The right rail (per
-// DESIGN_LOCK.md "Right rail follows shared spine") is deferred to a
-// follow-up scaffold ticket.
+// Phase RW-2.1 wiring (2026-05-13): real packets via
+// GET /api/flow-requests?scope_id=…. The page-level server component
+// (app/flow-center/page.tsx) does the fetch + active-scope lookup,
+// then passes packets/participants/activeScopeId/userId here.
 //
-// Doctrine surface — every flow response that returns a
-// memory_candidate_prompt routes the user through MemoryPromptDrawer,
-// and acceptance of a memory atom happens in MemoryReviewDrawer with
-// server-side authority. Neither auto-accepts memory.
-//
-// Data plumbing is mocked for Phase C; Phase B.2 lands the real
-// `/api/flow-requests/summary` (metric counts) + `/api/flow-requests?...`
-// (table rows) endpoints. Search for `// TODO(phase-b.2)` to find every
-// mock point.
+// The 4-tile metric strip computes its counts from the packet list —
+// no separate summary endpoint required for the read path. Counts are
+// derived, not mocked.
 
-import { Card, Metric, PageHeader, Text } from "@/components/ui";
+import { Card, EmptyState, Metric, PageHeader, Text } from "@/components/ui";
 
 import { FlowTable } from "./FlowTable";
+import type { FlowListResponse } from "./types";
 
-// Stubbed counts. TODO(phase-b.2): replace with
-//   `GET /api/flow-requests/summary?scope_id=...`
-// returning { needs_me, waiting, awaiting_membrane, completed }.
-function useFlowCenterSummary() {
-  return {
-    needsMe: 0,
-    waiting: 0,
-    awaitingMembrane: 0,
-    completed: 0,
-  };
+interface FlowCenterMetrics {
+  needsMe: number;
+  waiting: number;
+  awaitingMembrane: number;
+  completed: number;
 }
 
-export function FlowCenter() {
-  const summary = useFlowCenterSummary();
+function computeMetrics(
+  packets: FlowListResponse["packets"],
+  userId: string,
+): FlowCenterMetrics {
+  let needsMe = 0;
+  let waiting = 0;
+  let awaitingMembrane = 0;
+  let completed = 0;
+  for (const p of packets) {
+    if (p.status === "completed") {
+      completed += 1;
+      continue;
+    }
+    if (p.stage === "awaiting_membrane") {
+      awaitingMembrane += 1;
+    }
+    if (p.current_target_user_ids.includes(userId)) {
+      needsMe += 1;
+    } else if (p.source_user_id === userId) {
+      waiting += 1;
+    }
+  }
+  return { needsMe, waiting, awaitingMembrane, completed };
+}
+
+export function FlowCenter({
+  data,
+  activeScopeId,
+  userId,
+}: {
+  data: FlowListResponse;
+  activeScopeId: string | null;
+  userId: string;
+}) {
+  const metrics = computeMetrics(data.packets, userId);
 
   return (
     <main
@@ -58,19 +81,30 @@ export function FlowCenter() {
           marginBottom: 20,
         }}
       >
-        <Metric value={summary.needsMe} label="Needs me" tone="accent" />
-        <Metric value={summary.waiting} label="Waiting on others" />
+        <Metric value={metrics.needsMe} label="Needs me" tone="accent" />
+        <Metric value={metrics.waiting} label="Waiting on others" />
         <Metric
-          value={summary.awaitingMembrane}
+          value={metrics.awaitingMembrane}
           label="Awaiting Membrane"
           tone="amber"
         />
-        <Metric value={summary.completed} label="Recently completed" />
+        <Metric value={metrics.completed} label="Recently completed" />
       </div>
 
-      <Card title="Flow packets" flush>
-        <FlowTable />
-      </Card>
+      {activeScopeId === null ? (
+        // No scope selected — the read endpoint is scope-bound. Tell
+        // the user how to get content; do NOT fall back to mock rows.
+        <Card>
+          <EmptyState>
+            Pick a project scope above to view its flow packets.
+            Cross-scope aggregation lands in a follow-up.
+          </EmptyState>
+        </Card>
+      ) : (
+        <Card title="Flow packets" flush>
+          <FlowTable data={data} userId={userId} />
+        </Card>
+      )}
 
       <Text
         as="p"

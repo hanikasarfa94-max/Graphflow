@@ -35,11 +35,15 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, ConfigDict, Field
 
 from workgraph_api.deps import require_user
-from workgraph_api.services import AuthenticatedUser, ProjectService
+from workgraph_api.services import (
+    AuthenticatedUser,
+    FlowProjectionService,
+    ProjectService,
+)
 
 router = APIRouter(tags=["flow-requests"])
 
@@ -146,6 +150,47 @@ async def _gate_scope_membership(
         project_id=scope_id, user_id=user_id
     ):
         _raise_service_error("not_a_scope_member")
+
+
+def _get_projection_service(request: Request) -> FlowProjectionService:
+    return request.app.state.flow_projection_service
+
+
+# ---- read endpoint (RW-2.1) ----------------------------------------------
+
+
+@router.get("/api/flow-requests")
+async def list_flow_requests(
+    request: Request,
+    scope_id: str = Query(min_length=1, max_length=64),
+    bucket: Literal[
+        "needs_me", "waiting_on_others", "awaiting_membrane", "recent"
+    ]
+    | None = Query(default=None),
+    limit: int = Query(default=100, ge=1, le=500),
+    user: AuthenticatedUser = Depends(require_user),
+) -> dict[str, Any]:
+    """List flow packets for a scope.
+
+    v0.6.2 alias for the existing `/api/projects/{project_id}/flows`
+    surface — `scope_id` is the API name; `project_id` is the DB column.
+    Wraps FlowProjectionService.list_for_project. Returns the same
+    `{packets, participants}` envelope so the FE doesn't need to relearn
+    the wire shape.
+
+    RW-2.1 lands the read path. Mutation endpoints (draft / send /
+    respond) below remain Phase B.3 stubs.
+    """
+    await _gate_scope_membership(request, scope_id=scope_id, user_id=user.id)
+    projection = _get_projection_service(request)
+    return await projection.list_for_project(
+        project_id=scope_id,
+        viewer_user_id=user.id,
+        status=None,
+        bucket=bucket,
+        recipe=None,
+        limit=limit,
+    )
 
 
 def _empty_memory_candidate_prompt() -> dict[str, Any]:

@@ -2,139 +2,101 @@
 
 // FlowTable — the flow packet table that lives inside <FlowCenter>.
 //
-// Phase C scaffold (2026-05-13). Mock rows live at the top of this file
-// (MOCK_ROWS) so the surface renders end-to-end while the wire contract
-// stabilizes. Each row reflects one of the eight FlowRequestType values
-// from API_CONTRACT.md so the visual grammar (type pill + status tag +
-// Next button) gets exercised across the matrix.
+// Phase RW-2.1 (2026-05-13): renders live packets from
+// GET /api/flow-requests?scope_id=… (wraps FlowProjectionService).
+// MOCK_ROWS + useFlowTableRows() are gone. Each row is a real
+// FlowPacket emitted by the projection layer; the recipe + status
+// + participant fields come straight from the wire.
 //
-// Phase B.2 swap-in: replace MOCK_ROWS + useFlowTableRows() with
-//   `GET /api/flow-requests?scope_id=<active>&bucket=<needs_me|waiting|...>`
-// returning the same row shape (or a typed wire object that maps 1:1).
-//
-// The "Next" column always opens FlowDrawer via useDrawer() — no
-// inline state mutation, no business logic. Thin-router pattern in the
-// frontend equivalent.
+// The "Open" button still routes through useDrawer() with
+// type=flow_request. The drawer body itself remains mock until
+// Phase RW-3 — the read path is verified first.
 
-import { Button, Tag, Text } from "@/components/ui";
+import { Button, EmptyState, Tag, Text } from "@/components/ui";
 import { useDrawer } from "@/components/shell/v062/DrawerHost";
 
-import type { FlowRequestType, FlowRequestStatus } from "./types";
+import type {
+  FlowListResponse,
+  FlowPacket,
+  FlowPacketRecipe,
+  FlowPacketStatus,
+  FlowParticipant,
+} from "./types";
 
-interface FlowTableRow {
-  id: string;
-  type: FlowRequestType;
-  title: string;
-  source: string;
-  target: string;
-  requester: string;
-  authority: string;
-  evidenceCount: number;
-  status: FlowRequestStatus;
-}
-
-// TODO(phase-b.2): replace with rows from
-//   `GET /api/flow-requests?scope_id=...`
-// Stub data — every FlowRequestType present at least once so the
-// styling matrix renders.
-const MOCK_ROWS: FlowTableRow[] = [
-  {
-    id: "flow_001",
-    type: "confirm",
-    title: "Confirm Q3 launch date moves to Sep 18",
-    source: "topic:topic_launch_date",
-    target: "user:alex",
-    requester: "Mei",
-    authority: "project_owner",
-    evidenceCount: 4,
-    status: "awaiting_response",
-  },
-  {
-    id: "flow_002",
-    type: "review",
-    title: "Review pricing memo before exec sync",
-    source: "doc:doc_pricing_v3",
-    target: "user:jess",
-    requester: "Ravi",
-    authority: "reviewer",
-    evidenceCount: 2,
-    status: "in_membrane",
-  },
-  {
-    id: "flow_003",
-    type: "handoff",
-    title: "Handoff onboarding flow to growth team",
-    source: "task:task_onboarding",
-    target: "team:growth",
-    requester: "Alex",
-    authority: "assignee",
-    evidenceCount: 6,
-    status: "draft",
-  },
-  {
-    id: "flow_004",
-    type: "approval",
-    title: "Approve $40k vendor contract renewal",
-    source: "doc:doc_vendor_renewal",
-    target: "user:vp_ops",
-    requester: "Jess",
-    authority: "approver",
-    evidenceCount: 3,
-    status: "awaiting_response",
-  },
-  {
-    id: "flow_005",
-    type: "clarification",
-    title: "Clarify scope: web only, or web + mobile?",
-    source: "topic:topic_scope_q",
-    target: "user:pm_lead",
-    requester: "Ravi",
-    authority: "requester",
-    evidenceCount: 1,
-    status: "responded",
-  },
-  {
-    id: "flow_006",
-    type: "delegate",
-    title: "Delegate compliance review to Priya",
-    source: "task:task_sso_audit",
-    target: "user:priya",
-    requester: "Mei",
-    authority: "project_owner",
-    evidenceCount: 2,
-    status: "accepted",
-  },
-];
+// Recipe → human label. The wire id is machine-stable; the FE picks
+// a short readable name for the type pill.
+const RECIPE_LABEL: Record<FlowPacketRecipe, string> = {
+  ask_with_context: "Route",
+  promote_to_memory: "Memory promote",
+  promote_task_to_plan: "Task promote",
+  crystallize_decision: "Decision",
+  manual_create_room: "New room",
+  manual_skill_change: "Skill change",
+  manual_invite: "Invite",
+  review: "Review",
+  handoff: "Handoff",
+  meeting_metabolism: "Meeting",
+};
 
 const STATUS_TONE: Record<
-  FlowRequestStatus,
+  FlowPacketStatus,
   "neutral" | "accent" | "amber" | "ok" | "danger"
 > = {
-  draft: "neutral",
-  awaiting_response: "accent",
-  in_membrane: "amber",
-  responded: "neutral",
-  accepted: "ok",
-  declined: "danger",
+  active: "accent",
+  blocked: "amber",
+  completed: "ok",
+  rejected: "danger",
+  expired: "neutral",
 };
 
-const STATUS_LABEL: Record<FlowRequestStatus, string> = {
-  draft: "Draft",
-  awaiting_response: "Awaiting",
-  in_membrane: "In Membrane",
-  responded: "Responded",
-  accepted: "Accepted",
-  declined: "Declined",
-};
-
-// TODO(phase-b.2): replace with a real data hook backed by SWR / RQ.
-function useFlowTableRows(): FlowTableRow[] {
-  return MOCK_ROWS;
+function nameFor(
+  participants: Record<string, FlowParticipant>,
+  user_id: string | null,
+): string {
+  if (!user_id) return "—";
+  const p = participants[user_id];
+  if (!p) return user_id.slice(0, 8);
+  return p.display_name || p.username || user_id.slice(0, 8);
 }
 
-export function FlowTable() {
-  const rows = useFlowTableRows();
+function targetLabel(packet: FlowPacket, participants: Record<string, FlowParticipant>): string {
+  const live = packet.current_target_user_ids;
+  if (live.length === 0) return "—";
+  if (live.length === 1) return nameFor(participants, live[0]);
+  return `${nameFor(participants, live[0])} +${live.length - 1}`;
+}
+
+function authorityLabel(packet: FlowPacket): string {
+  // Authority is a list of user_ids server-side; the table just needs
+  // a tone signal ("project_owner" / count). When the v0.6.2
+  // AuthorityRole enum is wired (Phase RW-3) we'll resolve a role
+  // string; for the read path we surface the raw count.
+  const n = packet.authority_user_ids.length;
+  if (n === 0) return "—";
+  if (n === 1) return "1 authority";
+  return `${n} authorities`;
+}
+
+export function FlowTable({
+  data,
+  userId,
+}: {
+  data: FlowListResponse;
+  userId: string;
+}) {
   const drawer = useDrawer();
+
+  if (data.packets.length === 0) {
+    return (
+      <div style={{ padding: 24 }}>
+        <EmptyState>
+          No flow packets in this scope. New packets show up here when
+          someone routes a question, promotes a memory candidate,
+          handoffs work, or crystallizes a decision.
+        </EmptyState>
+      </div>
+    );
+  }
 
   return (
     <div style={{ overflowX: "auto" }}>
@@ -154,68 +116,82 @@ export function FlowTable() {
               background: "var(--wg-surface-sunk)",
             }}
           >
-            <Th>Source → Target</Th>
+            <Th>Type</Th>
             <Th>Title</Th>
-            <Th>Requester</Th>
+            <Th>Source → Target</Th>
             <Th>Authority</Th>
-            <Th>Evidence</Th>
             <Th>Status</Th>
             <Th>Next</Th>
           </tr>
         </thead>
         <tbody>
-          {rows.map((row) => (
-            <tr
-              key={row.id}
-              style={{ borderBottom: "1px solid var(--wg-line-soft)" }}
-            >
-              <Td>
-                <Text variant="caption" muted>
-                  {row.source}
-                </Text>
-                <br />
-                <Text variant="caption" muted>
-                  → {row.target}
-                </Text>
-              </Td>
-              <Td>
-                <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                  <Tag tone="accent">{row.type}</Tag>
-                  <Text variant="body">{row.title}</Text>
-                </div>
-              </Td>
-              <Td>
-                <Text variant="body">{row.requester}</Text>
-              </Td>
-              <Td>
-                <Text variant="caption" muted>
-                  {row.authority}
-                </Text>
-              </Td>
-              <Td>
-                <Text variant="mono">{row.evidenceCount}</Text>
-              </Td>
-              <Td>
-                <Tag tone={STATUS_TONE[row.status]}>
-                  {STATUS_LABEL[row.status]}
-                </Tag>
-              </Td>
-              <Td>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() =>
-                    drawer.open({
-                      type: "flow_request",
-                      props: { flow_id: row.id },
-                    })
-                  }
-                >
-                  Open
-                </Button>
-              </Td>
-            </tr>
-          ))}
+          {data.packets.map((row) => {
+            const sourceName = nameFor(data.participants, row.source_user_id);
+            const targetName = targetLabel(row, data.participants);
+            const needsMe = row.current_target_user_ids.includes(userId);
+            return (
+              <tr
+                key={row.id}
+                style={{ borderBottom: "1px solid var(--wg-line-soft)" }}
+              >
+                <Td>
+                  <Tag tone={needsMe ? "accent" : "neutral"}>
+                    {RECIPE_LABEL[row.recipe_id] || row.recipe_id}
+                  </Tag>
+                </Td>
+                <Td>
+                  <Text variant="body">{row.title || row.summary || row.id}</Text>
+                  {row.intent ? (
+                    <>
+                      <br />
+                      <Text variant="caption" muted>
+                        {row.intent}
+                      </Text>
+                    </>
+                  ) : null}
+                </Td>
+                <Td>
+                  <Text variant="caption" muted>
+                    {sourceName}
+                  </Text>
+                  <br />
+                  <Text variant="caption" muted>
+                    → {targetName}
+                  </Text>
+                </Td>
+                <Td>
+                  <Text variant="caption" muted>
+                    {authorityLabel(row)}
+                  </Text>
+                </Td>
+                <Td>
+                  <Tag tone={STATUS_TONE[row.status]}>{row.status}</Tag>
+                  {row.stage && row.stage !== row.status ? (
+                    <>
+                      <br />
+                      <Text variant="caption" muted>
+                        {row.stage}
+                      </Text>
+                    </>
+                  ) : null}
+                </Td>
+                <Td>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() =>
+                      drawer.open({
+                        type: "flow_request",
+                        props: { flow_id: row.id },
+                      })
+                    }
+                  >
+                    Open
+                  </Button>
+                </Td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>
