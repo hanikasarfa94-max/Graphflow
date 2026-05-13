@@ -1,0 +1,10 @@
+# Bun runtime config for apps/web.
+#
+# [test] root pins bun's test runner to src/ so it doesn't recurse
+# into tests/e2e/*.spec.ts — those are Playwright tests and trip on
+# bun's lack of Playwright globals ("Playwright Test did not expect
+# test.describe() to be called here"). Playwright is invoked
+# separately via `playwright test` from package.json scripts.
+
+[test]
+root = "src"
