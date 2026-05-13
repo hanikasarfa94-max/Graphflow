@@ -11,11 +11,14 @@
 // reflects the new state. No optimistic UI — the post-action render
 // always comes from a fresh server payload.
 //
-// Revise + Skip remain client-only: revise just edits the local
-// `revisedAtom` buffer before the accept POST (the BE doesn't take a
-// revision body yet; lineage.reviewer_revision_id stays null). Skip
-// is a flow_response-side action, not a memory_candidate action — it
-// lives on MemoryPromptDrawer, not here.
+// Phase RW-3.5 safety polish (2026-05-13): Revise is gone. The
+// backend's accept_candidate doesn't take a revision body yet, so
+// any FE-side edit to the proposed atom would be silently dropped
+// (lineage.reviewer_revision_id stays null on the server). Leaving
+// the Revise button + textarea visible was misleading; the button,
+// the textarea, and the local revisedAtom buffer are removed. The
+// proposed atom renders read-only verbatim from the server. Skip is
+// a flow_response-side action and lives on MemoryPromptDrawer.
 //
 // Authority is server-driven. We render `authority.allowed_actions`
 // as the source of truth for which buttons are enabled. No
@@ -128,10 +131,9 @@ function MemoryReviewBody({
 }) {
   const t = useTranslations("shellV062.flowCenter.memory");
   const router = useRouter();
-  const [revising, setRevising] = useState(false);
-  const [revisedAtom, setRevisedAtom] = useState(
-    candidate.proposed_memory_atom.claim,
-  );
+  // RW-3.5 safety: the Revise button, textarea, and local
+  // revisedAtom buffer are all removed. See file header for rationale.
+  // The proposed atom renders read-only from candidate.proposed_memory_atom.
   const [pending, setPending] = useState<CandidateAction | null>(null);
   const [acceptedAnim, setAcceptedAnim] = useState(false);
   const [feedback, setFeedback] = useState<
@@ -286,20 +288,18 @@ function MemoryReviewBody({
         </Card>
       </section>
 
-      {/* 4. Proposed memory atom — with revise affordance */}
-      <section style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-        <div style={{ display: "flex", justifyContent: "space-between" }}>
-          <Text variant="caption" muted>
-            Proposed memory atom · {candidate.proposed_memory_atom.tier}
-          </Text>
-          <Button
-            variant="link"
-            size="sm"
-            onClick={() => setRevising((r) => !r)}
-          >
-            {revising ? "Cancel revision" : t("actions.revise")}
-          </Button>
-        </div>
+      {/* 4. Proposed memory atom — read-only.
+            RW-3.5 safety: the Revise affordance was removed until
+            the backend's accept_candidate takes a revision body.
+            Today the AI's distillation is what gets accepted; any
+            FE-side edit would be silently discarded. */}
+      <section
+        data-testid="memory-review-proposed-atom"
+        style={{ display: "flex", flexDirection: "column", gap: 6 }}
+      >
+        <Text variant="caption" muted>
+          Proposed memory atom · {candidate.proposed_memory_atom.tier}
+        </Text>
         <Card accent="accent">
           <div className={acceptedAnim ? "wg-motion-memory-accept" : undefined}>
             {candidate.proposed_memory_atom.title ? (
@@ -311,29 +311,9 @@ function MemoryReviewBody({
                 {candidate.proposed_memory_atom.title}
               </Text>
             ) : null}
-            {revising ? (
-              <textarea
-                value={revisedAtom}
-                onChange={(e) => setRevisedAtom(e.target.value)}
-                rows={5}
-                style={{
-                  width: "100%",
-                  padding: 10,
-                  borderRadius: "var(--wg-radius)",
-                  border: "1px solid var(--wg-line)",
-                  background: "var(--wg-surface)",
-                  fontFamily: "var(--wg-font-sans)",
-                  fontSize: "var(--wg-fs-body)",
-                  color: "var(--wg-ink)",
-                  lineHeight: "var(--wg-lh-normal)",
-                  resize: "vertical",
-                }}
-              />
-            ) : (
-              <Text as="p" variant="body">
-                {revisedAtom || "(no claim)"}
-              </Text>
-            )}
+            <Text as="p" variant="body">
+              {candidate.proposed_memory_atom.claim || "(no claim)"}
+            </Text>
           </div>
         </Card>
       </section>
@@ -442,14 +422,14 @@ function MemoryReviewBody({
         >
           {pending === "reject" ? "…" : t("actions.reject")}
         </Button>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => setRevising(true)}
-          disabled={revising || pending !== null}
-        >
-          {t("actions.revise")}
-        </Button>
+        {/* RW-3.5 safety — Revise button removed entirely. Until the
+            backend's accept_candidate accepts a revision body, the
+            FE has no honest path for "I edited the proposed atom and
+            that edit will persist." The button stayed visible after
+            RW-3 as a TODO; that's exactly the misleading affordance
+            the safety pass closes. The local revisedAtom state is
+            also gone — the rendered atom shows the AI distillation
+            verbatim. */}
         <Button
           data-testid="memory-action-accept"
           variant="primary"
