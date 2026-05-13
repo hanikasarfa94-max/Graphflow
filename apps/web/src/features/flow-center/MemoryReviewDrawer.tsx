@@ -1,48 +1,59 @@
 "use client";
 
 // MemoryReviewDrawer — the full Membrane review surface. The hardest
-// doctrine UI in the product. Renders the entire memory lineage and
-// gates acceptance on server-computed authority.
+// doctrine UI in the product.
 //
-// Phase RW-2.2 (2026-05-13): read path is live. The drawer fetches
-// the candidate via `GET /api/memory-candidates/:id` on mount
-// (MembraneService.get_candidate_full_detail) and renders the wire
-// shape directly. Compression caveat, authority check, lineage all
-// come from the server. Mock useMemoryCandidate() is gone.
+// Phase RW-3 (2026-05-13): four real mutation actions wired
+// end-to-end. Accept / defer / reject / reopen POST to the live
+// /api/memory-candidates/:id/{accept,defer,reject,reopen} endpoints
+// and the drawer refetches the candidate (server-authoritative
+// status) plus refreshes the parent Flow Center page so the table
+// reflects the new state. No optimistic UI — the post-action render
+// always comes from a fresh server payload.
 //
-// Mutation actions (accept / revise / reject / defer / skip / reopen)
-// stay no-op stubs per the RW-2 brief — "no new mutation behavior
-// until read path is verified." Wiring them comes in RW-3.
+// Revise + Skip remain client-only: revise just edits the local
+// `revisedAtom` buffer before the accept POST (the BE doesn't take a
+// revision body yet; lineage.reviewer_revision_id stays null). Skip
+// is a flow_response-side action, not a memory_candidate action — it
+// lives on MemoryPromptDrawer, not here.
 //
-// DESIGN_LOCK.md invariants honored:
-//   #6  Flow acceptance does not auto-accept memory.       ← prompt → review handoff
-//   #7  Memory crystallization is a separate decision.     ← acceptance is its own action
-//   #8  Memory acceptance requires server-side authority.  ← Accept disabled if !can_accept
-//   #9  Memory candidates must preserve lineage.           ← VerbatimSource → distillation → revision → accepted
+// Authority is server-driven. We render `authority.allowed_actions`
+// as the source of truth for which buttons are enabled. No
+// client-side role inference anywhere.
 //
-// API surface:
-//   GET  /api/memory-candidates/:id          ← live (RW-2.2)
-//   POST /api/memory-candidates/:id/accept   ← Phase RW-3
-//   POST /api/memory-candidates/:id/defer    ← Phase RW-3
-//   POST /api/memory-candidates/:id/reject   ← Phase RW-3
-//   POST /api/memory-candidates/:id/reopen   ← Phase RW-3
+// DESIGN_LOCK.md invariants:
+//   #6  Flow acceptance does not auto-accept memory.
+//   #7  Memory crystallization is a separate decision.
+//   #8  Memory acceptance requires server-side authority.
+//   #9  Memory candidates must preserve lineage.
 
-import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
+import { useCallback, useEffect, useState } from "react";
 
 import { Button, Card, EmptyState, Tag, Text } from "@/components/ui";
 import { useDrawer } from "@/components/shell/v062/DrawerHost";
 import { ApiError, api } from "@/lib/api";
 
 import { AuthorityState } from "./AuthorityState";
-import type { MemoryCandidate } from "./types";
+import {
+  postCandidateAction,
+  type ActionResult,
+  type CandidateAction,
+} from "./memoryCandidateActions";
+import type { AllowedAction, MemoryCandidate } from "./types";
 
 type FetchState =
   | { status: "loading" }
   | { status: "error"; message: string }
   | { status: "ready"; candidate: MemoryCandidate };
 
-function useMemoryCandidate(id: string): FetchState {
+function useFetchCandidate(id: string): {
+  state: FetchState;
+  refetch: () => void;
+} {
   const [state, setState] = useState<FetchState>({ status: "loading" });
+  const [tick, setTick] = useState(0);
   useEffect(() => {
     let cancelled = false;
     setState({ status: "loading" });
@@ -61,32 +72,22 @@ function useMemoryCandidate(id: string): FetchState {
     return () => {
       cancelled = true;
     };
-  }, [id]);
-  return state;
+  }, [id, tick]);
+
+  const refetch = useCallback(() => setTick((t) => t + 1), []);
+  return { state, refetch };
 }
 
-// Mutation handlers stay no-op until RW-3 — the brief locks the read
-// path first. The hook exists so the action footer doesn't have to
-// branch on "is mutation wired" vs the disabled-by-authority case.
-function useMemoryAction(): (
-  action: "accept" | "revise" | "reject" | "defer" | "skip" | "reopen",
-  id: string,
-  revisedAtom?: string,
-) => Promise<void> {
-  return async () => {
-    // TODO(RW-3): POST to the matching /api/memory-candidates/:id/<action>
-    // endpoint (accept / defer / reject / reopen are live in
-    // memory_candidates.py; skip + revise are Phase B.3 follow-ups).
-    await new Promise((r) => setTimeout(r, 120));
-  };
-}
+// `postCandidateAction` lives in ./memoryCandidateActions so the
+// bun:test decoder exercises don't transitively load the drawer
+// chrome (lucide-react, Next.js client primitives). Re-exported at
+// the bottom of this file for any caller that imported from here.
 
 export function MemoryReviewDrawer({ candidate_id }: { candidate_id: string }) {
   const drawer = useDrawer();
-  const fetchState = useMemoryCandidate(candidate_id);
-  const act = useMemoryAction();
+  const { state, refetch } = useFetchCandidate(candidate_id);
 
-  if (fetchState.status === "loading") {
+  if (state.status === "loading") {
     return (
       <div style={{ padding: 24 }}>
         <Text variant="caption" muted>
@@ -96,19 +97,19 @@ export function MemoryReviewDrawer({ candidate_id }: { candidate_id: string }) {
     );
   }
 
-  if (fetchState.status === "error") {
+  if (state.status === "error") {
     return (
       <div style={{ padding: 24 }}>
-        <EmptyState>{fetchState.message}</EmptyState>
+        <EmptyState>{state.message}</EmptyState>
       </div>
     );
   }
 
   return (
     <MemoryReviewBody
-      candidate={fetchState.candidate}
+      candidate={state.candidate}
       candidate_id={candidate_id}
-      act={act}
+      refetch={refetch}
       onClose={drawer.close}
     />
   );
@@ -117,47 +118,101 @@ export function MemoryReviewDrawer({ candidate_id }: { candidate_id: string }) {
 function MemoryReviewBody({
   candidate,
   candidate_id,
-  act,
+  refetch,
   onClose,
 }: {
   candidate: MemoryCandidate;
   candidate_id: string;
-  act: ReturnType<typeof useMemoryAction>;
+  refetch: () => void;
   onClose: () => void;
 }) {
+  const t = useTranslations("shellV062.flowCenter.memory");
+  const router = useRouter();
   const [revising, setRevising] = useState(false);
   const [revisedAtom, setRevisedAtom] = useState(
     candidate.proposed_memory_atom.claim,
   );
-  const [accepting, setAccepting] = useState(false);
+  const [pending, setPending] = useState<CandidateAction | null>(null);
   const [acceptedAnim, setAcceptedAnim] = useState(false);
+  const [feedback, setFeedback] = useState<
+    | { kind: "success"; message: string }
+    | { kind: "error"; message: string }
+    | null
+  >(null);
 
   const authority = candidate.authority_check;
-  const acceptBlockedReason = authority.can_accept
-    ? null
-    : `Request review from a ${authority.required_roles[0] ?? "reviewer"}.`;
+  const allowed = new Set<AllowedAction>(authority.allowed_actions);
 
   // First lifecycle event ≈ verbatim capture. Used to surface a
   // timestamp on the verbatim block since the wire shape no longer
   // carries an inline timestamp.
   const verbatimAt = candidate.lifecycle_events[0]?.at ?? null;
 
-  async function handleAccept() {
-    if (!authority.can_accept || accepting) return;
-    setAccepting(true);
-    setAcceptedAnim(true);
-    try {
-      await act("accept", candidate_id, revising ? revisedAtom : undefined);
-      // Brief beat so the v3 motion moment #2 plays before we close.
-      await new Promise((r) => setTimeout(r, 260));
-      onClose();
-    } finally {
-      setAccepting(false);
-    }
+  function actionEnabled(a: CandidateAction): boolean {
+    if (pending !== null) return false;
+    return allowed.has(a);
   }
+
+  async function runAction(action: CandidateAction) {
+    if (!actionEnabled(action)) return;
+    setPending(action);
+    setFeedback(null);
+    if (action === "accept") setAcceptedAnim(true);
+    const result = await postCandidateAction(action, candidate_id);
+    if (!result.ok) {
+      setAcceptedAnim(false);
+      setPending(null);
+      const errKey = result.error ?? "unknown";
+      const message =
+        errKey === "authority_required"
+          ? t("errors.authorityRequired", {
+              role: result.required_role ?? "reviewer",
+            })
+          : errKey === "already_resolved"
+            ? t("errors.alreadyResolved")
+            : errKey === "not_reopenable"
+              ? t("errors.notReopenable")
+              : errKey === "not_found"
+                ? t("errors.notFound")
+                : errKey === "not_a_member"
+                  ? t("errors.notMember")
+                  : errKey === "network"
+                    ? t("errors.network")
+                    : t("errors.network");
+      setFeedback({ kind: "error", message });
+      return;
+    }
+    // Success — server is the source of truth for new status.
+    // Refetch the candidate and refresh the parent server-component
+    // so /flow-center's packet list reflects the transition.
+    setFeedback({
+      kind: "success",
+      message: t(`success.${action === "accept" ? "accepted" : action === "defer" ? "deferred" : action === "reject" ? "rejected" : "reopened"}` as const),
+    });
+    // Accept brief beat for the motion moment, then close.
+    if (action === "accept") {
+      await new Promise((r) => setTimeout(r, 260));
+      router.refresh();
+      onClose();
+      return;
+    }
+    // Non-accept actions: refetch + refresh parent so the user sees
+    // the new authoritative state inside the drawer.
+    refetch();
+    router.refresh();
+    setPending(null);
+  }
+
+  const acceptBlockedReason = authority.can_accept
+    ? null
+    : `Request review from a ${authority.required_roles[0] ?? "reviewer"}.`;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+      <Tag tone={candidate.status === "accepted" ? "ok" : "neutral"}>
+        status: {candidate.status}
+      </Tag>
+
       {/* 1. Verbatim source */}
       <section style={{ display: "flex", flexDirection: "column", gap: 6 }}>
         <Text variant="caption" muted>
@@ -242,14 +297,10 @@ function MemoryReviewBody({
             size="sm"
             onClick={() => setRevising((r) => !r)}
           >
-            {revising ? "Cancel revision" : "Revise"}
+            {revising ? "Cancel revision" : t("actions.revise")}
           </Button>
         </div>
-        <Card
-          accent="accent"
-          // v3 motion moment #2 — fires once on acceptance.
-          {...(acceptedAnim ? { "data-motion": "accept" } : {})}
-        >
+        <Card accent="accent">
           <div className={acceptedAnim ? "wg-motion-memory-accept" : undefined}>
             {candidate.proposed_memory_atom.title ? (
               <Text
@@ -342,8 +393,16 @@ function MemoryReviewBody({
         )}
       </section>
 
-      {/* 7. Six actions — mutation wiring lands in RW-3. */}
+      {/* Feedback strip — bilingual via i18n */}
+      {feedback ? (
+        <Card accent={feedback.kind === "success" ? "ok" : "amber"}>
+          <Text variant="body">{feedback.message}</Text>
+        </Card>
+      ) : null}
+
+      {/* 7. Actions — enabled state sourced from authority.allowed_actions */}
       <footer
+        data-testid="memory-review-actions"
         style={{
           position: "sticky",
           bottom: 0,
@@ -357,51 +416,59 @@ function MemoryReviewBody({
         }}
       >
         <Button
+          data-testid="memory-action-reopen"
           variant="ghost"
           size="sm"
-          onClick={() => act("reopen", candidate_id).then(() => onClose())}
+          onClick={() => void runAction("reopen")}
+          disabled={!actionEnabled("reopen")}
         >
-          Reopen
+          {pending === "reopen" ? "…" : t("actions.reopen")}
         </Button>
         <Button
+          data-testid="memory-action-defer"
           variant="ghost"
           size="sm"
-          onClick={() => act("skip", candidate_id).then(() => onClose())}
+          onClick={() => void runAction("defer")}
+          disabled={!actionEnabled("defer")}
         >
-          Skip
+          {pending === "defer" ? "…" : t("actions.defer")}
         </Button>
         <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => act("defer", candidate_id).then(() => onClose())}
-        >
-          Defer
-        </Button>
-        <Button
+          data-testid="memory-action-reject"
           variant="amber"
           size="sm"
-          onClick={() => act("reject", candidate_id).then(() => onClose())}
+          onClick={() => void runAction("reject")}
+          disabled={!actionEnabled("reject")}
         >
-          Reject
+          {pending === "reject" ? "…" : t("actions.reject")}
         </Button>
         <Button
           variant="ghost"
           size="sm"
           onClick={() => setRevising(true)}
-          disabled={revising}
+          disabled={revising || pending !== null}
         >
-          Revise
+          {t("actions.revise")}
         </Button>
         <Button
+          data-testid="memory-action-accept"
           variant="primary"
           size="md"
-          onClick={handleAccept}
-          disabled={!authority.can_accept || accepting}
+          onClick={() => void runAction("accept")}
+          disabled={!actionEnabled("accept")}
           title={acceptBlockedReason ?? undefined}
         >
-          {accepting ? "Accepting…" : "Accept"}
+          {pending === "accept" ? t("actions.accepting") : t("actions.accept")}
         </Button>
       </footer>
     </div>
   );
 }
+
+// Compat re-exports for any caller that previously imported from
+// MemoryReviewDrawer. The canonical home is ./memoryCandidateActions.
+export { postCandidateAction } from "./memoryCandidateActions";
+export type {
+  ActionResult,
+  CandidateAction,
+} from "./memoryCandidateActions";

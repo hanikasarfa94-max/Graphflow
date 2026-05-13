@@ -2029,7 +2029,29 @@
         "detected": "Memory candidate detected",
         "review": "Review",
         "skip": "Skip",
-        "later": "Later"
+        "later": "Later",
+        "actions": {
+          "accept": "Accept",
+          "accepting": "Accepting…",
+          "revise": "Revise",
+          "reject": "Reject",
+          "defer": "Defer",
+          "reopen": "Reopen"
+        },
+        "success": {
+          "accepted": "Memory accepted. Lineage recorded.",
+          "deferred": "Deferred. The candidate is parked; reopen later.",
+          "rejected": "Rejected. The candidate will not enter memory.",
+          "reopened": "Reopened. Back in the review queue."
+        },
+        "errors": {
+          "authorityRequired": "You don’t have authority to accept this memory. Request review from a {role}.",
+          "alreadyResolved": "This candidate has already been resolved.",
+          "notReopenable": "This candidate isn’t in a state that can be reopened.",
+          "notFound": "Memory candidate not found.",
+          "notMember": "You aren’t a member of this candidate’s scope.",
+          "network": "Couldn’t reach the server. Try again."
+        }
       }
     }
   }

@@ -2029,7 +2029,29 @@
         "detected": "发现记忆候选",
         "review": "审核",
         "skip": "跳过",
-        "later": "稍后"
+        "later": "稍后",
+        "actions": {
+          "accept": "接受",
+          "accepting": "正在接受…",
+          "revise": "修订",
+          "reject": "驳回",
+          "defer": "搁置",
+          "reopen": "重开"
+        },
+        "success": {
+          "accepted": "记忆已接受，溯源已记录。",
+          "deferred": "已搁置。该候选稍后可重开。",
+          "rejected": "已驳回。该候选不会进入记忆。",
+          "reopened": "已重开，回到审核队列。"
+        },
+        "errors": {
+          "authorityRequired": "你没有接受此记忆的权限。请向 {role} 申请审核。",
+          "alreadyResolved": "该候选已被处理。",
+          "notReopenable": "当前状态不允许重开。",
+          "notFound": "未找到该记忆候选。",
+          "notMember": "你不是该候选所属范围的成员。",
+          "network": "无法连接服务器，请重试。"
+        }
       }
     }
   }

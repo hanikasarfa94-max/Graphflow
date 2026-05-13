@@ -118,13 +118,32 @@ describe("v0.6.2 — memory lineage is required", () => {
 });
 
 describe("v0.6.2 — compression analysis carries a caveat", () => {
-  // Activates in Phase B.3. The compression_analysis block on a candidate
-  // shows the AI's confidence in lossless distillation, but the caveat
-  // string must remind reviewers that high confidence "does not guarantee"
-  // fidelity. This is a UX honesty invariant — string match enforces it.
-  test.todo(
-    "GET /api/memory-candidates/{id} returns compression_analysis.caveat containing 'does not guarantee'",
-  );
+  // Activated 2026-05-13 by RW-3.3.
+  //
+  // The backend side of this invariant lives at
+  //   apps/api/tests/test_rw3_memory_candidate_actions.py
+  //     ::test_compression_analysis_caveat_contains_does_not_guarantee
+  // which exercises the real `GET /api/memory-candidates/:id` path
+  // and asserts the caveat string contains "does not guarantee".
+  //
+  // The FE-side companion below is a structural check: the
+  // MemoryReviewDrawer must render `candidate.compression_analysis
+  // .caveat` verbatim. If a future refactor swaps it for a hardcoded
+  // string or paraphrases it, the bun:test below catches the
+  // regression even before integration tests run.
+  test("MemoryReviewDrawer renders compression_analysis.caveat verbatim", async () => {
+    const path = "src/features/flow-center/MemoryReviewDrawer.tsx";
+    const src = await Bun.file(path).text();
+    // The component must render the server-supplied caveat string
+    // (not a hardcoded paraphrase). The grep target is the
+    // candidate.compression_analysis.caveat property access inside a
+    // JSX expression.
+    expect(src.includes("candidate.compression_analysis.caveat")).toBe(true);
+    // And no hardcoded paraphrase should sneak in. The doctrine
+    // string is "does not guarantee"; a refactor that hard-codes it
+    // would defeat the contract.
+    expect(src.includes("does not guarantee")).toBe(false);
+  });
 });
 
 describe("v0.6.2 — conversations dedupe active topics from recent", () => {

@@ -1015,6 +1015,22 @@ async def _http_handler(_: Request, exc: StarletteHTTPException):
         409: ApiErrorCode.conflict,
         429: ApiErrorCode.rate_limited,
     }.get(exc.status_code, ApiErrorCode.internal)
+    # When a router passes a structured dict detail (e.g. the
+    # `{error, required_roles, user_roles, allowed_actions}` envelope
+    # raised by the memory-candidate authority gate), preserve the
+    # fields under `details` instead of stringifying. The `error` key
+    # — when present — becomes the canonical short message so the FE
+    # can switch on it without parsing prose.
+    if isinstance(exc.detail, dict):
+        detail_dict = exc.detail
+        short = detail_dict.get("error") or detail_dict.get("message")
+        msg = str(short) if short else "request failed"
+        details = {
+            k: v for k, v in detail_dict.items() if k not in ("error", "message")
+        }
+        return _error_response(
+            code, msg, status_code=exc.status_code, details=details
+        )
     return _error_response(code, str(exc.detail), status_code=exc.status_code)
 
 
