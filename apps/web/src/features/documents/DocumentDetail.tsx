@@ -1,46 +1,23 @@
 "use client";
 
-// DocumentDetail — client-side viewer/editor for /docs/[id].
+// DocumentDetail — read-only viewer for /docs/[id].
 //
-// Phase D scaffold (2026-05-13). v1 renders the doc body as plain
-// markdown text in view mode; switching to edit mode swaps in
-// <DocumentEditor>. The edit-mode toggle is inline (no navigation),
-// matching the spec: "for v1 renders a viewer; edit mode toggled
-// inline."
-//
-// Layout — two-column: main content (viewer/editor) on the left,
-// <DocumentRightRail /> on the right. The rail follows the universal
-// spine per DESIGN_LOCK invariant #10.
+// Phase RW-8 (2026-05-13): the mock useDocument() hook is gone, the
+// inline view/edit toggle is gone, and DocumentEditor.tsx is
+// deleted. The brief is explicit: no document mutation behavior in
+// this slice, no publish exposed from the FE.
 
-import { useState } from "react";
+import { useTranslations } from "next-intl";
 
-import { Button, Card, EmptyState, PageHeader, Tag, Text } from "@/components/ui";
+import { Card, PageHeader, Tag, Text } from "@/components/ui";
+import { formatIso } from "@/lib/time";
 
-import { DocumentEditor } from "./DocumentEditor";
 import { DocumentRightRail } from "./DocumentRightRail";
 import { ProjectBriefBadge } from "./ProjectBriefBadge";
-import { useDocument } from "./hooks";
+import type { DocumentDetail as DocumentDetailType } from "./types";
 
-export function DocumentDetail({ id }: { id: string }) {
-  const doc = useDocument(id);
-  const [editing, setEditing] = useState(false);
-
-  if (!doc) {
-    return (
-      <main
-        style={{
-          maxWidth: 1180,
-          margin: "0 auto",
-          padding: "32px 28px 80px",
-        }}
-      >
-        <EmptyState>
-          {/* TODO(i18n) */}
-          Document not found.
-        </EmptyState>
-      </main>
-    );
-  }
+export function DocumentDetail({ doc }: { doc: DocumentDetailType }) {
+  const t = useTranslations("shellV062.docs.detail");
 
   return (
     <main
@@ -51,25 +28,9 @@ export function DocumentDetail({ id }: { id: string }) {
       }}
     >
       <PageHeader
-        kicker="Documents · KB"
+        kicker={t("kicker")}
         title={doc.title}
-        subtitle={
-          doc.is_project_brief
-            ? // TODO(i18n)
-              "Pinned project brief. Edits propose memory candidates; acceptance is a separate decision."
-            : // TODO(i18n)
-              "Document. Publishing proposes memory candidates; acceptance is a separate decision."
-        }
-        right={
-          <Button
-            size="md"
-            variant={editing ? "ghost" : "primary"}
-            onClick={() => setEditing((e) => !e)}
-          >
-            {/* TODO(i18n) */}
-            {editing ? "View" : "Edit"}
-          </Button>
-        }
+        subtitle={doc.is_project_brief ? t("subtitleBrief") : t("subtitleDoc")}
       />
 
       <div
@@ -79,41 +40,50 @@ export function DocumentDetail({ id }: { id: string }) {
           gap: 20,
         }}
       >
-        {/* Main column */}
         <div style={{ minWidth: 0 }}>
-          {editing ? (
-            <DocumentEditor doc={doc} />
-          ) : (
-            <article style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-              {/* Header strip */}
-              <div
-                style={{
-                  display: "flex",
-                  gap: 6,
-                  alignItems: "center",
-                  flexWrap: "wrap",
-                }}
+          <article
+            style={{ display: "flex", flexDirection: "column", gap: 16 }}
+          >
+            <div
+              style={{
+                display: "flex",
+                gap: 6,
+                alignItems: "center",
+                flexWrap: "wrap",
+              }}
+            >
+              {doc.is_project_brief ? <ProjectBriefBadge /> : null}
+              {doc.scope_id ? (
+                <Tag tone="neutral">{doc.scope_id.slice(0, 8)}</Tag>
+              ) : null}
+              <Tag tone={doc.scope === "personal" ? "neutral" : "accent"}>
+                {doc.scope}
+              </Tag>
+              <Tag
+                tone={
+                  doc.status === "draft"
+                    ? "amber"
+                    : doc.status === "archived"
+                      ? "neutral"
+                      : "ok"
+                }
               >
-                {doc.is_project_brief ? <ProjectBriefBadge /> : null}
-                <Tag tone="neutral">
-                  {/* TODO(i18n) */}
-                  {doc.scope_label ?? doc.scope_id}
-                </Tag>
-                {doc.author ? (
-                  <Text variant="caption" muted>
-                    {/* TODO(i18n) */}
-                    by {doc.author.display_name}
-                  </Text>
-                ) : null}
+                {doc.status}
+              </Tag>
+              {doc.owner_user_id ? (
                 <Text variant="caption" muted>
-                  {/* TODO(i18n) */}
-                  Last edited {doc.updated_at}
+                  {t("ownerLabel")} user:{doc.owner_user_id.slice(0, 8)}
                 </Text>
-              </div>
+              ) : null}
+              {doc.updated_at ? (
+                <Text variant="caption" muted>
+                  {t("editedLabel")} {formatIso(doc.updated_at)}
+                </Text>
+              ) : null}
+            </div>
 
-              {/* Body — v1 renders raw markdown; D.3 wires a real
-                  markdown renderer. */}
-              <Card>
+            <Card>
+              {doc.content_md ? (
                 <pre
                   style={{
                     whiteSpace: "pre-wrap",
@@ -124,24 +94,51 @@ export function DocumentDetail({ id }: { id: string }) {
                     margin: 0,
                   }}
                 >
-                  {doc.body_md ?? ""}
+                  {doc.content_md}
                 </pre>
-              </Card>
+              ) : (
+                <Text variant="caption" muted>
+                  {t("noBody")}
+                </Text>
+              )}
+            </Card>
 
-              <Text
-                as="p"
-                variant="caption"
-                muted
-                style={{ marginTop: 8, textAlign: "center" }}
-              >
-                {/* Doctrine — DESIGN_LOCK §"Hard invariants" #7. */}
-                Memory crystallization is a separate decision.
+            {doc.attachment ? (
+              <Card title={t("attachmentTitle")}>
+                <a
+                  href={doc.attachment.download_url}
+                  style={{
+                    color: "var(--wg-accent)",
+                    textDecoration: "none",
+                  }}
+                >
+                  {doc.attachment.filename} →
+                </a>
+                {doc.attachment.mime ? (
+                  <Text variant="caption" muted>
+                    {" "}· {doc.attachment.mime}
+                  </Text>
+                ) : null}
+              </Card>
+            ) : null}
+
+            <Card variant="sunk">
+              <Text variant="caption" muted>
+                {t("notWired")}
               </Text>
-            </article>
-          )}
+            </Card>
+
+            <Text
+              as="p"
+              variant="caption"
+              muted
+              style={{ marginTop: 8, textAlign: "center" }}
+            >
+              {t("doctrine")}
+            </Text>
+          </article>
         </div>
 
-        {/* Right rail */}
         <DocumentRightRail doc={doc} />
       </div>
     </main>

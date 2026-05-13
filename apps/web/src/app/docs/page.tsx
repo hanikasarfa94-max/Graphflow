@@ -1,25 +1,74 @@
 // /docs — Documents / KB index.
 //
-// Phase D scaffold (2026-05-13). The full Documents feature body lives
-// at `apps/web/src/features/documents/Documents.tsx`; this route file
-// is a thin server wrapper that requires auth and renders the
-// client-side feature. Mirrors the pattern in /flow-center/page.tsx.
-//
-// Doctrine (DESIGN_LOCK §"Locked IA") — Project Brief is a pinned KB
-// document, not a separate page. `GET /api/scopes/:id/project-brief`
-// always returns a `document_id` (4-tier fallback per the backend).
-//
-// API surface (Phase B.1 live, Phase D.2 wires reads):
-//   GET  /api/documents?scope_id=...&type=all|brief|note|attachment
-//   GET  /api/scopes/:scopeId/project-brief
-//   POST /api/documents/:id/publish  (returns memory_candidates)
+// Phase RW-8 (2026-05-13): server-side fetch against the live
+// GET /api/documents endpoint. Active scope sourced from
+// /api/user/active-scope. If the user has no concrete scope, an
+// honest empty state renders — the BE requires scope_id today.
 
+import { getTranslations } from "next-intl/server";
+
+import { Card, EmptyState, PageHeader } from "@/components/ui";
 import { Documents } from "@/features/documents/Documents";
-import { requireUser } from "@/lib/auth";
+import type { DocumentListResponse } from "@/features/documents/types";
+import { requireUser, serverFetch } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
+type ActiveScope = {
+  scope_id: string | null;
+  scope_mode: "current_focus" | "all_accessible" | "no_focus";
+};
+
+async function loadActiveScope(): Promise<ActiveScope> {
+  try {
+    return await serverFetch<ActiveScope>("/api/user/active-scope");
+  } catch {
+    return { scope_id: null, scope_mode: "no_focus" };
+  }
+}
+
+async function loadDocuments(
+  scope_id: string,
+): Promise<DocumentListResponse> {
+  try {
+    return await serverFetch<DocumentListResponse>(
+      `/api/documents?scope_id=${encodeURIComponent(scope_id)}&type=all`,
+    );
+  } catch {
+    return { documents: [], scope_id, type: "all" };
+  }
+}
+
 export default async function DocsIndexPage() {
   await requireUser("/docs");
-  return <Documents />;
+  const active = await loadActiveScope();
+  const scopeId =
+    active.scope_mode === "current_focus" && active.scope_id
+      ? active.scope_id
+      : null;
+
+  if (!scopeId) {
+    const t = await getTranslations("shellV062.docs.page");
+    return (
+      <main
+        style={{
+          maxWidth: 1180,
+          margin: "0 auto",
+          padding: "32px 28px 80px",
+        }}
+      >
+        <PageHeader
+          kicker={t("kicker")}
+          title={t("title")}
+          subtitle={t("subtitle")}
+        />
+        <Card>
+          <EmptyState>{t("needScope")}</EmptyState>
+        </Card>
+      </main>
+    );
+  }
+
+  const data = await loadDocuments(scopeId);
+  return <Documents docs={data.documents} scopeId={scopeId} />;
 }

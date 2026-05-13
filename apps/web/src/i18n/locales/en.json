@@ -2056,6 +2056,63 @@
         }
       }
     },
+    "docs": {
+      "page": {
+        "kicker": "Documents · KB",
+        "title": "Documents",
+        "subtitle": "Project Briefs, design notes, attachments. Read-only today — edit and publish wire in a later slice.",
+        "filters": {
+          "all": "All",
+          "brief": "Brief"
+        },
+        "scopeLabel": "Scope: {scope}",
+        "noScope": "Scope: not selected",
+        "listTitle": "Documents",
+        "doctrine": "Memory crystallization is a separate decision.",
+        "needScope": "Pick a project scope in the topbar to view its documents. The BE list endpoint is scope-bound today."
+      },
+      "index": {
+        "empty": "No documents in this scope yet.",
+        "pinnedLabel": "Pinned — Project Brief"
+      },
+      "card": {
+        "draft": "Draft",
+        "archived": "Archived",
+        "ownerLabel": "Owner",
+        "editedLabel": "edited"
+      },
+      "detail": {
+        "kicker": "Document",
+        "titleFallback": "Document",
+        "subtitleBrief": "Pinned project brief. Read-only — edit and publish aren’t wired here yet.",
+        "subtitleDoc": "Document. Read-only — edit and publish aren’t wired here yet.",
+        "ownerLabel": "Owner",
+        "editedLabel": "Edited",
+        "noBody": "(no body recorded)",
+        "attachmentTitle": "Attachment",
+        "doctrine": "Memory crystallization is a separate decision.",
+        "notWired": "Edit and publish aren’t wired in this slice. Memory extraction, citations, and AI Assistance land later.",
+        "forbidden": "You don’t have access to this document.",
+        "notFound": "Document {id} doesn’t exist or isn’t visible to you.",
+        "loadError": "Couldn’t load this document. Try again."
+      },
+      "rightRail": {
+        "context": "Context",
+        "scopeLabel": "Scope",
+        "noScope": "No scope attached.",
+        "ownerLabel": "Owner",
+        "lastEditedLabel": "Last edited",
+        "sourceLabel": "Source",
+        "relatedWork": "Related Work",
+        "evidence": "Evidence",
+        "aiAssistance": "AI Assistance",
+        "primaryAction": "Primary Action",
+        "notWiredRelated": "Related tasks, conversations, and decisions aren’t wired yet.",
+        "notWiredEvidence": "Citations and decision lineage aren’t wired yet.",
+        "notWiredAi": "AI Assistance for documents isn’t wired yet. Proposals will land here when /api/ai-assistance/run is producing real document proposals.",
+        "notWiredPublish": "Publish isn’t exposed in this slice. The backend endpoint exists; the FE wiring lands when the publish-→-memory-candidate pipeline is real end-to-end."
+      }
+    },
     "tasks": {
       "page": {
         "kicker": "Tasks",

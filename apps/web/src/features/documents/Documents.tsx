@@ -1,40 +1,37 @@
 "use client";
 
 // Documents — page body for /docs. PageHeader + type filter strip +
-// DocumentIndex. The doctrine string at the bottom is verbatim from
-// DESIGN_LOCK §"Hard invariants" #7.
+// DocumentIndex.
 //
-// Phase D scaffold (2026-05-13). Style modelled on
-// `apps/web/src/features/flow-center/FlowCenter.tsx`. The scope_id
-// param will be sourced from the active ScopeBand selection in Phase
-// D.2; for D.1 it's left undefined so the surface shows all visible
-// mocks across scopes.
+// Phase RW-8 (2026-05-13): receives all docs from the server page
+// (one fetch with type=all) and applies the type filter client-side.
+// The BE's type filter only honors 'brief' today; the FE filter is
+// honest about what the BE actually distinguishes.
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import { useTranslations } from "next-intl";
 
 import { Button, Card, PageHeader, Text } from "@/components/ui";
 
 import { DocumentIndex } from "./DocumentIndex";
-import type { DocumentTypeFilter } from "./types";
+import type { Document, DocumentTypeFilter } from "./types";
 
-// Filter strip definitions. Order matches the IA mock — Brief is
-// surfaced first after All since it's the doctrine-load-bearing kind.
-// TODO(i18n)
-const FILTERS: Array<{ id: DocumentTypeFilter; label: string }> = [
-  { id: "all", label: "All" },
-  { id: "brief", label: "Brief" },
-  { id: "note", label: "Notes" },
-  { id: "attachment", label: "Attachments" },
-];
+const FILTERS: DocumentTypeFilter[] = ["all", "brief"];
 
-export function Documents() {
+export function Documents({
+  docs,
+  scopeId,
+}: {
+  docs: Document[];
+  scopeId: string | null;
+}) {
+  const t = useTranslations("shellV062.docs.page");
   const [filter, setFilter] = useState<DocumentTypeFilter>("all");
 
-  // TODO(phase-d.2): pull `scope_id` from the active ScopeBand
-  // selection (currently sourced from /api/user/active-scope on the
-  // server side; client hook lands in D.2). Until then, the index
-  // mock returns docs across scopes.
-  const scope_id: string | undefined = undefined;
+  const visible = useMemo(() => {
+    if (filter === "brief") return docs.filter((d) => d.is_project_brief);
+    return docs;
+  }, [docs, filter]);
 
   return (
     <main
@@ -45,12 +42,11 @@ export function Documents() {
       }}
     >
       <PageHeader
-        kicker="Documents · KB"
-        title="Documents"
-        subtitle="Project Briefs, design notes, attachments. Authoring is a path to memory candidates — publish proposes memory; it does not accept memory."
+        kicker={t("kicker")}
+        title={t("title")}
+        subtitle={t("subtitle")}
       />
 
-      {/* Filter strip — All / Brief / Notes / Attachments */}
       <div
         style={{
           display: "flex",
@@ -61,19 +57,32 @@ export function Documents() {
       >
         {FILTERS.map((f) => (
           <Button
-            key={f.id}
+            key={f}
             size="sm"
-            variant={filter === f.id ? "primary" : "ghost"}
-            onClick={() => setFilter(f.id)}
+            variant={filter === f ? "primary" : "ghost"}
+            onClick={() => setFilter(f)}
           >
-            {f.label}
+            {t(`filters.${f}` as const)}
           </Button>
         ))}
+        <div
+          style={{
+            marginLeft: "auto",
+            display: "flex",
+            alignItems: "center",
+          }}
+        >
+          <Text variant="caption" muted>
+            {scopeId
+              ? t("scopeLabel", { scope: scopeId.slice(0, 8) })
+              : t("noScope")}
+          </Text>
+        </div>
       </div>
 
-      <Card title="Documents" flush>
+      <Card title={t("listTitle")} flush>
         <div style={{ padding: 16 }}>
-          <DocumentIndex scope_id={scope_id} type={filter} />
+          <DocumentIndex docs={visible} />
         </div>
       </Card>
 
@@ -83,8 +92,7 @@ export function Documents() {
         muted
         style={{ marginTop: 16, textAlign: "center" }}
       >
-        {/* Doctrine string — DESIGN_LOCK §"Hard invariants" #7. */}
-        Memory crystallization is a separate decision.
+        {t("doctrine")}
       </Text>
     </main>
   );

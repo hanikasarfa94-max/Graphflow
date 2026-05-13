@@ -2056,6 +2056,63 @@
         }
       }
     },
+    "docs": {
+      "page": {
+        "kicker": "文档 · 知识库",
+        "title": "文档",
+        "subtitle": "项目简报、设计笔记与附件。当前为只读 — 编辑与发布在后续切片接入。",
+        "filters": {
+          "all": "全部",
+          "brief": "简报"
+        },
+        "scopeLabel": "范围：{scope}",
+        "noScope": "范围：未选择",
+        "listTitle": "文档",
+        "doctrine": "记忆固化是一次独立的判断。",
+        "needScope": "请在顶栏选择一个项目范围以查看其文档。后端列表接口目前需要绑定范围。"
+      },
+      "index": {
+        "empty": "该范围下尚无文档。",
+        "pinnedLabel": "已置顶 — 项目简报"
+      },
+      "card": {
+        "draft": "草稿",
+        "archived": "已归档",
+        "ownerLabel": "所有者",
+        "editedLabel": "编辑于"
+      },
+      "detail": {
+        "kicker": "文档",
+        "titleFallback": "文档",
+        "subtitleBrief": "已置顶项目简报。当前为只读 — 编辑与发布尚未接入。",
+        "subtitleDoc": "文档。当前为只读 — 编辑与发布尚未接入。",
+        "ownerLabel": "所有者",
+        "editedLabel": "编辑于",
+        "noBody": "（未记录正文）",
+        "attachmentTitle": "附件",
+        "doctrine": "记忆固化是一次独立的判断。",
+        "notWired": "编辑与发布在本切片中尚未接入。记忆抽取、引用与 AI 辅助会在后续接入。",
+        "forbidden": "你没有该文档的访问权限。",
+        "notFound": "文档 {id} 不存在或对你不可见。",
+        "loadError": "无法加载该文档，请重试。"
+      },
+      "rightRail": {
+        "context": "上下文",
+        "scopeLabel": "范围",
+        "noScope": "未绑定范围。",
+        "ownerLabel": "所有者",
+        "lastEditedLabel": "最近编辑",
+        "sourceLabel": "来源",
+        "relatedWork": "相关工作",
+        "evidence": "证据",
+        "aiAssistance": "AI 辅助",
+        "primaryAction": "主操作",
+        "notWiredRelated": "相关任务、会话与决策尚未接入。",
+        "notWiredEvidence": "引用与决策溯源尚未接入。",
+        "notWiredAi": "文档侧的 AI 辅助尚未接入。等 /api/ai-assistance/run 真正产出文档侧的提议后会出现在这里。",
+        "notWiredPublish": "本切片不暴露发布。后端接口存在，FE 要在 publish → memory candidate 链路全部真实落地后才接入。"
+      }
+    },
     "tasks": {
       "page": {
         "kicker": "任务",

@@ -81,7 +81,11 @@ def _looks_like_brief(item: dict[str, Any]) -> bool:
 
 
 def _doc_from_kb(item: dict[str, Any]) -> dict[str, Any]:
-    """Re-shape a KbItemRow dict as a v0.6.2 Document."""
+    """Re-shape a KbItemRow dict as a v0.6.2 Document (list shape).
+
+    Keeps the list payload light — body content + attachment metadata
+    live on the singleton wire (`_doc_full_from_kb`) only.
+    """
     return {
         "document_id": item.get("id"),
         "scope_id": item.get("project_id"),
@@ -92,7 +96,21 @@ def _doc_from_kb(item: dict[str, Any]) -> dict[str, Any]:
         "updated_at": item.get("updated_at"),
         "created_at": item.get("created_at"),
         "source": item.get("source"),
+        "owner_user_id": item.get("owner_user_id"),
     }
+
+
+def _doc_full_from_kb(item: dict[str, Any]) -> dict[str, Any]:
+    """Singleton shape — list shape + body + attachment metadata.
+
+    Used by GET /api/documents/:id so the detail page renders without
+    a follow-up fetch.
+    """
+    base = _doc_from_kb(item)
+    base["content_md"] = item.get("content_md")
+    base["attachment"] = item.get("attachment")
+    base["folder_id"] = item.get("folder_id")
+    return base
 
 
 # ---- endpoints ------------------------------------------------------------
@@ -135,6 +153,28 @@ async def get_documents(
         pass
 
     return {"documents": docs, "scope_id": scope_id, "type": type}
+
+
+@router.get("/documents/{document_id}")
+async def get_document(
+    document_id: str,
+    request: Request,
+    user: AuthenticatedUser = Depends(require_user),
+) -> dict[str, Any]:
+    """Phase RW-8 — read-only single-document detail.
+
+    Wraps KbItemService.get (membership-checked). Returns the same
+    Document envelope as each row in the list endpoint plus the body
+    (`content_md`) and attachment block so the /docs/:id page renders
+    without a follow-up fetch. No mutation, no publish.
+    """
+    service = _kb_service(request)
+    try:
+        item = await service.get(item_id=document_id, viewer_user_id=user.id)
+    except KbItemError as err:
+        status = err.status or 400
+        raise HTTPException(status_code=status, detail=err.code) from err
+    return {"document": _doc_full_from_kb(item)}
 
 
 @router.get("/scopes/{scope_id}/project-brief")
