@@ -36,7 +36,7 @@ async function loadConversations(): Promise<ConversationIndexResponse> {
 }
 
 export default async function ConversationsIndexPage() {
-  await requireUser("/conversations");
+  const user = await requireUser("/conversations");
   const data = await loadConversations();
-  return <Conversations data={data} />;
+  return <Conversations data={data} viewerUserId={user.id} />;
 }

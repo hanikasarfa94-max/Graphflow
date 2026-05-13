@@ -26,7 +26,13 @@ export default async function ConversationDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  await requireUser(`/conversations/${id}`);
+  const user = await requireUser(`/conversations/${id}`);
   const data = await loadConversations();
-  return <Conversations data={data} initialSelectedId={id} />;
+  return (
+    <Conversations
+      data={data}
+      viewerUserId={user.id}
+      initialSelectedId={id}
+    />
+  );
 }

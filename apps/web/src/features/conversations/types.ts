@@ -69,11 +69,29 @@ export interface ConversationIndexResponse {
 
 // ── Message + conversation detail ────────────────────────────────────
 
+// Wire shape from GET /api/conversations/:id messages[] — mirrors
+// StreamService.list_messages, with the v0.6.2 field names the FE
+// consumes directly.
 export interface ConversationMessage {
   id: string;
-  author: { id: string; display_name: string };
+  stream_id: string;
+  project_id: string | null;
+  author_id: string;
+  author_username: string | null;
   body: string;
-  posted_at: string;
+  kind: string | null;
+  linked_id: string | null;
+  created_at: string;
+}
+
+// Participant — one row from StreamMemberRepository, enriched with
+// the user's display_name. The viewer is included; the DM rail
+// filters them out client-side to find the "other" party.
+export interface ConversationParticipant {
+  user_id: string;
+  username: string;
+  display_name: string;
+  role_in_stream: string | null;
 }
 
 // Right rail spine, shared across surfaces per DESIGN_LOCK.md:
@@ -98,8 +116,10 @@ export interface ConversationDetail {
   type: ConversationType;
   title: string;
   scope_id: string | null;
-  // Only populated for type === "topic"
-  topic_status?: TopicStatus;
+  // Only populated for type === "topic"; backend leaves this null
+  // until the TopicRow primitive lands (Phase B.3 follow-up).
+  topic_status?: TopicStatus | null;
+  participants: ConversationParticipant[];
   messages: ConversationMessage[];
   right_rail: RightRailPayload | null;
 }

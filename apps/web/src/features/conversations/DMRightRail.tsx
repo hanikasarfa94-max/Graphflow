@@ -2,69 +2,36 @@
 
 // DMRightRail — right rail for direct (1:1) conversations.
 //
-// Phase D scaffold (2026-05-13). Follows the DESIGN_LOCK.md spine:
-//   Context / Related Work / Evidence / AI Assistance / Primary Action.
+// Phase RW-4 (2026-05-13): honest minimal. Renders only what the
+// live `GET /api/conversations/:id` response actually carries —
+// the other participant + the scope (DMs typically have no scope).
 //
-// DM-specific framing:
-//   * Context shows the other participant + shared scopes.
-//   * Related Work pulls items the two of you have collaborated on.
-//   * Evidence is intentionally sparse for DMs — DMs rarely cite.
-//   * AI Assistance is biased toward "elevate to topic" / "create
-//     task candidate" proposals, since DMs are where coordination
-//     often surfaces but isn't yet structured.
-//   * Primary action is "Start a topic" — the DM's escape hatch into
-//     a coordination-shaped conversation.
+// Removed (vs the Phase D scaffold): fabricated docs co-edited with
+// the partner, invented follow-up task, made-up AI Assistance
+// proposals, simulated primary action. Until those data sources are
+// real, they are not rendered. The rail stays a real surface, not a
+// stage set.
 
-import {
-  AIAssistanceSection,
-  ContextSection,
-  EvidenceSection,
-  PrimaryActionFooter,
-  RelatedWorkSection,
-  linkRefFor,
-  type LinkRef,
-} from "./rightRailShared";
+import { useTranslations } from "next-intl";
+
+import { Card, EmptyState, Tag, Text } from "@/components/ui";
+
 import type { ConversationDetail } from "./types";
 
-// TODO(phase-d.2): replace with right_rail payload from
-//   `GET /api/conversations/:conversationId`
-// (the response already includes an initial `right_rail` slot, today
-// returned as `null`). For the scaffold we synthesize a believable
-// payload from the conversation title so the layout renders.
-function useDMRightRail(conv: ConversationDetail) {
-  const counterpart = conv.title;
-
-  const related: LinkRef[] = [
-    linkRefFor("doc", "doc_shared_brief", `Brief co-edited with ${counterpart}`),
-    linkRefFor("task", "task_followup", "Follow-up task from last week"),
-  ].filter((x): x is LinkRef => x !== null);
-
-  const evidence: LinkRef[] = [];
-
-  return {
-    context: [
-      { label: "With", value: counterpart },
-      { label: "Shared scopes", value: conv.scope_id ?? "personal" },
-    ],
-    related,
-    evidence,
-    ai_assistance: [
-      {
-        id: "ai_dm_topic",
-        label: "Suggest carving this into a topic",
-        proposal_type: "topic_suggestion" as const,
-      },
-      {
-        id: "ai_dm_task",
-        label: "Surface task candidates from this thread",
-        proposal_type: "task_candidate" as const,
-      },
-    ],
-  };
-}
-
-export function DMRightRail({ conv }: { conv: ConversationDetail }) {
-  const rail = useDMRightRail(conv);
+export function DMRightRail({
+  conv,
+  viewerUserId,
+}: {
+  conv: ConversationDetail;
+  viewerUserId: string;
+}) {
+  const t = useTranslations("shellV062.conversations.rightRail.dm");
+  // The "other" participant — DMs always have exactly two members.
+  // If the wire response is malformed (zero or only-me), fall back to
+  // a neutral display rather than crashing.
+  const other = conv.participants.find(
+    (p) => p.user_id !== viewerUserId,
+  );
 
   return (
     <aside
@@ -80,19 +47,54 @@ export function DMRightRail({ conv }: { conv: ConversationDetail }) {
         overflowY: "auto",
       }}
     >
-      <ContextSection rows={rail.context} />
-      <RelatedWorkSection items={rail.related} />
-      <EvidenceSection items={rail.evidence} />
-      <AIAssistanceSection actions={rail.ai_assistance} />
-      <PrimaryActionFooter
-        // TODO(i18n): shellV062.conversations.rightRail.dm.primary
-        label="Start a topic from here"
-        onClick={() => {
-          // TODO(phase-d.2): wire to `POST /api/topics` with
-          // source_conversation_id = conv.id and selected message ids.
-        }}
-        hint="Topics carve coordination out of chat."
-      />
+      <Section title={t("withLabel")}>
+        {other ? (
+          <Text variant="body">
+            {other.display_name || other.username || other.user_id.slice(0, 8)}
+          </Text>
+        ) : (
+          <Text variant="caption" muted>
+            {t("noCounterpart")}
+          </Text>
+        )}
+      </Section>
+
+      <Section title={t("scopeLabel")}>
+        {conv.scope_id ? (
+          <Tag tone="neutral">{conv.scope_id.slice(0, 12)}</Tag>
+        ) : (
+          <Text variant="caption" muted>
+            {t("noScope")}
+          </Text>
+        )}
+      </Section>
+
+      <Card variant="sunk">
+        <Text variant="caption" muted>
+          {t("notWired")}
+        </Text>
+      </Card>
     </aside>
+  );
+}
+
+function Section({
+  title,
+  children,
+}: {
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+      <Text
+        variant="caption"
+        muted
+        style={{ textTransform: "uppercase", letterSpacing: "0.06em" }}
+      >
+        {title}
+      </Text>
+      {children}
+    </section>
   );
 }

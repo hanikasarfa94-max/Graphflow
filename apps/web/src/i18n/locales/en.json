@@ -2012,6 +2012,37 @@
     "empty": {
       "myAi": "Start here. Think with AI first. Share when ready."
     },
+    "conversations": {
+      "shell": {
+        "noSelection": "Pick a conversation on the left, or start a new one from Create.",
+        "loading": "Loading conversation…",
+        "error": "{hint} — try selecting it again, or pick another conversation."
+      },
+      "stream": {
+        "empty": "No messages yet. Start the conversation below."
+      },
+      "rightRail": {
+        "dm": {
+          "withLabel": "With",
+          "scopeLabel": "Scope",
+          "noCounterpart": "No counterpart found in this DM.",
+          "noScope": "Direct message — no project scope.",
+          "notWired": "Related work, evidence, and AI Assistance for DMs aren’t wired yet. Only real participants and scope render here."
+        },
+        "room": {
+          "scopeLabel": "Scope",
+          "noScope": "No scope attached.",
+          "participantsLabel": "Participants ({count})",
+          "noParticipants": "No participants recorded.",
+          "notWired": "Related work, evidence, and AI Assistance for rooms aren’t wired yet. Only the real scope and member roster render here."
+        },
+        "topic": {
+          "notWiredTag": "topic not wired",
+          "notWiredBody": "Topic primitives aren’t persisted yet. Status, evidence, related work, and propose-closure return when /api/topics is real.",
+          "scopeLabel": "Scope"
+        }
+      }
+    },
     "flowCenter": {
       "metrics": {
         "needsMe": "Needs me",

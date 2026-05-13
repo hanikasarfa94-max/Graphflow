@@ -2,15 +2,17 @@
 
 // MessageStream — scrolling message list for the active conversation.
 //
-// Phase D scaffold (2026-05-13). Renders the messages provided in the
-// ConversationDetail payload. The stream owns scrolling + rendering
-// only; posting belongs to ConversationComposer.
+// Phase RW-4 (2026-05-13): renders the live message rows returned by
+// GET /api/conversations/:id. Each row is a real MessageRow shape
+// from StreamService.list_messages (author_id, author_username,
+// body, created_at, kind, linked_id). No mock messages.
 //
-// Phase D.2 swap-in: load messages from
-//   `GET /api/conversations/:conversationId`
-// (which already includes initial `messages`) and append via SSE / WS
-// as new ones arrive. For the scaffold the parent passes the messages
-// down so the component stays pure.
+// Display name resolution: we render `author_username` (the BE
+// already resolved UserRow.username for each author). When username
+// is null (system messages, edge agent posts), we render an
+// abbreviated user_id so the row never displays an empty author.
+
+import { useTranslations } from "next-intl";
 
 import { Text } from "@/components/ui";
 
@@ -21,6 +23,8 @@ export function MessageStream({
 }: {
   messages: ConversationMessage[];
 }) {
+  const t = useTranslations("shellV062.conversations.stream");
+
   if (messages.length === 0) {
     return (
       <div
@@ -33,8 +37,7 @@ export function MessageStream({
         }}
       >
         <Text variant="body" muted>
-          {/* TODO(i18n): shellV062.conversations.stream.empty */}
-          No messages yet. Start the conversation below.
+          {t("empty")}
         </Text>
       </div>
     );
@@ -60,6 +63,8 @@ export function MessageStream({
 }
 
 function MessageRow({ msg }: { msg: ConversationMessage }) {
+  const author =
+    msg.author_username || `user:${msg.author_id.slice(0, 8)}`;
   return (
     <article
       style={{
@@ -74,11 +79,16 @@ function MessageRow({ msg }: { msg: ConversationMessage }) {
     >
       <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
         <Text variant="body" style={{ fontWeight: 600 }}>
-          {msg.author.display_name}
+          {author}
         </Text>
         <Text variant="caption" muted>
-          {formatTime(msg.posted_at)}
+          {formatTime(msg.created_at)}
         </Text>
+        {msg.kind && msg.kind !== "text" ? (
+          <Text variant="caption" muted>
+            · {msg.kind}
+          </Text>
+        ) : null}
       </div>
       <Text variant="body" as="p" style={{ whiteSpace: "pre-wrap" }}>
         {msg.body}
@@ -88,7 +98,7 @@ function MessageRow({ msg }: { msg: ConversationMessage }) {
 }
 
 // All visible timestamps funnel through lib/time so SSR + CSR render
-// the same Asia/Shanghai string (avoids React hydration warnings).
+// the same Asia/Shanghai string (M1.1 invariant).
 import { formatIso as _formatIso } from "@/lib/time";
 function formatTime(iso: string): string {
   return _formatIso(iso);

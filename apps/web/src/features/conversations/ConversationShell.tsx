@@ -2,23 +2,23 @@
 
 // ConversationShell — right pane of the Conversations surface.
 //
-// Phase D scaffold (2026-05-13). Loads the detail for the selected
-// conversation and routes the right rail by ConversationType:
+// Phase RW-4 (2026-05-13): the mock useConversation() hook is gone.
+// The shell does a client-side fetch against the live
+// GET /api/conversations/:id whenever selection changes. The response
+// already carries title, type, scope_id, participants, messages, plus
+// a right_rail slot (currently null). All of that flows straight into
+// the rendered surface — no fabricated rows, no invented people.
 //
-//   direct → DMRightRail
-//   room   → RoomRightRail
-//   topic  → TopicRightRail
-//
-// The header + message stream + composer are the same across types;
-// only the right rail (and its primary action) varies.
-//
-// Phase D.2 swap-in: replace useConversation() with a real fetch
-// against `GET /api/conversations/:id` and replace the composer's
-// onSend with `POST /api/conversations/:id/messages`. The detail
-// response already includes initial `messages` and `right_rail` per
-// API_CONTRACT.md, so the wire-up should be a straight transcription.
+// Routing of the right rail by ConversationType:
+//   direct → DMRightRail (real participants + scope if any)
+//   room   → RoomRightRail (real scope + participants)
+//   topic  → TopicRightRail (honest empty; no backend persistence yet)
+
+import { useEffect, useState } from "react";
+import { useTranslations } from "next-intl";
 
 import { Card, EmptyState, Text } from "@/components/ui";
+import { ApiError, api } from "@/lib/api";
 
 import { ConversationComposer } from "./ConversationComposer";
 import { ConversationHeader } from "./ConversationHeader";
@@ -28,93 +28,67 @@ import { RoomRightRail } from "./RoomRightRail";
 import { TopicRightRail } from "./TopicRightRail";
 import type { ConversationDetail } from "./types";
 
-// TODO(phase-d.2): replace with real fetch against
-//   `GET /api/conversations/:conversationId`
-// Phase D returns a deterministic stub keyed by id so the surface
-// renders end-to-end. The id prefix selects which conversation
-// type's right rail surfaces — `conv_dm_*` → direct, `conv_room_*`
-// → room, `topic_*` → topic. Real fetcher will read `type` off the
-// wire response, not infer it from the id.
-export function useConversation(id: string | null): ConversationDetail | null {
-  if (!id) return null;
+type FetchState =
+  | { status: "idle" }
+  | { status: "loading" }
+  | { status: "error"; message: string }
+  | { status: "ready"; conv: ConversationDetail };
 
-  const type: ConversationDetail["type"] = id.startsWith("topic_")
-    ? "topic"
-    : id.startsWith("conv_dm_")
-      ? "direct"
-      : "room";
+function useConversationDetail(id: string | null): FetchState {
+  const [state, setState] = useState<FetchState>(
+    id ? { status: "loading" } : { status: "idle" },
+  );
 
-  const title =
-    type === "direct"
-      ? "Mei"
-      : type === "room"
-        ? "Q3 Launch Room"
-        : "Should Q3 launch slip to Sep 18?";
+  useEffect(() => {
+    if (!id) {
+      setState({ status: "idle" });
+      return;
+    }
+    let cancelled = false;
+    setState({ status: "loading" });
+    api<ConversationDetail>(
+      `/api/conversations/${encodeURIComponent(id)}`,
+    )
+      .then((data) => {
+        if (!cancelled) setState({ status: "ready", conv: data });
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        const message =
+          err instanceof ApiError
+            ? `couldn't load conversation (${err.status})`
+            : "couldn't load conversation";
+        setState({ status: "error", message });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [id]);
 
-  const base: ConversationDetail = {
-    id,
-    type,
-    title,
-    scope_id: type === "direct" ? null : "scope_tikhub",
-    messages: [
-      {
-        id: `${id}__m1`,
-        author: { id: "user_mei", display_name: "Mei" },
-        body:
-          type === "topic"
-            ? "Folks — I think we need to slip the launch by a week. Three blockers landed yesterday."
-            : "Quick thread to sync on the launch plan.",
-        posted_at: "2026-05-13T09:14:00Z",
-      },
-      {
-        id: `${id}__m2`,
-        author: { id: "user_ravi", display_name: "Ravi" },
-        body: "Agreed on the blockers. Can we get marketing to weigh in before EOD?",
-        posted_at: "2026-05-13T09:42:00Z",
-      },
-      {
-        id: `${id}__m3`,
-        author: { id: "user_alex", display_name: "Alex" },
-        body: "Marketing here — we can shift the calendar, but we need a confirmation by Thursday or the ad spend locks.",
-        posted_at: "2026-05-13T11:08:00Z",
-      },
-    ],
-    right_rail: null,
-  };
-
-  if (type === "topic") {
-    base.topic_status = "needs_input";
-  }
-
-  return base;
+  return state;
 }
 
-export function ConversationShell({ selectedId }: { selectedId: string | null }) {
-  const conv = useConversation(selectedId);
+export function ConversationShell({
+  selectedId,
+  viewerUserId,
+}: {
+  selectedId: string | null;
+  viewerUserId: string;
+}) {
+  const t = useTranslations("shellV062.conversations.shell");
+  const state = useConversationDetail(selectedId);
 
-  if (!conv) {
-    return (
-      <section
-        style={{
-          flex: 1,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          padding: 32,
-          background: "var(--wg-surface-sunk)",
-        }}
-      >
-        <Card>
-          <EmptyState>
-            {/* TODO(i18n): shellV062.conversations.shell.noSelection */}
-            <Text variant="body" muted>
-              Pick a conversation on the left, or start a new one from Create.
-            </Text>
-          </EmptyState>
-        </Card>
-      </section>
-    );
+  if (state.status === "idle") {
+    return <CenteredCard>{t("noSelection")}</CenteredCard>;
   }
+  if (state.status === "loading") {
+    return <CenteredCard>{t("loading")}</CenteredCard>;
+  }
+  if (state.status === "error") {
+    return <CenteredCard>{t("error", { hint: state.message })}</CenteredCard>;
+  }
+
+  const conv = state.conv;
 
   return (
     <section
@@ -138,17 +112,47 @@ export function ConversationShell({ selectedId }: { selectedId: string | null })
         <ConversationComposer
           conversationId={conv.id}
           onSend={async () => {
-            // TODO(phase-d.2): wire to
-            //   `POST /api/conversations/:conversationId/messages`
-            // and append the returned message to the stream.
+            // RW-4 is read-only by brief. POST /api/conversations/:id/messages
+            // wiring lands in a later phase. The composer is left visible
+            // but its send is a no-op so the surface looks complete;
+            // the textarea still accepts text but submitting won't post.
+            // TODO(RW-5): POST /api/conversations/:id/messages
           }}
         />
       </div>
 
-      {/* Right rail — routed by ConversationType */}
-      {conv.type === "direct" ? <DMRightRail conv={conv} /> : null}
+      {/* Right rail — routed by ConversationType. Each rail consumes
+          conv.participants + conv.scope_id from the real wire response;
+          there's no rail-internal fabrication. The topic rail is an
+          honest "not wired yet" until TopicRow lands. */}
+      {conv.type === "direct" ? (
+        <DMRightRail conv={conv} viewerUserId={viewerUserId} />
+      ) : null}
       {conv.type === "room" ? <RoomRightRail conv={conv} /> : null}
       {conv.type === "topic" ? <TopicRightRail conv={conv} /> : null}
+    </section>
+  );
+}
+
+function CenteredCard({ children }: { children: React.ReactNode }) {
+  return (
+    <section
+      style={{
+        flex: 1,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: 32,
+        background: "var(--wg-surface-sunk)",
+      }}
+    >
+      <Card>
+        <EmptyState>
+          <Text variant="body" muted>
+            {children}
+          </Text>
+        </EmptyState>
+      </Card>
     </section>
   );
 }

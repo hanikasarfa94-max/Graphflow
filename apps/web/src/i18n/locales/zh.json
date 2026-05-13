@@ -2012,6 +2012,37 @@
     "empty": {
       "myAi": "从这里开始。先与 AI 共思，准备好再分享。"
     },
+    "conversations": {
+      "shell": {
+        "noSelection": "在左侧选择一段会话，或通过创建新建一段。",
+        "loading": "正在加载会话…",
+        "error": "{hint} — 请重新选择该会话，或换一段。"
+      },
+      "stream": {
+        "empty": "还没有消息。先在下方开个头吧。"
+      },
+      "rightRail": {
+        "dm": {
+          "withLabel": "对方",
+          "scopeLabel": "范围",
+          "noCounterpart": "未找到该私聊的对方。",
+          "noScope": "私聊会话 — 不绑定项目范围。",
+          "notWired": "DM 的相关工作、证据与 AI 辅助尚未接入。这里只展示真实的参与人与范围。"
+        },
+        "room": {
+          "scopeLabel": "范围",
+          "noScope": "未绑定项目范围。",
+          "participantsLabel": "参与人（{count}）",
+          "noParticipants": "未记录参与人。",
+          "notWired": "群组的相关工作、证据与 AI 辅助尚未接入。这里只展示真实的范围与成员名单。"
+        },
+        "topic": {
+          "notWiredTag": "话题未接入",
+          "notWiredBody": "话题原语尚未持久化。状态、证据、相关工作与「提议结束」要等 /api/topics 真正落地后才会出现。",
+          "scopeLabel": "范围"
+        }
+      }
+    },
     "flowCenter": {
       "metrics": {
         "needsMe": "待我处理",

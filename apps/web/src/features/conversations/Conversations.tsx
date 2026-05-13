@@ -32,12 +32,16 @@ import type { ConversationIndexResponse } from "./types";
 
 export function Conversations({
   data,
+  viewerUserId,
   initialSelectedId = null,
 }: {
   // Phase RW-1.2 — data is fetched server-side in page.tsx via
   // `GET /api/conversations` and passed in as a prop. There is no
   // mock fallback; an empty server response renders an empty UI.
   data: ConversationIndexResponse;
+  // Phase RW-4 — viewer id flows through so the DM rail can resolve
+  // the "other" participant without inferring from local context.
+  viewerUserId: string;
   initialSelectedId?: string | null;
 }) {
   const [selectedId, setSelectedId] = useState<string | null>(initialSelectedId);
@@ -76,7 +80,10 @@ export function Conversations({
           selectedId={selectedId}
           onSelect={setSelectedId}
         />
-        <ConversationShell selectedId={selectedId} />
+        <ConversationShell
+          selectedId={selectedId}
+          viewerUserId={viewerUserId}
+        />
       </div>
     </main>
   );

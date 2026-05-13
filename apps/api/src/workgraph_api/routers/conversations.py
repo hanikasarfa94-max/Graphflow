@@ -194,32 +194,79 @@ async def get_conversation(
     limit: int = Query(default=100, ge=1, le=500),
     user: AuthenticatedUser = Depends(require_user),
 ) -> dict[str, Any]:
-    """Fetch a single conversation with initial messages + right_rail slot.
+    """Fetch a single conversation with metadata + initial messages.
 
-    Per API_CONTRACT.md: "GET /api/conversations/:conversationId should
-    include initial `right_rail`." For Phase B.1 we return
-    `right_rail: null` so the contract shape registers; Phase B.2
-    populates it from the RightRail surface stub.
+    Phase RW-4 (2026-05-13): returns the full v0.6.2 ConversationDetail
+    shape — id, type, title, scope_id, participants, messages, plus a
+    `right_rail: null` slot the FE renders honestly until the
+    RightRailService surface lands.
+
+    `type` maps StreamRow.type onto v0.6.2 ConversationType:
+      dm   → direct
+      room → room (StreamRow type='room' or 'project'; v0.6.2 reads
+             the team room and project main thread as the same surface)
+      topic → topic (not yet emitted by the persistence layer; no
+             stream rows of this type exist today)
+
+    `participants` is derived from StreamMemberRow → UserRow. The
+    payload is bounded by the stream's member count; no fan-out N+1
+    in steady state.
     """
     service = _service(request)
-    result = await service.list_messages(
+
+    meta = await service.get_for_user(
+        stream_id=conversation_id, viewer_id=user.id
+    )
+    if not meta.get("ok"):
+        err = meta.get("error", "get_failed")
+        if err == "stream_not_found":
+            raise HTTPException(status_code=404, detail=err)
+        if err == "not_a_member":
+            raise HTTPException(status_code=403, detail=err)
+        raise HTTPException(status_code=400, detail=err)
+    stream = meta["stream"]
+
+    msgs = await service.list_messages(
         stream_id=conversation_id, viewer_id=user.id, limit=limit
     )
-    if not result.get("ok"):
-        err = result.get("error", "list_failed")
+    if not msgs.get("ok"):
+        # Should not happen given the get_for_user gate above passed,
+        # but keep the membership-gate error reachable so the FE
+        # surfaces the same 403 if a race revoked membership.
+        err = msgs.get("error", "list_failed")
         if err == "stream_not_found":
             raise HTTPException(status_code=404, detail=err)
         if err == "not_a_member":
             raise HTTPException(status_code=403, detail=err)
         raise HTTPException(status_code=400, detail=err)
 
+    # Title preference order: persisted stream.name (rooms) → resolved
+    # display_name (project title for project/personal, partner name
+    # for DMs — derived on the FE) → fallback to the id prefix so the
+    # UI never renders an empty title.
+    title = (
+        stream.get("name")
+        or stream.get("display_name")
+        or conversation_id[:8]
+    )
+
+    conv_type = _classify_conversation_type({"kind": stream.get("type")})
+
     return {
         "id": conversation_id,
-        "messages": result["messages"],
+        "type": conv_type,
+        "title": title,
+        # v0.6.2 alias — `project_id` on the BE row → `scope_id` here.
+        "scope_id": stream.get("project_id"),
+        "participants": stream.get("members", []),
+        "messages": msgs["messages"],
+        # Topic primitives aren't persisted yet — when they are
+        # (Phase B.3 follow-up), shape this from TopicRow.status.
+        "topic_status": None,
         # TODO(Phase B.2): populate from RightRailService.for_surface(
         #   surface='conversation', object_id=conversation_id, viewer=user.id
-        # ). For B.1 we return null so the contract slot is registered
-        # without coupling B.1 to the B.2 right-rail wire-up.
+        # ). For RW-4 we return null so the contract slot is registered
+        # without coupling the conversation surface to the rail wire-up.
         "right_rail": None,
     }
 

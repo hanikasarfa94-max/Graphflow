@@ -126,6 +126,28 @@ class StreamService:
                 for s in streams
             ]
 
+    async def get_for_user(
+        self, *, stream_id: str, viewer_id: str
+    ) -> dict[str, Any]:
+        """Singleton stream metadata for /api/conversations/:id.
+
+        Returns the same `_shape_stream` payload as list_for_user but
+        for one stream + with membership gating. The caller layer
+        adds the `messages` and v0.6.2-shaped fields on top.
+        """
+        async with session_scope(self._sessionmaker) as session:
+            stream = await StreamRepository(session).get(stream_id)
+            if stream is None:
+                return {"ok": False, "error": "stream_not_found"}
+            if not await StreamMemberRepository(session).is_member(
+                stream_id=stream_id, user_id=viewer_id
+            ):
+                return {"ok": False, "error": "not_a_member"}
+            payload = await _shape_stream(
+                session, stream, viewer_id=viewer_id
+            )
+        return {"ok": True, "stream": payload}
+
     async def mark_read(
         self, *, stream_id: str, user_id: str
     ) -> dict[str, Any]:
