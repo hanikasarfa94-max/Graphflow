@@ -94,10 +94,11 @@ function RoutedRow({
   signal: RoutingSignal;
   t: Awaited<ReturnType<typeof getTranslations>>;
 }) {
-  // Anchor the user back to the project's team-room scrolled to the
-  // routing message — that's where the rich-options card already lives
-  // (RoutedInboundCard). We don't re-implement the answer flow here.
-  const href = `/projects/${signal.project_id}/team#routing-${signal.id}`;
+  // v0.6.2 — projects are no longer pages. Routed signals land in
+  // the global Flow Center; the conversation surface absorbs the
+  // team-room context. Anchor on the conversations scope filter so
+  // the user lands close to where the signal originated.
+  const href = `/conversations?scope_id=${signal.project_id}#routing-${signal.id}`;
   return (
     <Link
       href={href}
@@ -181,7 +182,10 @@ function GatedRow({
   t: Awaited<ReturnType<typeof getTranslations>>;
 }) {
   const p = item.proposal;
-  const href = `/projects/${p.project_id}/team#proposal-${p.id}`;
+  // v0.6.2 — gated proposals route to the global Flow Center where
+  // the membrane review surface lives. Scope filter preserves project
+  // context.
+  const href = `/conversations?scope_id=${p.project_id}#proposal-${p.id}`;
   return (
     <Link
       href={href}

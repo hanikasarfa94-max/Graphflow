@@ -194,7 +194,7 @@ export function DecisionProposalCard({
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
         {proposal.decision_id ? (
           <Link
-            href={`/projects/${projectId}/detail/decisions`}
+            href={`/decisions?scope_id=${projectId}`}
             style={primaryLinkBtn}
             data-testid="scrimmage-approve-btn"
             data-decision-id={proposal.decision_id}

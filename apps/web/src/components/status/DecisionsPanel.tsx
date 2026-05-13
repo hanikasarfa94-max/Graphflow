@@ -170,7 +170,7 @@ export async function DecisionsPanel({
                     </span>
                   ) : null}
                   <Link
-                    href={`/projects/${projectId}/nodes/${d.id}`}
+                    href={`/nodes/${d.id}`}
                     style={{
                       color: "var(--wg-accent)",
                       textDecoration: "none",

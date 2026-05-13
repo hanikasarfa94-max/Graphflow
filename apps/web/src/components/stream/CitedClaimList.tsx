@@ -120,23 +120,24 @@ export function CitedClaimList({ projectId, claims }: Props) {
 }
 
 // Pure helper exported for snapshot / parser tests — matches the href
-// format the chip renders. KB / wiki citations point at their own
-// canonical pages (the /nodes/ resolver only walks the graph state and
-// would 404 for kb_items / wiki rows). Graph kinds keep the unified
-// /nodes/ entry so deep-linking still works for tasks / decisions /
-// risks / etc.
+// format the chip renders. v0.6.2 routes all citations to global
+// surfaces: KB rows resolve under /kb-items/, decision/task/risk graph
+// nodes resolve under /nodes/. Wiki pages fall through to the docs
+// surface scoped by project. projectId is preserved in the call
+// signature because callers still know the originating scope and the
+// /kb-items + /nodes routes carry it in detail loaders.
 export function citationHref(
   projectId: string,
   nodeId: string,
   kind?: CitationKind | string,
 ): string {
   if (kind === "kb") {
-    return `/projects/${projectId}/kb/${nodeId}`;
+    return `/kb-items/${nodeId}`;
   }
   if (kind === "wiki_page") {
-    return `/projects/${projectId}/wiki/${nodeId}`;
+    return `/docs?scope_id=${projectId}&node_id=${nodeId}`;
   }
-  return `/projects/${projectId}/nodes/${nodeId}`;
+  return `/nodes/${nodeId}`;
 }
 
 // M1.3 Slice A — compact provenance chip line.

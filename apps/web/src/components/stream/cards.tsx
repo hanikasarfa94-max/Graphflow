@@ -409,7 +409,7 @@ export function HumanTurnCard({
           return projectId && decisionId ? (
             <Link
               data-testid="decision-recorded"
-              href={`/projects/${projectId}/nodes/${decisionId}`}
+              href={`/nodes/${decisionId}`}
               title={t("decision.recordedTooltip")}
               style={chipStyle}
             >
@@ -950,7 +950,7 @@ export function DecisionCard({
       )}
       <div style={{ marginTop: 6 }}>
         <Link
-          href={`/projects/${projectId}/nodes/${decision.id}`}
+          href={`/nodes/${decision.id}`}
           style={{
             fontSize: 12,
             color: "var(--wg-accent)",

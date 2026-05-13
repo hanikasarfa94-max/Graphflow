@@ -475,7 +475,7 @@ export function KbTreeBrowser({
                 keeper map and wonder what "sign-off gate-keepers" has
                 to do with creating a KB entry (it doesn't). */}
             <Link
-              href={`/projects/${projectId}/settings#membrane-subscriptions`}
+              href={`/scopes/${projectId}/settings#membrane-subscriptions`}
               style={{ textDecoration: "none" }}
               title={t("kb.folder.newItemHelp")}
             >
@@ -1025,7 +1025,7 @@ function ItemRow({
         onDragStart={onDragStart}
       >
         <Link
-          href={`/projects/${projectId}/kb/${item.id}`}
+          href={`/kb-items/${item.id}`}
           style={{
             color: "var(--wg-ink)",
             textDecoration: "none",
@@ -1117,7 +1117,7 @@ function DraftChip({
   return (
     <Link
       data-testid="kb-draft-chip"
-      href={`/projects/${projectId}/detail/im`}
+      href={`/conversations?scope_id=${projectId}`}
       title={t("kb.statusChip.tooltip")}
       style={{
         marginLeft: 8,

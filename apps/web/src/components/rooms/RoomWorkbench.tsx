@@ -530,7 +530,7 @@ function KnowledgePanelBody({
       return (
         <Link
           key={item.id}
-          href={`/projects/${projectId}/kb/${item.id}`}
+          href={`/kb-items/${item.id}`}
           style={{ textDecoration: "none" }}
         >
           <PanelItem

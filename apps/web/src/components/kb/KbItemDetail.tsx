@@ -46,7 +46,7 @@ export async function KbItemDetail({
     >
       <div>
         <Link
-          href={`/projects/${projectId}/kb`}
+          href={`/docs?scope_id=${projectId}`}
           style={{
             fontSize: 12,
             fontFamily: "var(--wg-font-mono)",
@@ -294,7 +294,7 @@ export async function KbItemDetail({
               // here so a reader who lands on a draft via the chip
               // knows where to act.
               <Link
-                href={`/projects/${projectId}/detail/im`}
+                href={`/conversations?scope_id=${projectId}`}
                 style={{
                   display: "inline-block",
                   marginTop: 6,

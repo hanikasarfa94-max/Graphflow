@@ -185,7 +185,7 @@ export function KbList({
           {items.map((item) => (
             <li key={item.id}>
               <Link
-                href={`/projects/${projectId}/kb/${item.id}`}
+                href={`/kb-items/${item.id}`}
                 style={{
                   display: "block",
                   padding: "12px 14px",

@@ -243,7 +243,7 @@ export default async function WorkspaceDetailPage({
             {detail.projects.map((p) => (
               <li key={p.id}>
                 <Link
-                  href={`/projects/${p.id}`}
+                  href={`/scopes/${p.id}`}
                   style={{
                     display: "block",
                     padding: "10px 14px",

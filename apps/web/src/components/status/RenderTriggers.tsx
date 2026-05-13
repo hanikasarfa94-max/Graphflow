@@ -84,7 +84,7 @@ export function RenderTriggers({
     setError(null);
     try {
       await regeneratePostmortemRender(projectId);
-      router.push(`/projects/${projectId}/renders/postmortem`);
+      router.push(`/docs?scope_id=${projectId}&kind=postmortem`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "failed");
       setPostmortemBusy(false);
@@ -92,7 +92,7 @@ export function RenderTriggers({
   }
 
   function handleViewPostmortem() {
-    router.push(`/projects/${projectId}/renders/postmortem`);
+    router.push(`/docs?scope_id=${projectId}&kind=postmortem`);
   }
 
   async function handleGenerateHandoff(userId: string) {
@@ -100,7 +100,7 @@ export function RenderTriggers({
     setError(null);
     try {
       await regenerateHandoffRender(projectId, userId);
-      router.push(`/projects/${projectId}/renders/handoff:${userId}`);
+      router.push(`/docs?scope_id=${projectId}&kind=handoff&user=${userId}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "failed");
       setHandoffBusyUserId(null);

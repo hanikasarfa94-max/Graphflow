@@ -71,7 +71,7 @@ export async function MembraneNotesPanel({
                     metaText={linkedId ? `→ ${linkedId.slice(0, 8)}` : null}
                     createdAt={r.created_at}
                     accent="amber"
-                    actionHref={`/projects/${projectId}/detail/im`}
+                    actionHref={`/conversations?scope_id=${projectId}`}
                     actionLabel={t("reviewLink")}
                   />
                 );

@@ -184,7 +184,9 @@ export function NewRoomModal({
       const roomId = resp.stream.id;
       onCreated?.(roomId);
       onClose();
-      router.push(`/projects/${projectId}/rooms/${roomId}`);
+      // v0.6.2 — rooms are conversations. /projects/[id]/rooms/[rid] is
+      // dead; rooms route through /conversations/[id] in the global IA.
+      router.push(`/conversations/${roomId}`);
       router.refresh();
     } catch (e) {
       if (e instanceof ApiError) {
