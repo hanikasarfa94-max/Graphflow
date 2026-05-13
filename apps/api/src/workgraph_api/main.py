@@ -45,13 +45,17 @@ from workgraph_persistence import (
 )
 from workgraph_schemas import ApiError, ApiErrorCode
 
+from workgraph_api.routers import ai_assistance as ai_assistance_router
 from workgraph_api.routers import auth as auth_router
 from workgraph_api.routers import clarification as clarification_router
 from workgraph_api.routers import collab as collab_router
 from workgraph_api.routers import commitments as commitments_router
 from workgraph_api.routers import composition as composition_router
 from workgraph_api.routers import conflicts as conflicts_router
+from workgraph_api.routers import conversations as conversations_router
+from workgraph_api.routers import create_menu as create_menu_router
 from workgraph_api.routers import delivery as delivery_router
+from workgraph_api.routers import documents as documents_router
 from workgraph_api.routers import demo as demo_router
 from workgraph_api.routers import decision_votes as decision_votes_router
 from workgraph_api.routers import dissent as dissent_router
@@ -79,13 +83,17 @@ from workgraph_api.routers import routing as routing_router
 from workgraph_api.routers import scopes as scopes_router
 from workgraph_api.routers import scrimmage as scrimmage_router
 from workgraph_api.routers import silent_consensus as silent_consensus_router
+from workgraph_api.routers import flow_requests as flow_requests_router
 from workgraph_api.routers import flows as flows_router
 from workgraph_api.routers import handoff as handoff_router
 from workgraph_api.routers import perf as perf_router
 from workgraph_api.routers import pre_answer as pre_answer_router
+from workgraph_api.routers import proposals as proposals_router
+from workgraph_api.routers import right_rail as right_rail_router
 from workgraph_api.routers import simulation as simulation_router
 from workgraph_api.routers import skill_atlas as skill_atlas_router
 from workgraph_api.routers import streams as streams_router
+from workgraph_api.routers import tasks_global as tasks_global_router
 from workgraph_api.routers import users as users_router
 from workgraph_api.routers import vnext_prefs as vnext_prefs_router
 from workgraph_api.routers import vnext_streams as vnext_streams_router
@@ -952,6 +960,17 @@ app.include_router(silent_consensus_router.router)
 app.include_router(streams_router.router)
 app.include_router(users_router.router)
 app.include_router(vnext_prefs_router.router)
+# v0.6.2 Phase B.2 routers — registered together for review clarity.
+# Each wraps existing services with the v0.6.2 contract shape; no
+# business logic in the routers themselves.
+app.include_router(ai_assistance_router.router)
+app.include_router(conversations_router.router)
+app.include_router(create_menu_router.router)
+app.include_router(documents_router.router)
+app.include_router(flow_requests_router.router)
+app.include_router(proposals_router.router)
+app.include_router(right_rail_router.router)
+app.include_router(tasks_global_router.router)
 app.include_router(vnext_streams_router.router)
 app.include_router(ws_router.router)
 
