@@ -412,6 +412,198 @@ async def test_respond_422_for_unknown_response_kind(api_env):
 # ---- Memory decoupling — explicit, separate from happy path --------------
 
 
+# ---- RW-9.5 — recorded_reply + dm_stream enrichment ---------------------
+
+
+@pytest.mark.asyncio
+async def test_singleton_recorded_reply_is_null_while_pending(api_env):
+    """Before the target replies, recorded_reply must be null. The FE
+    uses null/non-null as the render switch for the RecordedReply
+    card — silent strings or empty dicts would render a misleading
+    "reply: ''" affordance."""
+    client, maker, *_ = api_env
+    source_id = await _register(client, "rw95_pend_source")
+    target_id = await _register(client, "rw95_pend_target")
+    pid = await _mk_project_with_members(
+        maker, owner_id=source_id, member_id=target_id
+    )
+
+    await _login(client, "rw95_pend_source")
+    signal_id = await _dispatch_route(
+        client, target_user_id=target_id, project_id=pid
+    )
+
+    r = await client.get(f"/api/flow-requests/route:{signal_id}")
+    assert r.status_code == 200, r.text
+    fr = r.json()["flow_request"]
+    assert "recorded_reply" in fr
+    assert fr["recorded_reply"] is None
+
+
+@pytest.mark.asyncio
+async def test_singleton_recorded_reply_carries_custom_text(api_env):
+    """After the target replies with custom_text, the singleton
+    returns a full recorded_reply envelope. The FE renders this
+    verbatim in the RecordedReply card."""
+    client, maker, *_ = api_env
+    source_id = await _register(client, "rw95_rec_source")
+    target_id = await _register(client, "rw95_rec_target")
+    pid = await _mk_project_with_members(
+        maker, owner_id=source_id, member_id=target_id
+    )
+
+    await _login(client, "rw95_rec_source")
+    signal_id = await _dispatch_route(
+        client, target_user_id=target_id, project_id=pid
+    )
+
+    await _login(client, "rw95_rec_target")
+    r = await client.post(
+        f"/api/flow-requests/route:{signal_id}/respond",
+        json={"kind": "direct_response", "text": "Yes, 3pm works."},
+    )
+    assert r.status_code == 200, r.text
+    # Critical: the respond envelope STILL locks memory decoupling
+    # after RW-9.5 enrichment. The recorded_reply addition must not
+    # leak a memory candidate.
+    prompt = r.json()["memory_candidate_prompt"]
+    assert prompt["actions"] == ["review", "skip", "later"]
+    assert prompt["has_candidate"] is False
+    assert "memory_auto_accepted" not in r.json()
+
+    # Now GET the singleton — recorded_reply should reflect the text.
+    r = await client.get(f"/api/flow-requests/route:{signal_id}")
+    assert r.status_code == 200, r.text
+    fr = r.json()["flow_request"]
+    rr = fr["recorded_reply"]
+    assert rr is not None
+    assert rr["text"] == "Yes, 3pm works."
+    assert rr["replier_user_id"] == target_id
+    assert rr["replied_at"] is not None
+    # No option was picked — option_id and option_label are null.
+    assert rr["option_id"] is None
+    assert rr["option_label"] is None
+    # Respondability also flipped — the source can no longer
+    # respond from the drawer.
+    assert r.json()["respondability"]["respondable"] is False
+
+
+@pytest.mark.asyncio
+async def test_singleton_recorded_reply_carries_option_pick(api_env):
+    """When the target picks an option_id (1-click reply via the
+    /api/routing/:id/reply path), recorded_reply must include the
+    resolved option_label so the FE renders the human-readable
+    pick alongside the option_id."""
+    client, maker, *_ = api_env
+    source_id = await _register(client, "rw95_opt_source")
+    target_id = await _register(client, "rw95_opt_target")
+    pid = await _mk_project_with_members(
+        maker, owner_id=source_id, member_id=target_id
+    )
+
+    await _login(client, "rw95_opt_source")
+    signal_id = await _dispatch_route(
+        client, target_user_id=target_id, project_id=pid
+    )
+
+    # Reply via the existing routing endpoint with an option pick.
+    # /api/flow-requests/:id/respond only supports custom_text in
+    # RW-9, so we use the legacy route to seed an option pick — the
+    # singleton must still surface it.
+    await _login(client, "rw95_opt_target")
+    r = await client.post(
+        f"/api/routing/{signal_id}/reply",
+        json={"option_id": "yes"},
+    )
+    assert r.status_code == 200, r.text
+
+    r = await client.get(f"/api/flow-requests/route:{signal_id}")
+    assert r.status_code == 200, r.text
+    rr = r.json()["flow_request"]["recorded_reply"]
+    assert rr is not None
+    assert rr["option_id"] == "yes"
+    assert rr["option_label"] == "Yes, today at 3pm"
+    # custom_text was not used — text is null.
+    assert rr["text"] is None
+
+
+@pytest.mark.asyncio
+async def test_singleton_dm_stream_present_after_dispatch(api_env):
+    """RoutingService.dispatch creates the source↔target DM stream
+    via StreamService.create_or_get_dm. By the time the singleton
+    is fetched, that DM exists and the dm envelope carries its
+    stream_id + a /conversations/{id} href."""
+    client, maker, *_ = api_env
+    source_id = await _register(client, "rw95_dm_source")
+    target_id = await _register(client, "rw95_dm_target")
+    pid = await _mk_project_with_members(
+        maker, owner_id=source_id, member_id=target_id
+    )
+
+    await _login(client, "rw95_dm_source")
+    signal_id = await _dispatch_route(
+        client, target_user_id=target_id, project_id=pid
+    )
+
+    r = await client.get(f"/api/flow-requests/route:{signal_id}")
+    assert r.status_code == 200, r.text
+    fr = r.json()["flow_request"]
+    assert "dm" in fr
+    dm = fr["dm"]
+    assert dm["stream_id"] is not None
+    assert dm["href"] == f"/conversations/{dm['stream_id']}"
+
+
+@pytest.mark.asyncio
+async def test_singleton_dm_stream_does_not_get_created_by_get(api_env):
+    """RW-9.5 invariant: GET singleton must NOT create a DM stream as
+    a side effect. We construct a routed signal where the DM lookup
+    would return None (by tampering with the row's source/target to
+    a fresh user pair that never dispatched). Result: dm.stream_id
+    stays null and no DM stream materialises in StreamMemberRow.
+
+    This is a regression guard — replacing find_dm_between with
+    create_or_get_dm would be invisible at the FE but would slowly
+    fill StreamRow with phantom DMs from every detail open."""
+    client, maker, *_ = api_env
+    source_id = await _register(client, "rw95_nodm_source")
+    target_id = await _register(client, "rw95_nodm_target")
+    other_id = await _register(client, "rw95_nodm_other")
+    pid = await _mk_project_with_members(
+        maker, owner_id=source_id, member_id=target_id
+    )
+
+    await _login(client, "rw95_nodm_source")
+    signal_id = await _dispatch_route(
+        client, target_user_id=target_id, project_id=pid
+    )
+    # Rewrite the routed signal so its target points at `other_id`
+    # who never had a DM with source. The dispatched DM still
+    # exists between source/target, but the lookup is for source/
+    # other → None expected.
+    from workgraph_persistence import RoutedSignalRow as _Row
+    async with session_scope(maker) as session:
+        row = await session.get(_Row, signal_id)
+        assert row is not None
+        row.target_user_id = other_id
+
+    # Add `other_id` to the project so visibility still passes for
+    # source viewing the rewritten row.
+    async with session_scope(maker) as session:
+        await ProjectMemberRepository(session).add(
+            project_id=pid, user_id=other_id, role="member"
+        )
+
+    r = await client.get(f"/api/flow-requests/route:{signal_id}")
+    assert r.status_code == 200, r.text
+    dm = r.json()["flow_request"]["dm"]
+    assert dm["stream_id"] is None
+    assert dm["href"] is None
+
+
+# ---- B.4 invariant — memory decoupling stays locked after enrichment ----
+
+
 @pytest.mark.asyncio
 async def test_respond_envelope_locks_memory_decoupling(api_env):
     """B.4 invariant. The respond envelope must:

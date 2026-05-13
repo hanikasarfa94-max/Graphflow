@@ -132,6 +132,105 @@ describe("RW-9 — no fabricated request fixtures in flow-center sources", () =>
   }
 });
 
+describe("RW-9.5 — recorded reply rendering", () => {
+  test("FlowDrawer renders a dedicated RecordedReplySection", async () => {
+    const src = await Bun.file("src/features/flow-center/FlowDrawer.tsx").text();
+    expect(src.includes("RecordedReplySection")).toBe(true);
+    expect(src.includes("flow-drawer-recorded-reply")).toBe(true);
+    // The section gates on recorded_reply being non-null so an empty
+    // reply doesn't render a phantom card.
+    const stripped = strip(src);
+    expect(/const\s+rr\s*=\s*fr\.recorded_reply/.test(stripped)).toBe(true);
+    expect(stripped.includes("if (!rr) return null")).toBe(true);
+  });
+
+  test("RecordedReply reads exactly the BE field names (no renames)", async () => {
+    const src = await Bun.file("src/features/flow-center/FlowDrawer.tsx").text();
+    // Wire alignment with FlowRequestRecordedReply on the BE — any
+    // rename here would silently break the render.
+    expect(src.includes("rr.text")).toBe(true);
+    expect(src.includes("rr.option_label")).toBe(true);
+    expect(src.includes("rr.option_id")).toBe(true);
+    expect(src.includes("rr.replied_at")).toBe(true);
+    expect(src.includes("rr.replier_user_id")).toBe(true);
+  });
+});
+
+describe("RW-9.5 — Open conversation link only with a real href", () => {
+  test("OpenConversationSection gates on dm.stream_id + dm.href", async () => {
+    const src = await Bun.file("src/features/flow-center/FlowDrawer.tsx").text();
+    expect(src.includes("OpenConversationSection")).toBe(true);
+    // The link is rendered behind a real-href guard; the absence
+    // branch renders an honest "no DM yet" caption with its own
+    // test-id.
+    expect(src.includes("flow-drawer-open-conversation")).toBe(true);
+    expect(src.includes("flow-drawer-dm-absent")).toBe(true);
+    const stripped = strip(src);
+    expect(/if\s*\(\s*!\s*dm\??\.stream_id\s*\|\|\s*!\s*dm\.href\s*\)/.test(stripped)).toBe(true);
+  });
+
+  test("FlowDrawer never fabricates a /conversations href client-side", async () => {
+    // The href must come from the BE dm.href payload. If we ever
+    // catch the FE composing `/conversations/${something}` inline,
+    // the BE guarantee about find_dm_between (no side-effect
+    // creation) is no longer trustworthy.
+    const src = await Bun.file("src/features/flow-center/FlowDrawer.tsx").text();
+    const stripped = strip(src);
+    expect(/\/conversations\/\$\{/.test(stripped)).toBe(false);
+    expect(stripped.includes("\"/conversations/\"")).toBe(false);
+  });
+});
+
+describe("RW-9.5 — non-route kinds get kind-specific guidance", () => {
+  test("NotSupportedState exposes the kind via data attribute", async () => {
+    const src = await Bun.file("src/features/flow-center/FlowDrawer.tsx").text();
+    expect(src.includes("data-not-supported-kind")).toBe(true);
+  });
+
+  test("All 7 known non-route kinds have guidance entries", async () => {
+    const src = await Bun.file("src/features/flow-center/FlowDrawer.tsx").text();
+    for (const kind of [
+      "kb",
+      "task_promote",
+      "decision",
+      "handoff",
+      "manual_room",
+      "manual_skill",
+      "manual_invite",
+    ]) {
+      // The guidance map carries every kind the server's
+      // _KNOWN_KINDS emits as not_supported_yet.
+      expect(src.includes(`"${kind}"`)).toBe(true);
+    }
+  });
+
+  test("Both locale files carry guidance copy for each kind", async () => {
+    const en = await Bun.file("src/i18n/locales/en.json").text();
+    const zh = await Bun.file("src/i18n/locales/zh.json").text();
+    for (const kind of [
+      "kb",
+      "task_promote",
+      "decision",
+      "handoff",
+      "manual_room",
+      "manual_skill",
+      "manual_invite",
+    ]) {
+      // Both locales must define a guidance string per kind.
+      expect(
+        new RegExp(`"notSupportedGuidance"[\\s\\S]*"${kind}"\\s*:\\s*"`).test(
+          en,
+        ),
+      ).toBe(true);
+      expect(
+        new RegExp(`"notSupportedGuidance"[\\s\\S]*"${kind}"\\s*:\\s*"`).test(
+          zh,
+        ),
+      ).toBe(true);
+    }
+  });
+});
+
 describe("RW-9 — invariant-suite alignment", () => {
   test("FlowDrawer never reads memory_auto_accepted from the respond envelope", async () => {
     const src = await Bun.file("src/features/flow-center/FlowDrawer.tsx").text();

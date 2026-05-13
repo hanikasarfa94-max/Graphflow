@@ -16,6 +16,7 @@
 // from MemoryPromptDrawer. RW-9 keeps the two pipelines fully
 // separate.
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useState } from "react";
@@ -35,6 +36,22 @@ import type {
   FlowRequestSingletonResponse,
   FlowRequestRespondability,
 } from "./types";
+
+// RW-9.5 — per-kind guidance for non-route packets. Each entry is a
+// stable i18n key suffix the FE renders under
+// `shellV062.flowDrawer.notSupportedGuidance.<key>`. We do NOT
+// fabricate hrefs for kinds whose surface isn't wired yet — the copy
+// names the surface and the user navigates manually. When a kind's
+// dedicated surface lands, the value here gets an `href` too.
+const NOT_SUPPORTED_GUIDANCE: Record<string, string> = {
+  kb: "kb",
+  task_promote: "task_promote",
+  decision: "decision",
+  handoff: "handoff",
+  manual_room: "manual_room",
+  manual_skill: "manual_skill",
+  manual_invite: "manual_invite",
+};
 
 type LoadState =
   | { kind: "loading" }
@@ -172,9 +189,14 @@ function NotSupportedState({
   flow_id: string;
 }) {
   const t = useTranslations("shellV062.flowDrawer");
+  // RW-9.5 — kind-specific guidance copy. The map keys mirror the
+  // server's known-kinds set; a missing entry falls back to the
+  // generic notSupportedDetail.
+  const guidanceKey = kind ? NOT_SUPPORTED_GUIDANCE[kind] : undefined;
   return (
     <div
       data-testid="flow-drawer-not-supported"
+      data-not-supported-kind={kind ?? "unknown"}
       style={{ display: "flex", flexDirection: "column", gap: 12 }}
     >
       <header style={{ display: "flex", gap: 8, alignItems: "center" }}>
@@ -185,9 +207,17 @@ function NotSupportedState({
       </header>
       <EmptyState>{t("notSupportedHeadline")}</EmptyState>
       <Card variant="sunk">
-        <Text variant="caption" muted>
-          {t("notSupportedDetail", { kind: kind ?? "unknown" })}
-        </Text>
+        {guidanceKey ? (
+          <Text variant="caption" muted>
+            {t(
+              `notSupportedGuidance.${guidanceKey}` as Parameters<typeof t>[0],
+            )}
+          </Text>
+        ) : (
+          <Text variant="caption" muted>
+            {t("notSupportedDetail", { kind: kind ?? "unknown" })}
+          </Text>
+        )}
       </Card>
     </div>
   );
@@ -216,7 +246,9 @@ function ReadyBody({
       <FramingSection fr={fr} />
       <BackgroundSection fr={fr} />
       <OptionsSection fr={fr} />
+      <RecordedReplySection fr={fr} participants={participants} />
       <EvidenceSection fr={fr} participants={participants} />
+      <OpenConversationSection fr={fr} />
 
       <RespondSection
         flowId={fr.id}
@@ -234,6 +266,94 @@ function ReadyBody({
         {t("doctrine")}
       </Text>
     </div>
+  );
+}
+
+// ── RW-9.5 sections ────────────────────────────────────────────────────
+
+function RecordedReplySection({
+  fr,
+  participants,
+}: {
+  fr: FlowRequestSingleton;
+  participants: Record<string, FlowParticipant>;
+}) {
+  const t = useTranslations("shellV062.flowDrawer");
+  const rr = fr.recorded_reply;
+  if (!rr) return null;
+
+  // Show whichever piece the row actually carries. A target may have
+  // sent custom_text, or picked an option, or both.
+  const hasText = Boolean(rr.text && rr.text.trim().length > 0);
+  const hasOption = Boolean(rr.option_label || rr.option_id);
+  if (!hasText && !hasOption) return null;
+
+  return (
+    <Card
+      title={t("recordedReplyHeader")}
+      data-testid="flow-drawer-recorded-reply"
+    >
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        {hasText ? (
+          <pre
+            style={{
+              whiteSpace: "pre-wrap",
+              margin: 0,
+              fontFamily: "var(--wg-font-sans)",
+              fontSize: "var(--wg-fs-body)",
+              lineHeight: "var(--wg-lh-normal)",
+              color: "var(--wg-ink)",
+            }}
+          >
+            {rr.text}
+          </pre>
+        ) : null}
+        {hasOption ? (
+          <Text variant="body">
+            {t("recordedReplyOption", {
+              label: rr.option_label || rr.option_id || "",
+            })}
+          </Text>
+        ) : null}
+        <Text variant="caption" muted>
+          {t("recordedReplyMeta", {
+            who: nameFor(participants, rr.replier_user_id),
+            at: rr.replied_at ? formatIso(rr.replied_at) : "—",
+          })}
+        </Text>
+      </div>
+    </Card>
+  );
+}
+
+function OpenConversationSection({ fr }: { fr: FlowRequestSingleton }) {
+  const t = useTranslations("shellV062.flowDrawer");
+  const dm = fr.dm;
+  // No DM exists yet — render honest caption instead of a dead link.
+  if (!dm?.stream_id || !dm.href) {
+    return (
+      <Card variant="sunk" data-testid="flow-drawer-dm-absent">
+        <Text variant="caption" muted>
+          {t("openConversationAbsent")}
+        </Text>
+      </Card>
+    );
+  }
+  return (
+    <Card variant="sunk">
+      <Link
+        href={dm.href}
+        data-testid="flow-drawer-open-conversation"
+        style={{
+          color: "var(--wg-accent)",
+          textDecoration: "none",
+          fontFamily: "var(--wg-font-sans)",
+          fontSize: "var(--wg-fs-body)",
+        }}
+      >
+        {t("openConversation")} →
+      </Link>
+    </Card>
   );
 }
 

@@ -30,7 +30,7 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
-from workgraph_persistence import RoutedSignalRow, session_scope
+from workgraph_persistence import RoutedSignalRow, StreamRepository, session_scope
 
 from .flow_packets.contracts import Bucket, PacketStatus, RecipeId
 from .flow_packets.participants import _resolve_participants
@@ -262,6 +262,21 @@ class FlowProjectionService:
             # `status` so the FE knows whether respond is even an
             # option in principle (pending vs replied/accepted/...).
             packet["raw_status"] = row.status or "pending"
+            # RW-9.5 — recorded reply (verbatim text + option pick) so
+            # the drawer can render what the target already answered
+            # without refetching a separate route surface. Null while
+            # the row is still pending.
+            packet["recorded_reply"] = _recorded_reply_from_row(row)
+            # RW-9.5 — source↔target DM stream id if it exists. Read-
+            # only lookup via StreamRepository.find_dm_between; we do
+            # NOT call create_or_get_dm here (that would have side
+            # effects). When no DM exists, dm.stream_id is None and
+            # the FE renders honest copy instead of a dead link.
+            packet["dm"] = await _route_dm_stream(
+                session=session,
+                source_user_id=row.source_user_id,
+                target_user_id=row.target_user_id,
+            )
 
             if not _visible_to(packet, viewer_user_id, owner_ids):
                 raise FlowSingletonForbidden(flow_id)
@@ -276,6 +291,78 @@ class FlowProjectionService:
             "participants": participants,
             "respondability": respondability,
         }
+
+
+def _recorded_reply_from_row(row: RoutedSignalRow) -> dict[str, Any] | None:
+    """Surface the target's recorded reply for the singleton.
+
+    The reply lives in `RoutedSignalRow.reply_json` after status flips
+    pending → replied. We expose:
+
+      * `text` — the custom_text the target wrote, when present.
+      * `option_id` / `option_label` — the picked option (1-click
+        pick), when present. Looked up against `row.options_json` so
+        the FE doesn't need a second lookup.
+      * `replied_at` — ISO timestamp.
+      * `replier_user_id` — always the row's target_user_id (the
+        only allowed replier per RoutingService.reply).
+
+    Returns None while the row is still pending so the FE can decide
+    to show / hide the RecordedReply card.
+    """
+    if (row.status or "pending") == "pending" or not row.responded_at:
+        return None
+    reply = row.reply_json if isinstance(row.reply_json, dict) else {}
+    option_id = reply.get("option_id")
+    option_label: str | None = None
+    if option_id:
+        for opt in row.options_json or []:
+            if isinstance(opt, dict) and opt.get("id") == option_id:
+                option_label = (
+                    str(opt.get("label")) if opt.get("label") else None
+                )
+                break
+    custom_text = reply.get("custom_text")
+    return {
+        "text": str(custom_text) if custom_text else None,
+        "option_id": str(option_id) if option_id else None,
+        "option_label": option_label,
+        "replied_at": (
+            row.responded_at.isoformat() if row.responded_at else None
+        ),
+        "replier_user_id": row.target_user_id,
+    }
+
+
+async def _route_dm_stream(
+    *,
+    session,
+    source_user_id: str | None,
+    target_user_id: str | None,
+) -> dict[str, Any]:
+    """Look up the existing source↔target DM stream WITHOUT creating
+    one. Returns `{stream_id, href}` if a DM already exists; an
+    object with `stream_id=None` and `href=None` otherwise.
+
+    Side-effect free: we use StreamRepository.find_dm_between (a
+    read-only scan of StreamMemberRow), NOT StreamService
+    .create_or_get_dm. RW-9.5 explicitly does not want a GET to
+    materialize a stream.
+
+    The href points at `/conversations/{stream_id}` — the canonical
+    v0.6.2 surface for opening a stream.
+    """
+    if not source_user_id or not target_user_id:
+        return {"stream_id": None, "href": None}
+    stream = await StreamRepository(session).find_dm_between(
+        source_user_id, target_user_id
+    )
+    if stream is None:
+        return {"stream_id": None, "href": None}
+    return {
+        "stream_id": stream.id,
+        "href": f"/conversations/{stream.id}",
+    }
 
 
 def _route_respondability(

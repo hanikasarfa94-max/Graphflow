@@ -247,8 +247,28 @@ export interface FlowRequestTimelineEvent {
   refs: FlowRequestRef[];
 }
 
+// RW-9.5 — the verbatim reply once the target answers. Null while
+// the row is still pending. The FE switches on null vs non-null to
+// decide whether to render the RecordedReply card.
+export interface FlowRequestRecordedReply {
+  text: string | null;
+  option_id: string | null;
+  option_label: string | null;
+  replied_at: string | null;
+  replier_user_id: string | null;
+}
+
+// RW-9.5 — source↔target DM stream lookup result. Both fields null
+// when the DM doesn't exist yet (no creation as a GET side effect).
+// `href` always points at /conversations/{stream_id} when present.
+export interface FlowRequestDmStream {
+  stream_id: string | null;
+  href: string | null;
+}
+
 // The packet shape, enriched with singleton-only fields (framing_full,
-// background, options, source/target stream ids, raw_status).
+// background, options, source/target stream ids, raw_status,
+// recorded_reply, dm).
 export interface FlowRequestSingleton extends FlowPacket {
   framing_full: string;
   background: FlowRequestBackgroundSnippet[];
@@ -256,6 +276,8 @@ export interface FlowRequestSingleton extends FlowPacket {
   source_stream_id: string | null;
   target_stream_id: string | null;
   raw_status: string;
+  recorded_reply: FlowRequestRecordedReply | null;
+  dm: FlowRequestDmStream;
   evidence: FlowRequestEvidence;
   timeline: FlowRequestTimelineEvent[];
   routed_signal_id?: string;
