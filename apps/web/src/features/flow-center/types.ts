@@ -192,16 +192,96 @@ export interface MemoryCandidatePrompt {
   actions: Array<"review" | "skip" | "later">;
 }
 
-// ── Flow Request detail (drawer body) ────────────────────────────────
+// ── Flow Request singleton (drawer body) ─────────────────────────────
+//
+// RW-9 wire shape from GET /api/flow-requests/:id. Currently the BE
+// only serves route packets; other kinds raise 422 not_supported_yet.
+// The drawer reads that error code and renders an honest non-
+// respondable state for those kinds.
 
-export interface FlowRequestDetail {
+export interface FlowRequestBackgroundSnippet {
+  source: string;
+  snippet: string;
+  reference_id?: string | null;
+}
+
+export interface FlowRequestOption {
   id: string;
-  type: FlowRequestType;
-  status: FlowRequestStatus;
-  requester: { id: string; display_name: string };
-  framing: string;
-  attachments: Array<{ kind: string; id: string; label: string }>;
-  authority_check: AuthorityCheck;
-  // Populated after `/respond`. Drives MemoryPromptDrawer routing.
-  memory_candidate_prompt?: MemoryCandidatePrompt;
+  label: string;
+  kind?: string;
+  background?: string;
+  reason?: string;
+  tradeoff?: string;
+  weight?: number;
+}
+
+export interface FlowRequestHumanGate {
+  user_id: string;
+  action: string;
+  at: string;
+  note?: string | null;
+}
+
+export interface FlowRequestRef {
+  kind: string;
+  id?: string;
+  label?: string;
+  href?: string;
+}
+
+export interface FlowRequestEvidence {
+  citations: FlowRequestRef[];
+  source_messages: FlowRequestRef[];
+  artifacts: FlowRequestRef[];
+  agent_runs: FlowRequestRef[];
+  human_gates: FlowRequestHumanGate[];
+  uncertainty: string[];
+}
+
+export interface FlowRequestTimelineEvent {
+  at: string | null;
+  actor: string;
+  actor_user_id: string | null;
+  kind: string;
+  summary: string;
+  refs: FlowRequestRef[];
+}
+
+// The packet shape, enriched with singleton-only fields (framing_full,
+// background, options, source/target stream ids, raw_status).
+export interface FlowRequestSingleton extends FlowPacket {
+  framing_full: string;
+  background: FlowRequestBackgroundSnippet[];
+  options: FlowRequestOption[];
+  source_stream_id: string | null;
+  target_stream_id: string | null;
+  raw_status: string;
+  evidence: FlowRequestEvidence;
+  timeline: FlowRequestTimelineEvent[];
+  routed_signal_id?: string;
+  project_id: string;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export type FlowRequestResponseKind = "direct_response";
+
+export interface FlowRequestRespondability {
+  respondable: boolean;
+  reason: string | null;
+  response_kind: FlowRequestResponseKind | null;
+}
+
+export interface FlowRequestSingletonResponse {
+  flow_request: FlowRequestSingleton;
+  participants: Record<string, FlowParticipant>;
+  respondability: FlowRequestRespondability;
+}
+
+export interface FlowRequestRespondResponse {
+  ok: true;
+  flow_request_id: string;
+  response_kind: FlowRequestResponseKind;
+  signal?: unknown;
+  memory_candidate_prompt: MemoryCandidatePrompt;
 }

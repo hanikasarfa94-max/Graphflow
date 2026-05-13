@@ -42,7 +42,13 @@ from workgraph_api.deps import require_user
 from workgraph_api.services import (
     AuthenticatedUser,
     FlowProjectionService,
+    PersonalStreamService,
     ProjectService,
+)
+from workgraph_api.services.flow_projection import (
+    FlowSingletonForbidden,
+    FlowSingletonKindUnsupported,
+    FlowSingletonNotFound,
 )
 
 router = APIRouter(tags=["flow-requests"])
@@ -78,12 +84,19 @@ _STATUS_MAP: dict[str, int] = {
     "flow_request_not_found": 404,
     "flow_response_not_found": 404,
     "not_a_scope_member": 403,
+    "not_supported_yet": 422,
+    "not_respondable_yet": 422,
+    "not_the_target": 403,
+    "already_replied": 409,
+    "empty_response": 422,
+    "signal_not_found": 404,
+    "lint_paused": 409,
     "validation_error": 422,
     "draft_send_failed": 502,
 }
 
 
-def _raise_service_error(code: str, detail: str | None = None) -> None:
+def _raise_service_error(code: str, *, detail: str | None = None) -> None:
     raise HTTPException(
         status_code=_STATUS_MAP.get(code, 400),
         detail=detail or code,
@@ -126,11 +139,13 @@ class FlowRequestSendBody(BaseModel):
 class FlowRequestRespondBody(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    # The flow-level decision. Memory prompt actions are independent
-    # (see _MEMORY_PROMPT_ACTIONS).
-    action: Literal["accept", "decline", "revise", "needs_more_info"]
-    note: str | None = Field(default=None, max_length=4000)
-    framing: str | None = Field(default=None, max_length=4000)
+    # RW-9 (2026-05-13). The respond body is now a discriminated union
+    # on `kind`. Only `direct_response` is wired — a text reply that
+    # the target sends back to the source. Other response shapes
+    # (delegate / approve+note / counter) remain B.3+ work and are
+    # NOT accepted here.
+    kind: Literal["direct_response"]
+    text: str = Field(min_length=1, max_length=4000)
 
 
 # ---- helpers -------------------------------------------------------------
@@ -191,6 +206,51 @@ async def list_flow_requests(
         recipe=None,
         limit=limit,
     )
+
+
+# ---- read endpoint (RW-9.1) — singleton ----------------------------------
+
+
+@router.get("/api/flow-requests/{flow_request_id}")
+async def get_flow_request(
+    flow_request_id: str,
+    request: Request,
+    user: AuthenticatedUser = Depends(require_user),
+) -> dict[str, Any]:
+    """Singleton fetch for one flow request.
+
+    The id is the synthetic packet id from the projection — currently
+    `route:<routed_signal_id>` is the only kind wired for singleton
+    read (and the only kind wired for respond). Other packet kinds
+    raise 422 not_supported_yet so the FE drawer can render a stable,
+    honest "not wired for this kind yet" state.
+
+    Membership is checked inside the service via `_visible_to`, which
+    is per-packet — project membership alone does NOT grant access to
+    a route between two members the viewer doesn't participate in.
+    """
+    projection = _get_projection_service(request)
+    try:
+        return await projection.get_packet(
+            flow_id=flow_request_id, viewer_user_id=user.id
+        )
+    except FlowSingletonNotFound as err:
+        raise HTTPException(
+            status_code=_STATUS_MAP["flow_request_not_found"],
+            detail="flow_request_not_found",
+        ) from err
+    except FlowSingletonForbidden as err:
+        raise HTTPException(
+            status_code=_STATUS_MAP["not_a_scope_member"],
+            detail="not_a_scope_member",
+        ) from err
+    except FlowSingletonKindUnsupported as err:
+        # 422 with a stable code so the FE can render the right
+        # honest-empty drawer state for that kind.
+        raise HTTPException(
+            status_code=_STATUS_MAP["not_supported_yet"],
+            detail=f"not_supported_yet:{err.kind}",
+        ) from err
 
 
 def _empty_memory_candidate_prompt() -> dict[str, Any]:
@@ -299,21 +359,65 @@ async def respond_to_flow_request(
 ) -> dict[str, Any]:
     """Target-side response to a flow request.
 
-    Invariant: response NEVER auto-opens or auto-accepts memory. The
-    envelope carries `memory_candidate_prompt` with the locked
-    `["review", "skip", "later"]` action set. Memory acceptance is a
-    second, independent transition the user takes from the prompt.
+    RW-9 (2026-05-13). Now a real endpoint for `route:` packets — the
+    text body is recorded as the routed-signal reply (custom_text)
+    via PersonalStreamService.handle_reply, which:
+      1. flips RoutedSignalRow.status pending → replied
+      2. posts an `edge-reply-frame` into the source's personal stream
+      3. mirrors a `routed-dm-log` summary into the source↔target DM
+
+    Other packet kinds (kb_review / handoff / decision / manual_*) are
+    NOT respondable through this endpoint — they have their own gates
+    (Membrane review, handoff acceptance, decision crystallization)
+    that live behind dedicated routers. We return 422 here so the FE
+    can render an honest "not respondable yet" state.
+
+    Invariant (INVARIANT_TESTS.md §"Flow response memory decoupling"):
+    the response envelope carries `memory_candidate_prompt` with the
+    locked `["review", "skip", "later"]` action set, and NEVER sets
+    `memory_auto_accepted: true`. Memory acceptance is a second,
+    independent transition the user takes from the prompt.
     """
-    # TODO(Phase B.3): wire to FlowActionService.respond and to
-    # MembraneService for real candidate production (response body +
-    # framing → memory_candidate). Until then we emit the contract
-    # shape so the invariant tests on prompt actions and the absence
-    # of `memory_auto_accepted` already pass.
+    kind, _, ref_id = flow_request_id.partition(":")
+    if kind != "route" or not ref_id:
+        _raise_service_error(
+            "not_respondable_yet",
+            detail=f"not_respondable_yet:{kind or 'unknown'}",
+        )
+
+    # PersonalStreamService.handle_reply wraps RoutingService.reply +
+    # adds the edge-reply-frame card. The frame card is what makes the
+    # source's stream show the reply in the source's voice, so we go
+    # through personal_service rather than calling routing directly.
+    personal_service: PersonalStreamService = (
+        request.app.state.personal_service
+    )
+    result = await personal_service.handle_reply(
+        signal_id=ref_id,
+        replier_user_id=user.id,
+        custom_text=body.text,
+    )
+    if not result.get("ok"):
+        err = result.get("error", "reply_failed")
+        # Pass through the routing service's error vocabulary verbatim
+        # — it's already part of the public routing surface and stays
+        # the same here so the FE can share error copy.
+        raise HTTPException(
+            status_code=_STATUS_MAP.get(err, 400),
+            detail=err,
+        )
+
     return {
         "ok": True,
-        "flow_response_id": f"flowresp_{flow_request_id}",
         "flow_request_id": flow_request_id,
-        "action": body.action,
+        # `response_kind` echoes the body kind so the FE can route the
+        # post-success refresh into the right surface (the source's
+        # stream, the routed signal, the flow center list).
+        "response_kind": body.kind,
+        # Real routed signal payload from RoutingService.reply — the
+        # FE can render the recorded reply immediately without a
+        # follow-up GET.
+        "signal": result.get("signal"),
         # Locked envelope. INVARIANT_TESTS.md §"Flow response memory
         # decoupling" asserts on `.memory_candidate_prompt.actions`
         # containing review/skip/later and on the absence of

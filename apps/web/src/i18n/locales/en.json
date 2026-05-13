@@ -2275,6 +2275,39 @@
           "network": "Couldn’t reach the server. Try again."
         }
       }
+    },
+    "flowDrawer": {
+      "loading": "Loading flow request…",
+      "notFound": "This flow request doesn’t exist or isn’t visible to you.",
+      "forbidden": "You don’t have access to this flow request.",
+      "genericError": "Couldn’t load this flow request. Try again.",
+      "retry": "Retry",
+      "notSupportedBadge": "not respondable here",
+      "notSupportedHeadline": "This packet kind doesn’t have a respond surface yet.",
+      "notSupportedDetail": "Kind: {kind}. The Flow Center detail is wired for route requests today. KB review, handoffs, decisions, and manual creates use their own gates (Membrane review, handoff acceptance, decision crystallization). They appear in the Flow Center table but aren’t respondable through this drawer yet.",
+      "createdAt": "Created {at}",
+      "from": "From",
+      "to": "To",
+      "framingHeader": "Original framing",
+      "backgroundHeader": "AI context summary",
+      "optionsHeader": "Suggested judgment options",
+      "evidenceHeader": "Evidence so far",
+      "respondHeader": "Respond",
+      "respondPlaceholder": "Write a direct reply. The source receives it in their personal stream and the source↔target DM.",
+      "send": "Send response",
+      "sending": "Sending…",
+      "cancel": "Cancel",
+      "respondDisabledGeneric": "This flow request isn’t respondable right now.",
+      "respondDisabledNotTarget": "Only the routed target can respond from here. Open the source-side actions in the Flow Center row instead.",
+      "respondDisabledStatus": "The route is already {status}. New responses aren’t accepted in this state.",
+      "errorEmpty": "Write something before sending.",
+      "errorAlreadyReplied": "This route was already responded to. Refresh to see the recorded reply.",
+      "errorNotTheTarget": "Only the routed target can respond. Refresh and try again.",
+      "errorNotFound": "This flow request no longer exists.",
+      "errorNetwork": "Couldn’t reach the server. Try again.",
+      "errorGeneric": "Couldn’t send your response. Try again.",
+      "errorNotRespondable": "This packet kind isn’t respondable through this surface.",
+      "doctrine": "Memory crystallization is a separate decision. Sending a response never auto-creates a memory atom."
     }
   }
 }

@@ -2275,6 +2275,39 @@
           "network": "无法连接服务器，请重试。"
         }
       }
+    },
+    "flowDrawer": {
+      "loading": "正在加载流程请求…",
+      "notFound": "该流程请求不存在，或你不可见。",
+      "forbidden": "你没有访问该流程请求的权限。",
+      "genericError": "加载失败，请重试。",
+      "retry": "重试",
+      "notSupportedBadge": "此处不可响应",
+      "notSupportedHeadline": "该类型的流程请求暂未接入响应界面。",
+      "notSupportedDetail": "类型：{kind}。此抽屉目前只支持「路由请求」的响应。知识审核、交接、决定固化、手动创建等使用各自的关卡（Membrane 审核、交接接收、决定固化）——它们会出现在 Flow Center 列表中，但暂时不能在此处直接响应。",
+      "createdAt": "创建于 {at}",
+      "from": "发起",
+      "to": "对方",
+      "framingHeader": "原始陈述",
+      "backgroundHeader": "AI 背景说明",
+      "optionsHeader": "建议的判断选项",
+      "evidenceHeader": "已有证据",
+      "respondHeader": "回复",
+      "respondPlaceholder": "写一段直接答复。发起人会在个人流以及与对方的私聊中收到。",
+      "send": "发送答复",
+      "sending": "发送中…",
+      "cancel": "取消",
+      "respondDisabledGeneric": "该流程请求当前不可响应。",
+      "respondDisabledNotTarget": "只有被指定的对方可以在此处响应。请到 Flow Center 行中使用发起人侧的操作。",
+      "respondDisabledStatus": "该路由当前状态为 {status}，不再接受新的响应。",
+      "errorEmpty": "请先填写内容再发送。",
+      "errorAlreadyReplied": "该路由已被响应过。请刷新查看已记录的答复。",
+      "errorNotTheTarget": "只有被指定的对方可以响应。请刷新后重试。",
+      "errorNotFound": "该流程请求已不存在。",
+      "errorNetwork": "无法连接服务器，请重试。",
+      "errorGeneric": "发送失败，请重试。",
+      "errorNotRespondable": "该类型暂不支持在此处响应。",
+      "doctrine": "记忆固化是独立的决定。发送响应不会自动创建任何记忆原子。"
     }
   }
 }
