@@ -196,6 +196,31 @@ async def get_tasks(
     return {"tasks": out, "scope_id": scope_id, "view": view}
 
 
+@router.get("/{task_id}")
+async def get_task(
+    task_id: str,
+    request: Request,
+    user: AuthenticatedUser = Depends(require_user),
+) -> dict[str, Any]:
+    """Phase RW-7 — read-only singleton task detail.
+
+    Membership-gated on the task's scope (project). Returns the
+    same `_serialize_task` payload the list endpoint emits so the
+    FE consumes one shape. No mutation. Returns 404 when the id
+    doesn't resolve and 403 when the viewer isn't in the scope.
+    """
+    maker = request.app.state.sessionmaker
+    async with session_scope(maker) as session:
+        row = await PlanRepository(session).get_task(task_id)
+        if row is None:
+            raise HTTPException(status_code=404, detail="task_not_found")
+        if row.project_id is not None and not await ProjectMemberRepository(
+            session
+        ).is_member(row.project_id, user.id):
+            raise HTTPException(status_code=403, detail="not_a_scope_member")
+    return {"task": _serialize_task(row)}
+
+
 @router.post("/candidates")
 async def post_task_candidate(
     body: TaskCandidateRequest,

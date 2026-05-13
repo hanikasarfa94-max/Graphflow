@@ -2,45 +2,41 @@
 
 // Tasks — page body for the v0.6.2 global /tasks surface.
 //
-// Phase D scaffold (2026-05-13). Replaces the Phase A.1 placeholder
-// stub at apps/web/src/app/tasks/page.tsx with a real PageHeader +
-// view tabs (My Tasks / All) + scope selector context + TaskList.
-//
-// Doctrine — tasks are context-born. The Create Menu must NOT expose
-// "New task" (FRONTEND_IMPLEMENTATION.md + API_CONTRACT.md §"Create
-// Menu" excluded_direct_creations). The page header therefore has no
-// "+ New" CTA — by design.
-//
-// API surface consumed (Phase D.2):
-//   GET /api/tasks?scope_id=<id|undefined>&view=<my_tasks|all>
-//   POST /api/tasks/candidates       (consumed by other surfaces)
-//   POST /api/tasks/:id/promote      (consumed by TaskRightRail)
-
-// TODO(i18n): externalize tab labels, subtitle, scope-strip copy.
+// Phase RW-7 (2026-05-13): live data via GET /api/tasks. The shell's
+// server page fetches twice (once per view tab) so switching views
+// is a client-side prop swap, not a refetch. Scope filtering uses
+// the same wire endpoint with ?scope_id=…; today the BE returns the
+// caller's personal drafts in either view, so the My Tasks / All
+// split is structurally present but visually identical until the
+// backend widens list_personal_for_owner to include plan-scope rows.
+// That limitation is surfaced inline in the page footer.
 
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 
 import { Button, PageHeader, Text } from "@/components/ui";
 
 import { TaskList } from "./TaskList";
-import type { TaskView } from "./types";
+import type { TaskListResponse, TaskRow, TaskView } from "./types";
 
-const TABS: ReadonlyArray<{ id: TaskView; label: string }> = [
-  { id: "my_tasks", label: "My Tasks" },
-  { id: "all", label: "All" },
-];
+const TABS: ReadonlyArray<TaskView> = ["my_tasks", "all"];
 
-export function Tasks() {
-  // View tab — defaults to My Tasks. Phase D.2 persists this in the
-  // URL so deep-linking to /tasks?view=all is shareable.
-  const [view, setView] = useState<TaskView>("my_tasks");
+export function Tasks({
+  myTasks,
+  allTasks,
+  initialView = "my_tasks",
+  scopeId,
+}: {
+  myTasks: TaskListResponse;
+  allTasks: TaskListResponse;
+  initialView?: TaskView;
+  scopeId: string | null;
+}) {
+  const t = useTranslations("shellV062.tasks.page");
+  const [view, setView] = useState<TaskView>(initialView);
 
-  // Scope context. The shell's ScopeBand owns the active scope in
-  // v0.6.2; for the scaffold we leave scope_id undefined (cross-scope)
-  // and let the user filter via the chips on TaskCards. D.2 wires
-  // useActiveScope() from the shell context.
-  // TODO(phase-d.2): const { activeScopeId } = useActiveScope();
-  const activeScopeId: string | undefined = undefined;
+  const rows: TaskRow[] =
+    view === "my_tasks" ? myTasks.tasks : allTasks.tasks;
 
   return (
     <main
@@ -51,56 +47,51 @@ export function Tasks() {
       }}
     >
       <PageHeader
-        kicker="Tasks"
-        title="Tasks"
-        subtitle="Work in flight. Tasks are context-born — they enter as candidates and ascend through recognition policy to canonical. The Create Menu doesn't include 'New task' by doctrine."
+        kicker={t("kicker")}
+        title={t("title")}
+        subtitle={t("subtitle")}
       />
 
-      {/* View tabs. Two tabs only — anything richer (assignee, due,
-          policy) is a filter inside the list, not a tab. */}
       <div
         role="tablist"
-        aria-label="Task view"
+        aria-label={t("tabsAriaLabel")}
         style={{
           display: "flex",
           gap: 8,
           marginBottom: 20,
           borderBottom: "1px solid var(--wg-line)",
-          paddingBottom: 0,
         }}
       >
         {TABS.map((tab) => {
-          const active = tab.id === view;
+          const active = tab === view;
           return (
             <Button
-              key={tab.id}
+              key={tab}
               variant={active ? "primary" : "ghost"}
               size="sm"
               role="tab"
               aria-selected={active}
-              onClick={() => setView(tab.id)}
+              onClick={() => setView(tab)}
               style={{
-                // Override Button shape for tab-bar fit: square the
-                // bottom corners so the underline reads as a tab strip.
                 borderBottomLeftRadius: 0,
                 borderBottomRightRadius: 0,
                 marginBottom: -1,
               }}
             >
-              {tab.label}
+              {t(`tabs.${tab}` as const)}
             </Button>
           );
         })}
         <div style={{ marginLeft: "auto", paddingBottom: 8 }}>
           <Text variant="caption" muted>
-            {activeScopeId
-              ? `Scope: ${activeScopeId}`
-              : "Scope: all accessible"}
+            {scopeId
+              ? t("scopeLabel", { scope: scopeId.slice(0, 8) })
+              : t("scopeAll")}
           </Text>
         </div>
       </div>
 
-      <TaskList view={view} scopeId={activeScopeId} />
+      <TaskList tasks={rows} />
 
       <Text
         as="p"
@@ -108,7 +99,7 @@ export function Tasks() {
         muted
         style={{ marginTop: 16, textAlign: "center" }}
       >
-        Recognition policy is non-optional on promote.
+        {t("limitationNote")}
       </Text>
     </main>
   );

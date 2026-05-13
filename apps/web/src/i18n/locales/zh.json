@@ -2056,6 +2056,54 @@
         }
       }
     },
+    "tasks": {
+      "page": {
+        "kicker": "任务",
+        "title": "任务",
+        "subtitle": "正在流转的工作。任务是有治理的状态迁移，不是 todo — 从候选起步，经过认定策略升级到正式。",
+        "tabsAriaLabel": "任务视图",
+        "tabs": {
+          "my_tasks": "我的任务",
+          "all": "全部"
+        },
+        "scopeLabel": "范围：{scope}",
+        "scopeAll": "范围：全部可访问",
+        "limitationNote": "目前 /api/tasks 在两个视图下都只返回调用者的个人草稿。后端拓宽 list_personal_for_owner 后，团队的 plan 域任务才会出现。"
+      },
+      "list": {
+        "emptyTitle": "任务",
+        "empty": "目前没有任务。任务由上下文催生 — 从会话、文档或流转响应出现，再按认定策略升级。",
+        "otherGroup": "其他"
+      },
+      "card": {
+        "roleLabel": "角色"
+      },
+      "detail": {
+        "kicker": "任务",
+        "title": "任务详情",
+        "subtitle": "只读 Proof Page。仅展示描述、来源引用与元信息。升级 / 状态变更尚未接入。",
+        "metaTitle": "元信息",
+        "descriptionTitle": "描述",
+        "sourceTitle": "来源",
+        "noDescription": "（未记录描述）",
+        "noSource": "未附加来源引用。",
+        "sourceFromMessage": "来源会话消息",
+        "notWired": "认定策略、阻塞项、相关文档、证据、AI 辅助以及升级操作会在后续切片接入。这里只渲染后端实际返回的字段。",
+        "meta": {
+          "id": "ID",
+          "scope": "范围",
+          "scopeKind": "载体",
+          "owner": "所有者",
+          "assigneeRole": "受派角色",
+          "estimate": "预估",
+          "requirement": "需求",
+          "created": "创建时间"
+        },
+        "forbidden": "你没有该任务所属范围的访问权限。",
+        "notFound": "任务 {id} 不存在或对你不可见。",
+        "loadError": "无法加载该任务，请重试。"
+      }
+    },
     "scopes": {
       "detail": {
         "subtitle": "只读 X 光视图。成员、名单和按范围过滤的入口 — 这里不做任何写操作。",

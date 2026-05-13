@@ -2,27 +2,21 @@
 
 // TaskCard — one row in the global Tasks index.
 //
-// Phase D scaffold (2026-05-13). Renders the task summary line:
-// title + RecognitionPolicyBadge + assignee + status pill + scope chip.
-// Click opens the task detail in the shared DrawerHost (preview) or
-// navigates to /tasks/[id] for a full page.
-//
-// URL invariant — Phase A.4 cut over to the 5-surface shell. Task
-// links MUST resolve to `/tasks/[id]` and NEVER /projects/.../tasks/...
-// (FRONTEND_IMPLEMENTATION.md §Routes).
-
-// TODO(i18n): externalize status / aria labels.
+// Phase RW-7 (2026-05-13): renders only the truthful fields the BE
+// emits today (title, status, assignee_role, scope_id). The Phase D
+// scaffold rendered a fabricated RecognitionPolicyBadge + an invented
+// assignee_display_name + a synthesized scope_label — all gone. The
+// drawer-on-click handler is also gone; plain navigation to
+// /tasks/[id].
 
 import Link from "next/link";
+import { useTranslations } from "next-intl";
 
 import { Tag, Text } from "@/components/ui";
-import { useDrawer } from "@/components/shell/v062/DrawerHost";
 
-import { RecognitionPolicyBadge } from "./RecognitionPolicyBadge";
 import type { TaskRow, TaskStatus } from "./types";
 
-// Status display labels. The grouping order lives in TaskList.tsx.
-const STATUS_LABEL: Record<TaskStatus, string> = {
+const STATUS_LABEL: Partial<Record<TaskStatus, string>> = {
   personal_draft: "Personal draft",
   candidate: "Candidate",
   confirmation_pending: "Confirmation pending",
@@ -34,11 +28,11 @@ const STATUS_LABEL: Record<TaskStatus, string> = {
   ready_for_review: "Ready for review",
   done: "Done",
   archived: "Archived",
+  pending: "Pending",
 };
 
-const STATUS_TONE: Record<
-  TaskStatus,
-  "neutral" | "accent" | "amber" | "ok" | "danger"
+const STATUS_TONE: Partial<
+  Record<TaskStatus, "neutral" | "accent" | "amber" | "ok" | "danger">
 > = {
   personal_draft: "neutral",
   candidate: "accent",
@@ -51,28 +45,17 @@ const STATUS_TONE: Record<
   ready_for_review: "amber",
   done: "ok",
   archived: "neutral",
+  pending: "neutral",
 };
 
 export function TaskCard({ task }: { task: TaskRow }) {
-  const drawer = useDrawer();
-
-  function handleClick(e: React.MouseEvent<HTMLAnchorElement>) {
-    // Modifier-click / middle-click falls through to the deep-link
-    // route so users can open a task in a new tab as expected. A
-    // plain left-click opens the preview drawer for the inline flow.
-    if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
-    e.preventDefault();
-    drawer.open({
-      type: "edit_request", // placeholder drawer slot; D.2 adds 'task_detail' to DrawerType.
-      props: { task_id: task.id },
-      title: task.title,
-    });
-  }
+  const t = useTranslations("shellV062.tasks.card");
+  const statusLabel = STATUS_LABEL[task.status] || task.status;
+  const statusTone = STATUS_TONE[task.status] || "neutral";
 
   return (
     <Link
-      href={`/tasks/${task.id}`}
-      onClick={handleClick}
+      href={`/tasks/${encodeURIComponent(task.id)}`}
       style={{
         display: "block",
         padding: "14px 16px",
@@ -83,37 +66,18 @@ export function TaskCard({ task }: { task: TaskRow }) {
       }}
       aria-label={`Task: ${task.title}`}
     >
-      <div
-        style={{
-          display: "flex",
-          flexDirection: "column",
-          gap: 8,
-        }}
-      >
-        {/* Row 1 — title + badge cluster */}
-        <div
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        <Text
+          variant="body"
           style={{
-            display: "flex",
-            alignItems: "flex-start",
-            justifyContent: "space-between",
-            gap: 12,
+            fontWeight: 600,
+            color: "var(--wg-ink)",
+            minWidth: 0,
           }}
         >
-          <Text
-            variant="body"
-            style={{
-              fontWeight: 600,
-              color: "var(--wg-ink)",
-              flex: 1,
-              minWidth: 0,
-            }}
-          >
-            {task.title}
-          </Text>
-          <RecognitionPolicyBadge policy={task.recognition_policy} />
-        </div>
+          {task.title}
+        </Text>
 
-        {/* Row 2 — assignee / status / scope chips */}
         <div
           style={{
             display: "flex",
@@ -122,22 +86,26 @@ export function TaskCard({ task }: { task: TaskRow }) {
             flexWrap: "wrap",
           }}
         >
-          <Tag tone={STATUS_TONE[task.status]} size="sm">
-            {STATUS_LABEL[task.status]}
+          <Tag tone={statusTone} size="sm">
+            {statusLabel}
           </Tag>
-          <Text variant="caption" muted>
-            {/* TODO(i18n): "Assigned to" prefix. */}
-            Assigned to {task.assignee_display_name}
-          </Text>
-          <span aria-hidden style={{ color: "var(--wg-line)" }}>
-            ·
-          </span>
-          {/* Scope chip — links to the scope's home surface. Per Phase
-              A.4 there is no /projects/<id> page; the scope label is
-              informational only. */}
-          <Tag tone="neutral" size="sm">
-            {task.scope_label}
-          </Tag>
+
+          {task.assignee_role && task.assignee_role !== "unknown" ? (
+            <Text variant="caption" muted>
+              {t("roleLabel")}: {task.assignee_role}
+            </Text>
+          ) : null}
+
+          {task.scope_id ? (
+            <>
+              <span aria-hidden style={{ color: "var(--wg-line)" }}>
+                ·
+              </span>
+              <Tag tone="neutral" size="sm">
+                {task.scope_id.slice(0, 8)}
+              </Tag>
+            </>
+          ) : null}
         </div>
       </div>
     </Link>

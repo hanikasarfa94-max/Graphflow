@@ -1,18 +1,44 @@
 // /tasks/[id] — deep-link to a single task.
 //
-// Phase D scaffold (2026-05-13). The detail page is intentionally
-// minimal: PageHeader + TaskRightRail (5-section spine). The right
-// rail carries the load-bearing surface; the left side is reserved
-// for a future timeline / comments stream (Phase D.2).
+// Phase RW-7 (2026-05-13): server-side fetches GET /api/tasks/:id
+// and passes the resolved task into TaskRightRail. The Phase D
+// scaffold's useTask() mock with fabricated content_summary +
+// invented evidence_sources + synthesized AI assistance buttons is
+// gone. The right rail renders only real BE fields plus honest
+// empty states.
 //
-// URL invariant (FRONTEND_IMPLEMENTATION.md §Routes): the canonical
-// task URL is /tasks/[id]. There is NO /projects/<id>/tasks/<id>.
+// URL invariant (FRONTEND_IMPLEMENTATION.md §Routes): canonical
+// task URL is /tasks/[id]. No /projects/<id>/tasks/<id>.
 
-import { Heading, Text } from "@/components/ui";
+import { getTranslations } from "next-intl/server";
+
+import { Card, EmptyState, Heading, Text } from "@/components/ui";
 import { TaskRightRail } from "@/features/tasks/TaskRightRail";
-import { requireUser } from "@/lib/auth";
+import type { TaskDetailResponse } from "@/features/tasks/types";
+import { ApiError } from "@/lib/api";
+import { requireUser, serverFetch } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
+
+async function loadTask(id: string): Promise<
+  | { kind: "ok"; data: TaskDetailResponse }
+  | { kind: "forbidden" }
+  | { kind: "not_found" }
+  | { kind: "error" }
+> {
+  try {
+    const data = await serverFetch<TaskDetailResponse>(
+      `/api/tasks/${encodeURIComponent(id)}`,
+    );
+    return { kind: "ok", data };
+  } catch (err) {
+    if (err instanceof ApiError) {
+      if (err.status === 403) return { kind: "forbidden" };
+      if (err.status === 404) return { kind: "not_found" };
+    }
+    return { kind: "error" };
+  }
+}
 
 export default async function TaskDetailPage({
   params,
@@ -21,6 +47,39 @@ export default async function TaskDetailPage({
 }) {
   const { id } = await params;
   await requireUser(`/tasks/${id}`);
+  const t = await getTranslations("shellV062.tasks.detail");
+  const result = await loadTask(id);
+
+  if (result.kind !== "ok") {
+    return (
+      <main
+        style={{
+          maxWidth: 1180,
+          margin: "0 auto",
+          padding: "32px 28px 80px",
+        }}
+      >
+        <Heading
+          level={1}
+          variant="display"
+          style={{ margin: "6px 0 12px", letterSpacing: "-0.02em" }}
+        >
+          {t("title")}
+        </Heading>
+        <Card>
+          <EmptyState>
+            {result.kind === "forbidden"
+              ? t("forbidden")
+              : result.kind === "not_found"
+                ? t("notFound", { id })
+                : t("loadError")}
+          </EmptyState>
+        </Card>
+      </main>
+    );
+  }
+
+  const task = result.data.task;
 
   return (
     <main
@@ -35,25 +94,21 @@ export default async function TaskDetailPage({
       }}
     >
       <section>
-        {/* TODO(i18n) */}
         <Text variant="caption" muted>
-          Task · {id}
+          {t("kicker")} · {task.id}
         </Text>
         <Heading
           level={1}
           variant="display"
           style={{ margin: "6px 0 12px", letterSpacing: "-0.02em" }}
         >
-          Task detail
+          {task.title}
         </Heading>
         <Text as="p" variant="body" muted style={{ maxWidth: 640 }}>
-          The full timeline + comments stream lands in Phase D.2. The
-          right rail carries the doctrine-load-bearing surface today:
-          Context, Related Work, Evidence, AI Assistance, and the
-          state-changing Primary Action.
+          {t("subtitle")}
         </Text>
       </section>
-      <TaskRightRail taskId={id} />
+      <TaskRightRail task={task} />
     </main>
   );
 }

@@ -1,28 +1,58 @@
 // /tasks — global task index.
 //
-// Phase D scaffold (2026-05-13). Replaces the Phase A.1 placeholder
-// stub with the real Tasks feature body. Tasks are global; the
-// scope_id query param filters to a project.
-//
-// API surface (Phase B + D.2):
-//   GET  /api/tasks?scope_id=...&view=my_tasks|all
-//   POST /api/tasks/candidates
-//   POST /api/tasks/:id/promote   (requires TaskRecognitionPolicy)
-//
-// TaskRecognitionPolicy enum (schemas.graphflow.json):
-//   "none" | "assignee_accept" | "project_owner_confirm"
-//   | "flow_required" | "review_required"
-//
-// TaskStatus enum (full lifecycle): personal_draft → candidate →
-// confirmation_pending → accepted_personal → team_confirmed → in_progress
-// → blocked → waiting_for_feedback → ready_for_review → done → archived
+// Phase RW-7 (2026-05-13): server-side fetches the live GET /api/tasks
+// endpoint twice — once per view tab — and threads both payloads
+// plus the user's active scope into the client feature. The Phase D
+// useTasks mock is gone; no fabricated tasks, owners, or recognition
+// policies survive in the rendered surface.
 
 import { Tasks } from "@/features/tasks/Tasks";
-import { requireUser } from "@/lib/auth";
+import type { TaskListResponse } from "@/features/tasks/types";
+import { requireUser, serverFetch } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
+type ActiveScope = {
+  scope_id: string | null;
+  scope_mode: "current_focus" | "all_accessible" | "no_focus";
+};
+
+async function loadActiveScope(): Promise<ActiveScope> {
+  try {
+    return await serverFetch<ActiveScope>("/api/user/active-scope");
+  } catch {
+    return { scope_id: null, scope_mode: "no_focus" };
+  }
+}
+
+async function loadTasks(
+  view: "my_tasks" | "all",
+  scope_id: string | null,
+): Promise<TaskListResponse> {
+  const params = new URLSearchParams();
+  params.set("view", view);
+  if (scope_id) params.set("scope_id", scope_id);
+  try {
+    return await serverFetch<TaskListResponse>(
+      `/api/tasks?${params.toString()}`,
+    );
+  } catch {
+    return { tasks: [], scope_id, view };
+  }
+}
+
 export default async function TasksIndexPage() {
   await requireUser("/tasks");
-  return <Tasks />;
+  const active = await loadActiveScope();
+  const scope_id =
+    active.scope_mode === "current_focus" && active.scope_id
+      ? active.scope_id
+      : null;
+
+  const [myTasks, allTasks] = await Promise.all([
+    loadTasks("my_tasks", scope_id),
+    loadTasks("all", scope_id),
+  ]);
+
+  return <Tasks myTasks={myTasks} allTasks={allTasks} scopeId={scope_id} />;
 }

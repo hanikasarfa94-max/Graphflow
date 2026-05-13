@@ -2056,6 +2056,54 @@
         }
       }
     },
+    "tasks": {
+      "page": {
+        "kicker": "Tasks",
+        "title": "Tasks",
+        "subtitle": "Work in flight. Tasks are governed state transitions, not todo items — they enter as candidates and ascend through recognition policy to canonical.",
+        "tabsAriaLabel": "Task view",
+        "tabs": {
+          "my_tasks": "My Tasks",
+          "all": "All"
+        },
+        "scopeLabel": "Scope: {scope}",
+        "scopeAll": "Scope: all accessible",
+        "limitationNote": "Today /api/tasks returns the caller’s personal drafts in both views. Plan-scope rows from teammates land when the backend widens list_personal_for_owner."
+      },
+      "list": {
+        "emptyTitle": "Tasks",
+        "empty": "No tasks yet. Tasks are context-born — they surface from conversations, documents, and flow responses, then promote through recognition policy.",
+        "otherGroup": "Other"
+      },
+      "card": {
+        "roleLabel": "Role"
+      },
+      "detail": {
+        "kicker": "Task",
+        "title": "Task detail",
+        "subtitle": "Read-only proof page. Description, source ref, and metadata only. Promote / status mutation isn’t wired here yet.",
+        "metaTitle": "Metadata",
+        "descriptionTitle": "Description",
+        "sourceTitle": "Source",
+        "noDescription": "(no description recorded)",
+        "noSource": "No source reference attached to this task.",
+        "sourceFromMessage": "From conversation message",
+        "notWired": "Recognition policy, blockers, related documents, evidence, AI Assistance, and the promote affordance land in a later slice. Today only fields the backend actually emits are rendered.",
+        "meta": {
+          "id": "ID",
+          "scope": "Scope",
+          "scopeKind": "Carrier",
+          "owner": "Owner",
+          "assigneeRole": "Assignee role",
+          "estimate": "Estimate",
+          "requirement": "Requirement",
+          "created": "Created"
+        },
+        "forbidden": "You don’t have access to this task’s scope.",
+        "notFound": "Task {id} doesn’t exist or isn’t visible to you.",
+        "loadError": "Couldn’t load this task. Try again."
+      }
+    },
     "scopes": {
       "detail": {
         "subtitle": "Read-only X-ray. Membership, roster, and scoped surface links — no mutation here.",
