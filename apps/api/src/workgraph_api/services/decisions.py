@@ -29,6 +29,7 @@ from workgraph_persistence import (
     ConflictRepository,
     DecisionRepository,
     DecisionRow,
+    ProjectMemberRepository,
     session_scope,
 )
 
@@ -260,6 +261,25 @@ class DecisionService:
                 project_id, limit=limit
             )
         return [self._decision_payload(r) for r in rows]
+
+    async def get_for_viewer(
+        self, *, decision_id: str, viewer_user_id: str
+    ) -> dict[str, Any]:
+        """Phase RW-6 — single-decision read for /decisions/:id.
+
+        Membership-gated on the decision's project. Returns
+        `{ok: True, decision: {...}}` on success or
+        `{ok: False, error: 'not_found' | 'not_a_member'}`.
+        """
+        async with session_scope(self._sessionmaker) as session:
+            row = await DecisionRepository(session).get(decision_id)
+            if row is None:
+                return {"ok": False, "error": "not_found"}
+            if row.project_id is not None and not await ProjectMemberRepository(
+                session
+            ).is_member(row.project_id, viewer_user_id):
+                return {"ok": False, "error": "not_a_member"}
+            return {"ok": True, "decision": self._decision_payload(row)}
 
     async def list_for_conflict(
         self, conflict_id: str

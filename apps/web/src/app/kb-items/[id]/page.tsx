@@ -1,21 +1,74 @@
-// /kb-items/[id] — global KB item detail (Phase E.1 URL shell).
+// /kb-items/[id] — KB item read-only proof page.
 //
-// Migration source: replaces the deleted
-// `/projects/[id]/kb/[kid]` audit route. KB items are global per
-// v0.6.2 IA — addressable directly without a project prefix.
+// Phase RW-6 (2026-05-13): the Phase E.1 placeholder is replaced
+// with a real read-only body backed by the live
+// GET /api/kb-items/:id endpoint that was already shipped.
 //
-// Phase E.1 ships the URL shell only so rewritten links from Part B
-// don't 404. The full <KbItemDetail /> render (already implemented
-// for the legacy route) gets re-mounted here in Phase E.2 with
-// scope_id read from the item row instead of the URL.
-//
-// API surface (Phase E.2):
-//   GET /api/kb-items/:id
+// Renders the truthful fields the BE actually exposes today —
+// title, scope, status (draft/published/archived/...), owner,
+// content body, attachment + download link if present, and
+// timestamps. No mutation. No fabricated lineage.
 
-import { Card, PageHeader, Text } from "@/components/ui";
-import { requireUser } from "@/lib/auth";
+import Link from "next/link";
+import { getTranslations } from "next-intl/server";
+
+import { Card, EmptyState, PageHeader, Tag, Text } from "@/components/ui";
+import { ApiError } from "@/lib/api";
+import { requireUser, serverFetch } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
+
+type KbAttachment = {
+  filename: string;
+  mime: string | null;
+  bytes: number | null;
+  download_url: string;
+};
+
+type KbItemDetail = {
+  id: string;
+  project_id: string | null;
+  folder_id: string | null;
+  owner_user_id: string | null;
+  scope: "personal" | "group" | "department" | "enterprise" | string;
+  title: string;
+  content_md: string | null;
+  status: string;
+  source: string | null;
+  attachment: KbAttachment | null;
+  created_at: string | null;
+  updated_at: string | null;
+};
+
+async function loadKbItem(
+  id: string,
+): Promise<
+  | { kind: "ok"; data: KbItemDetail }
+  | { kind: "forbidden" }
+  | { kind: "not_found" }
+  | { kind: "error" }
+> {
+  try {
+    const data = await serverFetch<KbItemDetail>(
+      `/api/kb-items/${encodeURIComponent(id)}`,
+    );
+    return { kind: "ok", data };
+  } catch (err) {
+    if (err instanceof ApiError) {
+      if (err.status === 403) return { kind: "forbidden" };
+      if (err.status === 404) return { kind: "not_found" };
+    }
+    return { kind: "error" };
+  }
+}
+
+const STATUS_TONE: Record<string, "neutral" | "accent" | "ok" | "amber"> = {
+  draft: "amber",
+  published: "ok",
+  archived: "neutral",
+  "pending-review": "amber",
+  rejected: "neutral",
+};
 
 export default async function KbItemDetailPage({
   params,
@@ -24,7 +77,141 @@ export default async function KbItemDetailPage({
 }) {
   const { id } = await params;
   await requireUser(`/kb-items/${id}`);
+  const t = await getTranslations("shellV062.kbItems.detail");
+  const result = await loadKbItem(id);
 
+  if (result.kind === "forbidden") {
+    return <Shell><EmptyState>{t("forbidden")}</EmptyState></Shell>;
+  }
+  if (result.kind === "not_found") {
+    return <Shell><EmptyState>{t("notFound", { id })}</EmptyState></Shell>;
+  }
+  if (result.kind === "error") {
+    return <Shell><EmptyState>{t("loadError")}</EmptyState></Shell>;
+  }
+
+  const item = result.data;
+  const statusTone = STATUS_TONE[item.status] || "neutral";
+
+  return (
+    <Shell>
+      <PageHeader
+        kicker="KB item"
+        title={item.title}
+        subtitle={t("subtitle")}
+        right={
+          <div style={{ display: "flex", gap: 8 }}>
+            <Tag tone="neutral">{item.scope}</Tag>
+            <Tag tone={statusTone}>{item.status}</Tag>
+          </div>
+        }
+      />
+
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "minmax(0, 2fr) minmax(0, 1fr)",
+          gap: 16,
+        }}
+      >
+        <Card title={t("bodyTitle")}>
+          {item.content_md ? (
+            <Text as="p" variant="body" style={{ whiteSpace: "pre-wrap" }}>
+              {item.content_md}
+            </Text>
+          ) : (
+            <EmptyState>{t("noBody")}</EmptyState>
+          )}
+        </Card>
+
+        <Card title={t("metaTitle")}>
+          <Meta label={t("meta.id")} value={item.id} />
+          {item.project_id ? (
+            <Meta
+              label={t("meta.scope")}
+              value={
+                <Link
+                  href={`/scopes/${encodeURIComponent(item.project_id)}`}
+                  style={{ color: "var(--wg-accent)" }}
+                >
+                  {item.project_id.slice(0, 8)} →
+                </Link>
+              }
+            />
+          ) : (
+            <Meta label={t("meta.scope")} value="—" />
+          )}
+          <Meta
+            label={t("meta.owner")}
+            value={
+              item.owner_user_id
+                ? `user:${item.owner_user_id.slice(0, 8)}`
+                : "—"
+            }
+          />
+          <Meta label={t("meta.source")} value={item.source || "—"} />
+          <Meta label={t("meta.created")} value={item.created_at || "—"} />
+          <Meta label={t("meta.updated")} value={item.updated_at || "—"} />
+          {item.attachment ? (
+            <Meta
+              label={t("meta.attachment")}
+              value={
+                <a
+                  href={item.attachment.download_url}
+                  style={{ color: "var(--wg-accent)" }}
+                >
+                  {item.attachment.filename} →
+                </a>
+              }
+            />
+          ) : null}
+        </Card>
+      </div>
+
+      <Card variant="sunk" style={{ marginTop: 16 }}>
+        <Text variant="caption" muted>
+          {t("notWired")}
+        </Text>
+      </Card>
+    </Shell>
+  );
+}
+
+function Meta({
+  label,
+  value,
+}: {
+  label: string;
+  value: React.ReactNode;
+}) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        gap: 8,
+        marginBottom: 6,
+        alignItems: "baseline",
+      }}
+    >
+      <Text
+        variant="caption"
+        muted
+        style={{
+          minWidth: 90,
+          textTransform: "uppercase",
+          letterSpacing: "0.06em",
+        }}
+      >
+        {label}
+      </Text>
+      <Text variant="body" as="span">
+        {value}
+      </Text>
+    </div>
+  );
+}
+
+function Shell({ children }: { children: React.ReactNode }) {
   return (
     <main
       style={{
@@ -33,22 +220,7 @@ export default async function KbItemDetailPage({
         padding: "32px 28px 80px",
       }}
     >
-      <PageHeader
-        kicker="KB item"
-        title="Knowledge entry"
-        subtitle={`KB item · ${id}`}
-      />
-
-      <Card title="Coming in Phase E.2">
-        <Text variant="body" muted>
-          The KB entry detail surface (body, citations, license, edit
-          history) lands in Phase E.2. This URL replaces the deleted{" "}
-          <code>/projects/[id]/kb/[kid]</code> route. The existing{" "}
-          <code>KbItemDetail</code> client component will be re-mounted
-          here once the loader resolves <code>scope_id</code> from the
-          item row.
-        </Text>
-      </Card>
+      {children}
     </main>
   );
 }

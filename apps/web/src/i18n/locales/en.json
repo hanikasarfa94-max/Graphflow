@@ -2056,6 +2056,79 @@
         }
       }
     },
+    "scopes": {
+      "detail": {
+        "subtitle": "Read-only X-ray. Membership, roster, and scoped surface links — no mutation here.",
+        "membersTitle": "Members ({count})",
+        "noMembers": "No members recorded.",
+        "surfacesTitle": "Scoped surfaces",
+        "surfaces": {
+          "conversations": "Conversations in this scope",
+          "flowCenter": "Flow packets in this scope",
+          "tasks": "Tasks in this scope",
+          "docs": "Documents in this scope"
+        },
+        "notWired": "Activity feed, project brief, and decision history will land here when their producers are wired.",
+        "forbidden": "You don’t have access to this scope.",
+        "notFound": "Scope {id} doesn’t exist or isn’t visible to you.",
+        "loadError": "Couldn’t load this scope. Try again."
+      }
+    },
+    "kbItems": {
+      "detail": {
+        "subtitle": "Read-only memory atom. Source of truth lives in the membrane.",
+        "bodyTitle": "Body",
+        "metaTitle": "Metadata",
+        "noBody": "(no body recorded)",
+        "meta": {
+          "id": "ID",
+          "scope": "Scope",
+          "owner": "Owner",
+          "source": "Source",
+          "created": "Created",
+          "updated": "Updated",
+          "attachment": "Attachment"
+        },
+        "notWired": "Edit, archive, citations, and lineage to-and-from this atom land in a later slice.",
+        "forbidden": "You don’t have access to this KB item.",
+        "notFound": "KB item {id} doesn’t exist or isn’t visible to you.",
+        "loadError": "Couldn’t load this KB item. Try again."
+      }
+    },
+    "decisions": {
+      "detail": {
+        "subtitle": "Read-only decision record. Resolver, rationale, and outcome only.",
+        "rationaleTitle": "Rationale",
+        "customTextLabel": "Custom resolution",
+        "metaTitle": "Metadata",
+        "noRationale": "(no rationale recorded)",
+        "meta": {
+          "id": "ID",
+          "scope": "Scope",
+          "resolver": "Resolver",
+          "option": "Option",
+          "customOption": "custom",
+          "conflict": "Conflict",
+          "created": "Created",
+          "applied": "Applied",
+          "votes": "Approve/Deny/Abstain"
+        },
+        "notWired": "Dissent threads, supersession lineage, and revote affordances aren’t wired yet.",
+        "forbidden": "You don’t have access to this decision.",
+        "notFound": "Decision {id} doesn’t exist or isn’t visible to you.",
+        "loadError": "Couldn’t load this decision. Try again."
+      }
+    },
+    "nodes": {
+      "detail": {
+        "title": "Node — unresolved",
+        "subtitle": "We probed the known object kinds and none matched. Below is what we did find — and what to try next.",
+        "unresolvedTag": "unresolved",
+        "unresolvedBody": "No KB item or decision matches id {id}. Graph-internal nodes (goals / deliverables / risks / constraints) live inside project state — open the scope from /scopes/[id] to navigate to them.",
+        "forbidden": "An object exists at id {id} but you don’t have access to it.",
+        "hint": "When the proof page surface lands real graph-node resolution, this route will dispatch to the kind-specific detail without a redirect step."
+      }
+    },
     "flowCenter": {
       "metrics": {
         "needsMe": "Needs me",

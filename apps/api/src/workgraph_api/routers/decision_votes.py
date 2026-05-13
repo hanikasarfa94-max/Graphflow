@@ -22,7 +22,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field
 
 from workgraph_api.deps import require_user
-from workgraph_api.services import AuthenticatedUser
+from workgraph_api.services import AuthenticatedUser, DecisionService
 from workgraph_api.services.decision_votes import (
     VALID_VERDICTS,
     DecisionVoteError,
@@ -31,6 +31,35 @@ from workgraph_api.services.decision_votes import (
 
 
 router = APIRouter(tags=["decision-votes"])
+
+
+def _decision_service(request: Request) -> DecisionService:
+    return request.app.state.decision_service
+
+
+@router.get("/api/decisions/{decision_id}")
+async def get_decision_detail(
+    decision_id: str,
+    request: Request,
+    user: AuthenticatedUser = Depends(require_user),
+):
+    """Phase RW-6 — read-only single decision detail.
+
+    Wraps DecisionService.get_for_viewer. Membership-gated on the
+    decision's project. Returns the v0.6.2 decision payload (id,
+    project_id, conflict_id, source_suggestion_id, resolver_id,
+    option_index, custom_text, rationale, apply_outcome,
+    apply_detail, created_at, applied_at).
+    """
+    svc = _decision_service(request)
+    result = await svc.get_for_viewer(
+        decision_id=decision_id, viewer_user_id=user.id
+    )
+    if not result.get("ok"):
+        err = result.get("error", "request_failed")
+        status = {"not_found": 404, "not_a_member": 403}.get(err, 400)
+        raise HTTPException(status_code=status, detail=err)
+    return result["decision"]
 
 
 class CastVoteRequest(BaseModel):

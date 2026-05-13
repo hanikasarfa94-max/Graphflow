@@ -138,6 +138,52 @@ async def list_scopes(
     ]
 
 
+class ScopeDetailResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str
+    title: str
+    role: str
+    tier: Literal["personal", "cell", "department", "enterprise"]
+    members: list[dict]
+
+
+@router.get("/api/scopes/{scope_id}", response_model=ScopeDetailResponse)
+async def get_scope(
+    scope_id: str,
+    request: Request,
+    user: AuthenticatedUser = Depends(require_user),
+) -> ScopeDetailResponse:
+    """Phase RW-6 — single-scope read-only X-ray.
+
+    Membership-gated. Returns the Scope envelope plus the member
+    roster (display name + role + skill_tags) so the FE
+    /scopes/[id] page can render without a second fetch. No state
+    mutation; no cross-project data leakage.
+    """
+    service = _get_project_service(request)
+    if not await service.is_member(project_id=scope_id, user_id=user.id):
+        raise HTTPException(status_code=403, detail="not_a_scope_member")
+    # Lookup viewer's row in the scope to derive role.
+    members = await service.members(scope_id)
+    me = next((m for m in members if m["user_id"] == user.id), None)
+    role = (me.get("role") if me else None) or "member"
+    # Title lookup via list_for_user (cheap — bounded by scope count).
+    user_projects = await service.list_for_user(user.id)
+    title_row = next((p for p in user_projects if p["id"] == scope_id), None)
+    if title_row is None:
+        # Membership says yes, list says no — race or partial visibility.
+        # Return 404 rather than fabricate a title.
+        raise HTTPException(status_code=404, detail="scope_not_found")
+    return ScopeDetailResponse(
+        id=scope_id,
+        title=title_row["title"],
+        role=role,
+        tier=_DEFAULT_SCOPE_TIER,
+        members=members,
+    )
+
+
 @router.get("/api/user/active-scope", response_model=ActiveScopeResponse)
 async def get_active_scope(
     request: Request,

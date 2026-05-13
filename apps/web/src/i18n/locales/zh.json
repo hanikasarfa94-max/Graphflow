@@ -2056,6 +2056,79 @@
         }
       }
     },
+    "scopes": {
+      "detail": {
+        "subtitle": "只读 X 光视图。成员、名单和按范围过滤的入口 — 这里不做任何写操作。",
+        "membersTitle": "成员（{count}）",
+        "noMembers": "未记录成员。",
+        "surfacesTitle": "按范围过滤的入口",
+        "surfaces": {
+          "conversations": "该范围下的会话",
+          "flowCenter": "该范围下的流转包",
+          "tasks": "该范围下的任务",
+          "docs": "该范围下的文档"
+        },
+        "notWired": "活动流、项目简报与决策历史会在各自生产者接入后出现。",
+        "forbidden": "你没有该范围的访问权限。",
+        "notFound": "范围 {id} 不存在或对你不可见。",
+        "loadError": "无法加载该范围，请重试。"
+      }
+    },
+    "kbItems": {
+      "detail": {
+        "subtitle": "只读记忆原子。事实真相由 membrane 持有。",
+        "bodyTitle": "正文",
+        "metaTitle": "元信息",
+        "noBody": "（未记录正文）",
+        "meta": {
+          "id": "ID",
+          "scope": "范围",
+          "owner": "所有者",
+          "source": "来源",
+          "created": "创建时间",
+          "updated": "更新时间",
+          "attachment": "附件"
+        },
+        "notWired": "编辑、归档、引用以及上下游溯源会在后续切片接入。",
+        "forbidden": "你没有该 KB 条目的访问权限。",
+        "notFound": "KB 条目 {id} 不存在或对你不可见。",
+        "loadError": "无法加载该 KB 条目，请重试。"
+      }
+    },
+    "decisions": {
+      "detail": {
+        "subtitle": "只读决策记录。仅展示决策人、理由与结果。",
+        "rationaleTitle": "理由",
+        "customTextLabel": "自定义结论",
+        "metaTitle": "元信息",
+        "noRationale": "（未记录理由）",
+        "meta": {
+          "id": "ID",
+          "scope": "范围",
+          "resolver": "决策人",
+          "option": "选项",
+          "customOption": "自定义",
+          "conflict": "冲突",
+          "created": "创建时间",
+          "applied": "执行时间",
+          "votes": "赞成/反对/弃权"
+        },
+        "notWired": "异议线索、覆盖溯源与重新投票相关功能尚未接入。",
+        "forbidden": "你没有该决策的访问权限。",
+        "notFound": "决策 {id} 不存在或对你不可见。",
+        "loadError": "无法加载该决策，请重试。"
+      }
+    },
+    "nodes": {
+      "detail": {
+        "title": "节点 — 未识别",
+        "subtitle": "我们尝试了已知的对象类型但没有命中。下面是已查到的线索与下一步建议。",
+        "unresolvedTag": "未识别",
+        "unresolvedBody": "没有 KB 条目或决策匹配 id {id}。图内节点（目标 / 交付物 / 风险 / 约束）位于项目状态内 — 请打开 /scopes/[id] 通过项目上下文查看。",
+        "forbidden": "存在 id 为 {id} 的对象，但你没有访问权限。",
+        "hint": "当 Proof Page 接入图节点直查后，本路由将直接分发到具体类型而无需重定向。"
+      }
+    },
     "flowCenter": {
       "metrics": {
         "needsMe": "待我处理",
