@@ -1,11 +1,10 @@
 // /tasks — global task index.
 //
-// Phase A.1 scaffold (2026-05-12). Replaces the project-scoped
-// /projects/[id]/detail/tasks audit route. Tasks are global; the
-// scope_id query param filters to a project. The full TaskList +
-// TaskCard + RecognitionPolicyBadge surface arrives in Phase D.
+// Phase D scaffold (2026-05-13). Replaces the Phase A.1 placeholder
+// stub with the real Tasks feature body. Tasks are global; the
+// scope_id query param filters to a project.
 //
-// API surface (Phase B):
+// API surface (Phase B + D.2):
 //   GET  /api/tasks?scope_id=...&view=my_tasks|all
 //   POST /api/tasks/candidates
 //   POST /api/tasks/:id/promote   (requires TaskRecognitionPolicy)
@@ -18,35 +17,12 @@
 // confirmation_pending → accepted_personal → team_confirmed → in_progress
 // → blocked → waiting_for_feedback → ready_for_review → done → archived
 
-import { Card, PageHeader, Text } from "@/components/ui";
+import { Tasks } from "@/features/tasks/Tasks";
 import { requireUser } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
 export default async function TasksIndexPage() {
   await requireUser("/tasks");
-
-  return (
-    <main
-      style={{
-        maxWidth: 1180,
-        margin: "0 auto",
-        padding: "32px 28px 80px",
-      }}
-    >
-      <PageHeader
-        kicker="Tasks"
-        title="Tasks"
-        subtitle="Work in flight. Tasks are context-born — they enter as candidates and ascend through recognition policy to canonical."
-      />
-
-      <Card title="Coming next">
-        <Text variant="body" muted>
-          Global task index with my_tasks / all views, recognition policy
-          badges, and candidate promotion arrives in Phase D of{" "}
-          <code>BUILD-v062.md</code>.
-        </Text>
-      </Card>
-    </main>
-  );
+  return <Tasks />;
 }

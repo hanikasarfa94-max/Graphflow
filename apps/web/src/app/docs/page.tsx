@@ -1,48 +1,25 @@
 // /docs — Documents / KB index.
 //
-// Phase A.1 scaffold (2026-05-12). Replaces /projects/[id]/kb and
-// /projects/[id]/renders. The full DocumentIndex with Project Brief
-// pinned (ProjectBriefBadge) + editor with publish→memory_candidate
-// flow arrives in Phase D per BUILD-v062.md.
+// Phase D scaffold (2026-05-13). The full Documents feature body lives
+// at `apps/web/src/features/documents/Documents.tsx`; this route file
+// is a thin server wrapper that requires auth and renders the
+// client-side feature. Mirrors the pattern in /flow-center/page.tsx.
 //
-// Doctrine — Project Brief is a pinned KB document, not a separate
-// concept. DocumentEditor's publish action returns memory_candidates,
-// never accepted memory (memory crystallization is a separate decision).
+// Doctrine (DESIGN_LOCK §"Locked IA") — Project Brief is a pinned KB
+// document, not a separate page. `GET /api/scopes/:id/project-brief`
+// always returns a `document_id` (4-tier fallback per the backend).
 //
-// API surface (Phase B):
-//   GET  /api/documents?scope_id=...&type=all
+// API surface (Phase B.1 live, Phase D.2 wires reads):
+//   GET  /api/documents?scope_id=...&type=all|brief|note|attachment
 //   GET  /api/scopes/:scopeId/project-brief
 //   POST /api/documents/:id/publish  (returns memory_candidates)
 
-import { Card, PageHeader, Text } from "@/components/ui";
+import { Documents } from "@/features/documents/Documents";
 import { requireUser } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
 export default async function DocsIndexPage() {
   await requireUser("/docs");
-
-  return (
-    <main
-      style={{
-        maxWidth: 1180,
-        margin: "0 auto",
-        padding: "32px 28px 80px",
-      }}
-    >
-      <PageHeader
-        kicker="Documents · KB"
-        title="Documents"
-        subtitle="Project Briefs, rendered artifacts, knowledge entries. Authoring is a path to memory candidates — publish doesn't make memory canonical."
-      />
-
-      <Card title="Coming next">
-        <Text variant="body" muted>
-          Document index with Project Brief, KB browser, and the
-          publish→memory-candidate flow lands in Phase D of{" "}
-          <code>BUILD-v062.md</code>.
-        </Text>
-      </Card>
-    </main>
-  );
+  return <Documents />;
 }
