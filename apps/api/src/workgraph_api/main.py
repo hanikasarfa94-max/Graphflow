@@ -67,6 +67,7 @@ from workgraph_api.routers import intake as intake_router
 from workgraph_api.routers import kb as kb_router
 from workgraph_api.routers import meetings as meetings_router
 from workgraph_api.routers import membrane as membrane_router
+from workgraph_api.routers import memory_candidates as memory_candidates_router
 from workgraph_api.routers import my_ai as my_ai_router
 from workgraph_api.routers import observability as observability_router
 from workgraph_api.routers import onboarding as onboarding_router
@@ -913,6 +914,7 @@ app.include_router(intake_router.router)
 app.include_router(kb_router.router)
 app.include_router(meetings_router.router)
 app.include_router(membrane_router.router)
+app.include_router(memory_candidates_router.router)
 app.include_router(my_ai_router.router)
 app.include_router(clarification_router.router)
 app.include_router(graph_router.router)

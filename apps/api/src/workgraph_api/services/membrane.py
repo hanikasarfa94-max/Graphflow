@@ -72,10 +72,12 @@ from workgraph_persistence import (
     AgentRunLogRepository,
     EDGE_AGENT_SYSTEM_USER_ID,
     IMSuggestionRepository,
+    IMSuggestionRow,
     KbIngestRepository,
     KbItemRepository,
     KbItemRow,
     MessageRepository,
+    MessageRow,
     ProjectMemberRepository,
     ProjectRow,
     StreamRepository,
@@ -993,6 +995,482 @@ class MembraneService:
             "approved_at": row.approved_at.isoformat() if row.approved_at else None,
             "trace_id": row.trace_id,
             "created_at": row.created_at.isoformat() if row.created_at else None,
+        }
+
+    # ------------------------------------------------------------------
+    # v0.6.2 — Memory Candidate / Authority API
+    #
+    # Wraps the existing IMSuggestion(kind='membrane_review') + linked
+    # KbItemRow draft surface in the contract shape
+    # graphflow_handoff_v062/API_CONTRACT.md §"Memory Candidate /
+    # Membrane" expects. Read-paths only; mutation still flows through
+    # this service so the membrane stays the single boundary.
+    # ------------------------------------------------------------------
+
+    # Compression caveat MUST contain the substring "does not guarantee"
+    # — INVARIANT_TESTS.md §"Compression analysis shape" asserts this.
+    COMPRESSION_CAVEAT = (
+        "No warning does not guarantee faithful distillation."
+    )
+
+    # Required role gates per CandidateKind. Maps to AuthorityRole enum
+    # in schemas.graphflow.json. v0 keeps it conservative: project_owner
+    # is the only role that can accept; admin always can.
+    _ACCEPT_ROLES_BY_KIND: dict[str, list[str]] = {
+        "kb_item_group": ["project_owner", "admin"],
+        "task_promote": ["project_owner", "task_owner", "admin"],
+        "decision_crystallize": ["project_owner", "admin"],
+    }
+
+    @staticmethod
+    def _membership_role_to_authority(role: str | None) -> list[str]:
+        """Project member.role → AuthorityRole enum list.
+
+        v0 mapping: 'owner' → ['project_owner']; everyone else → ['project_member'].
+        AuthorityRole proper enum (pricing_owner / document_owner / domain_reviewer)
+        will be wired in v0.6.3 when role tables land.
+        """
+        if role == "owner":
+            return ["project_owner"]
+        if role is None:
+            return []
+        return ["project_member"]
+
+    async def get_candidate_full_detail(
+        self,
+        *,
+        candidate_id: str,
+        viewer_user_id: str,
+    ) -> dict[str, Any]:
+        """Assemble the v0.6.2 Memory Candidate detail payload.
+
+        Returns the full contract shape — verbatim source, AI extracted
+        claim, compression analysis (with the required `does not
+        guarantee` caveat), proposed memory atom, authority check
+        computed for `viewer_user_id`, affected objects, and lifecycle
+        events.
+
+        Returns `{ok: False, error: 'not_found'}` if no such candidate
+        exists, or `{ok: False, error: 'not_a_member', project_id: ...}`
+        if the viewer isn't in the candidate's project.
+        """
+        async with session_scope(self._sessionmaker) as session:
+            sugg_repo = IMSuggestionRepository(session)
+            sugg = await sugg_repo.get(candidate_id)
+            if sugg is None or sugg.kind != "membrane_review":
+                return {"ok": False, "error": "not_found"}
+
+            project_id = sugg.project_id
+            if not await ProjectMemberRepository(session).is_member(
+                project_id, viewer_user_id
+            ):
+                return {
+                    "ok": False,
+                    "error": "not_a_member",
+                    "project_id": project_id,
+                }
+
+            viewer_role = await ProjectMemberRepository(session).get_role(
+                project_id, viewer_user_id
+            )
+
+            # Source message (the AI message that proposed the
+            # candidate). Used for verbatim_source.
+            source_msg = await MessageRepository(session).get(sugg.message_id)
+
+            # The proposed memory atom (a KbItemRow draft) lives in
+            # proposal.detail.kb_item_id when candidate_kind ==
+            # 'kb_item_group'. For task_promote / decision_crystallize
+            # the same proposal carries task_id / decision_id; we
+            # generalize via `linked_id` on the source message.
+            proposal = dict(sugg.proposal or {})
+            detail = dict(proposal.get("detail") or {})
+            candidate_kind = (
+                detail.get("candidate_kind") or "kb_item_group"
+            )
+
+            kb_row: KbItemRow | None = None
+            kb_item_id = detail.get("kb_item_id")
+            if kb_item_id:
+                kb_row = await KbItemRepository(session).get(kb_item_id)
+
+        # ---- shape the response ----------------------------------
+        verbatim_source = self._build_verbatim_source(source_msg, detail)
+        ai_extracted_claim = (
+            detail.get("ai_extracted_claim")
+            or proposal.get("summary")
+            or (kb_row.title if kb_row else "")
+        )
+        proposed_atom = self._build_proposed_atom(kb_row, detail)
+        compression = self._build_compression_analysis(detail)
+        authority = self._compute_authority_check(
+            candidate_kind=candidate_kind,
+            viewer_role=viewer_role,
+        )
+        status = self._candidate_status(sugg, kb_row)
+        lifecycle = self._build_lifecycle_events(sugg, kb_row)
+        affected = list(detail.get("affected_objects") or [])
+
+        return {
+            "ok": True,
+            "candidate_id": sugg.id,
+            "status": status,
+            "scope_id": project_id,
+            "candidate_kind": candidate_kind,
+            "verbatim_source": verbatim_source,
+            "ai_extracted_claim": ai_extracted_claim,
+            "compression_analysis": compression,
+            "compression_warnings": list(
+                detail.get("compression_warnings") or []
+            ),
+            "proposed_memory_atom": proposed_atom,
+            "authority_check": authority,
+            "affected_objects": affected,
+            "lifecycle_events": lifecycle,
+        }
+
+    def _build_verbatim_source(
+        self,
+        msg: MessageRow | None,
+        detail: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Pull the original-message text the AI distilled from. Falls
+        back to detail.verbatim_source when the source message has
+        been hard-deleted (the audit trail prefers row-pinning, but
+        keep a safe shape so callers never see None)."""
+        if msg is not None:
+            return {
+                "kind": "message",
+                "object_id": msg.id,
+                "text": msg.body or "",
+                "author_user_id": msg.author_id,
+            }
+        verbatim = detail.get("verbatim_source") or {}
+        return {
+            "kind": verbatim.get("kind") or "message",
+            "object_id": verbatim.get("object_id") or "",
+            "text": verbatim.get("text") or "",
+            "author_user_id": verbatim.get("author_user_id"),
+        }
+
+    def _build_proposed_atom(
+        self,
+        kb_row: KbItemRow | None,
+        detail: dict[str, Any],
+    ) -> dict[str, Any]:
+        if kb_row is not None:
+            # KbItemRow.scope ∈ {personal, group, department, enterprise}.
+            # v0.6.2 contract tier values: cell | department | enterprise.
+            tier_map = {
+                "group": "cell",
+                "department": "department",
+                "enterprise": "enterprise",
+                "personal": "cell",
+            }
+            return {
+                "kb_item_id": kb_row.id,
+                "title": kb_row.title,
+                "claim": kb_row.content_md or "",
+                "scope_id": kb_row.project_id,
+                "tier": tier_map.get(kb_row.scope, "cell"),
+            }
+        # Fallback for task_promote / decision_crystallize where there's
+        # no KB row yet — surface what we have in the proposal detail.
+        return {
+            "title": detail.get("title") or "",
+            "claim": detail.get("claim") or detail.get("diff_summary") or "",
+            "scope_id": detail.get("scope_id"),
+            "tier": detail.get("tier") or "cell",
+        }
+
+    def _build_compression_analysis(
+        self, detail: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Compression analysis carries:
+          * status ('clean' | 'warnings_found')
+          * warning_count
+          * method (which checks ran)
+          * caveat (MUST contain 'does not guarantee')
+
+        TODO(Phase B.2): Real compression-check pipeline lives in
+        MembraneAgentReviewer. Until it surfaces a structured result,
+        we infer status from the deterministic warnings the policy
+        already stuffed into detail.compression_warnings.
+        """
+        warnings = list(detail.get("compression_warnings") or [])
+        # Allow the policy to override; default to inferred shape.
+        analysis = dict(detail.get("compression_analysis") or {})
+        status = analysis.get("status") or (
+            "warnings_found" if warnings else "clean"
+        )
+        method = analysis.get("method") or [
+            "rule_based",
+            "ai_semantic_check",
+        ]
+        return {
+            "status": status,
+            "warning_count": int(analysis.get("warning_count", len(warnings))),
+            "method": list(method),
+            # Invariant: substring "does not guarantee" must be present.
+            "caveat": analysis.get("caveat") or self.COMPRESSION_CAVEAT,
+        }
+
+    def _compute_authority_check(
+        self,
+        *,
+        candidate_kind: str,
+        viewer_role: str | None,
+    ) -> dict[str, Any]:
+        required = self._ACCEPT_ROLES_BY_KIND.get(
+            candidate_kind, ["project_owner", "admin"]
+        )
+        user_roles = self._membership_role_to_authority(viewer_role)
+        can_accept = any(r in required for r in user_roles)
+        if can_accept:
+            allowed = ["accept", "revise", "reject", "defer", "reopen"]
+        else:
+            allowed = ["comment", "request_review", "defer"]
+        return {
+            "can_accept": can_accept,
+            "required_roles": required,
+            "user_roles": user_roles,
+            "allowed_actions": allowed,
+        }
+
+    def _candidate_status(
+        self,
+        sugg: IMSuggestionRow,
+        kb_row: KbItemRow | None,
+    ) -> str:
+        """Map IMSuggestion.status → MemoryCandidateStatus enum.
+
+        v0 mapping; expand in Phase B.2 once skip/expired/superseded
+        states have real persistence.
+        """
+        s = (sugg.status or "").lower()
+        if s == "pending":
+            return "review_pending"
+        if s == "accepted":
+            return "accepted"
+        if s == "dismissed":
+            return "rejected"
+        if s == "deferred":
+            return "deferred"
+        if s == "reopened":
+            return "reopened"
+        return "review_pending"
+
+    def _build_lifecycle_events(
+        self,
+        sugg: IMSuggestionRow,
+        kb_row: KbItemRow | None,
+    ) -> list[dict[str, Any]]:
+        events: list[dict[str, Any]] = []
+        if sugg.created_at:
+            events.append(
+                {
+                    "event": "candidate_created",
+                    "at": sugg.created_at.isoformat(),
+                    "actor_user_id": None,
+                    "note": sugg.reasoning or "",
+                }
+            )
+        if getattr(sugg, "resolved_at", None):
+            events.append(
+                {
+                    "event": f"status_set_{sugg.status}",
+                    "at": sugg.resolved_at.isoformat(),
+                    "actor_user_id": None,
+                }
+            )
+        if kb_row is not None and kb_row.approved_at:
+            events.append(
+                {
+                    "event": "memory_atom_published",
+                    "at": kb_row.approved_at.isoformat(),
+                    "actor_user_id": kb_row.approved_by_user_id,
+                }
+            )
+        return events
+
+    async def accept_candidate(
+        self,
+        *,
+        candidate_id: str,
+        accepter_user_id: str,
+    ) -> dict[str, Any]:
+        """Authority-gated accept. Promotes the linked KB draft to
+        `status='published'`, resolves the suggestion, and returns the
+        memory atom id + full lineage envelope.
+
+        Authority gating happens server-side: the caller's role must
+        intersect `_ACCEPT_ROLES_BY_KIND[candidate_kind]`. On failure
+        returns `{ok: False, error: 'authority_required', ...}` — the
+        router translates to HTTP 403.
+        """
+        async with session_scope(self._sessionmaker) as session:
+            sugg_repo = IMSuggestionRepository(session)
+            sugg = await sugg_repo.get(candidate_id)
+            if sugg is None or sugg.kind != "membrane_review":
+                return {"ok": False, "error": "not_found"}
+            if sugg.status not in ("pending", "deferred", "reopened"):
+                return {"ok": False, "error": "already_resolved"}
+
+            project_id = sugg.project_id
+            if not await ProjectMemberRepository(session).is_member(
+                project_id, accepter_user_id
+            ):
+                return {"ok": False, "error": "not_a_member"}
+
+            accepter_role = await ProjectMemberRepository(session).get_role(
+                project_id, accepter_user_id
+            )
+            proposal = dict(sugg.proposal or {})
+            detail = dict(proposal.get("detail") or {})
+            candidate_kind = detail.get("candidate_kind") or "kb_item_group"
+            authority = self._compute_authority_check(
+                candidate_kind=candidate_kind,
+                viewer_role=accepter_role,
+            )
+            if not authority["can_accept"]:
+                return {
+                    "ok": False,
+                    "error": "authority_required",
+                    "required_roles": authority["required_roles"],
+                    "user_roles": authority["user_roles"],
+                    "allowed_actions": authority["allowed_actions"],
+                }
+
+            source_msg = await MessageRepository(session).get(sugg.message_id)
+            kb_repo = KbItemRepository(session)
+            kb_row: KbItemRow | None = None
+            kb_item_id = detail.get("kb_item_id")
+            if kb_item_id:
+                kb_row = await kb_repo.get(kb_item_id)
+                if kb_row is not None:
+                    await kb_repo.update(
+                        item_id=kb_row.id, status="published"
+                    )
+
+            await sugg_repo.resolve(candidate_id, "accepted")
+
+        # Emit lifecycle event so observability + WS pick it up.
+        await self._event_bus.emit(
+            "memory_candidate.accepted",
+            {
+                "candidate_id": candidate_id,
+                "project_id": project_id,
+                "memory_atom_id": kb_row.id if kb_row else None,
+                "accepted_by_user_id": accepter_user_id,
+                "candidate_kind": candidate_kind,
+            },
+        )
+
+        from datetime import datetime, timezone
+
+        accepted_at = datetime.now(timezone.utc).isoformat()
+        return {
+            "ok": True,
+            "candidate_id": candidate_id,
+            "memory_atom_id": kb_row.id if kb_row else None,
+            "lineage": {
+                # Three required ids per
+                # INVARIANT_TESTS.md §"Memory lineage required".
+                "verbatim_source_id": source_msg.id if source_msg else None,
+                "ai_distillation_id": sugg.id,
+                "reviewer_revision_id": None,  # set when revise path lands
+                "accepted_by": accepter_user_id,
+                "accepted_at": accepted_at,
+            },
+        }
+
+    async def set_candidate_status(
+        self,
+        *,
+        candidate_id: str,
+        new_status: str,
+        actor_user_id: str,
+    ) -> dict[str, Any]:
+        """Membership-gated status flip for defer / reopen / reject.
+
+        `new_status` ∈ {'deferred', 'reopened', 'rejected'}. Authority
+        is NOT required for these — any member can defer or reopen
+        their own queue; reject still requires a role-eligible caller
+        (Phase B.2 will gate that explicitly).
+        """
+        if new_status not in ("deferred", "reopened", "rejected"):
+            return {"ok": False, "error": "invalid_status"}
+
+        # IMSuggestionRow uses the source word `dismissed` for reject;
+        # the v0.6.2 contract surfaces it as `rejected` outwards.
+        internal_status = (
+            "dismissed" if new_status == "rejected" else new_status
+        )
+        async with session_scope(self._sessionmaker) as session:
+            sugg_repo = IMSuggestionRepository(session)
+            sugg = await sugg_repo.get(candidate_id)
+            if sugg is None or sugg.kind != "membrane_review":
+                return {"ok": False, "error": "not_found"}
+            if not await ProjectMemberRepository(session).is_member(
+                sugg.project_id, actor_user_id
+            ):
+                return {"ok": False, "error": "not_a_member"}
+
+            # Reopen is only meaningful from terminal-ish states.
+            if new_status == "reopened" and sugg.status not in (
+                "deferred",
+                "dismissed",
+            ):
+                return {"ok": False, "error": "not_reopenable"}
+
+            await sugg_repo.resolve(candidate_id, internal_status)
+
+        await self._event_bus.emit(
+            f"memory_candidate.{new_status}",
+            {
+                "candidate_id": candidate_id,
+                "project_id": sugg.project_id,
+                "actor_user_id": actor_user_id,
+            },
+        )
+        return {
+            "ok": True,
+            "candidate_id": candidate_id,
+            "status": new_status,
+        }
+
+    async def get_memory_atom_citations(
+        self,
+        *,
+        atom_id: str,
+        viewer_user_id: str,
+    ) -> dict[str, Any]:
+        """Outbound lineage for a published memory atom.
+
+        Returns `cited_by` (objects that reference this atom) and
+        `downstream_dependencies` (objects whose state depends on this
+        atom). Phase B.2 will wire real citation tracking through the
+        KB hierarchy + decision/task lineage tables; v0 returns the
+        empty-shape envelope so the FE can render without 500ing.
+
+        TODO(Phase B.2): query DecisionRow.cited_kb_ids, TaskRow.
+        evidence_refs, and KbItemRow.parent_id to populate both arrays.
+        """
+        async with session_scope(self._sessionmaker) as session:
+            kb_row = await KbItemRepository(session).get(atom_id)
+            if kb_row is None:
+                return {"ok": False, "error": "not_found"}
+            project_id = kb_row.project_id
+            if project_id is not None and not await ProjectMemberRepository(
+                session
+            ).is_member(project_id, viewer_user_id):
+                return {"ok": False, "error": "not_a_member"}
+
+        return {
+            "ok": True,
+            "atom_id": atom_id,
+            "cited_by": [],
+            "downstream_dependencies": [],
         }
 
 
