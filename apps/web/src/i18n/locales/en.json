@@ -2021,6 +2021,19 @@
       "stream": {
         "empty": "No messages yet. Start the conversation below."
       },
+      "composer": {
+        "placeholder": "Write a message…",
+        "send": "Send",
+        "sending": "Sending…",
+        "hint": "⌘/Ctrl + Enter to send",
+        "disabledTopic": "Posting into topic threads isn’t wired yet. Use the parent room or DM for now.",
+        "errors": {
+          "notMember": "You’re no longer a member of this conversation.",
+          "notFound": "This conversation no longer exists.",
+          "validation": "Message can’t be empty or over 4,000 characters.",
+          "network": "Couldn’t reach the server. Try again."
+        }
+      },
       "rightRail": {
         "dm": {
           "withLabel": "With",

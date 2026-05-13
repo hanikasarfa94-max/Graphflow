@@ -2021,6 +2021,19 @@
       "stream": {
         "empty": "还没有消息。先在下方开个头吧。"
       },
+      "composer": {
+        "placeholder": "写点什么…",
+        "send": "发送",
+        "sending": "正在发送…",
+        "hint": "⌘/Ctrl + Enter 发送",
+        "disabledTopic": "话题串内发送还没接入。请暂时在父群组或私聊中发言。",
+        "errors": {
+          "notMember": "你已不再是该会话的成员。",
+          "notFound": "该会话不存在了。",
+          "validation": "消息不能为空，也不能超过 4,000 个字符。",
+          "network": "无法连接服务器，请重试。"
+        }
+      },
       "rightRail": {
         "dm": {
           "withLabel": "对方",

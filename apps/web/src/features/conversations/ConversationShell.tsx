@@ -14,7 +14,7 @@
 //   room   → RoomRightRail (real scope + participants)
 //   topic  → TopicRightRail (honest empty; no backend persistence yet)
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
 
 import { Card, EmptyState, Text } from "@/components/ui";
@@ -26,6 +26,7 @@ import { DMRightRail } from "./DMRightRail";
 import { MessageStream } from "./MessageStream";
 import { RoomRightRail } from "./RoomRightRail";
 import { TopicRightRail } from "./TopicRightRail";
+import { postConversationMessage } from "./conversationActions";
 import type { ConversationDetail } from "./types";
 
 type FetchState =
@@ -34,10 +35,14 @@ type FetchState =
   | { status: "error"; message: string }
   | { status: "ready"; conv: ConversationDetail };
 
-function useConversationDetail(id: string | null): FetchState {
+function useConversationDetail(id: string | null): {
+  state: FetchState;
+  refetch: () => void;
+} {
   const [state, setState] = useState<FetchState>(
     id ? { status: "loading" } : { status: "idle" },
   );
+  const [tick, setTick] = useState(0);
 
   useEffect(() => {
     if (!id) {
@@ -45,7 +50,10 @@ function useConversationDetail(id: string | null): FetchState {
       return;
     }
     let cancelled = false;
-    setState({ status: "loading" });
+    // First load: show loading. Subsequent refetches (tick > 0) keep
+    // the existing ready state so the message stream doesn't flash
+    // empty between POST and the new GET.
+    if (tick === 0) setState({ status: "loading" });
     api<ConversationDetail>(
       `/api/conversations/${encodeURIComponent(id)}`,
     )
@@ -63,9 +71,17 @@ function useConversationDetail(id: string | null): FetchState {
     return () => {
       cancelled = true;
     };
+  }, [id, tick]);
+
+  // Reset tick when id changes so the fresh selection always shows
+  // the loading spinner instead of stale-ready state from the
+  // previous conversation.
+  useEffect(() => {
+    setTick(0);
   }, [id]);
 
-  return state;
+  const refetch = useCallback(() => setTick((t) => t + 1), []);
+  return { state, refetch };
 }
 
 export function ConversationShell({
@@ -76,7 +92,7 @@ export function ConversationShell({
   viewerUserId: string;
 }) {
   const t = useTranslations("shellV062.conversations.shell");
-  const state = useConversationDetail(selectedId);
+  const { state, refetch } = useConversationDetail(selectedId);
 
   if (state.status === "idle") {
     return <CenteredCard>{t("noSelection")}</CenteredCard>;
@@ -89,6 +105,14 @@ export function ConversationShell({
   }
 
   const conv = state.conv;
+
+  // Composer behavior per conversation type. Direct + room send for
+  // real; topic stays disabled because the topic primitive isn't
+  // persisted and POSTing into a stub stream would silently no-op.
+  const composerDisabledKey: string | null =
+    conv.type === "topic"
+      ? "shellV062.conversations.composer.disabledTopic"
+      : null;
 
   return (
     <section
@@ -111,13 +135,22 @@ export function ConversationShell({
         <MessageStream messages={conv.messages} />
         <ConversationComposer
           conversationId={conv.id}
-          onSend={async () => {
-            // RW-4 is read-only by brief. POST /api/conversations/:id/messages
-            // wiring lands in a later phase. The composer is left visible
-            // but its send is a no-op so the surface looks complete;
-            // the textarea still accepts text but submitting won't post.
-            // TODO(RW-5): POST /api/conversations/:id/messages
+          // Real POST + refetch loop. The shell owns the side-effect;
+          // the composer stays purely about input.
+          onSend={async (body) => {
+            const result = await postConversationMessage(conv.id, body);
+            if (result.ok) {
+              // Refetch is the cheapest path to server-authoritative
+              // state. The new message includes its server-assigned
+              // id, kind, created_at, and author_username (which the
+              // POST response also includes, but appending would
+              // bypass any other side-effects the BE emits — e.g.
+              // edge-agent auto-replies in personal streams).
+              refetch();
+            }
+            return result;
           }}
+          disabledReasonI18nKey={composerDisabledKey}
         />
       </div>
 
