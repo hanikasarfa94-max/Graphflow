@@ -146,12 +146,14 @@ describe("v0.6.2 — project is not routable as a page", () => {
   // the runtime 404 — if any project page.tsx came back, this would
   // fail.
   test("no /projects/[id] route file exists after the Phase A.4 cutover", async () => {
-    const { glob } = await import("bun");
+    // Bun.Glob — synchronous file-system glob. Asserts there's no
+    // page.tsx anywhere under apps/web/src/app/projects/. The build
+    // itself enforces the runtime 404; this is a structural canary.
+    const glob = new Bun.Glob("projects/**/page.tsx");
     const matches: string[] = [];
-    for await (const file of glob.scan({
-      cwd: "apps/web/src/app",
-      glob: "projects/**/page.tsx",
-    })) {
+    // CWD when `bun test` runs is the package root (apps/web). Anchor
+    // explicitly so the test passes regardless of how it's invoked.
+    for (const file of glob.scanSync({ cwd: "src/app" })) {
       matches.push(file);
     }
     expect(matches).toEqual([]);

@@ -87,10 +87,9 @@ function MessageRow({ msg }: { msg: ConversationMessage }) {
   );
 }
 
+// All visible timestamps funnel through lib/time so SSR + CSR render
+// the same Asia/Shanghai string (avoids React hydration warnings).
+import { formatIso as _formatIso } from "@/lib/time";
 function formatTime(iso: string): string {
-  try {
-    return new Date(iso).toLocaleString();
-  } catch {
-    return iso;
-  }
+  return _formatIso(iso);
 }

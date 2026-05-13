@@ -310,14 +310,9 @@ function TopicRow({
   );
 }
 
-// TODO(phase-d.2): swap for shared `formatRelative` once the
-// conversation surface adopts the same Intl-based helper used by
-// other surfaces. Keeping it local + minimal for the scaffold.
+// All visible timestamps funnel through lib/time so SSR + CSR render
+// the same Asia/Shanghai string (M1.1 invariant).
+import { formatIso as _formatIso } from "@/lib/time";
 function formatRelative(iso: string): string {
-  try {
-    const d = new Date(iso);
-    return d.toLocaleString();
-  } catch {
-    return iso;
-  }
+  return _formatIso(iso);
 }
