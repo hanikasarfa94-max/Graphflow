@@ -124,44 +124,62 @@ export type MemoryCandidateStatus =
   | "expired"
   | "superseded";
 
+// RW-2.2 (2026-05-13): shapes below match the live BE response from
+// GET /api/memory-candidates/:id (MembraneService.get_candidate_full_detail).
+
 export interface VerbatimSource {
-  author: string;
-  timestamp: string;
+  // The object the AI distilled from. `kind` is one of message /
+  // document / flow_response; `object_id` is the row id (use it +
+  // `kind` to build a deep-link when those routes land).
+  kind: "message" | "document" | "flow_response";
+  object_id: string;
   text: string;
-  citation_url?: string;
+  author_user_id: string | null;
 }
 
 export interface CompressionAnalysis {
-  status: "no_warnings" | "warnings_found";
+  status: "no_warnings" | "warnings_found" | "clean";
   warning_count: number;
-  method: Array<"rule_based" | "ai_semantic_check">;
+  method: Array<"rule_based" | "ai_semantic_check" | string>;
   // Doctrine string — must render verbatim wherever this object is
-  // surfaced to a reviewer.
+  // surfaced to a reviewer. Server guarantees it contains
+  // "does not guarantee" per INVARIANT_TESTS.md §"Compression analysis
+  // shape".
   caveat: string;
 }
 
+export interface ProposedMemoryAtom {
+  // Optional kb_item_id present when a draft KB row already backs the
+  // candidate (the M1 path). For task_promote / decision_crystallize
+  // candidates, the row doesn't exist yet — title + claim are still
+  // populated.
+  kb_item_id?: string;
+  title: string;
+  claim: string;
+  scope_id: string | null;
+  tier: "cell" | "department" | "enterprise";
+}
+
 export interface LifecycleEvent {
-  kind:
-    | "verbatim_captured"
-    | "ai_distilled"
-    | "reviewer_revised"
-    | "accepted"
-    | "rejected"
-    | "deferred"
-    | "skipped"
-    | "reopened";
-  actor: string;
+  kind: string;
+  // Server returns actor_user_id; FE may resolve to display name in a
+  // follow-up (Phase RW-3) once a participants sidecar lands on the
+  // candidate response.
+  actor_user_id: string | null;
   at: string;
-  note?: string;
+  note?: string | null;
 }
 
 export interface MemoryCandidate {
-  id: string;
+  candidate_id: string;
   status: MemoryCandidateStatus;
+  scope_id: string | null;
+  candidate_kind: string;
   verbatim_source: VerbatimSource;
   ai_extracted_claim: string;
   compression_analysis: CompressionAnalysis;
-  proposed_memory_atom: string;
+  compression_warnings: string[];
+  proposed_memory_atom: ProposedMemoryAtom;
   authority_check: AuthorityCheck;
   affected_objects: Array<{ kind: string; id: string; label: string }>;
   lifecycle_events: LifecycleEvent[];
