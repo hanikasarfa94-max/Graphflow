@@ -2012,6 +2012,15 @@
     "empty": {
       "myAi": "从这里开始。先与 AI 共思，准备好再分享。"
     },
+    "myAi": {
+      "thinkHeading": "与 AI 思考",
+      "groundedHeading": "回到刚才在做的",
+      "groundedHide": "收起",
+      "showReentry": "展开返回入口（{count}）",
+      "landingEmpty": "目前没有等待你的事项。可以从上方开始一段私聊。",
+      "subtitle": "先用 AI 私下思考，再决定要分享什么。",
+      "greeting": "你好，{name}。"
+    },
     "conversations": {
       "shell": {
         "noSelection": "在左侧选择一段会话，或通过创建新建一段。",

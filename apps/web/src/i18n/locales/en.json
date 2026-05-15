@@ -2012,6 +2012,15 @@
     "empty": {
       "myAi": "Start here. Think with AI first. Share when ready."
     },
+    "myAi": {
+      "thinkHeading": "Think with AI",
+      "groundedHeading": "Pick up where you left off",
+      "groundedHide": "Hide",
+      "showReentry": "Show re-entry items ({count})",
+      "landingEmpty": "Nothing waiting for you right now. Start a private thread above.",
+      "subtitle": "Private reasoning first. Think with AI, then share what's ready.",
+      "greeting": "Good to see you, {name}."
+    },
     "conversations": {
       "shell": {
         "noSelection": "Pick a conversation on the left, or start a new one from Create.",
