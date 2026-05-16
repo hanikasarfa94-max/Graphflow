@@ -114,7 +114,17 @@ describe("MyAI — composer fires onActivity on focus + send", () => {
       "src/features/my-ai/MyAIComposer.tsx",
     ).text();
     const stripped = strip(src);
-    expect(/onFocus\s*=\s*\{\s*signalActivity\s*\}/.test(stripped)).toBe(true);
+    // The handler may be a direct reference (`onFocus={signalActivity}`)
+    // OR a wrapping lambda that calls signalActivity() and an
+    // additional side-effect (e.g., setting focus-ring state). The
+    // intent test: somewhere in the textarea's onFocus binding, the
+    // activity signaler fires. Match either shape.
+    const directBind = /onFocus\s*=\s*\{\s*signalActivity\s*\}/.test(stripped);
+    const lambdaBind =
+      /onFocus\s*=\s*\{\s*\(\s*\)\s*=>\s*\{[\s\S]{0,200}signalActivity\s*\(\s*\)/.test(
+        stripped,
+      );
+    expect(directBind || lambdaBind).toBe(true);
   });
 
   test("onSubmit calls signalActivity before posting", async () => {

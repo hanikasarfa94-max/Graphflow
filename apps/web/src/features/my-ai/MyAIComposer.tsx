@@ -72,6 +72,12 @@ export function MyAIComposer({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [thread, setThread] = useState<ThreadEntry[]>([]);
+  // Mirrors textarea focus into the wrapper so we can show a visible
+  // focus ring on the WRAPPER (not the inner textarea, where the
+  // border would stack awkwardly inside the card). Keyboard-only
+  // a11y per DESIGN.md universal rules — never `outline: none` without
+  // a replacement.
+  const [composerFocused, setComposerFocused] = useState(false);
 
   // Guard so a noisy parent doesn't get one callback per keystroke;
   // we want exactly "user is engaged" semantics, fired once.
@@ -193,16 +199,27 @@ export function MyAIComposer({
           display: "flex",
           flexDirection: "column",
           gap: 8,
-          border: "1px solid var(--wg-line)",
+          border: composerFocused
+            ? "1px solid var(--wg-accent)"
+            : "1px solid var(--wg-line)",
+          boxShadow: composerFocused
+            ? "0 0 0 3px var(--wg-accent-ring)"
+            : "none",
           borderRadius: 10,
           padding: 12,
           background: "var(--wg-surface)",
+          transition:
+            "border-color var(--wg-dur-short) var(--wg-ease-move), box-shadow var(--wg-dur-short) var(--wg-ease-move)",
         }}
       >
         <textarea
           value={text}
           onChange={(e) => setText(e.target.value)}
-          onFocus={signalActivity}
+          onFocus={() => {
+            signalActivity();
+            setComposerFocused(true);
+          }}
+          onBlur={() => setComposerFocused(false)}
           placeholder={t("placeholder")}
           rows={3}
           disabled={busy}
