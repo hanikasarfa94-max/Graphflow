@@ -54,7 +54,11 @@ const linkBase: CSSProperties = {
   display: "flex",
   alignItems: "center",
   gap: 12,
-  padding: "10px 14px",
+  // 12px vertical + 14px horizontal padding lands the row at 44px tall
+  // (12 + 14px line-height body + 12 + 2 hairline = 44). Hits the WCAG
+  // 44px touch-target minimum without growing the sidebar.
+  padding: "12px 14px",
+  minHeight: 44,
   fontSize: "var(--wg-fs-body)",
   fontFamily: "var(--wg-font-sans)",
   color: "var(--wg-ink-soft)",

@@ -64,13 +64,15 @@ export function ScopeBand({
       role="region"
       aria-label="Project scope"
       style={{
-        height: 40,
+        // 48px band gives the scope-switch button room to hit a 44px
+        // touch target without crowding the topbar / page header.
+        minHeight: 48,
         borderBottom: "1px solid var(--wg-line)",
         background: "var(--wg-surface-sunk)",
         display: "flex",
         alignItems: "center",
         gap: 12,
-        padding: "0 24px",
+        padding: "4px 24px",
         fontSize: "var(--wg-fs-label)",
         fontFamily: "var(--wg-font-sans)",
         color: "var(--wg-ink-soft)",
@@ -98,7 +100,8 @@ export function ScopeBand({
           display: "inline-flex",
           alignItems: "center",
           gap: 6,
-          padding: "4px 10px",
+          padding: "10px 14px",
+          minHeight: 40,
           background: "var(--wg-surface)",
           border: "1px solid var(--wg-line)",
           borderRadius: "var(--wg-radius-sm)",
@@ -109,9 +112,9 @@ export function ScopeBand({
           fontFamily: "inherit",
         }}
       >
-        {mode === "all_accessible" ? <Globe2 size={13} /> : null}
+        {mode === "all_accessible" ? <Globe2 size={14} /> : null}
         <span>{label}</span>
-        <ChevronDown size={13} />
+        <ChevronDown size={14} />
       </button>
 
       {menuOpen ? (
