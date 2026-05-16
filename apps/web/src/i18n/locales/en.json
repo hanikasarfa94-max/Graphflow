@@ -2015,13 +2015,55 @@
     "myAi": {
       "thinkHeading": "Think with AI",
       "groundedHeading": "Pick up where you left off",
+      "readyHeading": "Ready to share",
       "groundedHide": "Hide",
       "showReentry": "Show re-entry items ({count})",
       "landingEmpty": "Nothing waiting for you right now. Start a private thread above.",
       "subtitle": "Private reasoning first. Think with AI, then share what's ready.",
-      "greeting": "Good to see you, {name}."
+      "greeting": "Good to see you, {name}.",
+      "composer": {
+        "noScope": "Pick a project scope in the topbar to start a private chat.",
+        "errorEmpty": "Write something before sending.",
+        "errorStatus": "Send failed ({status}). Try again.",
+        "errorNetwork": "Couldn’t reach the server. Try again.",
+        "failedSuffix": "[failed]",
+        "placeholder": "Ask, draft, or think out loud. Cmd/Ctrl+Enter sends.",
+        "scopeBound": "Project scoped",
+        "send": "Send",
+        "sending": "Sending…",
+        "roleUser": "You",
+        "roleAssistant": "AI",
+        "proposals": "Proposals from this turn: {count}. Review them in Flow Center."
+      }
     },
     "conversations": {
+      "page": {
+        "kicker": "Conversations",
+        "title": "Conversations",
+        "subtitle": "Direct messages, rooms, and topics. One conversation surface, different scopes."
+      },
+      "list": {
+        "recent": "Recent",
+        "activeTopics": "Active Topics",
+        "emptyRecent": "No DMs or rooms yet.",
+        "emptyTopics": "No active topics. Topics appear when a conversation needs its own focused thread.",
+        "untitled": "Untitled conversation",
+        "lastActive": "Last active {time}",
+        "directPreview": "Direct conversation",
+        "roomPreview": "Room conversation",
+        "types": {
+          "direct": "Direct",
+          "room": "Room",
+          "topic": "Topic"
+        },
+        "topicStatus": {
+          "open": "open",
+          "needs_input": "needs input",
+          "waiting": "waiting",
+          "resolved": "resolved",
+          "archived": "archived"
+        }
+      },
       "shell": {
         "noSelection": "Pick a conversation on the left, or start a new one from Create.",
         "loading": "Loading conversation…",
@@ -2134,7 +2176,7 @@
         },
         "scopeLabel": "Scope: {scope}",
         "scopeAll": "Scope: all accessible",
-        "limitationNote": "Today /api/tasks returns the caller’s personal drafts in both views. Plan-scope rows from teammates land when the backend widens list_personal_for_owner."
+        "limitationNote": "Team-plan rows will appear here after they are recognized into the shared plan."
       },
       "list": {
         "emptyTitle": "Tasks",
@@ -2244,6 +2286,20 @@
       }
     },
     "flowCenter": {
+      "page": {
+        "kicker": "Flow Center",
+        "title": "Flow Center",
+        "subtitle": "Review requests, answer routed questions, and move accepted outcomes back into shared state.",
+        "metrics": {
+          "needsMe": "Needs me",
+          "waiting": "Waiting on others",
+          "awaitingMembrane": "Awaiting review",
+          "completed": "Recently completed"
+        },
+        "needScope": "Pick a project scope above to view its flow packets.",
+        "tableTitle": "Flow packets",
+        "footer": "Open a row to respond, review, or follow the source context."
+      },
       "metrics": {
         "needsMe": "Needs me",
         "waiting": "Waiting on others",

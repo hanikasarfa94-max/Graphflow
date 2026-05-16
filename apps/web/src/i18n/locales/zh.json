@@ -2015,13 +2015,55 @@
     "myAi": {
       "thinkHeading": "与 AI 思考",
       "groundedHeading": "回到刚才在做的",
+      "readyHeading": "准备分享",
       "groundedHide": "收起",
       "showReentry": "展开返回入口（{count}）",
       "landingEmpty": "目前没有等待你的事项。可以从上方开始一段私聊。",
       "subtitle": "先用 AI 私下思考，再决定要分享什么。",
-      "greeting": "你好，{name}。"
+      "greeting": "你好，{name}。",
+      "composer": {
+        "noScope": "请先在顶部选择一个项目范围，再开始私聊。",
+        "errorEmpty": "先写点内容再发送。",
+        "errorStatus": "发送失败（{status}）。请重试。",
+        "errorNetwork": "无法连接服务器，请重试。",
+        "failedSuffix": "【发送失败】",
+        "placeholder": "向 GraphFlow 提问、起草，或直接把想法说出来。Cmd/Ctrl+Enter 发送。",
+        "scopeBound": "已绑定项目范围",
+        "send": "发送",
+        "sending": "发送中…",
+        "roleUser": "你",
+        "roleAssistant": "AI",
+        "proposals": "本轮产生 {count} 个建议。请到流转中心查看。"
+      }
     },
     "conversations": {
+      "page": {
+        "kicker": "会话",
+        "title": "会话",
+        "subtitle": "私聊、群组和话题共用同一个会话工作面，只是范围不同。"
+      },
+      "list": {
+        "recent": "最近",
+        "activeTopics": "活跃话题",
+        "emptyRecent": "还没有私聊或群组会话。",
+        "emptyTopics": "暂无活跃话题。需要从会话中拆出聚焦讨论时，话题会出现在这里。",
+        "untitled": "未命名会话",
+        "lastActive": "最近活动 {time}",
+        "directPreview": "私聊会话",
+        "roomPreview": "群组会话",
+        "types": {
+          "direct": "私聊",
+          "room": "群组",
+          "topic": "话题"
+        },
+        "topicStatus": {
+          "open": "进行中",
+          "needs_input": "需要输入",
+          "waiting": "等待中",
+          "resolved": "已解决",
+          "archived": "已归档"
+        }
+      },
       "shell": {
         "noSelection": "在左侧选择一段会话，或通过创建新建一段。",
         "loading": "正在加载会话…",
@@ -2134,7 +2176,7 @@
         },
         "scopeLabel": "范围：{scope}",
         "scopeAll": "范围：全部可访问",
-        "limitationNote": "目前 /api/tasks 在两个视图下都只返回调用者的个人草稿。后端拓宽 list_personal_for_owner 后，团队的 plan 域任务才会出现。"
+        "limitationNote": "团队计划任务会在被认定为共享计划后出现在这里。"
       },
       "list": {
         "emptyTitle": "任务",
@@ -2244,6 +2286,20 @@
       }
     },
     "flowCenter": {
+      "page": {
+        "kicker": "流转中心",
+        "title": "流转中心",
+        "subtitle": "处理请求、回答被路由的问题，并把被接受的结果写回共享状态。",
+        "metrics": {
+          "needsMe": "需要我处理",
+          "waiting": "等待他人",
+          "awaitingMembrane": "等待审查",
+          "completed": "最近完成"
+        },
+        "needScope": "请先在顶部选择一个项目范围，以查看对应的流转事项。",
+        "tableTitle": "流转事项",
+        "footer": "打开任意一行，可以回复、审查，或回到来源上下文。"
+      },
       "metrics": {
         "needsMe": "待我处理",
         "waiting": "等待对方",

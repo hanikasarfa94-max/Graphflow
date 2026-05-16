@@ -87,9 +87,8 @@ export function MyAILandingClient({
       }}
     >
       <PageHeader
-        kicker="My AI"
-        title={`Good to see you, ${displayName}.`}
-        subtitle="Private reasoning first. Think with AI, then share what's ready."
+        title={t("greeting", { name: displayName })}
+        subtitle={t("subtitle")}
       />
 
       <section
@@ -102,7 +101,7 @@ export function MyAILandingClient({
         }}
       >
         <Heading level={2} id="composer-heading">
-          Think with AI
+          {t("thinkHeading")}
         </Heading>
         <MyAIComposer scopeId={scopeId} onActivity={() => setActive(true)} />
       </section>
@@ -149,7 +148,7 @@ export function MyAILandingClient({
             }}
           >
             <Heading level={2} id="grounded-heading">
-              Pick up where you left off
+              {t("groundedHeading")}
             </Heading>
             {active && showReentry ? (
               <Button
@@ -187,7 +186,7 @@ export function MyAILandingClient({
           data-testid="my-ai-ready-section"
         >
           <Heading level={2} id="ready-heading">
-            Ready to share
+            {t("readyHeading")}
           </Heading>
           {/* Draft renderer lands when /api/my-ai/landing actually
               populates ready_to_share. */}
@@ -227,11 +226,6 @@ function GroundedCard({ item }: { item: GroundedItem }) {
           }}
         >
           <Tag tone="ai">{item.kind}</Tag>
-          {item.scope_id ? (
-            <Text variant="caption" muted>
-              {item.scope_id.slice(0, 8)}
-            </Text>
-          ) : null}
         </div>
         <Text variant="body">{item.title}</Text>
       </Card>

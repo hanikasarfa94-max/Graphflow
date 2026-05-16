@@ -23,6 +23,7 @@
 //     all proposal interactions route through DrawerHost.
 
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 
 import { PageHeader } from "@/components/ui";
 
@@ -44,6 +45,7 @@ export function Conversations({
   viewerUserId: string;
   initialSelectedId?: string | null;
 }) {
+  const t = useTranslations("shellV062.conversations.page");
   const [selectedId, setSelectedId] = useState<string | null>(initialSelectedId);
 
   return (
@@ -60,10 +62,9 @@ export function Conversations({
     >
       <div style={{ padding: "24px 28px 12px" }}>
         <PageHeader
-          // TODO(i18n): shellV062.conversations.pageHeader.*
-          kicker="Conversations"
-          title="Conversations"
-          subtitle="Direct messages, rooms, and topics. The shared structure where coordination breaks open and resolves."
+          kicker={t("kicker")}
+          title={t("title")}
+          subtitle={t("subtitle")}
         />
       </div>
 

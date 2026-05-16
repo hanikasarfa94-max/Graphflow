@@ -16,6 +16,7 @@
 // regression is caught visibly.
 
 import { useMemo } from "react";
+import { useTranslations } from "next-intl";
 
 import { Card, EmptyState, Tag, Text } from "@/components/ui";
 
@@ -25,22 +26,10 @@ import type {
   RecentConversationSummary,
 } from "./types";
 
-// TODO(i18n): shellV062.conversations.list.* keys
-const RECENT_LABEL = "Recent";
-const ACTIVE_TOPICS_LABEL = "Active Topics";
-const EMPTY_RECENT = "No DMs or rooms yet.";
-const EMPTY_TOPICS = "No active topics. Topics are carved from messages where coordination breaks open.";
-
 const TYPE_TONE: Record<"direct" | "room" | "topic", "neutral" | "accent" | "amber"> = {
   direct: "neutral",
   room: "accent",
   topic: "amber",
-};
-
-const TOPIC_STATUS_LABEL: Record<string, string> = {
-  open: "open",
-  needs_input: "needs input",
-  waiting: "waiting",
 };
 
 export function ConversationList({
@@ -52,6 +41,7 @@ export function ConversationList({
   selectedId: string | null;
   onSelect: (id: string) => void;
 }) {
+  const t = useTranslations("shellV062.conversations.list");
 
   // Defensive: assert the topic dedup invariant at render time. If the
   // server ever regresses and emits the same id in both groups, drop
@@ -88,9 +78,9 @@ export function ConversationList({
         background: "var(--wg-surface)",
       }}
     >
-      <Group label={RECENT_LABEL}>
+      <Group label={t("recent")}>
         {data.recent.length === 0 ? (
-          <EmptyState>{EMPTY_RECENT}</EmptyState>
+          <EmptyState>{t("emptyRecent")}</EmptyState>
         ) : (
           data.recent.map((row) => (
             <RecentRow
@@ -103,9 +93,9 @@ export function ConversationList({
         )}
       </Group>
 
-      <Group label={ACTIVE_TOPICS_LABEL}>
+      <Group label={t("activeTopics")}>
         {safeActiveTopics.length === 0 ? (
-          <EmptyState>{EMPTY_TOPICS}</EmptyState>
+          <EmptyState>{t("emptyTopics")}</EmptyState>
         ) : (
           safeActiveTopics.map((row) => (
             <TopicRow
@@ -158,6 +148,9 @@ function RecentRow({
   selected: boolean;
   onSelect: (id: string) => void;
 }) {
+  const t = useTranslations("shellV062.conversations.list");
+  const title = row.title || t("untitled");
+  const kindLabel = t(`types.${row.type}` as const);
   return (
     <button
       type="button"
@@ -177,9 +170,9 @@ function RecentRow({
       aria-pressed={selected}
     >
       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-        <Tag tone={TYPE_TONE[row.type]}>{row.type}</Tag>
+        <Tag tone={TYPE_TONE[row.type]}>{kindLabel}</Tag>
         <Text variant="body" style={{ fontWeight: 600 }}>
-          {row.title}
+          {title}
         </Text>
         {row.unread_count > 0 ? (
           <span style={{ marginLeft: "auto" }}>
@@ -189,9 +182,12 @@ function RecentRow({
       </div>
       {row.last_message_at ? (
         <Text variant="caption" muted>
-          {formatRelative(row.last_message_at)}
+          {t("lastActive", { time: formatRelative(row.last_message_at) })}
         </Text>
       ) : null}
+      <Text variant="caption" muted>
+        {t(row.type === "direct" ? "directPreview" : "roomPreview")}
+      </Text>
     </button>
   );
 }
@@ -205,6 +201,8 @@ function TopicRow({
   selected: boolean;
   onSelect: (id: string) => void;
 }) {
+  const t = useTranslations("shellV062.conversations.list");
+  const title = row.title || t("untitled");
   return (
     <button
       type="button"
@@ -224,9 +222,9 @@ function TopicRow({
       aria-pressed={selected}
     >
       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-        <Tag tone="amber">topic</Tag>
+        <Tag tone="amber">{t("types.topic")}</Tag>
         <Tag tone="neutral">
-          {TOPIC_STATUS_LABEL[row.topic_status] ?? row.topic_status}
+          {t(`topicStatus.${row.topic_status}` as const)}
         </Tag>
         {row.unread_count > 0 ? (
           <span style={{ marginLeft: "auto" }}>
@@ -235,11 +233,11 @@ function TopicRow({
         ) : null}
       </div>
       <Text variant="body" style={{ fontWeight: 600 }}>
-        {row.title}
+        {title}
       </Text>
       {row.last_message_at ? (
         <Text variant="caption" muted>
-          {formatRelative(row.last_message_at)}
+          {t("lastActive", { time: formatRelative(row.last_message_at) })}
         </Text>
       ) : null}
     </button>

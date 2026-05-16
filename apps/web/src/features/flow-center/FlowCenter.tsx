@@ -12,6 +12,7 @@
 // derived, not mocked.
 
 import { Card, EmptyState, Metric, PageHeader, Text } from "@/components/ui";
+import { useTranslations } from "next-intl";
 
 import { FlowTable } from "./FlowTable";
 import type { FlowListResponse } from "./types";
@@ -57,6 +58,7 @@ export function FlowCenter({
   activeScopeId: string | null;
   userId: string;
 }) {
+  const t = useTranslations("shellV062.flowCenter.page");
   const metrics = computeMetrics(data.packets, userId);
 
   return (
@@ -68,9 +70,9 @@ export function FlowCenter({
       }}
     >
       <PageHeader
-        kicker="Flow Center"
-        title="Flow Center"
-        subtitle="Confirmations, reviews, handoffs, approvals. The control room for organizational state-change. Not a todo list."
+        kicker={t("kicker")}
+        title={t("title")}
+        subtitle={t("subtitle")}
       />
 
       <div
@@ -81,14 +83,14 @@ export function FlowCenter({
           marginBottom: 20,
         }}
       >
-        <Metric value={metrics.needsMe} label="Needs me" tone="accent" />
-        <Metric value={metrics.waiting} label="Waiting on others" />
+        <Metric value={metrics.needsMe} label={t("metrics.needsMe")} tone="accent" />
+        <Metric value={metrics.waiting} label={t("metrics.waiting")} />
         <Metric
           value={metrics.awaitingMembrane}
-          label="Awaiting Membrane"
+          label={t("metrics.awaitingMembrane")}
           tone="amber"
         />
-        <Metric value={metrics.completed} label="Recently completed" />
+        <Metric value={metrics.completed} label={t("metrics.completed")} />
       </div>
 
       {activeScopeId === null ? (
@@ -96,12 +98,11 @@ export function FlowCenter({
         // the user how to get content; do NOT fall back to mock rows.
         <Card>
           <EmptyState>
-            Pick a project scope above to view its flow packets.
-            Cross-scope aggregation lands in a follow-up.
+            {t("needScope")}
           </EmptyState>
         </Card>
       ) : (
-        <Card title="Flow packets" flush>
+        <Card title={t("tableTitle")} flush>
           <FlowTable data={data} userId={userId} />
         </Card>
       )}
@@ -112,7 +113,7 @@ export function FlowCenter({
         muted
         style={{ marginTop: 16, textAlign: "center" }}
       >
-        Memory crystallization is a separate decision.
+        {t("footer")}
       </Text>
     </main>
   );

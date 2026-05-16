@@ -18,6 +18,7 @@
 // instead of a broken composer.
 
 import { useCallback, useRef, useState } from "react";
+import { useTranslations } from "next-intl";
 
 import { Button, Card, Tag, Text } from "@/components/ui";
 import { ApiError, api } from "@/lib/api";
@@ -66,6 +67,7 @@ export function MyAIComposer({
   // the composer can be embedded in surfaces that don't care.
   onActivity?: () => void;
 }) {
+  const t = useTranslations("shellV062.myAi.composer");
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -84,9 +86,7 @@ export function MyAIComposer({
     return (
       <Card variant="sunk">
         <Text variant="caption" muted>
-          Pick a project scope in the topbar to start a private chat.
-          The composer posts to the scope-bound personal stream; with
-          no scope selected, there's nowhere to send.
+          {t("noScope")}
         </Text>
       </Card>
     );
@@ -96,7 +96,7 @@ export function MyAIComposer({
     if (busy) return;
     const trimmed = text.trim();
     if (!trimmed) {
-      setError("Write something before sending.");
+      setError(t("errorEmpty"));
       return;
     }
     // Fire activity here too — covers the case where the user keeps
@@ -150,8 +150,8 @@ export function MyAIComposer({
     } catch (err) {
       const msg =
         err instanceof ApiError
-          ? `Send failed (${err.status}). Try again.`
-          : "Couldn't reach the server. Try again.";
+          ? t("errorStatus", { status: err.status })
+          : t("errorNetwork");
       setError(msg);
       // Tag the optimistic user entry as failed so the user can see
       // it didn't go through. We don't remove it — they might want
@@ -159,7 +159,7 @@ export function MyAIComposer({
       setThread((prev) =>
         prev.map((e) =>
           e.id === userId
-            ? { ...e, body: e.body + "  [failed]" }
+            ? { ...e, body: `${e.body}  ${t("failedSuffix")}` }
             : e,
         ),
       );
@@ -186,15 +186,7 @@ export function MyAIComposer({
             <Entry key={entry.id} entry={entry} />
           ))}
         </div>
-      ) : (
-        <Card variant="sunk">
-          <Text variant="caption" muted>
-            Start a private thread. Anything you write here stays on
-            your personal stream until you explicitly share or
-            crystallize it.
-          </Text>
-        </Card>
-      )}
+      ) : null}
 
       <div
         style={{
@@ -211,7 +203,7 @@ export function MyAIComposer({
           value={text}
           onChange={(e) => setText(e.target.value)}
           onFocus={signalActivity}
-          placeholder="Ask, draft, or think out loud. Cmd/Ctrl+Enter sends."
+          placeholder={t("placeholder")}
           rows={3}
           disabled={busy}
           data-testid="my-ai-textarea"
@@ -243,16 +235,16 @@ export function MyAIComposer({
           style={{ display: "flex", justifyContent: "space-between", gap: 8 }}
         >
           <Text variant="caption" muted>
-            Scope: {scopeId.slice(0, 8)}
+            {t("scopeBound")}
           </Text>
           <Button
             size="sm"
             variant="primary"
             onClick={onSubmit}
             disabled={busy || text.trim().length === 0}
-            data-testid="my-ai-send"
+          data-testid="my-ai-send"
           >
-            {busy ? "Sending…" : "Send"}
+            {busy ? t("sending") : t("send")}
           </Button>
         </div>
       </div>
@@ -261,6 +253,7 @@ export function MyAIComposer({
 }
 
 function Entry({ entry }: { entry: ThreadEntry }) {
+  const t = useTranslations("shellV062.myAi.composer");
   const isUser = entry.role === "user";
   return (
     <div
@@ -272,7 +265,9 @@ function Entry({ entry }: { entry: ThreadEntry }) {
         gap: 4,
       }}
     >
-      <Tag tone={isUser ? "neutral" : "ai"}>{isUser ? "You" : "AI"}</Tag>
+      <Tag tone={isUser ? "neutral" : "ai"}>
+        {isUser ? t("roleUser") : t("roleAssistant")}
+      </Tag>
       <Card variant={isUser ? "default" : "sunk"}>
         <pre
           style={{
@@ -290,9 +285,7 @@ function Entry({ entry }: { entry: ThreadEntry }) {
       {entry.proposals && entry.proposals.length > 0 ? (
         <Card variant="sunk">
           <Text variant="caption" muted>
-            Proposals from this turn: {entry.proposals.length}. Open
-            them from /flow-center — memory crystallization is a
-            separate decision.
+            {t("proposals", { count: entry.proposals.length })}
           </Text>
         </Card>
       ) : null}
