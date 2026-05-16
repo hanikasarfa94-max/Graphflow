@@ -238,11 +238,11 @@ export function MyAIComposer({
             {t("scopeBound")}
           </Text>
           <Button
-            size="sm"
+            size="lg"
             variant="primary"
             onClick={onSubmit}
             disabled={busy || text.trim().length === 0}
-          data-testid="my-ai-send"
+            data-testid="my-ai-send"
           >
             {busy ? t("sending") : t("send")}
           </Button>

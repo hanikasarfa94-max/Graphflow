@@ -12,12 +12,15 @@
 //   danger  → filled amber → rare; reserved for irreversible actions
 //   link    → underline-less text link in accent color
 //
-// Sizes are `sm` (compact, 11px label + 4/10px padding — replaces the
-// "followUpBtn" / "discussBtn" micro-buttons inside cards) and `md`
-// (default, 12px label + 6/12px padding). The props surface is kept
-// intentionally small — anything richer (icon slots, full-width, etc.)
-// can be added later when a concrete need shows up; inventing it now
-// would just recreate the sprawl this primitive was built to kill.
+// Sizes are `sm` (compact, 11px label + 4/10px padding — for micro-
+// buttons inside cards; never use for primary CTAs because the result
+// is below the 44px touch-target floor), `md` (default, 13px label +
+// 6/12px padding), and `lg` (14px label + 12/16px padding — meets
+// WCAG 44px minimum, used for primary CTAs like the composer Send).
+// The props surface is kept intentionally small — anything richer
+// (icon slots, full-width, etc.) can be added later when a concrete
+// need shows up; inventing it now would just recreate the sprawl this
+// primitive was built to kill.
 
 import type {
   ButtonHTMLAttributes,
@@ -26,7 +29,7 @@ import type {
 } from "react";
 
 type Variant = "primary" | "ghost" | "amber" | "danger" | "link";
-type Size = "sm" | "md";
+type Size = "sm" | "md" | "lg";
 
 type Props = Omit<ButtonHTMLAttributes<HTMLButtonElement>, "className"> & {
   variant?: Variant;
@@ -49,6 +52,18 @@ function baseStyle(size: Size): CSSProperties {
       cursor: "pointer",
       lineHeight: 1.2,
       letterSpacing: "0.02em",
+    };
+  }
+  if (size === "lg") {
+    return {
+      padding: "12px 16px",
+      fontSize: "var(--wg-fs-body)",
+      fontFamily: "var(--wg-font-sans)",
+      fontWeight: 600,
+      borderRadius: "var(--wg-radius)",
+      cursor: "pointer",
+      lineHeight: 1.3,
+      minHeight: 44,
     };
   }
   return {
