@@ -20,11 +20,16 @@ export function PageHeader({
   title,
   subtitle,
   right,
+  titleVariant = "hero",
 }: {
   kicker?: ReactNode;
   title: ReactNode;
   subtitle?: ReactNode;
   right?: ReactNode;
+  // "hero" (default, 40px) for inner pages. "display" (56px) opts into
+  // the DESIGN.md "one display per page" slot — reserved for /my-ai
+  // landing, marketing surfaces, and primary content surfaces.
+  titleVariant?: "hero" | "display";
 }) {
   return (
     <header
@@ -55,8 +60,8 @@ export function PageHeader({
         ) : null}
         <Heading
           level={1}
-          variant="display"
-          style={{ margin: 0, letterSpacing: "-0.02em" }}
+          variant={titleVariant}
+          style={{ margin: 0 }}
         >
           {title}
         </Heading>

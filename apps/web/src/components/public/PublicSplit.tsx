@@ -30,7 +30,7 @@ export async function PublicSplit({ children }: { children: React.ReactNode }) {
           {tBrand("name")}
         </div>
 
-        <Heading level={1} variant="display" style={{ maxWidth: 560 }}>
+        <Heading level={1} variant="hero" style={{ maxWidth: 560 }}>
           {t("title1")}
           <br />
           {t("title2")}

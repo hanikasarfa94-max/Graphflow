@@ -61,8 +61,8 @@ export default async function TaskDetailPage({
       >
         <Heading
           level={1}
-          variant="display"
-          style={{ margin: "6px 0 12px", letterSpacing: "-0.02em" }}
+          variant="hero"
+          style={{ margin: "6px 0 12px" }}
         >
           {t("title")}
         </Heading>
@@ -99,8 +99,8 @@ export default async function TaskDetailPage({
         </Text>
         <Heading
           level={1}
-          variant="display"
-          style={{ margin: "6px 0 12px", letterSpacing: "-0.02em" }}
+          variant="hero"
+          style={{ margin: "6px 0 12px" }}
         >
           {task.title}
         </Heading>

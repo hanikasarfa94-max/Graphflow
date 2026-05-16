@@ -5,16 +5,21 @@
 // `variant` on level-1 headings selects:
 //   * "default" (default) → General Sans, 28px (--wg-fs-h1). Used on
 //     routine page titles (settings, dashboards, list views).
-//   * "display"           → Instrument Serif, 40px (--wg-fs-hero). Used
-//     on landing / marketing / node-detail primary titles (DESIGN.md
-//     §Typography: "Display / Hero"). The biggest single taste lever —
-//     signals "thoughtful instrument," not "messaging app."
+//   * "hero"              → Instrument Serif, 40px (--wg-fs-hero). H1 on
+//     inner pages (task detail, conversations, flow center) where the
+//     hero scale anchors the page but the display scale would be over-
+//     dominant.
+//   * "display"           → Instrument Serif, 56px (--wg-fs-display).
+//     DESIGN.md §Typography: "serif only; one per page" — the largest
+//     taste lever, reserved for /my-ai landing, empty-state headlines,
+//     node-detail primary titles, document-view titles, memory-atom
+//     titles, marketing surfaces.
 // Level 2 + 3 ignore `variant` — the serif is never used below H1 per
 // DESIGN.md: "Never at body scale."
 
 import type { CSSProperties, ReactNode } from "react";
 
-type Variant = "default" | "display";
+type Variant = "default" | "hero" | "display";
 
 type Props = {
   level: 1 | 2 | 3;
@@ -29,6 +34,15 @@ type Props = {
 function tokenFor(level: 1 | 2 | 3, variant: Variant): CSSProperties {
   if (level === 1) {
     if (variant === "display") {
+      return {
+        fontSize: "var(--wg-fs-display)",
+        lineHeight: "var(--wg-lh-display)",
+        fontFamily: "var(--wg-font-display)",
+        fontWeight: 400,
+        letterSpacing: "-0.02em",
+      };
+    }
+    if (variant === "hero") {
       return {
         fontSize: "var(--wg-fs-hero)",
         lineHeight: "var(--wg-lh-display)",

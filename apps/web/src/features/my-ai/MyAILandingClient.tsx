@@ -87,6 +87,7 @@ export function MyAILandingClient({
       }}
     >
       <PageHeader
+        titleVariant="display"
         title={t("greeting", { name: displayName })}
         subtitle={t("subtitle")}
       />
