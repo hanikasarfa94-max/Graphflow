@@ -21,6 +21,7 @@ from sqlalchemy import select
 
 from workgraph_api.main import app
 from workgraph_persistence import (
+    IMSuggestionRepository,
     IMSuggestionRow,
     session_scope,
 )
@@ -80,7 +81,11 @@ async def test_member_can_propose_decision_from_message(api_env):
     await _register(client, "pdfm_owner")
     pid = await _intake(client, "pdfm-1")
 
-    msg_id = await _post_message(client, pid, "Hmm I think we should drop X.")
+    # Sub-threshold body (< MIN_WORDS_FOR_CLASSIFICATION) so no classifier
+    # suggestion competes here — this test covers the clean create path. The
+    # classifier-races-the-human override case is covered explicitly by
+    # test_human_proposal_overrides_prior_classifier_suggestion below.
+    msg_id = await _post_message(client, pid, "Drop X.")
 
     r = await client.post(
         f"/api/messages/{msg_id}/propose_decision",
@@ -106,6 +111,65 @@ async def test_member_can_propose_decision_from_message(api_env):
     proposal = row.proposal or {}
     assert proposal.get("source") == "user_proposed"
     assert "Conflict with the v1 cut" in proposal.get("summary", "")
+
+
+@pytest.mark.asyncio
+async def test_human_proposal_overrides_prior_classifier_suggestion(api_env):
+    """A deliberate human propose_decision must OVERRIDE a classifier suggestion
+    that already landed on the same message — regardless of arrival order.
+
+    The IM classifier runs as a fire-and-forget task, so it can write its
+    lower-confidence (0.8) suggestion before the user clicks "propose". The
+    human 1.0 signal must win and upgrade the row in place — not defer to the
+    classifier and not create a duplicate. Regression for the ordering bug
+    surfaced when the test harness began draining background tasks.
+    """
+    client, maker, *_ = api_env
+    await _register(client, "pdfm_override_owner")
+    pid = await _intake(client, "pdfm-override-1")
+    msg_id = await _post_message(client, pid, "Drop X.")
+
+    # Simulate the classifier having raced ahead with its own suggestion.
+    async with session_scope(maker) as session:
+        await IMSuggestionRepository(session).append(
+            project_id=pid,
+            message_id=msg_id,
+            kind="decision",
+            confidence=0.8,
+            targets=None,
+            proposal={"summary": "auto-classified", "source": "classifier"},
+            reasoning="classifier output",
+            prompt_version="stub.v1",
+            outcome="classified",
+            attempts=0,
+        )
+
+    r = await client.post(
+        f"/api/messages/{msg_id}/propose_decision",
+        json={"rationale": "Human override of the classifier."},
+    )
+    assert r.status_code == 200, r.text
+    suggestion = r.json()["suggestion"]
+    assert suggestion["confidence"] == 1.0
+    assert suggestion["message_id"] == msg_id
+
+    # Exactly ONE row for the message — upgraded in place, not duplicated.
+    async with session_scope(maker) as session:
+        rows = (
+            (
+                await session.execute(
+                    select(IMSuggestionRow).where(
+                        IMSuggestionRow.message_id == msg_id
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+    assert len(rows) == 1
+    assert rows[0].outcome == "user_proposed"
+    assert rows[0].confidence == 1.0
+    assert (rows[0].proposal or {}).get("source") == "user_proposed"
 
 
 @pytest.mark.asyncio

@@ -494,34 +494,52 @@ class IMService:
                 project_id, actor_id
             ):
                 return None
-            existing = await IMSuggestionRepository(session).get_for_message(
-                message_id
-            )
-            if existing is not None:
-                return self._suggestion_payload(existing)
-
             summary = body[:240] or "Decision proposed by user"
             if rationale:
                 trimmed = rationale.strip()[:240]
                 if trimmed:
                     summary = f"{summary}\n\nRationale: {trimmed}"
+            user_proposal = {
+                "summary": summary,
+                "source": "user_proposed",
+                "proposer_id": actor_id,
+            }
+            user_reasoning = "User-proposed crystallization (subjective override)."
 
-            row = await IMSuggestionRepository(session).append(
-                project_id=project_id,
-                message_id=message_id,
-                kind="decision",
-                confidence=1.0,
-                targets=None,
-                proposal={
-                    "summary": summary,
-                    "source": "user_proposed",
-                    "proposer_id": actor_id,
-                },
-                reasoning="User-proposed crystallization (subjective override).",
-                prompt_version=None,
-                outcome="user_proposed",
-                attempts=0,
+            existing = await IMSuggestionRepository(session).get_for_message(
+                message_id
             )
+            if existing is not None:
+                if existing.outcome == "user_proposed":
+                    # True idempotency: a prior DELIBERATE human proposal wins;
+                    # a second click is a no-op.
+                    return self._suggestion_payload(existing)
+                # A classifier suggestion (outcome != "user_proposed") may have
+                # raced ahead on this message. A deliberate human proposal must
+                # OVERRIDE it, not defer to it — upgrade the row in place to the
+                # 1.0 human signal so order-of-arrival (the classifier is a
+                # fire-and-forget task) can't strip the human's authority.
+                existing.kind = "decision"
+                existing.confidence = 1.0
+                existing.proposal = dict(user_proposal)
+                existing.reasoning = user_reasoning
+                existing.outcome = "user_proposed"
+                existing.status = "pending"
+                await session.flush()
+                row = existing
+            else:
+                row = await IMSuggestionRepository(session).append(
+                    project_id=project_id,
+                    message_id=message_id,
+                    kind="decision",
+                    confidence=1.0,
+                    targets=None,
+                    proposal=dict(user_proposal),
+                    reasoning=user_reasoning,
+                    prompt_version=None,
+                    outcome="user_proposed",
+                    attempts=0,
+                )
             payload = self._suggestion_payload(row)
 
         # Mirror the classifier path so downstream listeners (event bus,
