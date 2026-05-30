@@ -38,6 +38,7 @@ from workgraph_persistence import (
 
 from .collab_hub import CollabHub
 from .signal_tally import SignalTallyService
+from ._users import hydrate_authors
 
 _log = logging.getLogger("workgraph.api.collab")
 
@@ -374,15 +375,7 @@ class CommentService:
             )
             if not rows:
                 return []
-            user_repo = UserRepository(session)
-            authors: dict[str, str] = {}
-            display_names: dict[str, str | None] = {}
-            for r in rows:
-                if r.author_id not in authors:
-                    u = await user_repo.get(r.author_id)
-                    if u is not None:
-                        authors[r.author_id] = u.username
-                        display_names[r.author_id] = u.display_name
+            authors, display_names = await hydrate_authors(session, rows)
             return [
                 {
                     "id": r.id,
@@ -579,15 +572,7 @@ class MessageService:
             rows = await MessageRepository(session).list_for_stream(
                 team_stream.id, limit=limit
             )
-            user_repo = UserRepository(session)
-            authors: dict[str, str] = {}
-            display_names: dict[str, str | None] = {}
-            for r in rows:
-                if r.author_id not in authors:
-                    u = await user_repo.get(r.author_id)
-                    if u is not None:
-                        authors[r.author_id] = u.username
-                        display_names[r.author_id] = u.display_name
+            authors, display_names = await hydrate_authors(session, rows)
             return [
                 {
                     "id": r.id,

@@ -55,6 +55,7 @@ from sqlalchemy import select
 from .routing import RoutingService
 from .skills import SkillsService
 from .streams import StreamService
+from ._users import hydrate_authors
 
 _log = logging.getLogger("workgraph.api.personal")
 
@@ -1139,15 +1140,7 @@ class PersonalStreamService:
             rows = await MessageRepository(session).list_for_stream(
                 stream_id, limit=limit
             )
-            user_repo = UserRepository(session)
-            authors: dict[str, str] = {}
-            display_names: dict[str, str | None] = {}
-            for r in rows:
-                if r.author_id not in authors:
-                    u = await user_repo.get(r.author_id)
-                    if u is not None:
-                        authors[r.author_id] = u.username
-                        display_names[r.author_id] = u.display_name
+            authors, display_names = await hydrate_authors(session, rows)
 
             # Routed-inbound attribution leak fix — the routed-inbound
             # MessageRow is authored by EDGE_AGENT_SYSTEM_USER_ID, so the

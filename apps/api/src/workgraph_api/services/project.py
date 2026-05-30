@@ -345,12 +345,10 @@ class ProjectService:
             if not memberships:
                 return []
             user_ids = [m.user_id for m in memberships]
-            user_repo = UserRepository(session)
-            users = {}
-            for uid in user_ids:
-                row = await user_repo.get(uid)
-                if row is not None:
-                    users[uid] = row
+            # Batch-fetch members in one query (was N+1 per member, on the
+            # hot /state path). get_many returns rows in arbitrary order.
+            rows = await UserRepository(session).get_many(user_ids)
+            users = {u.id: u for u in rows}
             return [
                 {
                     "user_id": m.user_id,

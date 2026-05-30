@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from uuid import uuid4
 
-from sqlalchemy import delete, select, update
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -1250,11 +1250,12 @@ class NotificationRepository:
         return list((await self._session.execute(stmt)).scalars().all())
 
     async def unread_count(self, user_id: str) -> int:
-        stmt = select(NotificationRow.id).where(
+        # COUNT(*) in the DB, not fetch-all-ids-then-len() in Python.
+        stmt = select(func.count()).select_from(NotificationRow).where(
             NotificationRow.user_id == user_id,
             NotificationRow.read == False,  # noqa: E712
         )
-        return len(list((await self._session.execute(stmt)).scalars().all()))
+        return int((await self._session.execute(stmt)).scalar_one())
 
     async def mark_read(self, notification_id: str, user_id: str) -> NotificationRow | None:
         row = (

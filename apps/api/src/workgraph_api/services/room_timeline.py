@@ -43,9 +43,10 @@ from workgraph_persistence import (
     MessageRow,
     StreamMemberRepository,
     StreamRepository,
-    UserRepository,
     session_scope,
 )
+
+from ._users import hydrate_authors
 
 
 # ---------------------------------------------------------------------------
@@ -197,15 +198,7 @@ class RoomTimelineService:
             messages = await MessageRepository(session).list_for_stream(
                 stream_id, limit=limit
             )
-            user_repo = UserRepository(session)
-            authors: dict[str, str] = {}
-            display_names: dict[str, str | None] = {}
-            for r in messages:
-                if r.author_id not in authors:
-                    u = await user_repo.get(r.author_id)
-                    if u is not None:
-                        authors[r.author_id] = u.username
-                        display_names[r.author_id] = u.display_name
+            authors, display_names = await hydrate_authors(session, messages)
 
             # IM suggestions whose source message landed in this room.
             suggestions = await IMSuggestionRepository(session).list_for_project(

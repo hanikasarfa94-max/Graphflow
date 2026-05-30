@@ -36,6 +36,7 @@ from workgraph_persistence import (
 )
 
 from .collab_hub import CollabHub
+from ._users import hydrate_authors
 
 
 def _stream_frame(kind: str, data: dict[str, Any]) -> dict[str, Any]:
@@ -513,13 +514,7 @@ class StreamService:
             rows = await MessageRepository(session).list_for_stream(
                 stream_id, limit=limit
             )
-            user_repo = UserRepository(session)
-            authors: dict[str, str] = {}
-            for r in rows:
-                if r.author_id not in authors:
-                    u = await user_repo.get(r.author_id)
-                    if u is not None:
-                        authors[r.author_id] = u.username
+            authors, _ = await hydrate_authors(session, rows)
 
         messages = [
             {
