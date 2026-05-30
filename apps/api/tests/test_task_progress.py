@@ -101,6 +101,59 @@ async def test_assignee_can_walk_through_status_states(api_env):
 
 
 @pytest.mark.asyncio
+async def test_manual_status_change_writes_replay_log(api_env):
+    """H2 regression: a manual task-status transition must append a
+    StatusTransitionRow so graph-at-timestamp replay can reconstruct it.
+
+    Before the fix, TaskProgressService.update_status wrote TaskRow.status
+    + TaskStatusUpdateRow but skipped the replay log — so scrubbing the
+    time-cursor back silently missed every manual transition.
+    """
+    from sqlalchemy import select
+    from workgraph_persistence import StatusTransitionRow
+
+    client, maker, *_ = api_env
+    owner_id = await _register_and_login(client, "tp_replay_owner")
+    assignee_id = await _register_and_login(client, "tp_replay_assignee")
+    pid, tid = await _seed_project_with_task(
+        maker, owner_id=owner_id, assignee_id=assignee_id
+    )
+
+    await _login(client, "tp_replay_assignee")
+    assert (
+        await client.post(
+            f"/api/tasks/{tid}/status", json={"new_status": "in_progress"}
+        )
+    ).status_code == 200
+    assert (
+        await client.post(
+            f"/api/tasks/{tid}/status", json={"new_status": "done"}
+        )
+    ).status_code == 200
+
+    async with session_scope(maker) as session:
+        rows = (
+            (
+                await session.execute(
+                    select(StatusTransitionRow)
+                    .where(StatusTransitionRow.project_id == pid)
+                    .where(StatusTransitionRow.entity_kind == "task")
+                    .where(StatusTransitionRow.entity_id == tid)
+                    .order_by(StatusTransitionRow.changed_at)
+                )
+            )
+            .scalars()
+            .all()
+        )
+
+    transitions = [(r.old_status, r.new_status) for r in rows]
+    assert ("open", "in_progress") in transitions
+    assert ("in_progress", "done") in transitions
+    # Attribution is preserved on the replay row.
+    assert all(r.changed_by_user_id == assignee_id for r in rows)
+
+
+@pytest.mark.asyncio
 async def test_invalid_transition_rejected(api_env):
     client, maker, *_ = api_env
     owner_id = await _register_and_login(client, "tp_owner_2")

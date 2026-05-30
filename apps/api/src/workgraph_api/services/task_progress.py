@@ -40,6 +40,7 @@ from workgraph_domain import EventBus
 from workgraph_persistence import (
     AssignmentRepository,
     ProjectMemberRepository,
+    StatusTransitionRepository,
     TaskRow,
     TaskScoreRepository,
     TaskStatusUpdateRepository,
@@ -167,6 +168,20 @@ class TaskProgressService:
                 note=note,
             )
             task.status = new_status
+
+            # H2: the same status change must also land in the replay log
+            # (StatusTransitionRow), or graph-at-timestamp replay silently
+            # misses every manual task transition (the im.py / silent_consensus
+            # paths already record here). Same session_scope as the TaskRow +
+            # TaskStatusUpdateRow writes — all three commit atomically.
+            await StatusTransitionRepository(session).record(
+                project_id=project_id,
+                entity_kind="task",
+                entity_id=task_id,
+                old_status=old_status,
+                new_status=new_status,
+                changed_by_user_id=actor_user_id,
+            )
 
         # Emit AFTER commit (the discipline established in earlier
         # event-bus race-condition fixes).
