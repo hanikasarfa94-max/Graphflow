@@ -7,7 +7,7 @@ for v1 the unit tests prove the filter contract.
 """
 from __future__ import annotations
 
-from workgraph_api.routers.projects import _apply_task_scope
+from workgraph_api.services.license_scope import _apply_task_scope
 
 
 def _sample_graph(

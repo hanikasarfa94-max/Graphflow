@@ -132,6 +132,7 @@ from workgraph_api.services import (
     PlanningService,
     PreAnswerService,
     ProjectService,
+    ProjectStateService,
     ScrimmageService,
     SilentConsensusService,
     RenderService,
@@ -696,6 +697,16 @@ async def lifespan(app: FastAPI):
     app.state.membrane_agent = membrane_agent
     app.state.membrane_ingest_service = membrane_ingest_service
     app.state.commitment_service = commitment_service
+    # H1 — composite /state read model, extracted from the fat router handler.
+    app.state.project_state_service = ProjectStateService(
+        sessionmaker,
+        project_service=project_service,
+        assignment_service=assignment_service,
+        conflict_service=conflict_service,
+        decision_service=decision_service,
+        delivery_service=delivery_service,
+        commitment_service=commitment_service,
+    )
     app.state.sla_service = sla_service
     app.state.simulation_service = simulation_service
     app.state.skill_atlas_service = skill_atlas_service

@@ -9,7 +9,7 @@ untouched.
 """
 from __future__ import annotations
 
-from workgraph_api.routers.projects import (
+from workgraph_api.services.license_scope import (
     _apply_observer_scope,
     _apply_task_scope,
 )
@@ -172,20 +172,19 @@ def test_task_scoped_filter_unchanged_regression():
 
 
 def test_full_tier_viewer_is_not_filtered():
-    """Full-tier viewers bypass both filters — the /state handler
-    only calls a filter when viewer_tier matches. Verify that by
-    confirming the filters aren't invoked for 'full' (this is a
-    structural assertion: we only wire _apply_*_scope behind tier
-    checks, never unconditionally).
+    """Full-tier viewers bypass both filters — ProjectStateService.build_state
+    only calls a filter when viewer_tier matches. Verify that by confirming the
+    filters aren't invoked for 'full' (this is a structural assertion: we only
+    wire _apply_*_scope behind tier checks, never unconditionally).
 
-    The check is lightweight: read the router source and assert the
-    observer branch is tier-gated the same way the task_scoped
-    branch is.
+    The check is lightweight: read the read-model source and assert the
+    observer branch is tier-gated the same way the task_scoped branch is.
+    (Scoping moved out of the router into the service layer — audit H1/H6.)
     """
-    from workgraph_api.routers import projects as projects_module
+    from workgraph_api.services.project_state import ProjectStateService
     import inspect
 
-    source = inspect.getsource(projects_module.get_project_state)
+    source = inspect.getsource(ProjectStateService.build_state)
     assert 'if viewer_tier == "task_scoped":' in source
     assert 'elif viewer_tier == "observer":' in source
     # The `full` path has no filter branch, so full-tier sees the

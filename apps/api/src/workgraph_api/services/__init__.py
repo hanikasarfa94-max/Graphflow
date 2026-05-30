@@ -93,6 +93,7 @@ from .personal import PersonalStreamService
 from .planning import NotReadyForPlanning, PlanningService, PlanValidationError
 from .pre_answer import PreAnswerService
 from .project import ProjectService
+from .project_state import ProjectStateService
 from .scrimmage import ScrimmageError, ScrimmageService
 from .silent_consensus import (
     MIN_MEMBERS as SILENT_CONSENSUS_MIN_MEMBERS,
@@ -214,6 +215,7 @@ __all__ = [
     "PersonalStreamService",
     "PreAnswerService",
     "ProjectService",
+    "ProjectStateService",
     "ScrimmageError",
     "ScrimmageService",
     "SilentConsensusError",

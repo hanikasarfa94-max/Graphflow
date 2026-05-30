@@ -446,6 +446,7 @@ from workgraph_api.services import (
     RetrievalService,
     DecisionVoteService,
     RoomTimelineService,
+    ProjectStateService,
     SkillsService,
     SlaService,
     StreamService,
@@ -692,6 +693,15 @@ async def api_env():
     app.state.render_agent = render_agent
     app.state.render_service = render_service
     app.state.commitment_service = commitment_service
+    app.state.project_state_service = ProjectStateService(
+        maker,
+        project_service=project_service,
+        assignment_service=assignment_service,
+        conflict_service=conflict_service,
+        decision_service=decision_service,
+        delivery_service=delivery_service,
+        commitment_service=commitment_service,
+    )
     app.state.sla_service = sla_service
     app.state.simulation_service = simulation_service
     app.state.skill_atlas_service = skill_atlas_service
