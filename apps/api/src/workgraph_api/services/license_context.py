@@ -501,9 +501,9 @@ class LicenseContextService:
         need. Always includes a `license_tier` key naming the effective
         tier used to build the slice.
         """
-        # Import locally to avoid a circular import: the router imports
-        # services, and LicenseContextService is exported from services.
-        from workgraph_api.routers.projects import (
+        # Shared scope policy (H6): both the /state read model and this
+        # LLM-context slice apply the same tier rules from one module.
+        from workgraph_api.services.license_scope import (
             _apply_observer_scope,
             _apply_task_scope,
         )

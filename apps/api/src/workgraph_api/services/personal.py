@@ -1168,13 +1168,15 @@ class PersonalStreamService:
                 for s in signal_rows:
                     signal_source_by_signal_id[s.id] = s.source_user_id
                 # Fill the username + display_name cache for any source
-                # user we haven't already loaded.
-                for src_uid in set(signal_source_by_signal_id.values()):
-                    if src_uid not in authors:
-                        u = await user_repo.get(src_uid)
-                        if u is not None:
-                            authors[src_uid] = u.username
-                            display_names[src_uid] = u.display_name
+                # user we haven't already loaded — batch, no N+1.
+                missing_src_ids = [
+                    uid
+                    for uid in set(signal_source_by_signal_id.values())
+                    if uid not in authors
+                ]
+                for u in await UserRepository(session).get_many(missing_src_ids):
+                    authors[u.id] = u.username
+                    display_names[u.id] = u.display_name
 
         messages: list[dict[str, Any]] = []
         for r in rows:
