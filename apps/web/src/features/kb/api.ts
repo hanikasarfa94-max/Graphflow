@@ -326,12 +326,14 @@ export function requestArchiveKb(
   kb_item_id: string;
   message_id: string;
 }> {
+  // `api()` already JSON.stringifies the body — pass the plain object,
+  // otherwise the backend receives a double-encoded JSON string literal.
   return api(`/api/kb-items/${itemId}/archive-request`, {
     method: "POST",
-    body: JSON.stringify({
+    body: {
       reason: body.reason,
       suggested_replacement_id: body.suggested_replacement_id ?? null,
-    }),
+    },
   });
 }
 
