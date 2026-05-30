@@ -114,6 +114,26 @@ async def test_posting_message_increments_messages_posted(api_env):
 
 
 @pytest.mark.asyncio
+async def test_increment_in_session_accumulates_in_one_transaction(api_env):
+    """Regression guard for the in-transaction tally path now used by message
+    post (collab), decision apply (decisions), and vote cast (gated_proposals):
+    two bumps inside ONE session accumulate deterministically — no separate-
+    session aiosqlite visibility/lost-update race (the bug that made the
+    messages_posted test flaky pre-fix).
+    """
+    from workgraph_api.services.signal_tally import SignalTallyService
+
+    client, maker, _, _, _, _ = api_env
+    uid = (await _register(client, "ae_in_session_tally"))["id"]
+    svc = SignalTallyService(maker)
+    async with session_scope(maker) as session:
+        await svc.increment_in_session(session, uid, "decisions_resolved")
+        await svc.increment_in_session(session, uid, "decisions_resolved")
+    tally = await _tally(maker, uid)
+    assert tally.get("decisions_resolved") == 2
+
+
+@pytest.mark.asyncio
 async def test_accepting_decision_increments_decisions_resolved(api_env):
     client, maker, _, _, _, _ = api_env
     await _register(client, "ae_resolver")

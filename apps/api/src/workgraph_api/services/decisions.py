@@ -215,11 +215,14 @@ class DecisionService:
                 else None
             )
 
-        # Tally must increment BEFORE emit: event_bus schedules
-        # subscribers via asyncio.create_task, whose concurrent sessions
-        # race the tally commit on aiosqlite and silently drop the write.
-        if self._signal_tally is not None:
-            await self._signal_tally.increment(actor_id, "decisions_resolved")
+            # Tally decisions_resolved IN THIS transaction (atomic with
+            # mark_applied / conflict resolve), so the bump can't be lost to a
+            # separate-session aiosqlite race. See increment_in_session.
+            if self._signal_tally is not None:
+                await self._signal_tally.increment_in_session(
+                    session, actor_id, "decisions_resolved"
+                )
+
         await self._event_bus.emit(
             "decision.applied",
             {

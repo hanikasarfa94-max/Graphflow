@@ -652,6 +652,15 @@ class GatedProposalService:
             proposer_id = proposal.proposer_user_id
             decision_class = proposal.decision_class
 
+            # votes_cast counts every verdict (approve / deny / abstain) —
+            # governance participation, not just decisiveness. Bump it IN THIS
+            # transaction so it can't be lost to a separate-session aiosqlite
+            # race. See increment_in_session.
+            if self._signal_tally is not None:
+                await self._signal_tally.increment_in_session(
+                    session, voter_user_id, "votes_cast"
+                )
+
         tally = {
             "approve": approve,
             "deny": deny,
@@ -660,14 +669,6 @@ class GatedProposalService:
             "pool_size": len(pool),
             "threshold": threshold,
         }
-
-        # Bump the voter's profile tally BEFORE any emit() — the
-        # emit-then-write race (see commit d0bf1fe / decisions.py) would
-        # otherwise silently drop this. votes_cast counts every
-        # verdict (approve / deny / abstain) — governance participation,
-        # not just decisiveness.
-        if self._signal_tally is not None:
-            await self._signal_tally.increment(voter_user_id, "votes_cast")
 
         # Side effects AFTER session closes: stream posts + events.
         if resolved_as is not None:
