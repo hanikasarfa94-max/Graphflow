@@ -21,7 +21,7 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timezone
 
-from sqlalchemy.ext.asyncio import async_sessionmaker
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from workgraph_persistence import UserRepository, session_scope
 
@@ -51,33 +51,50 @@ class SignalTallyService:
         self._sessionmaker = sessionmaker
 
     async def increment(self, user_id: str, signal_kind: str) -> None:
-        """Bump UserRow.profile['signal_tally'][signal_kind] by 1.
+        """Bump the tally in its OWN session (fire-and-forget call sites).
 
         Swallows every exception — call sites fire-and-forget from inside
         request handlers; a failed increment must not surface as a 500.
+
+        NOTE: because this opens a separate session, the read-modify-write on
+        UserRow.profile can be lost to a concurrent profile writer or a pooled-
+        connection visibility race under aiosqlite. When the bump must be atomic
+        with its triggering write (e.g. a message post), call
+        `increment_in_session` inside that transaction instead.
         """
         if not user_id or signal_kind not in SIGNAL_KINDS:
             return
         try:
             async with session_scope(self._sessionmaker) as session:
-                repo = UserRepository(session)
-                row = await repo.get(user_id)
-                if row is None:
-                    return
-                profile = dict(row.profile or {})
-                tally = dict(profile.get("signal_tally") or {})
-                tally[signal_kind] = int(tally.get(signal_kind, 0)) + 1
-                profile["signal_tally"] = tally
-                profile["signal_tally_updated_at"] = datetime.now(
-                    timezone.utc
-                ).isoformat()
-                row.profile = profile
-                await session.flush()
+                await self.increment_in_session(session, user_id, signal_kind)
         except Exception:
             _log.exception(
                 "signal_tally.increment failed",
                 extra={"user_id": user_id, "signal_kind": signal_kind},
             )
+
+    async def increment_in_session(
+        self, session: AsyncSession, user_id: str, signal_kind: str
+    ) -> None:
+        """Bump the tally on the CALLER's session/transaction.
+
+        Use this when the bump must commit atomically with the write that
+        triggered it (e.g. the message-post transaction) so it can't be lost to
+        a concurrent writer in a separate session. Does NOT swallow exceptions —
+        the caller's transaction owns error handling and rollback.
+        """
+        if not user_id or signal_kind not in SIGNAL_KINDS:
+            return
+        row = await UserRepository(session).get(user_id)
+        if row is None:
+            return
+        profile = dict(row.profile or {})
+        tally = dict(profile.get("signal_tally") or {})
+        tally[signal_kind] = int(tally.get(signal_kind, 0)) + 1
+        profile["signal_tally"] = tally
+        profile["signal_tally_updated_at"] = datetime.now(timezone.utc).isoformat()
+        row.profile = profile
+        await session.flush()
 
 
 __all__ = ["SignalTallyService", "SIGNAL_KINDS"]

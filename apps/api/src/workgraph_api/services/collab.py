@@ -511,6 +511,15 @@ class MessageService:
             member_rows = await pm_repo.list_for_project(project_id)
             member_ids = [m.user_id for m in member_rows if m.user_id != author_id]
 
+            # Tally messages_posted IN THIS transaction (atomic with the
+            # message append), so the bump can't be lost to a separate-session
+            # aiosqlite visibility/lost-update race — this was flaky when done
+            # as a post-commit separate-session increment.
+            if self._signal_tally is not None:
+                await self._signal_tally.increment_in_session(
+                    session, author_id, "messages_posted"
+                )
+
         payload = {
             "id": row.id,
             "project_id": project_id,
@@ -521,14 +530,12 @@ class MessageService:
             "body": body,
             "created_at": row.created_at.isoformat(),
         }
-        # Tally + notify before emit — see decisions.py / signal_tally
-        # precedent (commit d0bf1fe). EventBus.emit() schedules
-        # subscribers via asyncio.create_task whose concurrent aiosqlite
-        # sessions race any follow-up DB write and silently drop it.
-        # Both the tally and the fanout notification rows must land
-        # before control hands off to fire-and-forget subscribers.
-        if self._signal_tally is not None:
-            await self._signal_tally.increment(author_id, "messages_posted")
+        # Notify before emit — EventBus.emit() schedules subscribers via
+        # asyncio.create_task whose concurrent aiosqlite sessions race any
+        # follow-up DB write and silently drop it, so the fanout notification
+        # rows must land before control hands off to fire-and-forget
+        # subscribers. (The messages_posted tally now commits inside the post
+        # transaction above — see increment_in_session.)
         for uid in member_ids:
             await self._notifications.notify(
                 user_id=uid,
