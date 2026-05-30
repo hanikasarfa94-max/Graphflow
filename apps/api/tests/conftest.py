@@ -731,46 +731,45 @@ async def api_env():
     app.state._tutorial_seed_service_available = tutorial_seed_service
     app.state.tutorial_seed_service = None
 
-    class _DrainingTransport(ASGITransport):
-        """ASGI transport that drains EventBus subscriber tasks after
-        every request. Test-only: with the shared aiosqlite StaticPool
-        (one connection) a subscriber from request N can still be
-        holding that connection when request N+1's session_scope tries
-        to commit, silently rolling the commit back. Awaiting drain
-        between requests makes the race impossible."""
+    async def _drain_all() -> None:
+        """Settle EVERY background-task source until quiescent.
 
-        async def handle_async_request(self, request):  # type: ignore[override]
-            response = await super().handle_async_request(request)
+        Test-only barrier. With the shared aiosqlite StaticPool (one
+        connection), any fire-and-forget task from request N — whether an
+        EventBus subscriber OR a service-level create_task (im / conflict /
+        meeting metabolize) — can still hold that connection when request
+        N+1's session_scope commits, silently rolling N+1 back (the systemic
+        flake). Draining ONLY the bus left service tasks racing; drain all
+        sources, and loop because a service task may emit() (scheduling a bus
+        task) and a bus subscriber may schedule service work. Three rounds
+        covers the shallow chains in this codebase. Production treats all of
+        these as fire-and-forget and never waits.
+        """
+        for _ in range(3):
+            for svc in (im_service, conflict_service, meeting_ingest_service):
+                try:
+                    await svc.drain()
+                except Exception:
+                    pass
             try:
                 await bus.drain()
             except Exception:
                 pass
+
+    class _DrainingTransport(ASGITransport):
+        """ASGI transport that drains all background-task sources after every
+        request (see _drain_all) so cross-request state can't bleed across the
+        shared aiosqlite StaticPool connection."""
+
+        async def handle_async_request(self, request):  # type: ignore[override]
+            response = await super().handle_async_request(request)
+            await _drain_all()
             return response
 
     transport = _DrainingTransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         yield client, maker, bus, req_agent, clar_agent, plan_agent
-    try:
-        await im_service.drain()
-    except Exception:
-        pass
-    try:
-        await conflict_service.drain()
-    except Exception:
-        pass
-    try:
-        await meeting_ingest_service.drain()
-    except Exception:
-        pass
-    # Drain EventBus subscriber tasks before teardown so fire-and-forget
-    # transactions don't race the next test's commits on the shared
-    # aiosqlite StaticPool connection. Production treats subscribers as
-    # fire-and-forget; tests need this barrier because requests N and N+1
-    # share one pooled connection.
-    try:
-        await bus.drain()
-    except Exception:
-        pass
+    await _drain_all()
     await collab_hub.stop()
     await drop_all(engine)
     await engine.dispose()

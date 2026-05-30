@@ -74,11 +74,18 @@ class EventBus:
         transactions release the shared aiosqlite StaticPool connection
         before the next request's session_scope tries to commit.
         """
-        # Snapshot first: done-callbacks mutate `_tasks` while we await.
-        pending = list(self._tasks)
-        if pending:
+        # Loop, don't snapshot-and-clear: a draining subscriber may itself
+        # emit() a new event, scheduling another task AFTER our snapshot. The
+        # old `clear()` discarded such nested tasks from tracking while they
+        # kept running — leaking a live subscriber into the next request, where
+        # it holds the shared aiosqlite connection during that request's commit
+        # and silently rolls it back. Keep gathering until no tasks remain so
+        # nested chains fully settle before control returns.
+        while self._tasks:
+            pending = list(self._tasks)
             await asyncio.gather(*pending, return_exceptions=True)
-        self._tasks.clear()
+            for task in pending:
+                self._tasks.discard(task)
 
     @staticmethod
     async def _safe_invoke(
