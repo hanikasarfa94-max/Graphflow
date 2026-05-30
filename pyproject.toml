@@ -35,6 +35,7 @@ dev = [
     "pytest-asyncio>=0.24",
     "httpx>=0.28",
     "ruff>=0.8",
+    "import-linter>=2.0",
 ]
 
 [tool.ruff]
@@ -50,3 +51,41 @@ python_files = ["test_*.py", "canonical_*.py"]
 markers = [
     "eval: hits a live LLM (DeepSeek); opt-in with `-m eval`",
 ]
+
+# Architectural invariants, enforced in CI (`uv run lint-imports`).
+# See CLAUDE.md §"Architectural invariants" and ARCHITECTURE-AUDIT-2026-05-30.md.
+# NOTE: the `routers ↛ repositories` (thin-router, invariant a) contract is
+# intentionally absent until the H1 `ProjectStateService` extraction lands —
+# `/state` currently drives repositories directly, so it would fail today.
+[tool.importlinter]
+root_packages = [
+    "workgraph_api",
+    "workgraph_agents",
+    "workgraph_persistence",
+    "workgraph_domain",
+    "workgraph_schemas",
+    "workgraph_observability",
+]
+
+[[tool.importlinter.contracts]]
+name = "Services never import the LLM client (invariant c: LLM orchestration lives in packages/agents)"
+type = "forbidden"
+source_modules = ["workgraph_api.services"]
+forbidden_modules = ["workgraph_agents.llm"]
+# Services legitimately import agent CLASSES from `workgraph_agents` to
+# orchestrate them; that package's __init__ transitively reaches `.llm`.
+# The invariant is "no service instantiates/uses LLMClient" — approximated
+# as no DIRECT import of the llm module. Indirect reachability is expected.
+allow_indirect_imports = "true"
+
+[[tool.importlinter.contracts]]
+name = "Packages never import the API app (layering: apps depend on packages, never the reverse)"
+type = "forbidden"
+source_modules = [
+    "workgraph_agents",
+    "workgraph_persistence",
+    "workgraph_domain",
+    "workgraph_schemas",
+    "workgraph_observability",
+]
+forbidden_modules = ["workgraph_api"]

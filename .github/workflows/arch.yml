@@ -1,0 +1,41 @@
+name: arch
+
+# Enforces the architectural invariants from CLAUDE.md as machine-checked
+# import contracts (see [tool.importlinter] in pyproject.toml). Fast — no
+# browsers, no DB — so it gates every PR cheaply.
+on:
+  pull_request:
+    paths:
+      - "apps/**"
+      - "packages/**"
+      - "pyproject.toml"
+      - ".github/workflows/arch.yml"
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: arch-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  import-contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
+
+      - name: Install workspace (Python)
+        run: uv sync --all-packages --dev
+
+      - name: Check architectural import contracts
+        run: uv run lint-imports
