@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from sqlalchemy import JSON, Boolean, DateTime, Float, ForeignKey, Integer, String, UniqueConstraint
+from sqlalchemy import JSON, Boolean, DateTime, Float, ForeignKey, Index, Integer, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .db import Base
@@ -301,6 +301,8 @@ class TaskRow(_GraphEntityBase, _FrecencyColumnsMixin, Base):
     __tablename__ = "plan_tasks"
     __table_args__ = (
         UniqueConstraint("requirement_id", "sort_order", name="uq_task_order"),
+        # M6: personal-task list filters by (project_id, scope, owner_user_id).
+        Index("ix_plan_tasks_project_scope_owner", "project_id", "scope", "owner_user_id"),
     )
 
     project_id: Mapped[str] = mapped_column(
@@ -759,6 +761,8 @@ class ConflictRow(Base):
     __tablename__ = "conflicts"
     __table_args__ = (
         UniqueConstraint("project_id", "fingerprint", name="uq_conflict_fingerprint"),
+        # M6: conflict lists filter by (project_id, status).
+        Index("ix_conflicts_project_status", "project_id", "status"),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
@@ -910,6 +914,12 @@ class GatedProposalRow(Base):
     """
 
     __tablename__ = "gated_proposals"
+    __table_args__ = (
+        # M6: gate-keeper inbox filters by (gate_keeper_user_id, status);
+        # project listing by (project_id, status). status was unindexed.
+        Index("ix_gated_proposals_gatekeeper_status", "gate_keeper_user_id", "status"),
+        Index("ix_gated_proposals_project_status", "project_id", "status"),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     project_id: Mapped[str] = mapped_column(
@@ -1208,6 +1218,10 @@ class StatusTransitionRow(Base):
     """
 
     __tablename__ = "status_transitions"
+    __table_args__ = (
+        # M6: graph-at-timestamp replay filters by (project_id, changed_at) range.
+        Index("ix_status_transitions_project_changed", "project_id", "changed_at"),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     project_id: Mapped[str] = mapped_column(
@@ -1249,6 +1263,12 @@ class RoutedSignalRow(Base):
     """
 
     __tablename__ = "routed_signals"
+    __table_args__ = (
+        # M6: inbox/outbox lists filter by (target_user_id, status) and
+        # (source_user_id, status).
+        Index("ix_routed_signals_target_status", "target_user_id", "status"),
+        Index("ix_routed_signals_source_status", "source_user_id", "status"),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     trace_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
@@ -1313,6 +1333,10 @@ class CommitmentRow(Base):
     """
 
     __tablename__ = "commitments"
+    __table_args__ = (
+        # M6: commitment lists filter by (project_id, status).
+        Index("ix_commitments_project_status", "project_id", "status"),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     project_id: Mapped[str] = mapped_column(
@@ -1916,6 +1940,12 @@ class KbItemRow(_FrecencyColumnsMixin, Base):
     """
 
     __tablename__ = "kb_items"
+    __table_args__ = (
+        # M6: KB lists filter by (project_id, scope) for group and
+        # (project_id, scope, owner_user_id) for personal — the 3-col index
+        # serves both via its leading prefix.
+        Index("ix_kb_items_project_scope_owner", "project_id", "scope", "owner_user_id"),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     # Nullable since 0022 — org-level ingests have no project (mirrors
