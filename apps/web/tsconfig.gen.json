@@ -1,5 +1,5 @@
 {
   "//": "C1-A: scoped typecheck for the generated OpenAPI types. Verifies api-types.gen.ts (and, as C1-B aliases it, its consumers) compile under the project's compiler options. Deliberately NOT a repo-wide tsc --noEmit: the repo has pre-existing tsc errors in *.test.ts (bun:test runtime types) that are out of C1-A scope. Run via `bun run typecheck`.",
   "extends": "./tsconfig.json",
-  "include": ["src/lib/api-types.gen.ts"]
+  "include": ["src/lib/api-types.gen.ts", "src/lib/api.ts"]
 }

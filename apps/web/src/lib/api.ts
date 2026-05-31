@@ -8,6 +8,10 @@
 // `features/kb/api.ts`; the public re-exports for the rest of the KB
 // surface are at the bottom of this file.
 import type { KbNote } from "@/features/kb/api";
+// C1-B: generated OpenAPI schemas (single source of truth for wire shapes).
+// Hand-written types are migrated to aliases of these, one slice at a time,
+// keeping the exported names stable so consumers don't change.
+import type { components } from "./api-types.gen";
 
 export class ApiError extends Error {
   status: number;
@@ -104,12 +108,11 @@ export async function api<T = unknown>(
 
 // ---------- Shared response shapes ----------
 
-export interface User {
-  id: string;
-  username: string;
-  display_name: string;
-  created_at: string;
-}
+// C1-B: alias to the generated `UserResponse` schema (auth.py register/login/me
+// response_model). Note the generated shape adds an optional `tier?: string |
+// null` the hand-written type omitted — a safe superset; existing consumers read
+// only id/username/display_name/created_at.
+export type User = components["schemas"]["UserResponse"];
 
 export interface ProjectSummary {
   id: string;
