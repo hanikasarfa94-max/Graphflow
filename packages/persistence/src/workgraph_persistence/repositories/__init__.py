@@ -1,0 +1,105 @@
+"""Bounded-context repositories package (H4 split). Re-exports every
+Repository + the two error classes + _new_id, so the public barrel and
+the deep import `from workgraph_persistence.repositories import _new_id`
+(tutorial_seed.py) stay byte-compatible."""
+from ._base import DuplicateIntakeError, InvalidProposalStateError, _new_id
+from .core import (
+    IntakeRepository,
+    UserRepository,
+    SessionRepository,
+    ProjectMemberRepository,
+    OrganizationRepository,
+    OrganizationMemberRepository,
+    OnboardingStateRepository,
+    EventRepository,
+    AgentRunLogRepository,
+)
+from .graph_plan import (
+    RequirementRepository,
+    ClarificationQuestionRepository,
+    ProjectGraphRepository,
+    PlanRepository,
+    AssignmentRepository,
+    TaskStatusUpdateRepository,
+    TaskScoreRepository,
+    StatusTransitionRepository,
+)
+from .streams_im import (
+    StreamRepository,
+    StreamMemberRepository,
+    MessageRepository,
+    IMSuggestionRepository,
+    CommentRepository,
+    NotificationRepository,
+    RoutedSignalRepository,
+)
+from .decisions import (
+    ConflictRepository,
+    DecisionRepository,
+    GatedProposalRepository,
+    VoteRepository,
+    DissentRepository,
+    ScrimmageRepository,
+    SilentConsensusRepository,
+    DeliverySummaryRepository,
+)
+from .kb_membrane import (
+    KbFolderRepository,
+    KbItemRepository,
+    KbIngestRepository,
+    KbItemLicenseRepository,
+    MembraneSubscriptionRepository,
+    MeetingTranscriptRepository,
+)
+from .commitments import (
+    CommitmentRepository,
+    HandoffRepository,
+    LicenseAuditRepository,
+)
+
+__all__ = [
+    "AgentRunLogRepository",
+    "AssignmentRepository",
+    "ClarificationQuestionRepository",
+    "CommentRepository",
+    "CommitmentRepository",
+    "ConflictRepository",
+    "DecisionRepository",
+    "DeliverySummaryRepository",
+    "DissentRepository",
+    "DuplicateIntakeError",
+    "EventRepository",
+    "GatedProposalRepository",
+    "HandoffRepository",
+    "IMSuggestionRepository",
+    "IntakeRepository",
+    "InvalidProposalStateError",
+    "KbFolderRepository",
+    "KbIngestRepository",
+    "KbItemLicenseRepository",
+    "KbItemRepository",
+    "LicenseAuditRepository",
+    "MeetingTranscriptRepository",
+    "MembraneSubscriptionRepository",
+    "MessageRepository",
+    "NotificationRepository",
+    "OnboardingStateRepository",
+    "OrganizationMemberRepository",
+    "OrganizationRepository",
+    "PlanRepository",
+    "ProjectGraphRepository",
+    "ProjectMemberRepository",
+    "RequirementRepository",
+    "RoutedSignalRepository",
+    "ScrimmageRepository",
+    "SessionRepository",
+    "SilentConsensusRepository",
+    "StatusTransitionRepository",
+    "StreamMemberRepository",
+    "StreamRepository",
+    "TaskScoreRepository",
+    "TaskStatusUpdateRepository",
+    "UserRepository",
+    "VoteRepository",
+    "_new_id",
+]
