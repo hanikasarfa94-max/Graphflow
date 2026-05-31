@@ -7,6 +7,8 @@
     "build": "next build",
     "start": "next start -p 3000",
     "test": "bun test",
+    "typecheck": "tsc --noEmit -p tsconfig.gen.json",
+    "gen:api": "openapi-typescript ../../apps/api/openapi.json -o src/lib/api-types.gen.ts",
     "e2e": "playwright test",
     "e2e:ui": "playwright test --ui",
     "e2e:install": "playwright install chromium"
@@ -24,6 +26,7 @@
     "@types/node": "^22.10.2",
     "@types/react": "^19.0.2",
     "@types/react-dom": "^19.0.2",
+    "openapi-typescript": "^7.13.0",
     "typescript": "^5.7.2"
   }
 }
