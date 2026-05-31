@@ -12,6 +12,7 @@
 
 import { MyAILandingClient } from "@/features/my-ai/MyAILandingClient";
 import { requireUser, serverFetch } from "@/lib/auth";
+import type { ActiveScope } from "@/lib/api";
 
 export const dynamic = "force-dynamic";
 
@@ -36,11 +37,6 @@ type MyAILandingResponse = {
   scope_id: string | null;
 };
 
-type ActiveScope = {
-  scope_id: string | null;
-  scope_mode: "current_focus" | "all_accessible" | "no_focus";
-};
-
 type ProjectSummary = { id: string; title: string; role: string };
 
 async function loadLanding(): Promise<MyAILandingResponse> {
@@ -57,7 +53,7 @@ async function loadActiveScope(): Promise<ActiveScope> {
   try {
     return await serverFetch<ActiveScope>("/api/user/active-scope");
   } catch {
-    return { scope_id: null, scope_mode: "no_focus" };
+    return { scope_id: null, scope_mode: "no_focus", updated_at: null };
   }
 }
 

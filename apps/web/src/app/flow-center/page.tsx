@@ -19,14 +19,9 @@
 import { FlowCenter } from "@/features/flow-center/FlowCenter";
 import type { FlowListResponse } from "@/features/flow-center/types";
 import { requireUser, serverFetch } from "@/lib/auth";
+import type { ActiveScope } from "@/lib/api";
 
 export const dynamic = "force-dynamic";
-
-type ActiveScope = {
-  scope_id: string | null;
-  scope_mode: "current_focus" | "all_accessible" | "no_focus";
-  updated_at: string | null;
-};
 
 async function loadActiveScope(): Promise<ActiveScope> {
   try {

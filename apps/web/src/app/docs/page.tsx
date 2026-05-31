@@ -11,19 +11,15 @@ import { Card, EmptyState, PageHeader } from "@/components/ui";
 import { Documents } from "@/features/documents/Documents";
 import type { DocumentListResponse } from "@/features/documents/types";
 import { requireUser, serverFetch } from "@/lib/auth";
+import type { ActiveScope } from "@/lib/api";
 
 export const dynamic = "force-dynamic";
-
-type ActiveScope = {
-  scope_id: string | null;
-  scope_mode: "current_focus" | "all_accessible" | "no_focus";
-};
 
 async function loadActiveScope(): Promise<ActiveScope> {
   try {
     return await serverFetch<ActiveScope>("/api/user/active-scope");
   } catch {
-    return { scope_id: null, scope_mode: "no_focus" };
+    return { scope_id: null, scope_mode: "no_focus", updated_at: null };
   }
 }
 

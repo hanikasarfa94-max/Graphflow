@@ -109,10 +109,17 @@ export async function api<T = unknown>(
 // ---------- Shared response shapes ----------
 
 // C1-B: alias to the generated `UserResponse` schema (auth.py register/login/me
-// response_model). Note the generated shape adds an optional `tier?: string |
-// null` the hand-written type omitted — a safe superset; existing consumers read
-// only id/username/display_name/created_at.
+// response_model). The hand-written type previously declared a `created_at`
+// field the backend UserResponse ({id, username, display_name}) never returns —
+// a phantom FE-only field, now dropped. No consumer reads it (typecheck green).
 export type User = components["schemas"]["UserResponse"];
+
+// C1-B: generated-backed export for GET /api/user/active-scope
+// (scopes.py response_model=ActiveScopeResponse). Stable name several page
+// components migrate their local duplicates onto. Generated shape includes
+// `updated_at: string | null`, which 3 of the 4 page-local copies omitted —
+// a safe widening (none read it); flow-center already matched.
+export type ActiveScope = components["schemas"]["ActiveScopeResponse"];
 
 export interface ProjectSummary {
   id: string;
