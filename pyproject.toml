@@ -89,3 +89,19 @@ source_modules = [
     "workgraph_observability",
 ]
 forbidden_modules = ["workgraph_api"]
+
+[[tool.importlinter.contracts]]
+name = "Consumer services depend on the membrane DTO contract, not the facade (audit M5: no services->membrane cycle)"
+type = "forbidden"
+source_modules = [
+    "workgraph_api.services.decisions",
+    "workgraph_api.services.im",
+    "workgraph_api.services.kb_items",
+    "workgraph_api.services.silent_consensus",
+]
+forbidden_modules = ["workgraph_api.services.membrane"]
+# These four construct MembraneCandidate + read MembraneReview only; they now
+# import the DTOs from the leaf `membrane_policies.base`, never the heavy
+# `services.membrane` facade. membrane_ingest.py (the ingest facade) and the
+# services package __init__ (public surface) legitimately import the facade and
+# are intentionally out of scope.

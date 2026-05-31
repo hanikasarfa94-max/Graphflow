@@ -37,6 +37,7 @@ from workgraph_persistence import (
 from .collab import AssignmentService
 from .collab_hub import CollabHub
 from .conflicts import ConflictService
+from .membrane_policies.base import MembraneCandidate, MembraneReviewPort
 from .signal_tally import SignalTallyService
 
 _log = logging.getLogger("workgraph.api.decisions")
@@ -72,9 +73,9 @@ class DecisionService:
         # because the membrane needs StreamService). When None, the
         # decision-crystallize review degrades to a no-op so existing
         # boot orders + tests stay working.
-        self._membrane_service: Any = None
+        self._membrane_service: MembraneReviewPort | None = None
 
-    def attach_membrane(self, membrane_service: Any) -> None:
+    def attach_membrane(self, membrane_service: MembraneReviewPort) -> None:
         self._membrane_service = membrane_service
 
     async def submit(
@@ -134,8 +135,6 @@ class DecisionService:
         # its own session for the recent-decisions scan.
         warnings: tuple[str, ...] = ()
         if self._membrane_service is not None:
-            from .membrane import MembraneCandidate
-
             review = await self._membrane_service.review(
                 MembraneCandidate(
                     kind="decision_crystallize",

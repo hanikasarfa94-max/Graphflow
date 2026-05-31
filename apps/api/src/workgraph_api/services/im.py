@@ -47,6 +47,7 @@ from workgraph_persistence import (
 
 from .collab import MessageService, NotificationService
 from .collab_hub import CollabHub
+from .membrane_policies.base import MembraneCandidate, MembraneReviewPort
 from .proposal_handlers import HandlerServices, ProposalHandler, default_registry
 
 _log = logging.getLogger("workgraph.api.im")
@@ -97,7 +98,7 @@ class IMService:
         # Keep in-flight classification tasks so tests + shutdown can await.
         self._pending: set[asyncio.Task] = set()
 
-    def attach_membrane(self, membrane_service: Any) -> None:
+    def attach_membrane(self, membrane_service: MembraneReviewPort) -> None:
         self._membrane_service = membrane_service
 
     def attach_stream_service(self, stream_service: Any) -> None:
@@ -632,8 +633,6 @@ class IMService:
                     if isinstance(candidate_supersedes, str):
                         supersedes_ref = candidate_supersedes
                 if self._membrane_service is not None:
-                    from .membrane import MembraneCandidate
-
                     review_title = (
                         proposal.get("summary", "") if isinstance(proposal, dict) else ""
                     )[:200]

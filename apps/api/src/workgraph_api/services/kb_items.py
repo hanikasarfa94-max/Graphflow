@@ -69,6 +69,8 @@ from workgraph_persistence import (
     session_scope,
 )
 
+from .membrane_policies.base import MembraneCandidate
+
 
 # Disk layout for attachments. Default lands inside the same /data
 # volume the SQLite DB lives on, so the nightly backup script picks
@@ -194,8 +196,6 @@ class KbItemService:
         # caller).
         review = None
         if scope == "group" and self._membrane_service is not None:
-            from .membrane import MembraneCandidate
-
             review = await self._membrane_service.review(
                 MembraneCandidate(
                     kind="kb_item_group",
@@ -331,8 +331,6 @@ class KbItemService:
             and scope == "group"
             and self._membrane_service is not None
         ):
-            from .membrane import MembraneCandidate
-
             await self._membrane_service.notify_clarification(
                 candidate=MembraneCandidate(
                     kind="kb_item_group",
@@ -473,8 +471,6 @@ class KbItemService:
         # (legacy boot path / tests without late-binding).
         target_status = "published"
         if self._membrane_service is not None:
-            from .membrane import MembraneCandidate
-
             review = await self._membrane_service.review(
                 MembraneCandidate(
                     kind="kb_item_group",

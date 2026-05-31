@@ -84,6 +84,8 @@ from workgraph_persistence import (
     session_scope,
 )
 
+from .membrane_policies.base import MembraneCandidate, MembraneReviewPort
+
 _log = logging.getLogger("workgraph.api.silent_consensus")
 
 # Lookback for "recent consistent action". 7 days matches the PLAN
@@ -135,9 +137,9 @@ class SilentConsensusService:
         # ratify() can route the resulting Decision through the
         # advisory review (Stage A). When None, decisions crystallize
         # without review (existing behavior).
-        self._membrane_service: Any = None
+        self._membrane_service: MembraneReviewPort | None = None
 
-    def attach_membrane(self, membrane_service: Any) -> None:
+    def attach_membrane(self, membrane_service: MembraneReviewPort) -> None:
         self._membrane_service = membrane_service
 
     # ---- membership helpers ---------------------------------------------
@@ -451,8 +453,6 @@ class SilentConsensusService:
         # the recent-decisions scan can use its own connection.
         membrane_warnings: list[str] = []
         if self._membrane_service is not None:
-            from .membrane import MembraneCandidate
-
             review = await self._membrane_service.review(
                 MembraneCandidate(
                     kind="decision_crystallize",

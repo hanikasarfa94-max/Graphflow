@@ -140,11 +140,27 @@ class MembranePolicy(Protocol):
     ) -> MembraneReview: ...
 
 
+class MembraneReviewPort(Protocol):
+    """The single method consumer services need from MembraneService.
+
+    Lets DecisionService / IMService / KbItemService / SilentConsensusService
+    (and PersonalStreamService / ProjectService / StreamService) type their
+    late-bound membrane reference against a contract in this leaf module rather
+    than against the heavy `services.membrane` facade — that's what keeps the
+    services->membrane import cycle broken (audit M5) and makes the
+    setter-injection seam (audit M3) honest. MembraneService satisfies this
+    structurally; no nominal inheritance is required.
+    """
+
+    async def review(self, candidate: MembraneCandidate) -> MembraneReview: ...
+
+
 __all__ = [
     "CandidateKind",
     "MembraneCandidate",
     "MembraneContext",
     "MembranePolicy",
     "MembraneReview",
+    "MembraneReviewPort",
     "ReviewAction",
 ]
