@@ -1,0 +1,66 @@
+name: contract
+
+# C1-A: FE/BE contract drift gate. Regenerate the OpenAPI schema + TS types and
+# fail if either differs from what's committed — so a backend response-shape
+# change that isn't accompanied by regenerated artifacts cannot merge. Fast: the
+# dump is import-only (app.openapi() never runs lifespan), so no DB/Redis/LLM.
+on:
+  pull_request:
+    paths:
+      - "apps/api/**"
+      - "packages/**"
+      - "apps/web/openapi.json"
+      - "apps/web/package.json"
+      - "apps/web/src/lib/api-types.gen.ts"
+      - ".github/workflows/contract.yml"
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: contract-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  contract-drift:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      # Excludes the dev-only /_debug/boom route from the canonical schema.
+      WORKGRAPH_ENV: staging
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
+
+      - name: Install workspace (Python)
+        run: uv sync --all-packages --dev
+
+      - name: Regenerate OpenAPI schema (import-only, no DB)
+        run: uv run python apps/api/scripts/dump_openapi.py apps/api/openapi.json
+
+      - uses: oven-sh/setup-bun@v2
+
+      - name: Install web deps
+        working-directory: apps/web
+        run: bun install --frozen-lockfile
+
+      - name: Regenerate TS types
+        working-directory: apps/web
+        run: bun run gen:api
+
+      - name: Fail on contract drift
+        run: |
+          if ! git diff --exit-code apps/api/openapi.json apps/web/src/lib/api-types.gen.ts; then
+            echo "::error::Contract artifacts are stale. Regenerate with:"
+            echo "::error::  WORKGRAPH_ENV=staging uv run python apps/api/scripts/dump_openapi.py apps/api/openapi.json"
+            echo "::error::  (cd apps/web && bun run gen:api)"
+            exit 1
+          fi
