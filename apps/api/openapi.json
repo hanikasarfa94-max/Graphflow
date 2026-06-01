@@ -2893,6 +2893,18 @@
         "title": "TaskCandidateRequest",
         "type": "object"
       },
+      "TaskDetailResponse": {
+        "properties": {
+          "task": {
+            "$ref": "#/components/schemas/TaskRow"
+          }
+        },
+        "required": [
+          "task"
+        ],
+        "title": "TaskDetailResponse",
+        "type": "object"
+      },
       "TaskListResponse": {
         "properties": {
           "scope_id": {
@@ -12888,9 +12900,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Get Task Api Tasks  Task Id  Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/TaskDetailResponse"
                 }
               }
             },

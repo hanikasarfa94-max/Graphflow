@@ -5001,6 +5001,10 @@ export interface components {
             /** Title */
             title: string;
         };
+        /** TaskDetailResponse */
+        TaskDetailResponse: {
+            task: components["schemas"]["TaskRow"];
+        };
         /** TaskListResponse */
         TaskListResponse: {
             /** Scope Id */
@@ -11608,9 +11612,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["TaskDetailResponse"];
                 };
             };
             /** @description Validation Error */

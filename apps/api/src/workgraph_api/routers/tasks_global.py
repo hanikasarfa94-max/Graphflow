@@ -136,6 +136,10 @@ class TaskListResponse(BaseModel):
     view: str
 
 
+class TaskDetailResponse(BaseModel):
+    task: TaskRow
+
+
 # ---- helpers --------------------------------------------------------------
 
 
@@ -228,7 +232,7 @@ async def get_tasks(
     return {"tasks": out, "scope_id": scope_id, "view": view}
 
 
-@router.get("/{task_id}")
+@router.get("/{task_id}", response_model=TaskDetailResponse)
 async def get_task(
     task_id: str,
     request: Request,

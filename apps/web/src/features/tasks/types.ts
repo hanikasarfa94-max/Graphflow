@@ -43,6 +43,5 @@ export type TaskRow = components["schemas"]["TaskRow"];
 
 export type TaskListResponse = components["schemas"]["TaskListResponse"];
 
-export interface TaskDetailResponse {
-  task: TaskRow;
-}
+// C1-C: generated-backed (GET /api/tasks/{id} response_model=TaskDetailResponse).
+export type TaskDetailResponse = components["schemas"]["TaskDetailResponse"];
