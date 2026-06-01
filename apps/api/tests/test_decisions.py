@@ -398,3 +398,56 @@ async def test_decision_create_with_scope_stream_id_persists(api_env):
 
     assert scoped.scope_stream_id == room.id
     assert unscoped.scope_stream_id is None
+
+
+# ---- wire test (C1 consolidation): GET /projects/{id}/decisions ---------
+
+
+@pytest.mark.asyncio
+async def test_list_decisions_wire_shape_carries_consolidated_fields(api_env):
+    """GET /projects/{id}/decisions had no wire coverage. After serializer
+    consolidation it must emit the shared Decision superset, including the four
+    FE-live fields. Resolver name resolves via the bulk lookup (falls back to
+    username when display_name is unset, as the register helper leaves it)."""
+    client = api_env[0]
+    project_id = await _setup(client, "dec-wire-1", "dec_wire_owner")
+    owner = (await client.get("/api/auth/me")).json()
+    conflict = await _first_conflict(client, project_id)
+
+    r = await client.post(
+        f"/api/conflicts/{conflict['id']}/decision",
+        json={"option_index": 0, "rationale": "ship v1"},
+    )
+    assert r.status_code == 200, r.text
+
+    r = await client.get(f"/api/projects/{project_id}/decisions")
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert set(body.keys()) == {"decisions"}
+    rows = body["decisions"]
+    assert len(rows) >= 1
+    d = rows[0]
+
+    # The four FE-live provenance fields are present as keys (consolidation).
+    for key in (
+        "resolver_display_name",
+        "gated_via_proposal_id",
+        "decision_class",
+        "scope_stream_id",
+    ):
+        assert key in d, f"{key} missing from decisions payload"
+
+    # resolver_display_name is populated via the bulk lookup (no display_name
+    # set on register → falls back to username, which is non-null).
+    assert d["resolver_id"] == owner["id"]
+    assert d["resolver_display_name"] == owner["username"]
+    # Conflict-resolution decisions are not gated / class / room-scoped.
+    assert d["gated_via_proposal_id"] is None
+    assert d["decision_class"] is None
+    assert d["scope_stream_id"] is None
+    # Base superset fields still present.
+    assert d["rationale"] == "ship v1"
+    assert d["option_index"] == 0
+    assert d["apply_outcome"] == "advisory"
+    # tally is not enriched on this REST path.
+    assert d.get("tally") is None

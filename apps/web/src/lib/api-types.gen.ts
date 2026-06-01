@@ -4422,6 +4422,53 @@ export interface components {
             /** Title */
             title: string;
         };
+        /** Decision */
+        Decision: {
+            /** Applied At */
+            applied_at?: string | null;
+            /** Apply Actions */
+            apply_actions?: {
+                [key: string]: unknown;
+            }[];
+            /** Apply Detail */
+            apply_detail?: {
+                [key: string]: unknown;
+            };
+            /** Apply Outcome */
+            apply_outcome: string;
+            /** Conflict Id */
+            conflict_id?: string | null;
+            /** Created At */
+            created_at?: string | null;
+            /** Custom Text */
+            custom_text?: string | null;
+            /** Decision Class */
+            decision_class?: string | null;
+            /** Gated Via Proposal Id */
+            gated_via_proposal_id?: string | null;
+            /** Id */
+            id: string;
+            /** Option Index */
+            option_index?: number | null;
+            /** Project Id */
+            project_id: string;
+            /** Rationale */
+            rationale: string;
+            /** Resolver Display Name */
+            resolver_display_name?: string | null;
+            /** Resolver Id */
+            resolver_id?: string | null;
+            /** Scope Stream Id */
+            scope_stream_id?: string | null;
+            /** Source Suggestion Id */
+            source_suggestion_id?: string | null;
+            tally?: components["schemas"]["DecisionTally"] | null;
+        };
+        /** DecisionListResponse */
+        DecisionListResponse: {
+            /** Decisions */
+            decisions: components["schemas"]["Decision"][];
+        };
         /** DecisionRequest */
         DecisionRequest: {
             /** Assignee User Id */
@@ -4435,6 +4482,35 @@ export interface components {
              * @default
              */
             rationale: string;
+        };
+        /** DecisionTally */
+        DecisionTally: {
+            /** Abstain */
+            abstain: number;
+            /** Approve */
+            approve: number;
+            /** Cast */
+            cast: number;
+            /** Deny */
+            deny: number;
+            /** Majority */
+            majority: number;
+            /** Outstanding */
+            outstanding: number;
+            /** Quorum */
+            quorum: number;
+            /**
+             * Scope Kind
+             * @enum {string}
+             */
+            scope_kind: "room" | "project";
+            /** Scope Stream Id */
+            scope_stream_id?: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "open" | "passed" | "failed" | "tied";
         };
         /** DeliveryHistoryResponse */
         DeliveryHistoryResponse: {
@@ -8667,7 +8743,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["DecisionListResponse"];
                 };
             };
             /** @description Validation Error */

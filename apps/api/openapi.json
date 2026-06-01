@@ -1301,6 +1301,194 @@
         "title": "CreateTopicRequest",
         "type": "object"
       },
+      "Decision": {
+        "properties": {
+          "applied_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Applied At"
+          },
+          "apply_actions": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Apply Actions",
+            "type": "array"
+          },
+          "apply_detail": {
+            "additionalProperties": true,
+            "title": "Apply Detail",
+            "type": "object"
+          },
+          "apply_outcome": {
+            "title": "Apply Outcome",
+            "type": "string"
+          },
+          "conflict_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conflict Id"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "custom_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Custom Text"
+          },
+          "decision_class": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decision Class"
+          },
+          "gated_via_proposal_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gated Via Proposal Id"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "option_index": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Option Index"
+          },
+          "project_id": {
+            "title": "Project Id",
+            "type": "string"
+          },
+          "rationale": {
+            "title": "Rationale",
+            "type": "string"
+          },
+          "resolver_display_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolver Display Name"
+          },
+          "resolver_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolver Id"
+          },
+          "scope_stream_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scope Stream Id"
+          },
+          "source_suggestion_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Suggestion Id"
+          },
+          "tally": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DecisionTally"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "project_id",
+          "rationale",
+          "apply_outcome"
+        ],
+        "title": "Decision",
+        "type": "object"
+      },
+      "DecisionListResponse": {
+        "properties": {
+          "decisions": {
+            "items": {
+              "$ref": "#/components/schemas/Decision"
+            },
+            "title": "Decisions",
+            "type": "array"
+          }
+        },
+        "required": [
+          "decisions"
+        ],
+        "title": "DecisionListResponse",
+        "type": "object"
+      },
       "DecisionRequest": {
         "additionalProperties": false,
         "properties": {
@@ -1346,6 +1534,80 @@
           }
         },
         "title": "DecisionRequest",
+        "type": "object"
+      },
+      "DecisionTally": {
+        "properties": {
+          "abstain": {
+            "title": "Abstain",
+            "type": "integer"
+          },
+          "approve": {
+            "title": "Approve",
+            "type": "integer"
+          },
+          "cast": {
+            "title": "Cast",
+            "type": "integer"
+          },
+          "deny": {
+            "title": "Deny",
+            "type": "integer"
+          },
+          "majority": {
+            "title": "Majority",
+            "type": "integer"
+          },
+          "outstanding": {
+            "title": "Outstanding",
+            "type": "integer"
+          },
+          "quorum": {
+            "title": "Quorum",
+            "type": "integer"
+          },
+          "scope_kind": {
+            "enum": [
+              "room",
+              "project"
+            ],
+            "title": "Scope Kind",
+            "type": "string"
+          },
+          "scope_stream_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scope Stream Id"
+          },
+          "status": {
+            "enum": [
+              "open",
+              "passed",
+              "failed",
+              "tied"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "approve",
+          "deny",
+          "abstain",
+          "cast",
+          "quorum",
+          "outstanding",
+          "majority",
+          "status",
+          "scope_kind"
+        ],
+        "title": "DecisionTally",
         "type": "object"
       },
       "DeliveryHistoryResponse": {
@@ -9224,7 +9486,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionListResponse"
+                }
               }
             },
             "description": "Successful Response"

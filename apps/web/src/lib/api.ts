@@ -775,57 +775,16 @@ export interface ConflictSummary {
   low: number;
 }
 
-export interface Decision {
-  id: string;
-  conflict_id: string | null;
-  project_id: string;
-  resolver_id: string | null;
-  // Resolved name for the resolver_id (display_name || username), so
-  // the dashboard doesn't have to render UUIDs. Null when the user
-  // was deleted (resolver_id set to null on user delete).
-  resolver_display_name?: string | null;
-  option_index: number | null;
-  custom_text: string | null;
-  rationale: string;
-  apply_actions?: Record<string, unknown>[];
-  apply_outcome?: "pending" | "ok" | "partial" | "failed" | "advisory";
-  apply_detail?: Record<string, unknown>;
-  source_suggestion_id: string | null;
-  // Scene 2 routing provenance — set when the decision came from a
-  // gated proposal (gate-keeper sign-off → crystallize). Null for
-  // IM-suggestion-originated or conflict-originated decisions.
-  gated_via_proposal_id?: string | null;
-  decision_class?: string | null;
-  // Smallest-relevant-vote scope — set when the decision crystallized
-  // from a message inside a specific room (B3 + pickup #6). Null for
-  // legacy decisions and decisions from team-room messages. The room
-  // view reads this to render the "Voting with <room>'s <N> members"
-  // explainer on DecisionCard.
-  scope_stream_id?: string | null;
-  // N.4 — current vote tally + scope-derived quorum. Backend
-  // enriches every decision payload with this (REST + WS upserts) so
-  // the FE can render the tally without a follow-up GET.
-  tally?: DecisionTally;
-  created_at: string | null;
-  applied_at: string | null;
-}
+// C1-C: generated-backed (GET /projects/{id}/decisions response_model=
+// DecisionListResponse, behind the consolidated _decisions_serialize helper).
+// The four provenance fields (resolver_display_name/gated_via_proposal_id/
+// decision_class/scope_stream_id) are now emitted by every decision path.
+// apply_outcome widens from the FE union to string (runtime column is
+// unconstrained); tally is optional (only WS/room-timeline paths enrich it).
+export type Decision = components["schemas"]["Decision"];
 
-// N.4 vote tally shape — emitted by DecisionVoteService.
-export interface DecisionTally {
-  approve: number;
-  deny: number;
-  abstain: number;
-  cast: number;
-  outstanding: number;
-  quorum: number;
-  majority: number;
-  // 'open' = vote in progress; 'passed'/'failed' = majority reached;
-  // 'tied' = full participation, no majority. The frontend should
-  // render the badge differently per status.
-  status: "open" | "passed" | "failed" | "tied";
-  scope_kind: "room" | "project";
-  scope_stream_id: string | null;
-}
+// N.4 vote tally shape — generated-backed (nested in Decision + DecisionTallyResponse).
+export type DecisionTally = components["schemas"]["DecisionTally"];
 
 // Decision vote record. (VoteVerdict is defined further down in this
 // file under the gated-proposals section — same shape, reused here.)

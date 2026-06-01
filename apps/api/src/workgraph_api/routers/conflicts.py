@@ -11,6 +11,8 @@ conflict's project_id for the check so we don't trust client-supplied ids.
 """
 from __future__ import annotations
 
+from typing import Any, Literal
+
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -31,6 +33,52 @@ class ResolveRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     option_index: int | None = None
+
+
+# ---- response shapes (C1-C) -----------------------------------------------
+# Mirror the shared decision serializer (_decisions_serialize.decision_payload),
+# the single source of truth behind GET /projects/{id}/decisions. `tally` is
+# optional: this REST list does NOT enrich it (only the IM/room-timeline WS paths
+# do), but the FE Decision type declares it optional and consumers read it
+# null-safely, so the model keeps it optional for alias compatibility.
+
+
+class DecisionTally(BaseModel):
+    approve: int
+    deny: int
+    abstain: int
+    cast: int
+    quorum: int
+    outstanding: int
+    majority: int
+    status: Literal["open", "passed", "failed", "tied"]
+    scope_kind: Literal["room", "project"]
+    scope_stream_id: str | None = None
+
+
+class Decision(BaseModel):
+    id: str
+    conflict_id: str | None = None
+    source_suggestion_id: str | None = None
+    project_id: str
+    resolver_id: str | None = None
+    resolver_display_name: str | None = None
+    option_index: int | None = None
+    custom_text: str | None = None
+    rationale: str
+    apply_outcome: str
+    gated_via_proposal_id: str | None = None
+    decision_class: str | None = None
+    scope_stream_id: str | None = None
+    apply_actions: list[dict[str, Any]] = Field(default_factory=list)
+    apply_detail: dict[str, Any] = Field(default_factory=dict)
+    tally: DecisionTally | None = None
+    created_at: str | None = None
+    applied_at: str | None = None
+
+
+class DecisionListResponse(BaseModel):
+    decisions: list[Decision]
 
 
 class DecisionRequest(BaseModel):
@@ -182,7 +230,9 @@ async def submit_decision(
     return result
 
 
-@router.get("/projects/{project_id}/decisions")
+@router.get(
+    "/projects/{project_id}/decisions", response_model=DecisionListResponse
+)
 async def list_decisions(
     project_id: str,
     request: Request,
