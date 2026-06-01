@@ -4174,6 +4174,19 @@ export interface components {
             /** User Id */
             user_id?: string | null;
         };
+        /** Assignment */
+        Assignment: {
+            /** Active */
+            active: boolean;
+            /** Created At */
+            created_at: string;
+            /** Id */
+            id: string;
+            /** Task Id */
+            task_id: string;
+            /** User Id */
+            user_id: string;
+        };
         /** BackgroundSnippet */
         BackgroundSnippet: {
             /** Reference Id */
@@ -4384,6 +4397,42 @@ export interface components {
              * @default
              */
             rationale: string;
+        };
+        /** DeliveryHistoryResponse */
+        DeliveryHistoryResponse: {
+            /** Deliveries */
+            deliveries: components["schemas"]["DeliverySummary"][];
+        };
+        /** DeliveryLatestResponse */
+        DeliveryLatestResponse: {
+            delivery?: components["schemas"]["DeliverySummary"] | null;
+        };
+        /** DeliverySummary */
+        DeliverySummary: {
+            /** Content */
+            content: {
+                [key: string]: unknown;
+            };
+            /** Created At */
+            created_at?: string | null;
+            /** Created By */
+            created_by?: string | null;
+            /** Id */
+            id: string;
+            /** Parse Outcome */
+            parse_outcome: string;
+            /** Project Id */
+            project_id: string;
+            /** Prompt Version */
+            prompt_version?: string | null;
+            /** Qa Report */
+            qa_report: {
+                [key: string]: unknown;
+            };
+            /** Requirement Version */
+            requirement_version: number;
+            /** Trace Id */
+            trace_id?: string | null;
         };
         /** DenyRequest */
         DenyRequest: {
@@ -4700,6 +4749,34 @@ export interface components {
                 [key: string]: boolean;
             } | null;
         };
+        /** Notification */
+        Notification: {
+            /** Body */
+            body: string;
+            /** Created At */
+            created_at: string;
+            /** Id */
+            id: string;
+            /** Kind */
+            kind: string;
+            /** Project Id */
+            project_id: string;
+            /** Read */
+            read: boolean;
+            /** Target Id */
+            target_id?: string | null;
+            /** Target Kind */
+            target_kind?: string | null;
+            /** User Id */
+            user_id: string;
+        };
+        /** NotificationListResponse */
+        NotificationListResponse: {
+            /** Items */
+            items: components["schemas"]["Notification"][];
+            /** Unread Count */
+            unread_count: number;
+        };
         /** OpenToVoteRequest */
         OpenToVoteRequest: {
             /** Rationale */
@@ -4752,6 +4829,40 @@ export interface components {
             display_language?: string | null;
             /** Role Hints */
             role_hints?: string[] | null;
+        };
+        /** PersonalTask */
+        PersonalTask: {
+            /** Assignee Role */
+            assignee_role: string;
+            /** Created At */
+            created_at?: string | null;
+            /** Description */
+            description: string;
+            /** Estimate Hours */
+            estimate_hours?: number | null;
+            /** Id */
+            id: string;
+            /** Owner User Id */
+            owner_user_id?: string | null;
+            /** Project Id */
+            project_id: string;
+            /** Requirement Id */
+            requirement_id?: string | null;
+            /** Scope */
+            scope: string;
+            /** Source Message Id */
+            source_message_id?: string | null;
+            /** Status */
+            status: string;
+            /** Title */
+            title: string;
+        };
+        /** PersonalTaskListResponse */
+        PersonalTaskListResponse: {
+            /** Ok */
+            ok: boolean;
+            /** Tasks */
+            tasks: components["schemas"]["PersonalTask"][];
         };
         /** PostRequest */
         PostRequest: {
@@ -7618,7 +7729,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["NotificationListResponse"];
                 };
             };
             /** @description Validation Error */
@@ -8216,7 +8327,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["Assignment"][];
                 };
             };
             /** @description Validation Error */
@@ -8617,7 +8728,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["DeliveryLatestResponse"];
                 };
             };
             /** @description Validation Error */
@@ -8681,7 +8792,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["DeliveryHistoryResponse"];
                 };
             };
             /** @description Validation Error */
@@ -10378,7 +10489,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["PersonalTaskListResponse"];
                 };
             };
             /** @description Validation Error */

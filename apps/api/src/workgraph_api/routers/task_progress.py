@@ -149,6 +149,34 @@ class CreatePersonalTaskRequest(BaseModel):
     assignee_role: str | None = Field(default=None, max_length=32)
 
 
+# ---- response shapes (C1-C) -----------------------------------------------
+# Mirror the local _serialize_task below (the 12-field personal-task shape —
+# distinct from the global tasks_global.TaskRow, which adds scope_id). Required
+# fields map to non-null TaskRow columns (id, project_id, title, plus
+# description/scope/status/assignee_role non-null defaults); owner_user_id,
+# requirement_id, source_message_id, estimate_hours, created_at nullable.
+
+
+class PersonalTask(BaseModel):
+    id: str
+    project_id: str
+    title: str
+    description: str
+    scope: str
+    status: str
+    owner_user_id: str | None = None
+    requirement_id: str | None = None
+    source_message_id: str | None = None
+    assignee_role: str
+    estimate_hours: int | None = None
+    created_at: str | None = None
+
+
+class PersonalTaskListResponse(BaseModel):
+    ok: bool
+    tasks: list[PersonalTask]
+
+
 def _serialize_task(row: Any) -> dict[str, Any]:
     return {
         "id": row.id,
@@ -166,7 +194,10 @@ def _serialize_task(row: Any) -> dict[str, Any]:
     }
 
 
-@router.get("/api/projects/{project_id}/personal-tasks")
+@router.get(
+    "/api/projects/{project_id}/personal-tasks",
+    response_model=PersonalTaskListResponse,
+)
 async def list_personal_tasks(
     project_id: str,
     request: Request,

@@ -84,6 +84,37 @@ class ProposeDecisionRequest(BaseModel):
     rationale: str | None = Field(default=None, max_length=2000)
 
 
+# ---- response shapes (C1-C) -----------------------------------------------
+# Mirror AssignmentService.list_for_project (bare list) and
+# NotificationService.list_for_user + unread_count. created_at is non-null in
+# both serializers (no None-guard); notification target_kind/target_id nullable.
+
+
+class Assignment(BaseModel):
+    id: str
+    task_id: str
+    user_id: str
+    active: bool
+    created_at: str
+
+
+class Notification(BaseModel):
+    id: str
+    user_id: str
+    project_id: str
+    kind: str
+    body: str
+    target_kind: str | None = None
+    target_id: str | None = None
+    read: bool
+    created_at: str
+
+
+class NotificationListResponse(BaseModel):
+    items: list[Notification]
+    unread_count: int
+
+
 async def _project_from_task(sessionmaker, task_id: str) -> str | None:
     async with session_scope(sessionmaker) as session:
         task = (
@@ -147,7 +178,9 @@ async def set_assignment(
     return result
 
 
-@router.get("/projects/{project_id}/assignments")
+@router.get(
+    "/projects/{project_id}/assignments", response_model=list[Assignment]
+)
 async def list_assignments(
     project_id: str,
     request: Request,
@@ -222,7 +255,7 @@ async def list_comments(
 # ---- Notifications -------------------------------------------------------
 
 
-@router.get("/notifications")
+@router.get("/notifications", response_model=NotificationListResponse)
 async def list_notifications(
     request: Request,
     unread_only: bool = Query(default=False),
