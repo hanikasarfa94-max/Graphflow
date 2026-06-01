@@ -30,27 +30,18 @@ export type TaskStatus =
 
 export type TaskView = "my_tasks" | "all";
 
-export interface TaskRow {
-  id: string;
-  scope_id: string | null;
-  project_id: string | null;
-  title: string;
-  description: string | null;
-  scope: string;
-  status: TaskStatus;
-  owner_user_id: string | null;
-  requirement_id: string | null;
-  source_message_id: string | null;
-  assignee_role: string | null;
-  estimate_hours: number | null;
-  created_at: string | null;
-}
+// C1-C: generated-backed (GET /api/tasks response_model=TaskListResponse in
+// routers/tasks_global.py, mirroring _serialize_task). Stable names preserved.
+// The generated shape is the runtime truth — narrower than the old hand-written
+// type, which marked scope_id/project_id/description/assignee_role nullable and
+// status as the TaskStatus union; runtime makes those non-null TaskRow columns
+// and status a plain string. TaskStatus stays exported as an FE helper union for
+// status-comparison call sites.
+import type { components } from "@/lib/api-types.gen";
 
-export interface TaskListResponse {
-  tasks: TaskRow[];
-  scope_id: string | null;
-  view: TaskView;
-}
+export type TaskRow = components["schemas"]["TaskRow"];
+
+export type TaskListResponse = components["schemas"]["TaskListResponse"];
 
 export interface TaskDetailResponse {
   task: TaskRow;

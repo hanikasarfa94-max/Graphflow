@@ -104,6 +104,38 @@ class PromoteTaskRequest(BaseModel):
     recognition_policy: str = Field(min_length=1, max_length=32)
 
 
+# ---- response shapes (C1-C) -----------------------------------------------
+# Mirror the runtime `_serialize_task` payload below — NOT a frontend
+# assumption. Required fields map to non-null TaskRow columns (id PK, title,
+# description/scope/assignee_role/status carry non-null defaults, project_id
+# non-null; scope_id is the project_id alias). Nullable fields are the
+# genuinely-nullable columns. NOTE: the FE features/tasks/types.ts previously
+# marked scope_id/project_id/description/assignee_role nullable — wider than
+# runtime; this model encodes the true (non-null) shape.
+
+
+class TaskRow(BaseModel):
+    id: str
+    scope_id: str
+    project_id: str
+    title: str
+    description: str
+    scope: str
+    status: str
+    owner_user_id: str | None = None
+    requirement_id: str | None = None
+    source_message_id: str | None = None
+    assignee_role: str
+    estimate_hours: int | None = None
+    created_at: str | None = None
+
+
+class TaskListResponse(BaseModel):
+    tasks: list[TaskRow]
+    scope_id: str | None = None
+    view: str
+
+
 # ---- helpers --------------------------------------------------------------
 
 
@@ -132,7 +164,7 @@ def _serialize_task(row: Any) -> dict[str, Any]:
 # ---- endpoints ------------------------------------------------------------
 
 
-@router.get("")
+@router.get("", response_model=TaskListResponse)
 async def get_tasks(
     request: Request,
     scope_id: str | None = Query(default=None, max_length=64),
@@ -286,7 +318,7 @@ async def post_task_candidate(
     }
 
 
-@router.post("/{task_id}/promote")
+@router.post("/{task_id}/promote", operation_id="promote_global_task")
 async def post_promote_task(
     task_id: str,
     body: PromoteTaskRequest,

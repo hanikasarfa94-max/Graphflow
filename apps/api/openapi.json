@@ -2561,6 +2561,141 @@
         "title": "TaskCandidateRequest",
         "type": "object"
       },
+      "TaskListResponse": {
+        "properties": {
+          "scope_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scope Id"
+          },
+          "tasks": {
+            "items": {
+              "$ref": "#/components/schemas/TaskRow"
+            },
+            "title": "Tasks",
+            "type": "array"
+          },
+          "view": {
+            "title": "View",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tasks",
+          "view"
+        ],
+        "title": "TaskListResponse",
+        "type": "object"
+      },
+      "TaskRow": {
+        "properties": {
+          "assignee_role": {
+            "title": "Assignee Role",
+            "type": "string"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "estimate_hours": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Estimate Hours"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "owner_user_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner User Id"
+          },
+          "project_id": {
+            "title": "Project Id",
+            "type": "string"
+          },
+          "requirement_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requirement Id"
+          },
+          "scope": {
+            "title": "Scope",
+            "type": "string"
+          },
+          "scope_id": {
+            "title": "Scope Id",
+            "type": "string"
+          },
+          "source_message_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Message Id"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "scope_id",
+          "project_id",
+          "title",
+          "description",
+          "scope",
+          "status",
+          "assignee_role"
+        ],
+        "title": "TaskRow",
+        "type": "object"
+      },
       "UpdateKbItemRequest": {
         "additionalProperties": false,
         "properties": {
@@ -12338,9 +12473,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Get Tasks Api Tasks Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/TaskListResponse"
                 }
               }
             },
@@ -12549,7 +12682,7 @@
     "/api/tasks/{task_id}/promote": {
       "post": {
         "description": "Promote a candidate to plan, recognition-policy gated.\n\nAuthority pattern: the router validates `recognition_policy` is a\nlegal `TaskRecognitionPolicy` value, then delegates to\nMembraneService.review() with kind='task_promote' (the same path\n`task_progress.py` already uses). The policy is threaded into the\nreview metadata so the membrane can branch on it once policy-aware\nreview lands in Phase B.2.\n\nPolicy=`none` is rejected at the contract layer — promote without\na recognition gate is a doctrine violation. Use one of the other\nfour values explicitly.",
-        "operationId": "post_promote_task_api_tasks__task_id__promote_post",
+        "operationId": "promote_global_task",
         "parameters": [
           {
             "in": "path",
@@ -12577,7 +12710,7 @@
               "application/json": {
                 "schema": {
                   "additionalProperties": true,
-                  "title": "Response Post Promote Task Api Tasks  Task Id  Promote Post",
+                  "title": "Response Promote Global Task",
                   "type": "object"
                 }
               }

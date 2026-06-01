@@ -3811,7 +3811,7 @@ export interface paths {
          *     a recognition gate is a doctrine violation. Use one of the other
          *     four values explicitly.
          */
-        post: operations["post_promote_task_api_tasks__task_id__promote_post"];
+        post: operations["promote_global_task"];
         delete?: never;
         options?: never;
         head?: never;
@@ -4897,6 +4897,44 @@ export interface components {
             source_kind: "conversation" | "document" | "flow_response";
             /** Source Object Id */
             source_object_id: string;
+            /** Title */
+            title: string;
+        };
+        /** TaskListResponse */
+        TaskListResponse: {
+            /** Scope Id */
+            scope_id?: string | null;
+            /** Tasks */
+            tasks: components["schemas"]["TaskRow"][];
+            /** View */
+            view: string;
+        };
+        /** TaskRow */
+        TaskRow: {
+            /** Assignee Role */
+            assignee_role: string;
+            /** Created At */
+            created_at?: string | null;
+            /** Description */
+            description: string;
+            /** Estimate Hours */
+            estimate_hours?: number | null;
+            /** Id */
+            id: string;
+            /** Owner User Id */
+            owner_user_id?: string | null;
+            /** Project Id */
+            project_id: string;
+            /** Requirement Id */
+            requirement_id?: string | null;
+            /** Scope */
+            scope: string;
+            /** Scope Id */
+            scope_id: string;
+            /** Source Message Id */
+            source_message_id?: string | null;
+            /** Status */
+            status: string;
             /** Title */
             title: string;
         };
@@ -11407,9 +11445,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["TaskListResponse"];
                 };
             };
             /** @description Validation Error */
@@ -11559,7 +11595,7 @@ export interface operations {
             };
         };
     };
-    post_promote_task_api_tasks__task_id__promote_post: {
+    promote_global_task: {
         parameters: {
             query?: never;
             header?: never;
