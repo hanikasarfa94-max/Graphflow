@@ -35,20 +35,7 @@ import { Button, Card, EmptyState, Heading, PageHeader, Tag, Text } from "@/comp
 
 import { MyAIComposer } from "./MyAIComposer";
 
-interface GroundedItem {
-  id: string;
-  kind: string;
-  title: string;
-  scope_id: string | null;
-  object_url: string | null;
-}
-
-interface ShareableDraft {
-  id: string;
-  title: string;
-  target_scope_id: string | null;
-  target_user_id: string | null;
-}
+import type { GroundedItem, ShareableDraft } from "@/lib/api";
 
 interface Props {
   displayName: string;

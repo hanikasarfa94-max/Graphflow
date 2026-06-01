@@ -121,6 +121,16 @@ export type User = components["schemas"]["UserResponse"];
 // a safe widening (none read it); flow-center already matched.
 export type ActiveScope = components["schemas"]["ActiveScopeResponse"];
 
+// C1-B: generated-backed exports for GET /api/my-ai/landing
+// (my_ai.py response_model=MyAILandingResponse). Stable names the /my-ai page
+// and MyAILandingClient migrate their local duplicates onto. The generated
+// children mark scope_id/object_url/target_* optional (`?:`) where the local
+// copies had required `string | null` — a safe widening; consumers read them
+// null-tolerantly (e.g. `item.object_url || "#"`) and never read target_*.
+export type GroundedItem = components["schemas"]["GroundedItem"];
+export type ShareableDraft = components["schemas"]["ShareableDraft"];
+export type MyAILandingResponse = components["schemas"]["MyAILandingResponse"];
+
 export interface ProjectSummary {
   id: string;
   title: string;

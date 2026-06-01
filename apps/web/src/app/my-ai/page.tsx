@@ -12,30 +12,14 @@
 
 import { MyAILandingClient } from "@/features/my-ai/MyAILandingClient";
 import { requireUser, serverFetch } from "@/lib/auth";
-import type { ActiveScope } from "@/lib/api";
+import type {
+  ActiveScope,
+  GroundedItem,
+  MyAILandingResponse,
+  ShareableDraft,
+} from "@/lib/api";
 
 export const dynamic = "force-dynamic";
-
-type GroundedItem = {
-  id: string;
-  kind: string;
-  title: string;
-  scope_id: string | null;
-  object_url: string | null;
-};
-
-type ShareableDraft = {
-  id: string;
-  title: string;
-  target_scope_id: string | null;
-  target_user_id: string | null;
-};
-
-type MyAILandingResponse = {
-  grounded_items: GroundedItem[];
-  ready_to_share: ShareableDraft[];
-  scope_id: string | null;
-};
 
 type ProjectSummary = { id: string; title: string; role: string };
 
