@@ -2413,8 +2413,14 @@ export function putGateKeeperMap(
 // The tier above project. Backend: routers/organizations.py. Slug is
 // the URL key everywhere except create.
 
+// FE-only helper union for inputs (invite/role-change selectors). The GET
+// response `role` fields widen to plain string (runtime is an unconstrained
+// membership column), so the generated types below carry string, not this union.
 export type WorkspaceRole = "owner" | "admin" | "member" | "viewer";
 
+// WorkspaceSummary stays hand-written: the create endpoint (POST /organizations)
+// returns this bare shape and isn't promoted this wave (GET-only). The generated
+// WorkspaceWithRole inlines the same fields + role.
 export interface WorkspaceSummary {
   id: string;
   name: string;
@@ -2424,28 +2430,12 @@ export interface WorkspaceSummary {
   created_at: string | null;
 }
 
-export interface WorkspaceWithRole extends WorkspaceSummary {
-  role: WorkspaceRole;
-}
-
-export interface WorkspaceProject {
-  id: string;
-  title: string;
-  updated_at: string | null;
-}
-
-export interface WorkspaceDetail extends WorkspaceWithRole {
-  projects: WorkspaceProject[];
-}
-
-export interface WorkspaceMember {
-  user_id: string;
-  username: string;
-  display_name: string;
-  role: WorkspaceRole;
-  invited_by_user_id: string | null;
-  created_at: string | null;
-}
+// C1-C: generated-backed (organizations.py GET list/{slug}/{slug}/members).
+// `role` widened union→string; member display_name corrected non-null→nullable.
+export type WorkspaceWithRole = components["schemas"]["WorkspaceWithRole"];
+export type WorkspaceProject = components["schemas"]["WorkspaceProject"];
+export type WorkspaceDetail = components["schemas"]["WorkspaceDetail"];
+export type WorkspaceMember = components["schemas"]["WorkspaceMember"];
 
 export function createWorkspace(input: {
   name: string;

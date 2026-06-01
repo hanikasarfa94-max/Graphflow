@@ -49,6 +49,46 @@ class UpdateRoleRequest(BaseModel):
     role: str = Field(min_length=1, max_length=16)
 
 
+# ---- Response shapes (C1-C) -----------------------------------------------
+# Mirror _serialize_org + the per-handler additions in OrganizationService.
+# `role` is the raw membership column (unconstrained str) — the FE narrowed it
+# to a 4-value union; the model widens to str (runtime truth). Member
+# display_name is str | None (UserRow column is nullable) — the FE wrongly typed
+# it non-null; corrected here.
+
+
+class WorkspaceSummary(BaseModel):
+    id: str
+    name: str
+    slug: str
+    owner_user_id: str
+    description: str | None = None
+    created_at: str | None = None
+
+
+class WorkspaceWithRole(WorkspaceSummary):
+    role: str
+
+
+class WorkspaceProject(BaseModel):
+    id: str
+    title: str
+    updated_at: str | None = None
+
+
+class WorkspaceDetail(WorkspaceWithRole):
+    projects: list[WorkspaceProject]
+
+
+class WorkspaceMember(BaseModel):
+    user_id: str
+    username: str
+    display_name: str | None = None
+    role: str
+    invited_by_user_id: str | None = None
+    created_at: str | None = None
+
+
 # ---- Error translation -----------------------------------------------------
 
 
@@ -103,7 +143,7 @@ async def create_organization(
         raise  # unreachable — keeps type-checker happy
 
 
-@router.get("")
+@router.get("", response_model=list[WorkspaceWithRole])
 async def list_organizations(
     request: Request,
     user: AuthenticatedUser = Depends(require_user),
@@ -112,7 +152,7 @@ async def list_organizations(
     return await service.list_for_user(user.id)
 
 
-@router.get("/{slug}")
+@router.get("/{slug}", response_model=WorkspaceDetail)
 async def get_organization(
     slug: str,
     request: Request,
@@ -126,7 +166,7 @@ async def get_organization(
         raise
 
 
-@router.get("/{slug}/members")
+@router.get("/{slug}/members", response_model=list[WorkspaceMember])
 async def list_members(
     slug: str,
     request: Request,

@@ -5284,6 +5284,66 @@ export interface components {
             /** Error Type */
             type: string;
         };
+        /** WorkspaceDetail */
+        WorkspaceDetail: {
+            /** Created At */
+            created_at?: string | null;
+            /** Description */
+            description?: string | null;
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /** Owner User Id */
+            owner_user_id: string;
+            /** Projects */
+            projects: components["schemas"]["WorkspaceProject"][];
+            /** Role */
+            role: string;
+            /** Slug */
+            slug: string;
+        };
+        /** WorkspaceMember */
+        WorkspaceMember: {
+            /** Created At */
+            created_at?: string | null;
+            /** Display Name */
+            display_name?: string | null;
+            /** Invited By User Id */
+            invited_by_user_id?: string | null;
+            /** Role */
+            role: string;
+            /** User Id */
+            user_id: string;
+            /** Username */
+            username: string;
+        };
+        /** WorkspaceProject */
+        WorkspaceProject: {
+            /** Id */
+            id: string;
+            /** Title */
+            title: string;
+            /** Updated At */
+            updated_at?: string | null;
+        };
+        /** WorkspaceWithRole */
+        WorkspaceWithRole: {
+            /** Created At */
+            created_at?: string | null;
+            /** Description */
+            description?: string | null;
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /** Owner User Id */
+            owner_user_id: string;
+            /** Role */
+            role: string;
+            /** Slug */
+            slug: string;
+        };
         /** _AcceptBody */
         _AcceptBody: {
             /**
@@ -7694,9 +7754,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    }[];
+                    "application/json": components["schemas"]["WorkspaceWithRole"][];
                 };
             };
         };
@@ -7753,9 +7811,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["WorkspaceDetail"];
                 };
             };
             /** @description Validation Error */
@@ -7823,9 +7879,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    }[];
+                    "application/json": components["schemas"]["WorkspaceMember"][];
                 };
             };
             /** @description Validation Error */
