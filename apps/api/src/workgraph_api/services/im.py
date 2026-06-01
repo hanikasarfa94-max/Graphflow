@@ -47,6 +47,7 @@ from workgraph_persistence import (
 
 from .collab import MessageService, NotificationService
 from .collab_hub import CollabHub
+from ._decisions_serialize import decision_payload as _decision_payload_shared
 from .membrane_policies.base import MembraneCandidate, MembraneReviewPort
 from .proposal_handlers import HandlerServices, ProposalHandler, default_registry
 
@@ -378,33 +379,16 @@ class IMService:
         }
 
     def _decision_payload(self, row: DecisionRow) -> dict[str, Any]:
-        """Mirror DecisionService._decision_payload so WS frames stay identical.
+        """Shared decision serializer (C1 consolidation).
 
-        Local to IMService so the crystallization path doesn't need to reach
-        into DecisionService internals, which would create a reverse import.
+        Was a hand-maintained copy of DecisionService._decision_payload (the
+        "mirror" had drifted — it carried scope_stream_id but not the gated/
+        class provenance). Now delegates to the one shared helper so WS frames,
+        REST, and /state all agree. resolver_display_name is left null here (the
+        crystallize path doesn't resolve names); tally is grafted on by the
+        caller via enrich_decision_with_tally as before.
         """
-        return {
-            "id": row.id,
-            "conflict_id": row.conflict_id,
-            "source_suggestion_id": row.source_suggestion_id,
-            "project_id": row.project_id,
-            "resolver_id": row.resolver_id,
-            "option_index": row.option_index,
-            "custom_text": row.custom_text,
-            "rationale": row.rationale,
-            "apply_actions": row.apply_actions or [],
-            "apply_outcome": row.apply_outcome,
-            "apply_detail": row.apply_detail or {},
-            # Smallest-relevant-vote scope. Set when this decision
-            # crystallized from a message inside a specific room
-            # (B3 + pickup #6); null for legacy decisions and decisions
-            # crystallized from team-room messages. Frontend
-            # DecisionCard reads this to render the vote-scope explainer
-            # ("Voting with <room>'s <N> members.").
-            "scope_stream_id": row.scope_stream_id,
-            "created_at": row.created_at.isoformat() if row.created_at else None,
-            "applied_at": row.applied_at.isoformat() if row.applied_at else None,
-        }
+        return _decision_payload_shared(row)
 
     async def get_suggestion(self, suggestion_id: str) -> dict | None:
         async with session_scope(self._sessionmaker) as session:

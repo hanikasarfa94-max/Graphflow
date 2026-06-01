@@ -42,6 +42,8 @@ from workgraph_persistence import (
     session_scope,
 )
 
+from ._decisions_serialize import decision_payload as _decision_payload_shared
+
 
 _log = logging.getLogger("workgraph.api.license_context")
 
@@ -404,31 +406,15 @@ class LicenseContextService:
                     return None
                 return u.display_name or u.username
 
+            # Shared serializer (C1 consolidation). Reuses this path's existing
+            # bulk resolver-name lookup (_resolver_display) for the name; the
+            # helper additionally surfaces scope_stream_id / apply_actions /
+            # apply_detail that this inline dict historically omitted (additive
+            # to the /state payload — existing consumers read a subset).
             decisions = [
-                {
-                    "id": d.id,
-                    "project_id": d.project_id,
-                    "resolver_id": d.resolver_id,
-                    "resolver_display_name": _resolver_display(d.resolver_id),
-                    "rationale": d.rationale,
-                    "custom_text": d.custom_text,
-                    # Provenance fields the DecisionsPanel needs to
-                    # render "how this decision was made". Stripped
-                    # historically; restored 2026-04-25 after a QA
-                    # report that the dashboard hides these.
-                    "conflict_id": d.conflict_id,
-                    "source_suggestion_id": d.source_suggestion_id,
-                    "gated_via_proposal_id": d.gated_via_proposal_id,
-                    "decision_class": d.decision_class,
-                    "apply_outcome": d.apply_outcome,
-                    "option_index": d.option_index,
-                    "created_at": (
-                        d.created_at.isoformat() if d.created_at else None
-                    ),
-                    "applied_at": (
-                        d.applied_at.isoformat() if d.applied_at else None
-                    ),
-                }
+                _decision_payload_shared(
+                    d, resolver_display_name=_resolver_display(d.resolver_id)
+                )
                 for d in decision_rows
             ]
 

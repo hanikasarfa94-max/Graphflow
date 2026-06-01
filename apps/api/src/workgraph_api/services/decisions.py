@@ -37,6 +37,7 @@ from workgraph_persistence import (
 from .collab import AssignmentService
 from .collab_hub import CollabHub
 from .conflicts import ConflictService
+from ._decisions_serialize import decision_payload, resolve_resolver_names
 from .membrane_policies.base import MembraneCandidate, MembraneReviewPort
 from .signal_tally import SignalTallyService
 
@@ -208,8 +209,18 @@ class DecisionService:
                 else None
             )
             decision_row = await decision_repo.get(decision_id)
+            _resolver_names = (
+                await resolve_resolver_names(session, [decision_row])
+                if decision_row is not None
+                else {}
+            )
             decision_payload = (
-                self._decision_payload(decision_row)
+                self._decision_payload(
+                    decision_row,
+                    resolver_display_name=_resolver_names.get(
+                        decision_row.resolver_id
+                    ),
+                )
                 if decision_row is not None
                 else None
             )
@@ -262,7 +273,13 @@ class DecisionService:
             rows = await DecisionRepository(session).list_for_project(
                 project_id, limit=limit
             )
-        return [self._decision_payload(r) for r in rows]
+            names = await resolve_resolver_names(session, rows)
+        return [
+            self._decision_payload(
+                r, resolver_display_name=names.get(r.resolver_id)
+            )
+            for r in rows
+        ]
 
     async def get_for_viewer(
         self, *, decision_id: str, viewer_user_id: str
@@ -281,7 +298,13 @@ class DecisionService:
                 session
             ).is_member(row.project_id, viewer_user_id):
                 return {"ok": False, "error": "not_a_member"}
-            return {"ok": True, "decision": self._decision_payload(row)}
+            names = await resolve_resolver_names(session, [row])
+            return {
+                "ok": True,
+                "decision": self._decision_payload(
+                    row, resolver_display_name=names.get(row.resolver_id)
+                ),
+            }
 
     async def list_for_conflict(
         self, conflict_id: str
@@ -290,7 +313,13 @@ class DecisionService:
             rows = await DecisionRepository(session).list_for_conflict(
                 conflict_id
             )
-        return [self._decision_payload(r) for r in rows]
+            names = await resolve_resolver_names(session, rows)
+        return [
+            self._decision_payload(
+                r, resolver_display_name=names.get(r.resolver_id)
+            )
+            for r in rows
+        ]
 
     # ---- internals -----------------------------------------------------
 
@@ -377,22 +406,15 @@ class DecisionService:
             outcome = "partial"
         return outcome, {"results": results, "succeeded": succeeded, "failed": failed}
 
-    def _decision_payload(self, row: DecisionRow) -> dict[str, Any]:
-        return {
-            "id": row.id,
-            "conflict_id": row.conflict_id,
-            "source_suggestion_id": row.source_suggestion_id,
-            "project_id": row.project_id,
-            "resolver_id": row.resolver_id,
-            "option_index": row.option_index,
-            "custom_text": row.custom_text,
-            "rationale": row.rationale,
-            "apply_actions": row.apply_actions or [],
-            "apply_outcome": row.apply_outcome,
-            "apply_detail": row.apply_detail or {},
-            "created_at": row.created_at.isoformat() if row.created_at else None,
-            "applied_at": row.applied_at.isoformat() if row.applied_at else None,
-        }
+    def _decision_payload(
+        self, row: DecisionRow, *, resolver_display_name: str | None = None
+    ) -> dict[str, Any]:
+        # Shared serializer (C1 consolidation). Now also emits scope_stream_id /
+        # gated_via_proposal_id / decision_class (additive) and, when the caller
+        # resolved it via a bulk lookup, resolver_display_name.
+        return decision_payload(
+            row, resolver_display_name=resolver_display_name
+        )
 
 
 __all__ = ["DecisionService", "DecisionError"]
