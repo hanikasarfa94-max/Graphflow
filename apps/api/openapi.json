@@ -189,6 +189,159 @@
         "title": "ActiveTopicSummary",
         "type": "object"
       },
+      "ActivityLast30d": {
+        "properties": {
+          "last_active_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Active At"
+          },
+          "messages": {
+            "title": "Messages",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "messages"
+        ],
+        "title": "ActivityLast30d",
+        "type": "object"
+      },
+      "AgentRunPayload": {
+        "properties": {
+          "agent": {
+            "title": "Agent",
+            "type": "string"
+          },
+          "attempts": {
+            "title": "Attempts",
+            "type": "integer"
+          },
+          "cache_read_tokens": {
+            "title": "Cache Read Tokens",
+            "type": "integer"
+          },
+          "completion_tokens": {
+            "title": "Completion Tokens",
+            "type": "integer"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "latency_ms": {
+            "title": "Latency Ms",
+            "type": "integer"
+          },
+          "outcome": {
+            "title": "Outcome",
+            "type": "string"
+          },
+          "project_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id"
+          },
+          "prompt_tokens": {
+            "title": "Prompt Tokens",
+            "type": "integer"
+          },
+          "prompt_version": {
+            "title": "Prompt Version",
+            "type": "string"
+          },
+          "trace_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trace Id"
+          }
+        },
+        "required": [
+          "id",
+          "agent",
+          "prompt_version",
+          "outcome",
+          "attempts",
+          "latency_ms",
+          "prompt_tokens",
+          "completion_tokens",
+          "cache_read_tokens"
+        ],
+        "title": "AgentRunPayload",
+        "type": "object"
+      },
+      "AgentRunsResponse": {
+        "properties": {
+          "agent": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "runs": {
+            "items": {
+              "$ref": "#/components/schemas/AgentRunPayload"
+            },
+            "title": "Runs",
+            "type": "array"
+          }
+        },
+        "required": [
+          "limit",
+          "runs"
+        ],
+        "title": "AgentRunsResponse",
+        "type": "object"
+      },
       "ApiIntakeRequest": {
         "additionalProperties": false,
         "properties": {
@@ -528,6 +681,27 @@
           "body"
         ],
         "title": "ConversationMessageRequest",
+        "type": "object"
+      },
+      "CountWithIds": {
+        "properties": {
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "count",
+          "ids"
+        ],
+        "title": "CountWithIds",
         "type": "object"
       },
       "CounterRequest": {
@@ -1044,6 +1218,34 @@
           "framing"
         ],
         "title": "DispatchRequest",
+        "type": "object"
+      },
+      "DissentAccuracy": {
+        "properties": {
+          "refuted": {
+            "title": "Refuted",
+            "type": "integer"
+          },
+          "still_open": {
+            "title": "Still Open",
+            "type": "integer"
+          },
+          "supported": {
+            "title": "Supported",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "total",
+          "supported",
+          "refuted",
+          "still_open"
+        ],
+        "title": "DissentAccuracy",
         "type": "object"
       },
       "Document": {
@@ -2851,6 +3053,29 @@
         "title": "SimulateRequest",
         "type": "object"
       },
+      "SkillsValidated": {
+        "properties": {
+          "declared": {
+            "title": "Declared",
+            "type": "integer"
+          },
+          "observed": {
+            "title": "Observed",
+            "type": "integer"
+          },
+          "overlap": {
+            "title": "Overlap",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "declared",
+          "observed",
+          "overlap"
+        ],
+        "title": "SkillsValidated",
+        "type": "object"
+      },
       "StageGraphCounts": {
         "properties": {
           "constraints": {
@@ -3142,6 +3367,45 @@
         "title": "TaskListResponse",
         "type": "object"
       },
+      "TaskQuality": {
+        "properties": {
+          "good": {
+            "title": "Good",
+            "type": "integer"
+          },
+          "needs_work": {
+            "title": "Needs Work",
+            "type": "integer"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "integer"
+          },
+          "quality_index": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quality Index"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "good",
+          "ok",
+          "needs_work",
+          "total"
+        ],
+        "title": "TaskQuality",
+        "type": "object"
+      },
       "TaskRow": {
         "properties": {
           "assignee_role": {
@@ -3243,6 +3507,75 @@
           "assignee_role"
         ],
         "title": "TaskRow",
+        "type": "object"
+      },
+      "TeamMemberPerf": {
+        "properties": {
+          "activity_last_30d": {
+            "$ref": "#/components/schemas/ActivityLast30d"
+          },
+          "decisions_made": {
+            "$ref": "#/components/schemas/CountWithIds"
+          },
+          "display_name": {
+            "title": "Display Name",
+            "type": "string"
+          },
+          "dissent_accuracy": {
+            "$ref": "#/components/schemas/DissentAccuracy"
+          },
+          "license_tier": {
+            "title": "License Tier",
+            "type": "string"
+          },
+          "risks_owned": {
+            "$ref": "#/components/schemas/CountWithIds"
+          },
+          "role_in_project": {
+            "title": "Role In Project",
+            "type": "string"
+          },
+          "routings_answered": {
+            "$ref": "#/components/schemas/CountWithIds"
+          },
+          "silent_consensus_ratified": {
+            "$ref": "#/components/schemas/CountWithIds"
+          },
+          "skills_validated": {
+            "$ref": "#/components/schemas/SkillsValidated"
+          },
+          "task_quality": {
+            "$ref": "#/components/schemas/TaskQuality"
+          },
+          "tasks_completed": {
+            "$ref": "#/components/schemas/CountWithIds"
+          },
+          "user_id": {
+            "title": "User Id",
+            "type": "string"
+          },
+          "username": {
+            "title": "Username",
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_id",
+          "display_name",
+          "username",
+          "role_in_project",
+          "license_tier",
+          "decisions_made",
+          "routings_answered",
+          "risks_owned",
+          "tasks_completed",
+          "task_quality",
+          "skills_validated",
+          "dissent_accuracy",
+          "silent_consensus_ratified",
+          "activity_last_30d"
+        ],
+        "title": "TeamMemberPerf",
         "type": "object"
       },
       "UpdateKbItemRequest": {
@@ -6821,9 +7154,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response List Agent Runs Api Observability Agents Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/AgentRunsResponse"
                 }
               }
             },
@@ -11953,8 +12284,7 @@
               "application/json": {
                 "schema": {
                   "items": {
-                    "additionalProperties": true,
-                    "type": "object"
+                    "$ref": "#/components/schemas/TeamMemberPerf"
                   },
                   "title": "Response Get Team Perf Api Projects  Project Id  Team Perf Get",
                   "type": "array"

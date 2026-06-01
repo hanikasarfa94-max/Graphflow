@@ -16,6 +16,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from fastapi import APIRouter, Depends, Query, Request
+from pydantic import BaseModel
 
 from workgraph_api.deps import require_user
 from workgraph_api.services import AuthenticatedUser
@@ -27,6 +28,34 @@ from workgraph_persistence import (
 )
 
 router = APIRouter(prefix="/api/observability", tags=["observability"])
+
+
+# ---- response shapes (C1-C) -----------------------------------------------
+# Mirror _row_payload (below). No FE consumer — pure additive contract. project_id/
+# trace_id/error nullable per AgentRunLogRow; created_at nullable by iso-guard;
+# attempts/latency/*_tokens are non-null int columns (defaults).
+
+
+class AgentRunPayload(BaseModel):
+    id: str
+    agent: str
+    prompt_version: str
+    project_id: str | None = None
+    trace_id: str | None = None
+    outcome: str
+    attempts: int
+    latency_ms: int
+    prompt_tokens: int
+    completion_tokens: int
+    cache_read_tokens: int
+    error: str | None = None
+    created_at: str | None = None
+
+
+class AgentRunsResponse(BaseModel):
+    agent: str | None = None  # echoes the optional filter query param
+    limit: int
+    runs: list[AgentRunPayload]
 
 
 def _percentile(values: list[int], p: float) -> int:
@@ -116,7 +145,7 @@ async def get_health(
     }
 
 
-@router.get("/agents")
+@router.get("/agents", response_model=AgentRunsResponse)
 async def list_agent_runs(
     request: Request,
     agent: str | None = Query(None),

@@ -4094,6 +4094,51 @@ export interface components {
             /** Unread Count */
             unread_count: number;
         };
+        /** ActivityLast30d */
+        ActivityLast30d: {
+            /** Last Active At */
+            last_active_at?: string | null;
+            /** Messages */
+            messages: number;
+        };
+        /** AgentRunPayload */
+        AgentRunPayload: {
+            /** Agent */
+            agent: string;
+            /** Attempts */
+            attempts: number;
+            /** Cache Read Tokens */
+            cache_read_tokens: number;
+            /** Completion Tokens */
+            completion_tokens: number;
+            /** Created At */
+            created_at?: string | null;
+            /** Error */
+            error?: string | null;
+            /** Id */
+            id: string;
+            /** Latency Ms */
+            latency_ms: number;
+            /** Outcome */
+            outcome: string;
+            /** Project Id */
+            project_id?: string | null;
+            /** Prompt Tokens */
+            prompt_tokens: number;
+            /** Prompt Version */
+            prompt_version: string;
+            /** Trace Id */
+            trace_id?: string | null;
+        };
+        /** AgentRunsResponse */
+        AgentRunsResponse: {
+            /** Agent */
+            agent?: string | null;
+            /** Limit */
+            limit: number;
+            /** Runs */
+            runs: components["schemas"]["AgentRunPayload"][];
+        };
         /** ApiIntakeRequest */
         ApiIntakeRequest: {
             /**
@@ -4196,6 +4241,13 @@ export interface components {
         ConversationMessageRequest: {
             /** Body */
             body: string;
+        };
+        /** CountWithIds */
+        CountWithIds: {
+            /** Count */
+            count: number;
+            /** Ids */
+            ids: string[];
         };
         /** CounterRequest */
         CounterRequest: {
@@ -4350,6 +4402,17 @@ export interface components {
             project_id: string;
             /** Target User Id */
             target_user_id: string;
+        };
+        /** DissentAccuracy */
+        DissentAccuracy: {
+            /** Refuted */
+            refuted: number;
+            /** Still Open */
+            still_open: number;
+            /** Supported */
+            supported: number;
+            /** Total */
+            total: number;
         };
         /** Document */
         Document: {
@@ -4982,6 +5045,15 @@ export interface components {
              */
             kind: "drop_task";
         };
+        /** SkillsValidated */
+        SkillsValidated: {
+            /** Declared */
+            declared: number;
+            /** Observed */
+            observed: number;
+            /** Overlap */
+            overlap: number;
+        };
         /** StageGraphCounts */
         StageGraphCounts: {
             /** Constraints */
@@ -5082,6 +5154,19 @@ export interface components {
             /** View */
             view: string;
         };
+        /** TaskQuality */
+        TaskQuality: {
+            /** Good */
+            good: number;
+            /** Needs Work */
+            needs_work: number;
+            /** Ok */
+            ok: number;
+            /** Quality Index */
+            quality_index?: number | null;
+            /** Total */
+            total: number;
+        };
         /** TaskRow */
         TaskRow: {
             /** Assignee Role */
@@ -5110,6 +5195,28 @@ export interface components {
             status: string;
             /** Title */
             title: string;
+        };
+        /** TeamMemberPerf */
+        TeamMemberPerf: {
+            activity_last_30d: components["schemas"]["ActivityLast30d"];
+            decisions_made: components["schemas"]["CountWithIds"];
+            /** Display Name */
+            display_name: string;
+            dissent_accuracy: components["schemas"]["DissentAccuracy"];
+            /** License Tier */
+            license_tier: string;
+            risks_owned: components["schemas"]["CountWithIds"];
+            /** Role In Project */
+            role_in_project: string;
+            routings_answered: components["schemas"]["CountWithIds"];
+            silent_consensus_ratified: components["schemas"]["CountWithIds"];
+            skills_validated: components["schemas"]["SkillsValidated"];
+            task_quality: components["schemas"]["TaskQuality"];
+            tasks_completed: components["schemas"]["CountWithIds"];
+            /** User Id */
+            user_id: string;
+            /** Username */
+            username: string;
         };
         /** UpdateKbItemRequest */
         UpdateKbItemRequest: {
@@ -7492,9 +7599,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["AgentRunsResponse"];
                 };
             };
             /** @description Validation Error */
@@ -10902,9 +11007,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    }[];
+                    "application/json": components["schemas"]["TeamMemberPerf"][];
                 };
             };
             /** @description Validation Error */
