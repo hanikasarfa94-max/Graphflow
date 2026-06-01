@@ -4344,6 +4344,59 @@ export interface components {
             /** Updated At */
             updated_at?: string | null;
         };
+        /**
+         * DocumentAttachment
+         * @description Attachment metadata. Mirrors the `attachment` block from _serialize
+         *     (kb_items.py): present only when the KbItemRow has an upload, else the
+         *     whole block is null. filename/download_url non-null; mime/bytes nullable.
+         */
+        DocumentAttachment: {
+            /** Bytes */
+            bytes?: number | null;
+            /** Download Url */
+            download_url: string;
+            /** Filename */
+            filename: string;
+            /** Mime */
+            mime?: string | null;
+        };
+        /**
+         * DocumentDetail
+         * @description Singleton wire shape — list Document + body + attachment + folder.
+         *     Mirrors _doc_full_from_kb. content_md is str | None to match the FE and
+         *     the .get()-sourced runtime (the DB column is non-null str default '').
+         */
+        DocumentDetail: {
+            attachment?: components["schemas"]["DocumentAttachment"] | null;
+            /** Content Md */
+            content_md?: string | null;
+            /** Created At */
+            created_at?: string | null;
+            /** Document Id */
+            document_id: string;
+            /** Folder Id */
+            folder_id?: string | null;
+            /** Is Project Brief */
+            is_project_brief: boolean;
+            /** Owner User Id */
+            owner_user_id?: string | null;
+            /** Scope */
+            scope: string;
+            /** Scope Id */
+            scope_id?: string | null;
+            /** Source */
+            source?: string | null;
+            /** Status */
+            status: string;
+            /** Title */
+            title: string;
+            /** Updated At */
+            updated_at?: string | null;
+        };
+        /** DocumentDetailResponse */
+        DocumentDetailResponse: {
+            document: components["schemas"]["DocumentDetail"];
+        };
         /** DocumentListResponse */
         DocumentListResponse: {
             /** Documents */
@@ -5703,9 +5756,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["DocumentDetailResponse"];
                 };
             };
             /** @description Validation Error */

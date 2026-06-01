@@ -1037,6 +1037,180 @@
         "title": "Document",
         "type": "object"
       },
+      "DocumentAttachment": {
+        "description": "Attachment metadata. Mirrors the `attachment` block from _serialize\n(kb_items.py): present only when the KbItemRow has an upload, else the\nwhole block is null. filename/download_url non-null; mime/bytes nullable.",
+        "properties": {
+          "bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bytes"
+          },
+          "download_url": {
+            "title": "Download Url",
+            "type": "string"
+          },
+          "filename": {
+            "title": "Filename",
+            "type": "string"
+          },
+          "mime": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mime"
+          }
+        },
+        "required": [
+          "filename",
+          "download_url"
+        ],
+        "title": "DocumentAttachment",
+        "type": "object"
+      },
+      "DocumentDetail": {
+        "description": "Singleton wire shape — list Document + body + attachment + folder.\nMirrors _doc_full_from_kb. content_md is str | None to match the FE and\nthe .get()-sourced runtime (the DB column is non-null str default '').",
+        "properties": {
+          "attachment": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DocumentAttachment"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "content_md": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content Md"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "document_id": {
+            "title": "Document Id",
+            "type": "string"
+          },
+          "folder_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Folder Id"
+          },
+          "is_project_brief": {
+            "title": "Is Project Brief",
+            "type": "boolean"
+          },
+          "owner_user_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner User Id"
+          },
+          "scope": {
+            "title": "Scope",
+            "type": "string"
+          },
+          "scope_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scope Id"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          }
+        },
+        "required": [
+          "document_id",
+          "title",
+          "scope",
+          "status",
+          "is_project_brief"
+        ],
+        "title": "DocumentDetail",
+        "type": "object"
+      },
+      "DocumentDetailResponse": {
+        "properties": {
+          "document": {
+            "$ref": "#/components/schemas/DocumentDetail"
+          }
+        },
+        "required": [
+          "document"
+        ],
+        "title": "DocumentDetailResponse",
+        "type": "object"
+      },
       "DocumentListResponse": {
         "properties": {
           "documents": {
@@ -3969,9 +4143,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Get Document Api Documents  Document Id  Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/DocumentDetailResponse"
                 }
               }
             },

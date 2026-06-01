@@ -17,26 +17,19 @@ export type DocumentTypeFilter = "all" | "brief" | "note" | "attachment";
 export type Document = components["schemas"]["Document"];
 
 // Singleton extension — populated only by GET /api/documents/:id.
-export interface DocumentDetail extends Document {
-  content_md: string | null;
-  folder_id: string | null;
-  attachment: {
-    filename: string;
-    mime: string | null;
-    bytes: number | null;
-    download_url: string;
-  } | null;
-}
+// C1-C: generated-backed (GET /api/documents/:id response_model=DocumentDetailResponse).
+// attachment references the generated DocumentAttachment schema transitively.
+export type DocumentDetail = components["schemas"]["DocumentDetail"];
 
 // List endpoint wire shape. C1-C: generated-backed.
 export type DocumentListResponse = components["schemas"]["DocumentListResponse"];
 
-// Singleton wire shape.
-export interface DocumentDetailResponse {
-  document: DocumentDetail;
-}
+// Singleton wire shape. C1-C: generated-backed.
+export type DocumentDetailResponse = components["schemas"]["DocumentDetailResponse"];
 
-// Project brief envelope — already real on the BE.
+// Project brief envelope. Still hand-written: the /project-brief endpoint
+// emits a `_todo` key on its last-resort branch that response_model would
+// strip (and Pydantic can't model a leading-underscore field) — deferred.
 export interface ProjectBriefEnvelope {
   document_id: string | null;
   scope_id: string;

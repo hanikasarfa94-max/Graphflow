@@ -87,6 +87,31 @@ class DocumentListResponse(BaseModel):
     type: DocumentTypeFilter
 
 
+class DocumentAttachment(BaseModel):
+    """Attachment metadata. Mirrors the `attachment` block from _serialize
+    (kb_items.py): present only when the KbItemRow has an upload, else the
+    whole block is null. filename/download_url non-null; mime/bytes nullable."""
+
+    filename: str
+    mime: str | None = None
+    bytes: int | None = None
+    download_url: str
+
+
+class DocumentDetail(Document):
+    """Singleton wire shape — list Document + body + attachment + folder.
+    Mirrors _doc_full_from_kb. content_md is str | None to match the FE and
+    the .get()-sourced runtime (the DB column is non-null str default '')."""
+
+    content_md: str | None = None
+    attachment: DocumentAttachment | None = None
+    folder_id: str | None = None
+
+
+class DocumentDetailResponse(BaseModel):
+    document: DocumentDetail
+
+
 # ---- helpers --------------------------------------------------------------
 
 
@@ -182,7 +207,7 @@ async def get_documents(
     return {"documents": docs, "scope_id": scope_id, "type": type}
 
 
-@router.get("/documents/{document_id}")
+@router.get("/documents/{document_id}", response_model=DocumentDetailResponse)
 async def get_document(
     document_id: str,
     request: Request,
