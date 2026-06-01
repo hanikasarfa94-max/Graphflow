@@ -4703,6 +4703,34 @@ export interface components {
              */
             updated_at: string;
         };
+        /** ProjectMember */
+        ProjectMember: {
+            /** Display Name */
+            display_name?: string | null;
+            /** License Tier */
+            license_tier: string;
+            /** Role */
+            role: string;
+            /** Skill Tags */
+            skill_tags: string[];
+            /** User Id */
+            user_id: string;
+            /** Username */
+            username?: string | null;
+        };
+        /** ProjectSummary */
+        ProjectSummary: {
+            /** Id */
+            id: string;
+            /** Requirement Version */
+            requirement_version: number;
+            /** Role */
+            role: string;
+            /** Title */
+            title: string;
+            /** Updated At */
+            updated_at?: string | null;
+        };
         /**
          * PromoteTaskRequest
          * @description Promote a candidate to plan. Recognition policy is REQUIRED.
@@ -7925,9 +7953,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    }[];
+                    "application/json": components["schemas"]["ProjectSummary"][];
                 };
             };
         };
@@ -9550,9 +9576,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    }[];
+                    "application/json": components["schemas"]["ProjectMember"][];
                 };
             };
             /** @description Validation Error */

@@ -2110,6 +2110,98 @@
         "title": "Project",
         "type": "object"
       },
+      "ProjectMember": {
+        "properties": {
+          "display_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Name"
+          },
+          "license_tier": {
+            "title": "License Tier",
+            "type": "string"
+          },
+          "role": {
+            "title": "Role",
+            "type": "string"
+          },
+          "skill_tags": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Skill Tags",
+            "type": "array"
+          },
+          "user_id": {
+            "title": "User Id",
+            "type": "string"
+          },
+          "username": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Username"
+          }
+        },
+        "required": [
+          "user_id",
+          "role",
+          "license_tier",
+          "skill_tags"
+        ],
+        "title": "ProjectMember",
+        "type": "object"
+      },
+      "ProjectSummary": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "requirement_version": {
+            "title": "Requirement Version",
+            "type": "integer"
+          },
+          "role": {
+            "title": "Role",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "role",
+          "requirement_version"
+        ],
+        "title": "ProjectSummary",
+        "type": "object"
+      },
       "PromoteTaskRequest": {
         "additionalProperties": false,
         "description": "Promote a candidate to plan. Recognition policy is REQUIRED.\n\nAPI_CONTRACT.md: \"POST /api/tasks/:id/promote requires recognition\npolicy.\" The router enforces this before delegating, even if the\nunderlying service is permissive.",
@@ -7325,8 +7417,7 @@
               "application/json": {
                 "schema": {
                   "items": {
-                    "additionalProperties": true,
-                    "type": "object"
+                    "$ref": "#/components/schemas/ProjectSummary"
                   },
                   "title": "Response List Projects Api Projects Get",
                   "type": "array"
@@ -9878,8 +9969,7 @@
               "application/json": {
                 "schema": {
                   "items": {
-                    "additionalProperties": true,
-                    "type": "object"
+                    "$ref": "#/components/schemas/ProjectMember"
                   },
                   "title": "Response List Members Api Projects  Project Id  Members Get",
                   "type": "array"

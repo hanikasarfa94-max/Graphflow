@@ -131,12 +131,10 @@ export type GroundedItem = components["schemas"]["GroundedItem"];
 export type ShareableDraft = components["schemas"]["ShareableDraft"];
 export type MyAILandingResponse = components["schemas"]["MyAILandingResponse"];
 
-export interface ProjectSummary {
-  id: string;
-  title: string;
-  role: string;
-  updated_at: string | null;
-}
+// C1-C: generated-backed (GET /api/projects response_model=list[ProjectSummary]).
+// Surfaces requirement_version (runtime always emitted it; the old hand type
+// silently dropped it).
+export type ProjectSummary = components["schemas"]["ProjectSummary"];
 
 // Topbar project-switcher fetch. Same shape as the server-rendered
 // /projects list; the difference is calling context (client component
@@ -147,14 +145,11 @@ export function fetchMyProjects(
   return api<ProjectSummary[]>("/api/projects", { baseUrl });
 }
 
-export interface ProjectMember {
-  user_id: string;
-  username: string | null;
-  display_name: string | null;
-  role: string;
-  license_tier?: "full" | "task_scoped" | "observer";
-  skill_tags?: string[];
-}
+// C1-C: generated-backed (GET /api/projects/{id}/members
+// response_model=list[ProjectMember]). license_tier/skill_tags are now required
+// (runtime always emits them); license_tier widens from the 3-value union to
+// string (the column is unconstrained at runtime).
+export type ProjectMember = components["schemas"]["ProjectMember"];
 
 // Lightweight members fetch used by the workbench Skills panel.
 // Distinct from /state (which is a full graph snapshot) so the

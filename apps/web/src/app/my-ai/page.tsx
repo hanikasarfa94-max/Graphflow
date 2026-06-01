@@ -16,12 +16,11 @@ import type {
   ActiveScope,
   GroundedItem,
   MyAILandingResponse,
+  ProjectSummary,
   ShareableDraft,
 } from "@/lib/api";
 
 export const dynamic = "force-dynamic";
-
-type ProjectSummary = { id: string; title: string; role: string };
 
 async function loadLanding(): Promise<MyAILandingResponse> {
   // Tolerant: a transient API failure on the landing should not

@@ -48,7 +48,33 @@ class MemberSkillsUpdate(BaseModel):
     skill_tags: list[str] = Field(default_factory=list, max_length=32)
 
 
-@router.get("")
+# ---- response shapes (C1-C) -----------------------------------------------
+# Mirror the runtime dicts from ProjectService.list_for_user / .members —
+# NOT frontend assumptions. `requirement_version` is emitted by list_for_user
+# but the FE ProjectSummary never declared it (silently dropped today); the
+# model surfaces it. license_tier/skill_tags are ALWAYS emitted by .members
+# (license_tier raw str column; skill_tags defaults []), so they are required
+# here even though the FE marked them optional.
+
+
+class ProjectSummary(BaseModel):
+    id: str
+    title: str
+    role: str
+    requirement_version: int
+    updated_at: str | None = None
+
+
+class ProjectMember(BaseModel):
+    user_id: str
+    username: str | None = None
+    display_name: str | None = None
+    role: str
+    license_tier: str
+    skill_tags: list[str]
+
+
+@router.get("", response_model=list[ProjectSummary])
 async def list_projects(
     request: Request,
     user: AuthenticatedUser = Depends(require_user),
@@ -76,7 +102,7 @@ async def invite_member(
     return result
 
 
-@router.get("/{project_id}/members")
+@router.get("/{project_id}/members", response_model=list[ProjectMember])
 async def list_members(
     project_id: str,
     request: Request,
