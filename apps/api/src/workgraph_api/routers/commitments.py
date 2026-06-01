@@ -65,11 +65,43 @@ class UpdateStatusRequest(BaseModel):
     status: Literal["open", "met", "missed", "withdrawn"]
 
 
+# ---- response shapes (C1-C) -----------------------------------------------
+# Mirror CommitmentService._row_to_dict. Required: id/project_id/
+# created_by_user_id/headline/status (non-null CommitmentRow columns). The rest
+# are nullable. status/scope_ref_kind emitted as plain str (not Literal this
+# pass); the FE keeps CommitmentStatus/CommitmentScopeKind helper unions.
+
+
+class Commitment(BaseModel):
+    id: str
+    project_id: str
+    created_by_user_id: str
+    owner_user_id: str | None = None
+    headline: str
+    target_date: str | None = None
+    metric: str | None = None
+    scope_ref_kind: str | None = None
+    scope_ref_id: str | None = None
+    status: str
+    source_message_id: str | None = None
+    sla_window_seconds: int | None = None
+    sla_last_escalated_at: str | None = None
+    created_at: str | None = None
+    resolved_at: str | None = None
+
+
+class CommitmentListResponse(BaseModel):
+    commitments: list[Commitment]
+
+
 def _get_service(request: Request) -> CommitmentService:
     return request.app.state.commitment_service
 
 
-@router.get("/api/projects/{project_id}/commitments")
+@router.get(
+    "/api/projects/{project_id}/commitments",
+    response_model=CommitmentListResponse,
+)
 async def list_commitments(
     project_id: str,
     request: Request,

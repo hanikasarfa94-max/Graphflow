@@ -648,6 +648,165 @@
         "title": "CommentRequest",
         "type": "object"
       },
+      "Commitment": {
+        "properties": {
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "created_by_user_id": {
+            "title": "Created By User Id",
+            "type": "string"
+          },
+          "headline": {
+            "title": "Headline",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "metric": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metric"
+          },
+          "owner_user_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner User Id"
+          },
+          "project_id": {
+            "title": "Project Id",
+            "type": "string"
+          },
+          "resolved_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolved At"
+          },
+          "scope_ref_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scope Ref Id"
+          },
+          "scope_ref_kind": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scope Ref Kind"
+          },
+          "sla_last_escalated_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sla Last Escalated At"
+          },
+          "sla_window_seconds": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sla Window Seconds"
+          },
+          "source_message_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Message Id"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "target_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Date"
+          }
+        },
+        "required": [
+          "id",
+          "project_id",
+          "created_by_user_id",
+          "headline",
+          "status"
+        ],
+        "title": "Commitment",
+        "type": "object"
+      },
+      "CommitmentListResponse": {
+        "properties": {
+          "commitments": {
+            "items": {
+              "$ref": "#/components/schemas/Commitment"
+            },
+            "title": "Commitments",
+            "type": "array"
+          }
+        },
+        "required": [
+          "commitments"
+        ],
+        "title": "CommitmentListResponse",
+        "type": "object"
+      },
       "ConfirmRouteRequest": {
         "additionalProperties": false,
         "properties": {
@@ -8829,7 +8988,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/CommitmentListResponse"
+                }
               }
             },
             "description": "Successful Response"

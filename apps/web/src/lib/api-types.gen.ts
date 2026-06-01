@@ -4236,6 +4236,44 @@ export interface components {
             /** Parent Comment Id */
             parent_comment_id?: string | null;
         };
+        /** Commitment */
+        Commitment: {
+            /** Created At */
+            created_at?: string | null;
+            /** Created By User Id */
+            created_by_user_id: string;
+            /** Headline */
+            headline: string;
+            /** Id */
+            id: string;
+            /** Metric */
+            metric?: string | null;
+            /** Owner User Id */
+            owner_user_id?: string | null;
+            /** Project Id */
+            project_id: string;
+            /** Resolved At */
+            resolved_at?: string | null;
+            /** Scope Ref Id */
+            scope_ref_id?: string | null;
+            /** Scope Ref Kind */
+            scope_ref_kind?: string | null;
+            /** Sla Last Escalated At */
+            sla_last_escalated_at?: string | null;
+            /** Sla Window Seconds */
+            sla_window_seconds?: number | null;
+            /** Source Message Id */
+            source_message_id?: string | null;
+            /** Status */
+            status: string;
+            /** Target Date */
+            target_date?: string | null;
+        };
+        /** CommitmentListResponse */
+        CommitmentListResponse: {
+            /** Commitments */
+            commitments: components["schemas"]["Commitment"][];
+        };
         /** ConfirmRouteRequest */
         ConfirmRouteRequest: {
             /** Refined Framing */
@@ -8464,7 +8502,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["CommitmentListResponse"];
                 };
             };
             /** @description Validation Error */

@@ -288,3 +288,53 @@ async def test_set_status_rejects_unknown_status(api_env):
             actor_user_id=uid,
             status="nonexistent",
         )
+
+
+# ---- wire test (C1-C B5-B): GET endpoint shape guard -------------------
+
+
+@pytest.mark.asyncio
+async def test_list_commitments_wire_shape(api_env):
+    """HTTP-level guard for GET /api/projects/{id}/commitments (C1-C).
+
+    The endpoint had no wire coverage before the response_model promotion.
+    Register a real user (authed client), make them a project member, create
+    a commitment via the service, then assert the GET returns the
+    {commitments: [...]} envelope with the documented Commitment fields.
+    """
+    client = api_env[0]
+    maker = api_env[1]
+
+    r = await client.post(
+        "/api/auth/register",
+        json={"username": "cm_wire_owner", "password": "hunter22"},
+    )
+    assert r.status_code == 200, r.text
+    uid = r.json()["id"]
+
+    pid = await _mk_project(maker)
+    await _add_member(maker, pid, uid)
+
+    service = CommitmentService(maker, EventBus(maker))
+    created = await service.create(
+        project_id=pid, actor_user_id=uid, headline="ship the wire test"
+    )
+
+    r = await client.get(f"/api/projects/{pid}/commitments")
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert set(body.keys()) == {"commitments"}
+    rows = body["commitments"]
+    assert len(rows) == 1
+    row = rows[0]
+    assert row["id"] == created["id"]
+    assert row["project_id"] == pid
+    assert row["created_by_user_id"] == uid
+    assert row["headline"] == "ship the wire test"
+    assert row["status"] == "open"
+    # owner defaults to the actor at create time.
+    assert row["owner_user_id"] == uid
+    # nullable fields present as keys, null when unset.
+    assert row["target_date"] is None
+    assert row["resolved_at"] is None
+    assert row["scope_ref_kind"] is None

@@ -248,6 +248,9 @@ export interface ProjectState {
 
 // ---------- Commitments (Sprint 2a — thesis-commit primitive) ----------
 
+// Helper unions retained for mutation/request call sites (CreateCommitmentParams,
+// listCommitments(opts.status), UpdateStatusRequest). The Commitment wire type is
+// generated-backed where status/scope_ref_kind surface as plain `string`.
 export type CommitmentStatus = "open" | "met" | "missed" | "withdrawn";
 
 export type CommitmentScopeKind =
@@ -256,23 +259,10 @@ export type CommitmentScopeKind =
   | "goal"
   | "milestone";
 
-export interface Commitment {
-  id: string;
-  project_id: string;
-  created_by_user_id: string;
-  owner_user_id: string | null;
-  headline: string;
-  target_date: string | null;
-  metric: string | null;
-  scope_ref_kind: CommitmentScopeKind | null;
-  scope_ref_id: string | null;
-  status: CommitmentStatus;
-  source_message_id: string | null;
-  sla_window_seconds: number | null;
-  sla_last_escalated_at: string | null;
-  created_at: string | null;
-  resolved_at: string | null;
-}
+// C1-C: generated-backed (GET /api/projects/{id}/commitments
+// response_model=CommitmentListResponse). status/scope_ref_kind widen from the
+// helper unions to string (runtime columns are unconstrained).
+export type Commitment = components["schemas"]["Commitment"];
 
 export interface CreateCommitmentParams {
   headline: string;
