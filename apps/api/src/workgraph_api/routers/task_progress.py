@@ -120,7 +120,39 @@ async def post_score(
         _raise_from(err)
 
 
-@router.get("/api/tasks/{task_id}/history")
+# ---- task history response shapes (C1-C) ----------------------------------
+# Mirror TaskProgressService.history. actor_display_name nullable (bulk-resolved,
+# may be missing); old_status/note/created_at nullable; score nullable when the
+# task was never scored. quality is the raw column string.
+
+
+class TaskStatusUpdateRecord(BaseModel):
+    id: str
+    actor_user_id: str
+    actor_display_name: str | None = None
+    old_status: str | None = None
+    new_status: str
+    note: str | None = None
+    created_at: str | None = None
+
+
+class TaskScoreRecord(BaseModel):
+    quality: str
+    feedback: str | None = None
+    reviewer_user_id: str
+    assignee_user_id: str
+    created_at: str | None = None
+    updated_at: str | None = None
+
+
+class TaskHistoryResponse(BaseModel):
+    task_id: str
+    current_status: str
+    updates: list[TaskStatusUpdateRecord]
+    score: TaskScoreRecord | None = None
+
+
+@router.get("/api/tasks/{task_id}/history", response_model=TaskHistoryResponse)
 async def get_history(
     task_id: str,
     request: Request,

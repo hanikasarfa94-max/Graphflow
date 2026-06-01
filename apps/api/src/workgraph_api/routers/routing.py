@@ -14,6 +14,8 @@ Routes (all require auth):
 """
 from __future__ import annotations
 
+from typing import Any
+
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
@@ -63,6 +65,38 @@ class ReplyRequest(BaseModel):
 
     option_id: str | None = Field(default=None, max_length=64)
     custom_text: str | None = Field(default=None, max_length=4000)
+
+
+# ---- response shapes (C1-C) -----------------------------------------------
+# Mirror RoutingService._shape. background/options are free-form JSON columns
+# (list of arbitrary snippet/option dicts) → list[dict]; reply is a nullable
+# JSON dict. trace_id/project_id/reply/responded_at nullable per RoutedSignalRow.
+
+
+class RoutingSignal(BaseModel):
+    id: str
+    trace_id: str | None = None
+    source_user_id: str
+    target_user_id: str
+    source_stream_id: str
+    target_stream_id: str
+    project_id: str | None = None
+    framing: str
+    background: list[dict[str, Any]] = Field(default_factory=list)
+    options: list[dict[str, Any]] = Field(default_factory=list)
+    status: str
+    reply: dict[str, Any] | None = None
+    created_at: str | None = None
+    responded_at: str | None = None
+
+
+class RoutingSignalListResponse(BaseModel):
+    signals: list[RoutingSignal]
+
+
+class RoutingSignalDetailResponse(BaseModel):
+    ok: bool
+    signal: RoutingSignal
 
 
 def _get_service(request: Request) -> RoutingService:
@@ -188,7 +222,7 @@ async def post_accept(
     return result
 
 
-@router.get("/inbox")
+@router.get("/inbox", response_model=RoutingSignalListResponse)
 async def get_inbox(
     request: Request,
     status: str | None = Query(default=None, max_length=16),
@@ -202,7 +236,7 @@ async def get_inbox(
     return {"signals": items}
 
 
-@router.get("/outbox")
+@router.get("/outbox", response_model=RoutingSignalListResponse)
 async def get_outbox(
     request: Request,
     status: str | None = Query(default=None, max_length=16),
@@ -216,7 +250,7 @@ async def get_outbox(
     return {"signals": items}
 
 
-@router.get("/{signal_id}")
+@router.get("/{signal_id}", response_model=RoutingSignalDetailResponse)
 async def get_signal(
     signal_id: str,
     request: Request,

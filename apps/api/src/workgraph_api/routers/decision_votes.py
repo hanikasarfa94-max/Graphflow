@@ -29,6 +29,10 @@ from workgraph_api.services.decision_votes import (
     DecisionVoteService,
 )
 
+# Reuse the canonical Decision model (one generated schema) — get_decision_detail
+# returns the same shared _decisions_serialize payload as the list endpoint.
+from .conflicts import Decision
+
 
 router = APIRouter(tags=["decision-votes"])
 
@@ -37,7 +41,7 @@ def _decision_service(request: Request) -> DecisionService:
     return request.app.state.decision_service
 
 
-@router.get("/api/decisions/{decision_id}")
+@router.get("/api/decisions/{decision_id}", response_model=Decision)
 async def get_decision_detail(
     decision_id: str,
     request: Request,

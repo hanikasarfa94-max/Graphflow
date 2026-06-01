@@ -1972,6 +1972,62 @@
         "title": "DispatchRequest",
         "type": "object"
       },
+      "Dissent": {
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "decision_id": {
+            "title": "Decision Id",
+            "type": "string"
+          },
+          "dissenter_display_name": {
+            "title": "Dissenter Display Name",
+            "type": "string"
+          },
+          "dissenter_user_id": {
+            "title": "Dissenter User Id",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "outcome_evidence_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Outcome Evidence Ids",
+            "type": "array"
+          },
+          "stance_text": {
+            "title": "Stance Text",
+            "type": "string"
+          },
+          "validated_by_outcome": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Validated By Outcome"
+          }
+        },
+        "required": [
+          "id",
+          "decision_id",
+          "dissenter_user_id",
+          "dissenter_display_name",
+          "stance_text",
+          "created_at"
+        ],
+        "title": "Dissent",
+        "type": "object"
+      },
       "DissentAccuracy": {
         "properties": {
           "refuted": {
@@ -1998,6 +2054,27 @@
           "still_open"
         ],
         "title": "DissentAccuracy",
+        "type": "object"
+      },
+      "DissentListResponse": {
+        "properties": {
+          "dissents": {
+            "items": {
+              "$ref": "#/components/schemas/Dissent"
+            },
+            "title": "Dissents",
+            "type": "array"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok",
+          "dissents"
+        ],
+        "title": "DissentListResponse",
         "type": "object"
       },
       "Document": {
@@ -4342,6 +4419,154 @@
         "title": "RoomTimelineSnapshot",
         "type": "object"
       },
+      "RoutingSignal": {
+        "properties": {
+          "background": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Background",
+            "type": "array"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "framing": {
+            "title": "Framing",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "options": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Options",
+            "type": "array"
+          },
+          "project_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id"
+          },
+          "reply": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reply"
+          },
+          "responded_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Responded At"
+          },
+          "source_stream_id": {
+            "title": "Source Stream Id",
+            "type": "string"
+          },
+          "source_user_id": {
+            "title": "Source User Id",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "target_stream_id": {
+            "title": "Target Stream Id",
+            "type": "string"
+          },
+          "target_user_id": {
+            "title": "Target User Id",
+            "type": "string"
+          },
+          "trace_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trace Id"
+          }
+        },
+        "required": [
+          "id",
+          "source_user_id",
+          "target_user_id",
+          "source_stream_id",
+          "target_stream_id",
+          "framing",
+          "status"
+        ],
+        "title": "RoutingSignal",
+        "type": "object"
+      },
+      "RoutingSignalDetailResponse": {
+        "properties": {
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "signal": {
+            "$ref": "#/components/schemas/RoutingSignal"
+          }
+        },
+        "required": [
+          "ok",
+          "signal"
+        ],
+        "title": "RoutingSignalDetailResponse",
+        "type": "object"
+      },
+      "RoutingSignalListResponse": {
+        "properties": {
+          "signals": {
+            "items": {
+              "$ref": "#/components/schemas/RoutingSignal"
+            },
+            "title": "Signals",
+            "type": "array"
+          }
+        },
+        "required": [
+          "signals"
+        ],
+        "title": "RoutingSignalListResponse",
+        "type": "object"
+      },
       "Scope": {
         "additionalProperties": false,
         "properties": {
@@ -4860,6 +5085,42 @@
         "title": "TaskDetailResponse",
         "type": "object"
       },
+      "TaskHistoryResponse": {
+        "properties": {
+          "current_status": {
+            "title": "Current Status",
+            "type": "string"
+          },
+          "score": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TaskScoreRecord"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "task_id": {
+            "title": "Task Id",
+            "type": "string"
+          },
+          "updates": {
+            "items": {
+              "$ref": "#/components/schemas/TaskStatusUpdateRecord"
+            },
+            "title": "Updates",
+            "type": "array"
+          }
+        },
+        "required": [
+          "task_id",
+          "current_status",
+          "updates"
+        ],
+        "title": "TaskHistoryResponse",
+        "type": "object"
+      },
       "TaskListResponse": {
         "properties": {
           "scope_id": {
@@ -5032,6 +5293,129 @@
           "assignee_role"
         ],
         "title": "TaskRow",
+        "type": "object"
+      },
+      "TaskScoreRecord": {
+        "properties": {
+          "assignee_user_id": {
+            "title": "Assignee User Id",
+            "type": "string"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "feedback": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Feedback"
+          },
+          "quality": {
+            "title": "Quality",
+            "type": "string"
+          },
+          "reviewer_user_id": {
+            "title": "Reviewer User Id",
+            "type": "string"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          }
+        },
+        "required": [
+          "quality",
+          "reviewer_user_id",
+          "assignee_user_id"
+        ],
+        "title": "TaskScoreRecord",
+        "type": "object"
+      },
+      "TaskStatusUpdateRecord": {
+        "properties": {
+          "actor_display_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actor Display Name"
+          },
+          "actor_user_id": {
+            "title": "Actor User Id",
+            "type": "string"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "new_status": {
+            "title": "New Status",
+            "type": "string"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "old_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Old Status"
+          }
+        },
+        "required": [
+          "id",
+          "actor_user_id",
+          "new_status"
+        ],
+        "title": "TaskStatusUpdateRecord",
         "type": "object"
       },
       "TeamMemberPerf": {
@@ -6643,7 +7027,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/Decision"
+                }
               }
             },
             "description": "Successful Response"
@@ -10433,7 +10819,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/DissentListResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -14434,7 +14822,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/DissentListResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -14820,7 +15210,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/RoutingSignalListResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -14880,7 +15272,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/RoutingSignalListResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -14920,7 +15314,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/RoutingSignalDetailResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -15575,9 +15971,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Get History Api Tasks  Task Id  History Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/TaskHistoryResponse"
                 }
               }
             },

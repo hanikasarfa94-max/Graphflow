@@ -42,6 +42,30 @@ _ERROR_STATUS: dict[str, int] = {
 }
 
 
+# ---- response shapes (C1-C) -----------------------------------------------
+# Mirror _SerializedDissent.to_dict (services/dissent.py). validated_by_outcome
+# nullable; the {ok:false} variant is raised as HTTP by _handle, never
+# serialized. NOTE: get_user_dissents has no inline router membership gate (the
+# check is enforced service-side in list_for_user_in_project) — a thin-router
+# deviation flagged for a separate cleanup, not changed here.
+
+
+class Dissent(BaseModel):
+    id: str
+    decision_id: str
+    dissenter_user_id: str
+    dissenter_display_name: str
+    stance_text: str
+    created_at: str
+    validated_by_outcome: str | None = None
+    outcome_evidence_ids: list[str] = Field(default_factory=list)
+
+
+class DissentListResponse(BaseModel):
+    ok: bool
+    dissents: list[Dissent]
+
+
 def _handle(result: dict) -> dict:
     if not result.get("ok"):
         err = result.get("error") or "unknown"
@@ -78,7 +102,8 @@ async def post_record_dissent(
 
 
 @router.get(
-    "/api/projects/{project_id}/decisions/{decision_id}/dissents"
+    "/api/projects/{project_id}/decisions/{decision_id}/dissents",
+    response_model=DissentListResponse,
 )
 async def get_decision_dissents(
     project_id: str,
@@ -100,7 +125,8 @@ async def get_decision_dissents(
 
 
 @router.get(
-    "/api/projects/{project_id}/users/{user_id}/dissents"
+    "/api/projects/{project_id}/users/{user_id}/dissents",
+    response_model=DissentListResponse,
 )
 async def get_user_dissents(
     project_id: str,

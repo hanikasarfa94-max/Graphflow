@@ -4619,6 +4619,25 @@ export interface components {
             /** Target User Id */
             target_user_id: string;
         };
+        /** Dissent */
+        Dissent: {
+            /** Created At */
+            created_at: string;
+            /** Decision Id */
+            decision_id: string;
+            /** Dissenter Display Name */
+            dissenter_display_name: string;
+            /** Dissenter User Id */
+            dissenter_user_id: string;
+            /** Id */
+            id: string;
+            /** Outcome Evidence Ids */
+            outcome_evidence_ids?: string[];
+            /** Stance Text */
+            stance_text: string;
+            /** Validated By Outcome */
+            validated_by_outcome?: string | null;
+        };
         /** DissentAccuracy */
         DissentAccuracy: {
             /** Refuted */
@@ -4629,6 +4648,13 @@ export interface components {
             supported: number;
             /** Total */
             total: number;
+        };
+        /** DissentListResponse */
+        DissentListResponse: {
+            /** Dissents */
+            dissents: components["schemas"]["Dissent"][];
+            /** Ok */
+            ok: boolean;
         };
         /** Document */
         Document: {
@@ -5387,6 +5413,54 @@ export interface components {
             /** Stream Id */
             stream_id: string;
         };
+        /** RoutingSignal */
+        RoutingSignal: {
+            /** Background */
+            background?: {
+                [key: string]: unknown;
+            }[];
+            /** Created At */
+            created_at?: string | null;
+            /** Framing */
+            framing: string;
+            /** Id */
+            id: string;
+            /** Options */
+            options?: {
+                [key: string]: unknown;
+            }[];
+            /** Project Id */
+            project_id?: string | null;
+            /** Reply */
+            reply?: {
+                [key: string]: unknown;
+            } | null;
+            /** Responded At */
+            responded_at?: string | null;
+            /** Source Stream Id */
+            source_stream_id: string;
+            /** Source User Id */
+            source_user_id: string;
+            /** Status */
+            status: string;
+            /** Target Stream Id */
+            target_stream_id: string;
+            /** Target User Id */
+            target_user_id: string;
+            /** Trace Id */
+            trace_id?: string | null;
+        };
+        /** RoutingSignalDetailResponse */
+        RoutingSignalDetailResponse: {
+            /** Ok */
+            ok: boolean;
+            signal: components["schemas"]["RoutingSignal"];
+        };
+        /** RoutingSignalListResponse */
+        RoutingSignalListResponse: {
+            /** Signals */
+            signals: components["schemas"]["RoutingSignal"][];
+        };
         /** Scope */
         Scope: {
             /** Id */
@@ -5582,6 +5656,16 @@ export interface components {
         TaskDetailResponse: {
             task: components["schemas"]["TaskRow"];
         };
+        /** TaskHistoryResponse */
+        TaskHistoryResponse: {
+            /** Current Status */
+            current_status: string;
+            score?: components["schemas"]["TaskScoreRecord"] | null;
+            /** Task Id */
+            task_id: string;
+            /** Updates */
+            updates: components["schemas"]["TaskStatusUpdateRecord"][];
+        };
         /** TaskListResponse */
         TaskListResponse: {
             /** Scope Id */
@@ -5632,6 +5716,38 @@ export interface components {
             status: string;
             /** Title */
             title: string;
+        };
+        /** TaskScoreRecord */
+        TaskScoreRecord: {
+            /** Assignee User Id */
+            assignee_user_id: string;
+            /** Created At */
+            created_at?: string | null;
+            /** Feedback */
+            feedback?: string | null;
+            /** Quality */
+            quality: string;
+            /** Reviewer User Id */
+            reviewer_user_id: string;
+            /** Updated At */
+            updated_at?: string | null;
+        };
+        /** TaskStatusUpdateRecord */
+        TaskStatusUpdateRecord: {
+            /** Actor Display Name */
+            actor_display_name?: string | null;
+            /** Actor User Id */
+            actor_user_id: string;
+            /** Created At */
+            created_at?: string | null;
+            /** Id */
+            id: string;
+            /** New Status */
+            new_status: string;
+            /** Note */
+            note?: string | null;
+            /** Old Status */
+            old_status?: string | null;
         };
         /** TeamMemberPerf */
         TeamMemberPerf: {
@@ -6408,7 +6524,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["Decision"];
                 };
             };
             /** @description Validation Error */
@@ -9036,7 +9152,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["DissentListResponse"];
                 };
             };
             /** @description Validation Error */
@@ -11652,7 +11768,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["DissentListResponse"];
                 };
             };
             /** @description Validation Error */
@@ -11893,7 +12009,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["RoutingSignalListResponse"];
                 };
             };
             /** @description Validation Error */
@@ -11925,7 +12041,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["RoutingSignalListResponse"];
                 };
             };
             /** @description Validation Error */
@@ -11956,7 +12072,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["RoutingSignalDetailResponse"];
                 };
             };
             /** @description Validation Error */
@@ -12423,9 +12539,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["TaskHistoryResponse"];
                 };
             };
             /** @description Validation Error */
