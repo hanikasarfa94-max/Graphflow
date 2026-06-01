@@ -13,32 +13,17 @@ import Link from "next/link";
 import { getTranslations } from "next-intl/server";
 
 import { Card, EmptyState, PageHeader, Tag, Text } from "@/components/ui";
-import { ApiError } from "@/lib/api";
+import { ApiError, type KbNote, type KbNoteAttachment } from "@/lib/api";
 import { requireUser, serverFetch } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
-type KbAttachment = {
-  filename: string;
-  mime: string | null;
-  bytes: number | null;
-  download_url: string;
-};
-
-type KbItemDetail = {
-  id: string;
-  project_id: string | null;
-  folder_id: string | null;
-  owner_user_id: string | null;
-  scope: "personal" | "group" | "department" | "enterprise" | string;
-  title: string;
-  content_md: string | null;
-  status: string;
-  source: string | null;
-  attachment: KbAttachment | null;
-  created_at: string | null;
-  updated_at: string | null;
-};
+// C1-C dedup: GET /api/kb-items/{id} is generated-backed as KbNote; this page's
+// local KbItemDetail/KbAttachment duplicated that exact shape. Alias onto the
+// canonical types (content_md/source are non-null in the wire truth; the page
+// already reads them null-tolerantly, so the narrowing is safe).
+type KbAttachment = KbNoteAttachment;
+type KbItemDetail = KbNote;
 
 async function loadKbItem(
   id: string,

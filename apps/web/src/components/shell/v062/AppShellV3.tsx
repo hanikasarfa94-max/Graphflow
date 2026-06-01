@@ -16,17 +16,15 @@
 import { cookies } from "next/headers";
 
 import { ApiError, type User } from "@/lib/api";
+import type { components } from "@/lib/api-types.gen";
 
 import { AppShellClientV3 } from "./AppShellClientV3";
 import type { Scope } from "./ScopeBand";
 
-// Server response shape for GET /api/scopes (Phase B.1).
-type ScopeApiRow = {
-  id: string;
-  title: string;
-  role: string;
-  tier: "personal" | "cell" | "department" | "enterprise";
-};
+// Server response shape for GET /api/scopes (Phase B.1). C1-C: generated-backed
+// (scopes.py response_model=list[Scope]). Aliased under a local name to avoid
+// colliding with the FE `Scope` view-model imported from ./ScopeBand above.
+type ScopeApiRow = components["schemas"]["Scope"];
 
 const API_BASE =
   process.env.WORKGRAPH_API_BASE_SERVER ??
