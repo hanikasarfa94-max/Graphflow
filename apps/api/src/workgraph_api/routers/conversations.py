@@ -91,6 +91,39 @@ class ProposeTopicClosureRequest(BaseModel):
     rationale: str = Field(default="", max_length=2000)
 
 
+# ---- response shapes (C1-C) -----------------------------------------------
+# Mirror the runtime `record` dict built in get_conversations — NOT a frontend
+# assumption. `title` is `str | None` (runtime is `name or title`, both
+# nullable) even though the FE previously declared it non-null; the alias
+# widens FE to the true shape. Only the `recent` rows carry no topic_status;
+# `active_topics` rows add it. Detail/message/participant shapes stay
+# hand-written (the detail endpoint is a separate nested composite).
+
+
+class RecentConversationSummary(BaseModel):
+    id: str
+    type: ConversationTypeT
+    title: str | None = None
+    scope_id: str | None = None
+    last_message_at: str | None = None
+    unread_count: int
+
+
+class ActiveTopicSummary(BaseModel):
+    id: str
+    type: ConversationTypeT
+    title: str | None = None
+    scope_id: str | None = None
+    last_message_at: str | None = None
+    unread_count: int
+    topic_status: TopicStatusT
+
+
+class ConversationIndexResponse(BaseModel):
+    recent: list[RecentConversationSummary]
+    active_topics: list[ActiveTopicSummary]
+
+
 # ---- helpers --------------------------------------------------------------
 
 
@@ -115,7 +148,7 @@ def _classify_conversation_type(stream: dict[str, Any]) -> ConversationTypeT:
 # ---- conversations endpoints ---------------------------------------------
 
 
-@router.get("/conversations")
+@router.get("/conversations", response_model=ConversationIndexResponse)
 async def get_conversations(
     request: Request,
     scope_id: str | None = Query(default=None, max_length=64),
@@ -162,7 +195,11 @@ async def get_conversations(
             "type": conv_type,
             "title": s.get("name") or s.get("title"),
             "scope_id": s.get("project_id"),
-            "last_message_at": s.get("last_message_at"),
+            # Wire field stays `last_message_at` (FE consumes it); the
+            # source key is `last_activity_at` — the only timestamp
+            # _shape_stream emits. Reading `last_message_at` here made
+            # the field permanently null (no such key upstream).
+            "last_message_at": s.get("last_activity_at"),
             "unread_count": s.get("unread_count", 0),
         }
         # TODO(Phase B.2): real Topic primitives. Today no stream is

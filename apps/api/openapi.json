@@ -116,6 +116,79 @@
         "title": "ActiveScopeUpdate",
         "type": "object"
       },
+      "ActiveTopicSummary": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "last_message_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Message At"
+          },
+          "scope_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scope Id"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "topic_status": {
+            "enum": [
+              "open",
+              "needs_input",
+              "waiting",
+              "resolved",
+              "archived"
+            ],
+            "title": "Topic Status",
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "direct",
+              "room",
+              "topic"
+            ],
+            "title": "Type",
+            "type": "string"
+          },
+          "unread_count": {
+            "title": "Unread Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "type",
+          "unread_count",
+          "topic_status"
+        ],
+        "title": "ActiveTopicSummary",
+        "type": "object"
+      },
       "ApiIntakeRequest": {
         "additionalProperties": false,
         "properties": {
@@ -415,6 +488,30 @@
           "target_user_id"
         ],
         "title": "ConfirmRouteRequest",
+        "type": "object"
+      },
+      "ConversationIndexResponse": {
+        "properties": {
+          "active_topics": {
+            "items": {
+              "$ref": "#/components/schemas/ActiveTopicSummary"
+            },
+            "title": "Active Topics",
+            "type": "array"
+          },
+          "recent": {
+            "items": {
+              "$ref": "#/components/schemas/RecentConversationSummary"
+            },
+            "title": "Recent",
+            "type": "array"
+          }
+        },
+        "required": [
+          "recent",
+          "active_topics"
+        ],
+        "title": "ConversationIndexResponse",
         "type": "object"
       },
       "ConversationMessageRequest": {
@@ -2112,6 +2209,67 @@
         "title": "PublishDocumentRequest",
         "type": "object"
       },
+      "RecentConversationSummary": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "last_message_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Message At"
+          },
+          "scope_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scope Id"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "type": {
+            "enum": [
+              "direct",
+              "room",
+              "topic"
+            ],
+            "title": "Type",
+            "type": "string"
+          },
+          "unread_count": {
+            "title": "Unread Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "type",
+          "unread_count"
+        ],
+        "title": "RecentConversationSummary",
+        "type": "object"
+      },
       "RecordDissentRequest": {
         "additionalProperties": false,
         "properties": {
@@ -3721,9 +3879,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Get Conversations Api Conversations Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/ConversationIndexResponse"
                 }
               }
             },

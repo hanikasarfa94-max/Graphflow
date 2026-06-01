@@ -4071,6 +4071,29 @@ export interface components {
              */
             scope_mode: "current_focus" | "all_accessible" | "no_focus";
         };
+        /** ActiveTopicSummary */
+        ActiveTopicSummary: {
+            /** Id */
+            id: string;
+            /** Last Message At */
+            last_message_at?: string | null;
+            /** Scope Id */
+            scope_id?: string | null;
+            /** Title */
+            title?: string | null;
+            /**
+             * Topic Status
+             * @enum {string}
+             */
+            topic_status: "open" | "needs_input" | "waiting" | "resolved" | "archived";
+            /**
+             * Type
+             * @enum {string}
+             */
+            type: "direct" | "room" | "topic";
+            /** Unread Count */
+            unread_count: number;
+        };
         /** ApiIntakeRequest */
         ApiIntakeRequest: {
             /**
@@ -4161,6 +4184,13 @@ export interface components {
             refined_framing?: string | null;
             /** Target User Id */
             target_user_id: string;
+        };
+        /** ConversationIndexResponse */
+        ConversationIndexResponse: {
+            /** Active Topics */
+            active_topics: components["schemas"]["ActiveTopicSummary"][];
+            /** Recent */
+            recent: components["schemas"]["RecentConversationSummary"][];
         };
         /** ConversationMessageRequest */
         ConversationMessageRequest: {
@@ -4717,6 +4747,24 @@ export interface components {
          *     to 'published' and proposed memory candidates are generated).
          */
         PublishDocumentRequest: Record<string, never>;
+        /** RecentConversationSummary */
+        RecentConversationSummary: {
+            /** Id */
+            id: string;
+            /** Last Message At */
+            last_message_at?: string | null;
+            /** Scope Id */
+            scope_id?: string | null;
+            /** Title */
+            title?: string | null;
+            /**
+             * Type
+             * @enum {string}
+             */
+            type: "direct" | "room" | "topic";
+            /** Unread Count */
+            unread_count: number;
+        };
         /** RecordDissentRequest */
         RecordDissentRequest: {
             /** Stance Text */
@@ -5468,9 +5516,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["ConversationIndexResponse"];
                 };
             };
             /** @description Validation Error */

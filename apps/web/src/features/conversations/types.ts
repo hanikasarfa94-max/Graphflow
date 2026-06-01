@@ -36,36 +36,24 @@ export const ACTIVE_TOPIC_STATUSES: ReadonlyArray<TopicStatus> = [
   "waiting",
 ];
 
+// C1-C: generated-backed (GET /api/conversations response_model=
+// ConversationIndexResponse). Stable names preserved. Runtime makes `title`
+// nullable (name or title) — the generated alias widens the old non-null FE
+// type. `type` is the full 3-value union (runtime-tolerant); ACTIVE_TOPIC_STATUSES
+// + the FE-only ConversationType/TopicStatus helper unions are retained above.
+import type { components } from "@/lib/api-types.gen";
+
 // One row in `recent` (DMs + Rooms). Topics never appear here.
-export interface RecentConversationSummary {
-  id: string;
-  type: Exclude<ConversationType, "topic">;
-  title: string;
-  scope_id: string | null;
-  last_message_at: string | null;
-  unread_count: number;
-}
+export type RecentConversationSummary =
+  components["schemas"]["RecentConversationSummary"];
 
-// One row in `active_topics`. The presence of `topic_status` (always
-// in ACTIVE_TOPIC_STATUSES) is what makes this a Topic summary rather
-// than a RecentConversationSummary.
-export interface ActiveTopicSummary {
-  id: string;
-  type: "topic";
-  title: string;
-  scope_id: string | null;
-  last_message_at: string | null;
-  unread_count: number;
-  topic_status: TopicStatus;
-}
+// One row in `active_topics`. The presence of `topic_status` is what makes
+// this a Topic summary rather than a RecentConversationSummary.
+export type ActiveTopicSummary = components["schemas"]["ActiveTopicSummary"];
 
-// The shape returned by `GET /api/conversations?scope_id=...`. Per
-// the contract, `recent` and `active_topics` partition the user's
-// conversations — never an id in both.
-export interface ConversationIndexResponse {
-  recent: RecentConversationSummary[];
-  active_topics: ActiveTopicSummary[];
-}
+// The shape returned by `GET /api/conversations?scope_id=...`.
+export type ConversationIndexResponse =
+  components["schemas"]["ConversationIndexResponse"];
 
 // ── Message + conversation detail ────────────────────────────────────
 
