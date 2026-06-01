@@ -33,7 +33,9 @@ type Verdict = DecisionVoteRecord["verdict"];
 
 interface Props {
   decisionId: string;
-  tally?: DecisionTally;
+  // C1: the generated Decision.tally is `DecisionTally | null` (optional +
+  // nullable on the REST path), so accept null here and coalesce at seed.
+  tally?: DecisionTally | null;
   // Optional callback fired AFTER a successful cast — lets the parent
   // (or workbench projection) update local state. The reducer in
   // useRoomTimeline reconciles via the WS frame the backend emits, so
@@ -114,7 +116,7 @@ export function DecisionVoteControls({ decisionId, tally, onCast }: Props) {
     null,
   );
   const [localTally, setLocalTally] = useState<DecisionTally | undefined>(
-    tally,
+    tally ?? undefined,
   );
 
   // Lazy-fetch the viewer's vote (and refresh the tally) on mount.

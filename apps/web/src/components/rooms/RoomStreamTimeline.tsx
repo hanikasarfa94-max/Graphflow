@@ -421,9 +421,11 @@ function timelineItemToDecision(item: TimelineDecisionItem): Decision {
     custom_text: item.custom_text,
     rationale: item.rationale,
     apply_actions: [],
-    apply_outcome:
-      item.apply_outcome === null ? undefined : item.apply_outcome,
-    apply_detail: undefined,
+    // C1: both the timeline item and the generated Decision now type
+    // apply_outcome as a non-null string, so the old null→undefined dance is
+    // gone — pass it straight through.
+    apply_outcome: item.apply_outcome,
+    apply_detail: {},
     source_suggestion_id: item.source_suggestion_id,
     gated_via_proposal_id: null,
     decision_class: null,

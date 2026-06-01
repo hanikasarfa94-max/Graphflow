@@ -21,13 +21,88 @@ All routes require a signed-in user.
 """
 from __future__ import annotations
 
+from typing import Annotated, Literal, Union
+
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, ConfigDict, Field
 
 from workgraph_api.deps import require_user
 from workgraph_api.services import AuthenticatedUser, StreamService
 
+# Reuse the canonical DecisionTally so the generated OpenAPI has ONE schema
+# for it (also used by the decisions + decision-votes endpoints).
+from .conflicts import DecisionTally
+
 router = APIRouter(prefix="/api", tags=["streams"])
+
+
+# ---- room timeline (C1-C) -------------------------------------------------
+# The room timeline `items` is a polymorphic union discriminated by `kind`
+# (message | im_suggestion | decision), mirroring the WS upsert frames. Each
+# variant traced to RoomTimelineService.get_timeline. message stream_id/
+# project_id are ORM-nullable but always present for a room row; modeled
+# non-null to match the FE TimelineMessageItem. The decision variant's `tally`
+# is REQUIRED here — enrich_decision_with_tally always grafts it (real tally or
+# the empty-tally placeholder). Adding a 4th item kind requires a new variant.
+
+
+class TimelineMessageItem(BaseModel):
+    kind: Literal["message"]
+    id: str
+    stream_id: str
+    project_id: str | None = None
+    author_id: str
+    author_username: str | None = None
+    author_display_name: str | None = None
+    body: str
+    kind_message: str
+    linked_id: str | None = None
+    created_at: str | None = None
+
+
+class TimelineSuggestionItem(BaseModel):
+    kind: Literal["im_suggestion"]
+    id: str
+    project_id: str
+    message_id: str
+    status: str
+    kind_suggestion: str
+    confidence: float
+    targets: list = Field(default_factory=list)
+    proposal: dict = Field(default_factory=dict)
+    reasoning: str
+    decision_id: str | None = None
+    counter_of_id: str | None = None
+    created_at: str | None = None
+    resolved_at: str | None = None
+
+
+class TimelineDecisionItem(BaseModel):
+    kind: Literal["decision"]
+    id: str
+    project_id: str
+    conflict_id: str | None = None
+    source_suggestion_id: str | None = None
+    resolver_id: str | None = None
+    rationale: str
+    custom_text: str | None = None
+    scope_stream_id: str | None = None
+    apply_outcome: str
+    tally: DecisionTally
+    created_at: str | None = None
+    applied_at: str | None = None
+
+
+TimelineItem = Annotated[
+    Union[TimelineMessageItem, TimelineSuggestionItem, TimelineDecisionItem],
+    Field(discriminator="kind"),
+]
+
+
+class RoomTimelineSnapshot(BaseModel):
+    stream_id: str
+    project_id: str
+    items: list[TimelineItem]
 
 
 class CreateDMRequest(BaseModel):
@@ -193,7 +268,10 @@ async def get_list_rooms(
     return {"rooms": result["rooms"]}
 
 
-@router.get("/projects/{project_id}/rooms/{room_id}/timeline")
+@router.get(
+    "/projects/{project_id}/rooms/{room_id}/timeline",
+    response_model=RoomTimelineSnapshot,
+)
 async def get_room_timeline(
     project_id: str,
     room_id: str,

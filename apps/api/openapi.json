@@ -835,6 +835,89 @@
         "title": "ConfirmRouteRequest",
         "type": "object"
       },
+      "ConversationDetail": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "messages": {
+            "items": {
+              "$ref": "#/components/schemas/ConversationMessage"
+            },
+            "title": "Messages",
+            "type": "array"
+          },
+          "participants": {
+            "items": {
+              "$ref": "#/components/schemas/ConversationParticipant"
+            },
+            "title": "Participants",
+            "type": "array"
+          },
+          "right_rail": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RightRailPayload"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "scope_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scope Id"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "topic_status": {
+            "anyOf": [
+              {
+                "enum": [
+                  "open",
+                  "needs_input",
+                  "waiting",
+                  "resolved",
+                  "archived"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Topic Status"
+          },
+          "type": {
+            "enum": [
+              "direct",
+              "room",
+              "topic"
+            ],
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "type",
+          "title",
+          "participants",
+          "messages"
+        ],
+        "title": "ConversationDetail",
+        "type": "object"
+      },
       "ConversationIndexResponse": {
         "properties": {
           "active_topics": {
@@ -859,6 +942,77 @@
         "title": "ConversationIndexResponse",
         "type": "object"
       },
+      "ConversationMessage": {
+        "properties": {
+          "author_id": {
+            "title": "Author Id",
+            "type": "string"
+          },
+          "author_username": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Author Username"
+          },
+          "body": {
+            "title": "Body",
+            "type": "string"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "linked_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Linked Id"
+          },
+          "project_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id"
+          },
+          "stream_id": {
+            "title": "Stream Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "stream_id",
+          "author_id",
+          "body",
+          "kind",
+          "created_at"
+        ],
+        "title": "ConversationMessage",
+        "type": "object"
+      },
       "ConversationMessageRequest": {
         "additionalProperties": false,
         "properties": {
@@ -873,6 +1027,34 @@
           "body"
         ],
         "title": "ConversationMessageRequest",
+        "type": "object"
+      },
+      "ConversationParticipant": {
+        "properties": {
+          "display_name": {
+            "title": "Display Name",
+            "type": "string"
+          },
+          "role_in_stream": {
+            "title": "Role In Stream",
+            "type": "string"
+          },
+          "user_id": {
+            "title": "User Id",
+            "type": "string"
+          },
+          "username": {
+            "title": "Username",
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_id",
+          "username",
+          "display_name",
+          "role_in_stream"
+        ],
+        "title": "ConversationParticipant",
         "type": "object"
       },
       "CountWithIds": {
@@ -3676,6 +3858,148 @@
         "title": "RequirementBudgetUpdate",
         "type": "object"
       },
+      "RightRailAiItem": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "proposal_type": {
+            "title": "Proposal Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "proposal_type"
+        ],
+        "title": "RightRailAiItem",
+        "type": "object"
+      },
+      "RightRailContextItem": {
+        "properties": {
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "value": {
+            "title": "Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "label",
+          "value"
+        ],
+        "title": "RightRailContextItem",
+        "type": "object"
+      },
+      "RightRailPayload": {
+        "properties": {
+          "ai_assistance": {
+            "items": {
+              "$ref": "#/components/schemas/RightRailAiItem"
+            },
+            "title": "Ai Assistance",
+            "type": "array"
+          },
+          "context": {
+            "items": {
+              "$ref": "#/components/schemas/RightRailContextItem"
+            },
+            "title": "Context",
+            "type": "array"
+          },
+          "evidence": {
+            "items": {
+              "$ref": "#/components/schemas/RightRailRef"
+            },
+            "title": "Evidence",
+            "type": "array"
+          },
+          "primary_action": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RightRailPrimaryAction"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "related_work": {
+            "items": {
+              "$ref": "#/components/schemas/RightRailRef"
+            },
+            "title": "Related Work",
+            "type": "array"
+          }
+        },
+        "required": [
+          "context",
+          "related_work",
+          "evidence",
+          "ai_assistance"
+        ],
+        "title": "RightRailPayload",
+        "type": "object"
+      },
+      "RightRailPrimaryAction": {
+        "properties": {
+          "kind": {
+            "enum": [
+              "send",
+              "resolve",
+              "promote"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "label",
+          "kind"
+        ],
+        "title": "RightRailPrimaryAction",
+        "type": "object"
+      },
+      "RightRailRef": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "id",
+          "label",
+          "url"
+        ],
+        "title": "RightRailRef",
+        "type": "object"
+      },
       "RightRailResponse": {
         "additionalProperties": false,
         "description": "The five-slot spine. Order is load-bearing — the FE renders in\narray order, never re-sorts. Missing data = empty `items`, never a\nmissing key.",
@@ -3754,6 +4078,50 @@
           "kind"
         ],
         "title": "RightRailSlot",
+        "type": "object"
+      },
+      "RoomTimelineSnapshot": {
+        "properties": {
+          "items": {
+            "items": {
+              "discriminator": {
+                "mapping": {
+                  "decision": "#/components/schemas/TimelineDecisionItem",
+                  "im_suggestion": "#/components/schemas/TimelineSuggestionItem",
+                  "message": "#/components/schemas/TimelineMessageItem"
+                },
+                "propertyName": "kind"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/TimelineMessageItem"
+                },
+                {
+                  "$ref": "#/components/schemas/TimelineSuggestionItem"
+                },
+                {
+                  "$ref": "#/components/schemas/TimelineDecisionItem"
+                }
+              ]
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "project_id": {
+            "title": "Project Id",
+            "type": "string"
+          },
+          "stream_id": {
+            "title": "Stream Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "stream_id",
+          "project_id",
+          "items"
+        ],
+        "title": "RoomTimelineSnapshot",
         "type": "object"
       },
       "Scope": {
@@ -4515,6 +4883,318 @@
           "activity_last_30d"
         ],
         "title": "TeamMemberPerf",
+        "type": "object"
+      },
+      "TimelineDecisionItem": {
+        "properties": {
+          "applied_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Applied At"
+          },
+          "apply_outcome": {
+            "title": "Apply Outcome",
+            "type": "string"
+          },
+          "conflict_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conflict Id"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "custom_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Custom Text"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "const": "decision",
+            "title": "Kind",
+            "type": "string"
+          },
+          "project_id": {
+            "title": "Project Id",
+            "type": "string"
+          },
+          "rationale": {
+            "title": "Rationale",
+            "type": "string"
+          },
+          "resolver_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolver Id"
+          },
+          "scope_stream_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scope Stream Id"
+          },
+          "source_suggestion_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Suggestion Id"
+          },
+          "tally": {
+            "$ref": "#/components/schemas/DecisionTally"
+          }
+        },
+        "required": [
+          "kind",
+          "id",
+          "project_id",
+          "rationale",
+          "apply_outcome",
+          "tally"
+        ],
+        "title": "TimelineDecisionItem",
+        "type": "object"
+      },
+      "TimelineMessageItem": {
+        "properties": {
+          "author_display_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Author Display Name"
+          },
+          "author_id": {
+            "title": "Author Id",
+            "type": "string"
+          },
+          "author_username": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Author Username"
+          },
+          "body": {
+            "title": "Body",
+            "type": "string"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "const": "message",
+            "title": "Kind",
+            "type": "string"
+          },
+          "kind_message": {
+            "title": "Kind Message",
+            "type": "string"
+          },
+          "linked_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Linked Id"
+          },
+          "project_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id"
+          },
+          "stream_id": {
+            "title": "Stream Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "id",
+          "stream_id",
+          "author_id",
+          "body",
+          "kind_message"
+        ],
+        "title": "TimelineMessageItem",
+        "type": "object"
+      },
+      "TimelineSuggestionItem": {
+        "properties": {
+          "confidence": {
+            "title": "Confidence",
+            "type": "number"
+          },
+          "counter_of_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Counter Of Id"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "decision_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decision Id"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "const": "im_suggestion",
+            "title": "Kind",
+            "type": "string"
+          },
+          "kind_suggestion": {
+            "title": "Kind Suggestion",
+            "type": "string"
+          },
+          "message_id": {
+            "title": "Message Id",
+            "type": "string"
+          },
+          "project_id": {
+            "title": "Project Id",
+            "type": "string"
+          },
+          "proposal": {
+            "additionalProperties": true,
+            "title": "Proposal",
+            "type": "object"
+          },
+          "reasoning": {
+            "title": "Reasoning",
+            "type": "string"
+          },
+          "resolved_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolved At"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "targets": {
+            "items": {},
+            "title": "Targets",
+            "type": "array"
+          }
+        },
+        "required": [
+          "kind",
+          "id",
+          "project_id",
+          "message_id",
+          "status",
+          "kind_suggestion",
+          "confidence",
+          "reasoning"
+        ],
+        "title": "TimelineSuggestionItem",
         "type": "object"
       },
       "UpdateKbItemRequest": {
@@ -5626,9 +6306,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Get Conversation Api Conversations  Conversation Id  Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/ConversationDetail"
                 }
               }
             },
@@ -12929,7 +13607,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/RoomTimelineSnapshot"
+                }
               }
             },
             "description": "Successful Response"

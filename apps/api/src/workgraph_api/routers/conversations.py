@@ -124,6 +124,75 @@ class ConversationIndexResponse(BaseModel):
     active_topics: list[ActiveTopicSummary]
 
 
+# ---- conversation detail (C1-C) -------------------------------------------
+# Mirror the runtime dict built by get_conversation. title is non-null (the
+# id-prefix fallback guarantees it). participant/message shapes trace to
+# _shape_stream + list_messages. right_rail is always null today but is typed
+# as a nullable payload (not bare null) so wiring RightRailService later isn't
+# a breaking change — the wire stays null until then.
+
+
+class ConversationMessage(BaseModel):
+    id: str
+    stream_id: str
+    project_id: str | None = None
+    author_id: str
+    author_username: str | None = None
+    body: str
+    kind: str
+    linked_id: str | None = None
+    created_at: str
+
+
+class ConversationParticipant(BaseModel):
+    user_id: str
+    username: str
+    display_name: str
+    role_in_stream: str
+
+
+class RightRailContextItem(BaseModel):
+    label: str
+    value: str
+
+
+class RightRailRef(BaseModel):
+    kind: str
+    id: str
+    label: str
+    url: str
+
+
+class RightRailAiItem(BaseModel):
+    id: str
+    label: str
+    proposal_type: str
+
+
+class RightRailPrimaryAction(BaseModel):
+    label: str
+    kind: Literal["send", "resolve", "promote"]
+
+
+class RightRailPayload(BaseModel):
+    context: list[RightRailContextItem]
+    related_work: list[RightRailRef]
+    evidence: list[RightRailRef]
+    ai_assistance: list[RightRailAiItem]
+    primary_action: RightRailPrimaryAction | None = None
+
+
+class ConversationDetail(BaseModel):
+    id: str
+    type: ConversationTypeT
+    title: str
+    scope_id: str | None = None
+    participants: list[ConversationParticipant]
+    messages: list[ConversationMessage]
+    topic_status: TopicStatusT | None = None
+    right_rail: RightRailPayload | None = None
+
+
 # ---- helpers --------------------------------------------------------------
 
 
@@ -224,7 +293,9 @@ async def get_conversations(
     return {"recent": recent, "active_topics": active_topics}
 
 
-@router.get("/conversations/{conversation_id}")
+@router.get(
+    "/conversations/{conversation_id}", response_model=ConversationDetail
+)
 async def get_conversation(
     conversation_id: str,
     request: Request,

@@ -4281,6 +4281,27 @@ export interface components {
             /** Target User Id */
             target_user_id: string;
         };
+        /** ConversationDetail */
+        ConversationDetail: {
+            /** Id */
+            id: string;
+            /** Messages */
+            messages: components["schemas"]["ConversationMessage"][];
+            /** Participants */
+            participants: components["schemas"]["ConversationParticipant"][];
+            right_rail?: components["schemas"]["RightRailPayload"] | null;
+            /** Scope Id */
+            scope_id?: string | null;
+            /** Title */
+            title: string;
+            /** Topic Status */
+            topic_status?: ("open" | "needs_input" | "waiting" | "resolved" | "archived") | null;
+            /**
+             * Type
+             * @enum {string}
+             */
+            type: "direct" | "room" | "topic";
+        };
         /** ConversationIndexResponse */
         ConversationIndexResponse: {
             /** Active Topics */
@@ -4288,10 +4309,42 @@ export interface components {
             /** Recent */
             recent: components["schemas"]["RecentConversationSummary"][];
         };
+        /** ConversationMessage */
+        ConversationMessage: {
+            /** Author Id */
+            author_id: string;
+            /** Author Username */
+            author_username?: string | null;
+            /** Body */
+            body: string;
+            /** Created At */
+            created_at: string;
+            /** Id */
+            id: string;
+            /** Kind */
+            kind: string;
+            /** Linked Id */
+            linked_id?: string | null;
+            /** Project Id */
+            project_id?: string | null;
+            /** Stream Id */
+            stream_id: string;
+        };
         /** ConversationMessageRequest */
         ConversationMessageRequest: {
             /** Body */
             body: string;
+        };
+        /** ConversationParticipant */
+        ConversationParticipant: {
+            /** Display Name */
+            display_name: string;
+            /** Role In Stream */
+            role_in_stream: string;
+            /** User Id */
+            user_id: string;
+            /** Username */
+            username: string;
         };
         /** CountWithIds */
         CountWithIds: {
@@ -5178,6 +5231,55 @@ export interface components {
             /** Budget Hours */
             budget_hours?: number | null;
         };
+        /** RightRailAiItem */
+        RightRailAiItem: {
+            /** Id */
+            id: string;
+            /** Label */
+            label: string;
+            /** Proposal Type */
+            proposal_type: string;
+        };
+        /** RightRailContextItem */
+        RightRailContextItem: {
+            /** Label */
+            label: string;
+            /** Value */
+            value: string;
+        };
+        /** RightRailPayload */
+        RightRailPayload: {
+            /** Ai Assistance */
+            ai_assistance: components["schemas"]["RightRailAiItem"][];
+            /** Context */
+            context: components["schemas"]["RightRailContextItem"][];
+            /** Evidence */
+            evidence: components["schemas"]["RightRailRef"][];
+            primary_action?: components["schemas"]["RightRailPrimaryAction"] | null;
+            /** Related Work */
+            related_work: components["schemas"]["RightRailRef"][];
+        };
+        /** RightRailPrimaryAction */
+        RightRailPrimaryAction: {
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "send" | "resolve" | "promote";
+            /** Label */
+            label: string;
+        };
+        /** RightRailRef */
+        RightRailRef: {
+            /** Id */
+            id: string;
+            /** Kind */
+            kind: string;
+            /** Label */
+            label: string;
+            /** Url */
+            url: string;
+        };
         /**
          * RightRailResponse
          * @description The five-slot spine. Order is load-bearing — the FE renders in
@@ -5218,6 +5320,15 @@ export interface components {
             loading: boolean;
             /** Title */
             title?: string | null;
+        };
+        /** RoomTimelineSnapshot */
+        RoomTimelineSnapshot: {
+            /** Items */
+            items: (components["schemas"]["TimelineMessageItem"] | components["schemas"]["TimelineSuggestionItem"] | components["schemas"]["TimelineDecisionItem"])[];
+            /** Project Id */
+            project_id: string;
+            /** Stream Id */
+            stream_id: string;
         };
         /** Scope */
         Scope: {
@@ -5486,6 +5597,101 @@ export interface components {
             user_id: string;
             /** Username */
             username: string;
+        };
+        /** TimelineDecisionItem */
+        TimelineDecisionItem: {
+            /** Applied At */
+            applied_at?: string | null;
+            /** Apply Outcome */
+            apply_outcome: string;
+            /** Conflict Id */
+            conflict_id?: string | null;
+            /** Created At */
+            created_at?: string | null;
+            /** Custom Text */
+            custom_text?: string | null;
+            /** Id */
+            id: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "decision";
+            /** Project Id */
+            project_id: string;
+            /** Rationale */
+            rationale: string;
+            /** Resolver Id */
+            resolver_id?: string | null;
+            /** Scope Stream Id */
+            scope_stream_id?: string | null;
+            /** Source Suggestion Id */
+            source_suggestion_id?: string | null;
+            tally: components["schemas"]["DecisionTally"];
+        };
+        /** TimelineMessageItem */
+        TimelineMessageItem: {
+            /** Author Display Name */
+            author_display_name?: string | null;
+            /** Author Id */
+            author_id: string;
+            /** Author Username */
+            author_username?: string | null;
+            /** Body */
+            body: string;
+            /** Created At */
+            created_at?: string | null;
+            /** Id */
+            id: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "message";
+            /** Kind Message */
+            kind_message: string;
+            /** Linked Id */
+            linked_id?: string | null;
+            /** Project Id */
+            project_id?: string | null;
+            /** Stream Id */
+            stream_id: string;
+        };
+        /** TimelineSuggestionItem */
+        TimelineSuggestionItem: {
+            /** Confidence */
+            confidence: number;
+            /** Counter Of Id */
+            counter_of_id?: string | null;
+            /** Created At */
+            created_at?: string | null;
+            /** Decision Id */
+            decision_id?: string | null;
+            /** Id */
+            id: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "im_suggestion";
+            /** Kind Suggestion */
+            kind_suggestion: string;
+            /** Message Id */
+            message_id: string;
+            /** Project Id */
+            project_id: string;
+            /** Proposal */
+            proposal?: {
+                [key: string]: unknown;
+            };
+            /** Reasoning */
+            reasoning: string;
+            /** Resolved At */
+            resolved_at?: string | null;
+            /** Status */
+            status: string;
+            /** Targets */
+            targets?: unknown[];
         };
         /** UpdateKbItemRequest */
         UpdateKbItemRequest: {
@@ -6057,9 +6263,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["ConversationDetail"];
                 };
             };
             /** @description Validation Error */
@@ -10968,7 +11172,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["RoomTimelineSnapshot"];
                 };
             };
             /** @description Validation Error */

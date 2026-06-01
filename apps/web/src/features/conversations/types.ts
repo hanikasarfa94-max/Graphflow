@@ -59,55 +59,13 @@ export type ConversationIndexResponse =
 
 // Wire shape from GET /api/conversations/:id messages[] — mirrors
 // StreamService.list_messages, with the v0.6.2 field names the FE
-// consumes directly.
-export interface ConversationMessage {
-  id: string;
-  stream_id: string;
-  project_id: string | null;
-  author_id: string;
-  author_username: string | null;
-  body: string;
-  kind: string | null;
-  linked_id: string | null;
-  created_at: string;
-}
-
-// Participant — one row from StreamMemberRepository, enriched with
-// the user's display_name. The viewer is included; the DM rail
-// filters them out client-side to find the "other" party.
-export interface ConversationParticipant {
-  user_id: string;
-  username: string;
-  display_name: string;
-  role_in_stream: string | null;
-}
-
-// Right rail spine, shared across surfaces per DESIGN_LOCK.md:
-//   Context / Related Work / Evidence / AI Assistance / Primary Action
-// The conversation detail endpoint returns a `right_rail` payload
-// shaped roughly like this. Phase D.2 will firm up the exact shape;
-// today this is a loose placeholder so the scaffold can render.
-export interface RightRailPayload {
-  context: Array<{ label: string; value: string }>;
-  related_work: Array<{ kind: string; id: string; label: string; url: string }>;
-  evidence: Array<{ kind: string; id: string; label: string; url: string }>;
-  ai_assistance: Array<{
-    id: string;
-    label: string;
-    proposal_type: string;
-  }>;
-  primary_action: { label: string; kind: "send" | "resolve" | "promote" } | null;
-}
-
-export interface ConversationDetail {
-  id: string;
-  type: ConversationType;
-  title: string;
-  scope_id: string | null;
-  // Only populated for type === "topic"; backend leaves this null
-  // until the TopicRow primitive lands (Phase B.3 follow-up).
-  topic_status?: TopicStatus | null;
-  participants: ConversationParticipant[];
-  messages: ConversationMessage[];
-  right_rail: RightRailPayload | null;
-}
+// consumes directly. C1-C: generated-backed (GET /api/conversations/{id}
+// response_model=ConversationDetail). kind/role_in_stream widen from the old
+// |null FE types to non-null string (runtime ORM columns are non-null);
+// right_rail is a nullable payload (always null on the wire today). The
+// ConversationType/TopicStatus helper unions above are retained for FE logic.
+export type ConversationMessage = components["schemas"]["ConversationMessage"];
+export type ConversationParticipant =
+  components["schemas"]["ConversationParticipant"];
+export type RightRailPayload = components["schemas"]["RightRailPayload"];
+export type ConversationDetail = components["schemas"]["ConversationDetail"];

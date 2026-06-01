@@ -1001,65 +1001,18 @@ export function postStreamMessage(
 // kinds (`task`, `kb_item`) are reserved by the backend but only
 // schema-typed here so adding their renderers later is a frontend-
 // only change.
-export type TimelineMessageItem = {
-  kind: "message";
-  id: string;
-  stream_id: string;
-  project_id: string;
-  author_id: string;
-  author_username: string | null;
-  author_display_name?: string | null;
-  body: string;
-  // Renamed away from `kind` to avoid clashing with the discriminator.
-  kind_message: string;
-  linked_id: string | null;
-  created_at: string | null;
-};
-
-export type TimelineSuggestionItem = {
-  kind: "im_suggestion";
-  id: string;
-  project_id: string;
-  message_id: string;
-  status: "pending" | "accepted" | "dismissed" | "countered" | "escalated";
-  kind_suggestion: string;
-  confidence: number | null;
-  targets: unknown[];
-  proposal: Record<string, unknown> | null;
-  reasoning: string;
-  decision_id: string | null;
-  counter_of_id: string | null;
-  created_at: string | null;
-  resolved_at: string | null;
-};
-
-export type TimelineDecisionItem = {
-  kind: "decision";
-  id: string;
-  project_id: string;
-  conflict_id: string | null;
-  source_suggestion_id: string | null;
-  resolver_id: string | null;
-  rationale: string;
-  custom_text: string | null;
-  scope_stream_id: string | null;
-  apply_outcome:
-    | "pending"
-    | "ok"
-    | "partial"
-    | "failed"
-    | "advisory"
-    | null;
-  // N.4 — tally enriched at the timeline endpoint.
-  tally?: DecisionTally;
-  created_at: string | null;
-  applied_at: string | null;
-};
-
-export type TimelineItem =
-  | TimelineMessageItem
-  | TimelineSuggestionItem
-  | TimelineDecisionItem;
+// C1-C: generated-backed (GET /projects/{id}/rooms/{rid}/timeline
+// response_model=RoomTimelineSnapshot, a discriminated union on `kind`).
+// Widenings vs the old hand types: confidence non-null, proposal/targets
+// non-null, apply_outcome union→string, and the decision variant's `tally` is
+// now REQUIRED (the endpoint always enriches it). RoomTimelineEvent below stays
+// hand-written (WS envelope) and references the aliased TimelineItem.
+export type TimelineMessageItem = components["schemas"]["TimelineMessageItem"];
+export type TimelineSuggestionItem =
+  components["schemas"]["TimelineSuggestionItem"];
+export type TimelineDecisionItem =
+  components["schemas"]["TimelineDecisionItem"];
+export type TimelineItem = components["schemas"]["RoomTimelineSnapshot"]["items"][number];
 
 // Canonical WS event shape for room broadcasts. The reducer applies
 // these via one switch over `event.type` — same wire shape backs both
@@ -1081,11 +1034,8 @@ export type RoomTimelineEvent =
       id: string;
     };
 
-export interface RoomTimelineSnapshot {
-  stream_id: string;
-  project_id: string;
-  items: TimelineItem[];
-}
+export type RoomTimelineSnapshot =
+  components["schemas"]["RoomTimelineSnapshot"];
 
 // GET /api/projects/{projectId}/rooms/{roomId}/timeline
 // Snapshot for the room view; the WS channel reconciles incremental
