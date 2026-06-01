@@ -229,3 +229,48 @@ async def test_message_wire_fields_match_fe_consumer(api_env):
     # author_username is resolved from UserRow; should not be None for
     # a known-registered author.
     assert first["author_username"]
+
+
+# ---- list endpoint: last_message_at is populated -----------------------
+
+
+@pytest.mark.asyncio
+async def test_list_recent_carries_non_null_last_message_at(api_env):
+    """GET /api/conversations must surface a non-null `last_message_at`
+    for a conversation with activity.
+
+    Regression: the list handler used to read the source key
+    `last_message_at` from the shaped stream dict, but _shape_stream
+    only emits `last_activity_at`. The mismatch made the wire field
+    permanently null, so the FE's "last active {time}" label never
+    rendered (ConversationList.tsx guards on `row.last_message_at`).
+    The handler now reads `last_activity_at`; the wire field name
+    stays `last_message_at` for the FE consumer.
+    """
+    client, maker, *_ = api_env
+    owner_id = await _register_and_login(client, "rw4_list_owner")
+    member_id = await _register_and_login(client, "rw4_list_member")
+    pid = await _mk_project_with_members(
+        maker, owner_id=owner_id, member_id=member_id
+    )
+    sid = await _mk_room(maker, project_id=pid, members=[owner_id, member_id])
+
+    await _login(client, "rw4_list_owner")
+    # Post a message to bump last_activity_at (also non-null on create).
+    r = await client.post(
+        f"/api/conversations/{sid}/messages",
+        json={"body": "Hello room"},
+    )
+    assert r.status_code == 200, r.text
+
+    r = await client.get("/api/conversations")
+    assert r.status_code == 200, r.text
+    body = r.json()
+
+    rooms = [c for c in body["recent"] if c["id"] == sid]
+    assert len(rooms) == 1, body
+    row = rooms[0]
+    # The wire field the FE reads must be present and non-null — an ISO
+    # timestamp string, not None.
+    assert row["last_message_at"] is not None, row
+    assert isinstance(row["last_message_at"], str)
