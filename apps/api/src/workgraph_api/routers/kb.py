@@ -19,6 +19,7 @@ service errors into status codes.
 from __future__ import annotations
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request
+from pydantic import BaseModel, Field
 
 from workgraph_persistence import (
     KbIngestRepository,
@@ -55,6 +56,48 @@ _KB_ERROR_STATUS: dict[str, int] = {
     "name_too_long": 400,
     "invalid_tier": 400,
 }
+
+
+# ---- response shapes (C1-C) -----------------------------------------------
+# Mirror KbHierarchyService.get_tree's SUCCESS shape (_folder_payload +
+# _kb_item_payload + the two caller-injected keys). The non-member case is
+# already raised as HTTP 403 by _handle_kb, so it never serializes through this
+# model — no field-stripping risk. `ok` is kept so output stays byte-identical.
+# license_tier_override is the raw tier string ('full'|'task_scoped'|'observer')
+# or null; modeled as str | None.
+
+
+class KbFolderNode(BaseModel):
+    id: str
+    project_id: str
+    parent_folder_id: str | None = None
+    name: str
+    created_by_user_id: str | None = None
+    created_at: str | None = None
+    updated_at: str | None = None
+
+
+class KbTreeItem(BaseModel):
+    id: str
+    folder_id: str | None = None
+    title: str
+    summary: str
+    source_kind: str
+    source_identifier: str | None = None
+    status: str
+    tags: list[str] = Field(default_factory=list)
+    scope: str
+    created_at: str | None = None
+    updated_at: str | None = None
+    license_tier_override: str | None = None
+    ingested_by_username: str | None = None
+
+
+class KbTreeResponse(BaseModel):
+    ok: bool
+    folders: list[KbFolderNode]
+    items: list[KbTreeItem]
+    root_id: str | None = None
 
 
 def _handle_kb(result: dict) -> dict:
@@ -267,7 +310,7 @@ def _kb_service(request: Request) -> KbHierarchyService:
     return request.app.state.kb_hierarchy_service
 
 
-@router.get("/projects/{project_id}/kb/tree")
+@router.get("/projects/{project_id}/kb/tree", response_model=KbTreeResponse)
 async def get_kb_tree(
     project_id: str,
     request: Request,

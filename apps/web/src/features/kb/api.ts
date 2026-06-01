@@ -119,6 +119,13 @@ export async function getKbItem(
 
 export type LicenseTier = "full" | "task_scoped" | "observer";
 
+// C1-C: backend GET /api/projects/{id}/kb/tree is now response_model=
+// KbTreeResponse (contract locked + drift-gated). The FE types stay
+// hand-written for now: openapi-typescript renders the nullable fields as
+// optional (`?:` → `| undefined`) and widens license_tier_override to string,
+// which clashes with ~10 consumer sites that rely on `| null` and the
+// LicenseTier union (KbTreeBrowser / KbItemLicenseControl). Aliasing here is
+// deferred — not worth churning those consumers to switch null→undefined.
 export interface KbFolderNode {
   id: string;
   project_id: string;
@@ -137,11 +144,11 @@ export interface KbTreeItem {
   source_kind: string;
   source_identifier: string | null;
   status: KbItemStatus;
-  tags: string[];
   // KbItemRow.scope wire value — one of "personal" / "group" / "department"
   // / "enterprise". Used by ScopeTierPills to filter the tree client-side
   // (the backend access guard still enforces what the user can read at all).
   scope: string;
+  tags: string[];
   created_at: string | null;
   updated_at: string | null;
   license_tier_override: LicenseTier | null;

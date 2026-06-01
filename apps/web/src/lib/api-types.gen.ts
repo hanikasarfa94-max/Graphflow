@@ -4821,6 +4821,23 @@ export interface components {
             /** Source Event Id */
             source_event_id: string;
         };
+        /** KbFolderNode */
+        KbFolderNode: {
+            /** Created At */
+            created_at?: string | null;
+            /** Created By User Id */
+            created_by_user_id?: string | null;
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /** Parent Folder Id */
+            parent_folder_id?: string | null;
+            /** Project Id */
+            project_id: string;
+            /** Updated At */
+            updated_at?: string | null;
+        };
         /** KbNote */
         KbNote: {
             attachment?: components["schemas"]["KbNoteAttachment"] | null;
@@ -4864,6 +4881,46 @@ export interface components {
             items: components["schemas"]["KbNote"][];
             /** Ok */
             ok: boolean;
+        };
+        /** KbTreeItem */
+        KbTreeItem: {
+            /** Created At */
+            created_at?: string | null;
+            /** Folder Id */
+            folder_id?: string | null;
+            /** Id */
+            id: string;
+            /** Ingested By Username */
+            ingested_by_username?: string | null;
+            /** License Tier Override */
+            license_tier_override?: string | null;
+            /** Scope */
+            scope: string;
+            /** Source Identifier */
+            source_identifier?: string | null;
+            /** Source Kind */
+            source_kind: string;
+            /** Status */
+            status: string;
+            /** Summary */
+            summary: string;
+            /** Tags */
+            tags?: string[];
+            /** Title */
+            title: string;
+            /** Updated At */
+            updated_at?: string | null;
+        };
+        /** KbTreeResponse */
+        KbTreeResponse: {
+            /** Folders */
+            folders: components["schemas"]["KbFolderNode"][];
+            /** Items */
+            items: components["schemas"]["KbTreeItem"][];
+            /** Ok */
+            ok: boolean;
+            /** Root Id */
+            root_id?: string | null;
         };
         /** LoginRequest */
         LoginRequest: {
@@ -10017,7 +10074,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["KbTreeResponse"];
                 };
             };
             /** @description Validation Error */
