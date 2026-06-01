@@ -6,23 +6,15 @@
 // author, attachment_hint, body_md as optional) that didn't match
 // what the BE emits. Removed.
 
+import type { components } from "@/lib/api-types.gen";
+
 export type DocumentTypeFilter = "all" | "brief" | "note" | "attachment";
 
-// Shape returned by `_doc_from_kb()` in routers/documents.py (list).
-// Singleton (`_doc_full_from_kb`) extends with content_md + attachment.
-export interface Document {
-  document_id: string;
-  scope_id: string | null;
-  title: string;
-  // KB scope distinguishes personal vs group writes.
-  scope: "personal" | "group" | string;
-  status: "draft" | "published" | "archived" | "pending-review" | string;
-  is_project_brief: boolean;
-  updated_at: string | null;
-  created_at: string | null;
-  source: string | null;
-  owner_user_id: string | null;
-}
+// C1-C: generated-backed (GET /api/documents response_model=DocumentListResponse
+// in routers/documents.py, mirroring _doc_from_kb). Stable names preserved.
+// The singleton (`_doc_full_from_kb`) endpoint isn't promoted yet, so
+// DocumentDetail below extends this generated base with its extra fields.
+export type Document = components["schemas"]["Document"];
 
 // Singleton extension — populated only by GET /api/documents/:id.
 export interface DocumentDetail extends Document {
@@ -36,12 +28,8 @@ export interface DocumentDetail extends Document {
   } | null;
 }
 
-// List endpoint wire shape.
-export interface DocumentListResponse {
-  documents: Document[];
-  scope_id: string;
-  type: DocumentTypeFilter;
-}
+// List endpoint wire shape. C1-C: generated-backed.
+export type DocumentListResponse = components["schemas"]["DocumentListResponse"];
 
 // Singleton wire shape.
 export interface DocumentDetailResponse {

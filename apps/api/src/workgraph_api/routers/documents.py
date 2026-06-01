@@ -60,6 +60,33 @@ class PublishDocumentRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+# ---- response shapes (C1-C) -----------------------------------------------
+# These mirror the runtime payload built by `_doc_from_kb` below — NOT a
+# frontend assumption. Required fields map to non-null KbItemRow columns
+# (id PK, title, scope, status) + the always-bool is_project_brief; the rest
+# are `.get()`-sourced and may be null. The FE features/documents/types.ts
+# Document/DocumentListResponse already match this shape field-for-field.
+
+
+class Document(BaseModel):
+    document_id: str
+    scope_id: str | None = None
+    title: str
+    scope: str  # 'personal' | 'group'
+    status: str  # 'draft' | 'published' | 'archived' | 'pending-review'
+    is_project_brief: bool
+    updated_at: str | None = None
+    created_at: str | None = None
+    source: str | None = None
+    owner_user_id: str | None = None
+
+
+class DocumentListResponse(BaseModel):
+    documents: list[Document]
+    scope_id: str
+    type: DocumentTypeFilter
+
+
 # ---- helpers --------------------------------------------------------------
 
 
@@ -116,7 +143,7 @@ def _doc_full_from_kb(item: dict[str, Any]) -> dict[str, Any]:
 # ---- endpoints ------------------------------------------------------------
 
 
-@router.get("/documents")
+@router.get("/documents", response_model=DocumentListResponse)
 async def get_documents(
     request: Request,
     scope_id: str = Query(min_length=1, max_length=64),

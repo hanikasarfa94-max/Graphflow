@@ -4321,6 +4321,41 @@ export interface components {
             /** Target User Id */
             target_user_id: string;
         };
+        /** Document */
+        Document: {
+            /** Created At */
+            created_at?: string | null;
+            /** Document Id */
+            document_id: string;
+            /** Is Project Brief */
+            is_project_brief: boolean;
+            /** Owner User Id */
+            owner_user_id?: string | null;
+            /** Scope */
+            scope: string;
+            /** Scope Id */
+            scope_id?: string | null;
+            /** Source */
+            source?: string | null;
+            /** Status */
+            status: string;
+            /** Title */
+            title: string;
+            /** Updated At */
+            updated_at?: string | null;
+        };
+        /** DocumentListResponse */
+        DocumentListResponse: {
+            /** Documents */
+            documents: components["schemas"]["Document"][];
+            /** Scope Id */
+            scope_id: string;
+            /**
+             * Type
+             * @enum {string}
+             */
+            type: "all" | "brief" | "note" | "attachment";
+        };
         /** FlowRequestAttachmentsBody */
         FlowRequestAttachmentsBody: {
             /** Attachments */
@@ -5599,9 +5634,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["DocumentListResponse"];
                 };
             };
             /** @description Validation Error */

@@ -949,6 +949,126 @@
         "title": "DispatchRequest",
         "type": "object"
       },
+      "Document": {
+        "properties": {
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "document_id": {
+            "title": "Document Id",
+            "type": "string"
+          },
+          "is_project_brief": {
+            "title": "Is Project Brief",
+            "type": "boolean"
+          },
+          "owner_user_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner User Id"
+          },
+          "scope": {
+            "title": "Scope",
+            "type": "string"
+          },
+          "scope_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scope Id"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          }
+        },
+        "required": [
+          "document_id",
+          "title",
+          "scope",
+          "status",
+          "is_project_brief"
+        ],
+        "title": "Document",
+        "type": "object"
+      },
+      "DocumentListResponse": {
+        "properties": {
+          "documents": {
+            "items": {
+              "$ref": "#/components/schemas/Document"
+            },
+            "title": "Documents",
+            "type": "array"
+          },
+          "scope_id": {
+            "title": "Scope Id",
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "all",
+              "brief",
+              "note",
+              "attachment"
+            ],
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "documents",
+          "scope_id",
+          "type"
+        ],
+        "title": "DocumentListResponse",
+        "type": "object"
+      },
       "FlowRequestAttachmentsBody": {
         "additionalProperties": false,
         "properties": {
@@ -3671,9 +3791,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Get Documents Api Documents Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/DocumentListResponse"
                 }
               }
             },
