@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field
@@ -18,7 +18,51 @@ from workgraph_api.services import (
 router = APIRouter(prefix="/api/projects", tags=["clarification"])
 
 
-@router.get("/{project_id}/stage")
+# ---- response shapes (C1-C) -----------------------------------------------
+# Mirror StageInfo (packages/persistence/stage.py) — the dataclass asdict()'d
+# by get_stage. graph_counts/plan_counts have stable keys, so they're fixed
+# nested models for precise generated TS. The endpoint 404s on stage="unknown",
+# so a 200 never carries it, but the field type stays the full Stage Literal.
+# No FE alias: the client-side stage.ts `Stage` is an unrelated derived
+# vocabulary (computed from ProjectState), and no FE code consumes this endpoint.
+
+StageName = Literal[
+    "intake",
+    "clarification_pending",
+    "clarification_in_progress",
+    "graph_building",
+    "ready_for_planning",
+    "planned",
+    "manual_review",
+    "unknown",
+]
+
+
+class StageGraphCounts(BaseModel):
+    goals: int
+    deliverables: int
+    constraints: int
+    risks: int
+
+
+class StagePlanCounts(BaseModel):
+    tasks: int
+    dependencies: int
+    milestones: int
+
+
+class StageResponse(BaseModel):
+    project_id: str
+    stage: StageName
+    requirement_version: int
+    parse_outcome: str | None = None
+    total_questions: int
+    answered_questions: int
+    graph_counts: StageGraphCounts
+    plan_counts: StagePlanCounts
+
+
+@router.get("/{project_id}/stage", response_model=StageResponse)
 async def get_stage(project_id: str, request: Request) -> dict[str, Any]:
     """Graph-derived stage (decision 1E) — no `current_stage` column exists."""
     sessionmaker = request.app.state.sessionmaker

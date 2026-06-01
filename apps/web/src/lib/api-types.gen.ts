@@ -4982,6 +4982,46 @@ export interface components {
              */
             kind: "drop_task";
         };
+        /** StageGraphCounts */
+        StageGraphCounts: {
+            /** Constraints */
+            constraints: number;
+            /** Deliverables */
+            deliverables: number;
+            /** Goals */
+            goals: number;
+            /** Risks */
+            risks: number;
+        };
+        /** StagePlanCounts */
+        StagePlanCounts: {
+            /** Dependencies */
+            dependencies: number;
+            /** Milestones */
+            milestones: number;
+            /** Tasks */
+            tasks: number;
+        };
+        /** StageResponse */
+        StageResponse: {
+            /** Answered Questions */
+            answered_questions: number;
+            graph_counts: components["schemas"]["StageGraphCounts"];
+            /** Parse Outcome */
+            parse_outcome?: string | null;
+            plan_counts: components["schemas"]["StagePlanCounts"];
+            /** Project Id */
+            project_id: string;
+            /** Requirement Version */
+            requirement_version: number;
+            /**
+             * Stage
+             * @enum {string}
+             */
+            stage: "intake" | "clarification_pending" | "clarification_in_progress" | "graph_building" | "ready_for_planning" | "planned" | "manual_review" | "unknown";
+            /** Total Questions */
+            total_questions: number;
+        };
         /** StatusRequest */
         StatusRequest: {
             /** New Status */
@@ -10763,9 +10803,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["StageResponse"];
                 };
             };
             /** @description Validation Error */

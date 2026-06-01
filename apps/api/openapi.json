@@ -2851,6 +2851,119 @@
         "title": "SimulateRequest",
         "type": "object"
       },
+      "StageGraphCounts": {
+        "properties": {
+          "constraints": {
+            "title": "Constraints",
+            "type": "integer"
+          },
+          "deliverables": {
+            "title": "Deliverables",
+            "type": "integer"
+          },
+          "goals": {
+            "title": "Goals",
+            "type": "integer"
+          },
+          "risks": {
+            "title": "Risks",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "goals",
+          "deliverables",
+          "constraints",
+          "risks"
+        ],
+        "title": "StageGraphCounts",
+        "type": "object"
+      },
+      "StagePlanCounts": {
+        "properties": {
+          "dependencies": {
+            "title": "Dependencies",
+            "type": "integer"
+          },
+          "milestones": {
+            "title": "Milestones",
+            "type": "integer"
+          },
+          "tasks": {
+            "title": "Tasks",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "tasks",
+          "dependencies",
+          "milestones"
+        ],
+        "title": "StagePlanCounts",
+        "type": "object"
+      },
+      "StageResponse": {
+        "properties": {
+          "answered_questions": {
+            "title": "Answered Questions",
+            "type": "integer"
+          },
+          "graph_counts": {
+            "$ref": "#/components/schemas/StageGraphCounts"
+          },
+          "parse_outcome": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parse Outcome"
+          },
+          "plan_counts": {
+            "$ref": "#/components/schemas/StagePlanCounts"
+          },
+          "project_id": {
+            "title": "Project Id",
+            "type": "string"
+          },
+          "requirement_version": {
+            "title": "Requirement Version",
+            "type": "integer"
+          },
+          "stage": {
+            "enum": [
+              "intake",
+              "clarification_pending",
+              "clarification_in_progress",
+              "graph_building",
+              "ready_for_planning",
+              "planned",
+              "manual_review",
+              "unknown"
+            ],
+            "title": "Stage",
+            "type": "string"
+          },
+          "total_questions": {
+            "title": "Total Questions",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "project_id",
+          "stage",
+          "requirement_version",
+          "total_questions",
+          "answered_questions",
+          "graph_counts",
+          "plan_counts"
+        ],
+        "title": "StageResponse",
+        "type": "object"
+      },
       "StatusRequest": {
         "additionalProperties": false,
         "properties": {
@@ -11702,9 +11815,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Get Stage Api Projects  Project Id  Stage Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/StageResponse"
                 }
               }
             },
