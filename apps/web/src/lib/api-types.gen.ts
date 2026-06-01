@@ -4605,6 +4605,50 @@ export interface components {
             /** Source Event Id */
             source_event_id: string;
         };
+        /** KbNote */
+        KbNote: {
+            attachment?: components["schemas"]["KbNoteAttachment"] | null;
+            /** Content Md */
+            content_md: string;
+            /** Created At */
+            created_at?: string | null;
+            /** Folder Id */
+            folder_id?: string | null;
+            /** Id */
+            id: string;
+            /** Owner User Id */
+            owner_user_id?: string | null;
+            /** Project Id */
+            project_id?: string | null;
+            /** Scope */
+            scope: string;
+            /** Source */
+            source: string;
+            /** Status */
+            status: string;
+            /** Title */
+            title: string;
+            /** Updated At */
+            updated_at?: string | null;
+        };
+        /** KbNoteAttachment */
+        KbNoteAttachment: {
+            /** Bytes */
+            bytes?: number | null;
+            /** Download Url */
+            download_url: string;
+            /** Filename */
+            filename: string;
+            /** Mime */
+            mime?: string | null;
+        };
+        /** KbNoteListResponse */
+        KbNoteListResponse: {
+            /** Items */
+            items: components["schemas"]["KbNote"][];
+            /** Ok */
+            ok: boolean;
+        };
         /** LoginRequest */
         LoginRequest: {
             /** Password */
@@ -6934,9 +6978,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["KbNote"];
                 };
             };
             /** @description Validation Error */
@@ -9258,9 +9300,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["KbNoteListResponse"];
                 };
             };
             /** @description Validation Error */

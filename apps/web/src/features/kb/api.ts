@@ -222,36 +222,28 @@ export function setKbItemLicense(
 
 // ---------- KB items (Phase V — manual-write notes) -------------------
 
+// Helper unions retained for mutation call sites (createKbNote / updateKbNote /
+// uploadKbNote args below accept these narrowed values). The KbNote wire type
+// itself is now generated-backed where these surface as plain `string`.
 export type KbNoteScope = "personal" | "group";
 export type KbNoteStatus = "draft" | "published" | "archived";
 export type KbNoteSource = "manual" | "upload" | "llm";
 
-export interface KbNoteAttachment {
-  filename: string;
-  mime: string;
-  bytes: number;
-  download_url: string;
-}
+// C1-C: generated-backed (GET /api/kb-items/{id} response_model=KbNote;
+// GET /api/projects/{id}/kb-items response_model=KbNoteListResponse). Widened to
+// runtime truth: project_id/owner_user_id are str | None (unified ingest+authored
+// table), and attachment.mime/bytes are nullable. Audit confirmed no consumer
+// reads project_id/owner_user_id as non-null. scope/status/source are `string`.
+import type { components } from "@/lib/api-types.gen";
 
-export interface KbNote {
-  id: string;
-  project_id: string;
-  folder_id: string | null;
-  owner_user_id: string;
-  scope: KbNoteScope;
-  title: string;
-  content_md: string;
-  status: KbNoteStatus;
-  source: KbNoteSource;
-  attachment: KbNoteAttachment | null;
-  created_at: string | null;
-  updated_at: string | null;
-}
+export type KbNoteAttachment = components["schemas"]["KbNoteAttachment"];
+export type KbNote = components["schemas"]["KbNote"];
+export type KbNoteListResponse = components["schemas"]["KbNoteListResponse"];
 
 export function listKbNotes(
   projectId: string,
   baseUrl?: string,
-): Promise<{ ok: boolean; items: KbNote[] }> {
+): Promise<KbNoteListResponse> {
   return api(`/api/projects/${projectId}/kb-items`, { baseUrl });
 }
 

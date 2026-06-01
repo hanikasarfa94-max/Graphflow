@@ -109,6 +109,45 @@ class UpdateKbItemRequest(BaseModel):
     folder_id: str | None = Field(default=None, max_length=36)
 
 
+# ---- response shapes (C1-C) -----------------------------------------------
+# Mirror the runtime `_serialize(KbItemRow)` shape (services/kb_items.py) — NOT
+# frontend assumptions. project_id/folder_id/owner_user_id are nullable
+# (unified ingest+authored table; ingest rows have no project/owner). The
+# attachment block is null unless attachment_filename is set; within it,
+# mime/bytes are nullable columns. scope/status/source are left as plain `str`
+# (per decision: not modeled as Literals this pass) — the FE keeps its helper
+# unions (KbNoteScope/Status/Source) for mutation call sites. Named KbNote* to
+# match the FE type that consumes this shape (the FE `KbItem` is an unrelated
+# ingest-oriented shape for a different endpoint).
+
+
+class KbNoteAttachment(BaseModel):
+    filename: str
+    mime: str | None = None
+    bytes: int | None = None
+    download_url: str
+
+
+class KbNote(BaseModel):
+    id: str
+    project_id: str | None = None
+    folder_id: str | None = None
+    owner_user_id: str | None = None
+    scope: str
+    title: str
+    content_md: str
+    status: str
+    source: str
+    attachment: KbNoteAttachment | None = None
+    created_at: str | None = None
+    updated_at: str | None = None
+
+
+class KbNoteListResponse(BaseModel):
+    ok: bool
+    items: list[KbNote]
+
+
 @router.post("/api/projects/{project_id}/kb-items")
 async def create_item(
     project_id: str,
@@ -132,7 +171,9 @@ async def create_item(
         _raise(err)
 
 
-@router.get("/api/projects/{project_id}/kb-items")
+@router.get(
+    "/api/projects/{project_id}/kb-items", response_model=KbNoteListResponse
+)
 async def list_items(
     project_id: str,
     request: Request,
@@ -149,7 +190,7 @@ async def list_items(
         _raise(err)
 
 
-@router.get("/api/kb-items/{item_id}")
+@router.get("/api/kb-items/{item_id}", response_model=KbNote)
 async def get_item(
     item_id: str,
     request: Request,
