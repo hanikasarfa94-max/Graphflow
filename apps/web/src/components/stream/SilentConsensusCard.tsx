@@ -85,7 +85,11 @@ export function SilentConsensusCard({ message, projectId, onResolved }: Props) {
 
   const [status, setStatus] = useState<
     "pending" | "ratified" | "rejected"
-  >(proposal?.status ?? "pending");
+  >(
+    // status widens to string on the generated type; the wire values are still
+    // exactly these three.
+    (proposal?.status as "pending" | "ratified" | "rejected") ?? "pending",
+  );
   const [showActions, setShowActions] = useState(false);
   const [busy, setBusy] = useState<"ratify" | "reject" | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -194,7 +198,7 @@ export function SilentConsensusCard({ message, projectId, onResolved }: Props) {
         >
           <span style={{ marginRight: 6 }}>{t("bodyPrefix")}</span>
           <span style={{ display: "inline-flex", gap: 4, flexWrap: "wrap" }}>
-            {proposal.members.map((m, i) => {
+            {(proposal.members ?? []).map((m, i) => {
               // Stagger + per-chip origin direction. Odd chips drift from
               // the right, even from the left, all lift from below — gives
               // the "members converging" feel DESIGN.md §Motion calls for
@@ -247,7 +251,7 @@ export function SilentConsensusCard({ message, projectId, onResolved }: Props) {
               color: "var(--wg-ink-soft)",
             }}
           >
-            {proposal.supporting_action_ids.map((a, idx) => (
+            {(proposal.supporting_action_ids ?? []).map((a, idx) => (
               <li key={`${a.kind}-${a.id}-${idx}`}>
                 {a.kind}:{a.id.slice(0, 8)}
               </li>

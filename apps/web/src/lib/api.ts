@@ -690,31 +690,17 @@ export function recordDissent(
 }
 
 // ---------- Silent consensus (Phase 1.A) ----------
+// C1-C: generated-backed (GET /api/projects/{id}/silent-consensus
+// response_model=SilentConsensusListResponse). No mismatch — runtime and FE
+// both model supporting_action_ids as {kind,id} objects. status widens
+// union→string.
 
-export interface SilentConsensusMember {
-  user_id: string;
-  display_name: string;
-}
-
-export interface SilentConsensusSupportingAction {
-  kind: "task_status" | "decision" | "commit" | string;
-  id: string;
-}
-
-export interface SilentConsensusProposal {
-  id: string;
-  project_id: string;
-  topic_text: string;
-  supporting_action_ids: SilentConsensusSupportingAction[];
-  inferred_decision_summary: string;
-  members: SilentConsensusMember[];
-  member_user_ids: string[];
-  confidence: number;
-  status: "pending" | "ratified" | "rejected";
-  created_at: string | null;
-  ratified_decision_id: string | null;
-  ratified_at: string | null;
-}
+export type SilentConsensusMember =
+  components["schemas"]["SilentConsensusMember"];
+export type SilentConsensusSupportingAction =
+  components["schemas"]["SilentConsensusSupportingAction"];
+export type SilentConsensusProposal =
+  components["schemas"]["SilentConsensusProposal"];
 
 export function listSilentConsensus(
   projectId: string,

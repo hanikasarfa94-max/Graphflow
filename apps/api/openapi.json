@@ -4819,6 +4819,155 @@
         "title": "ShareableDraft",
         "type": "object"
       },
+      "SilentConsensusListResponse": {
+        "properties": {
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "proposals": {
+            "items": {
+              "$ref": "#/components/schemas/SilentConsensusProposal"
+            },
+            "title": "Proposals",
+            "type": "array"
+          }
+        },
+        "required": [
+          "ok",
+          "proposals"
+        ],
+        "title": "SilentConsensusListResponse",
+        "type": "object"
+      },
+      "SilentConsensusMember": {
+        "properties": {
+          "display_name": {
+            "title": "Display Name",
+            "type": "string"
+          },
+          "user_id": {
+            "title": "User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_id",
+          "display_name"
+        ],
+        "title": "SilentConsensusMember",
+        "type": "object"
+      },
+      "SilentConsensusProposal": {
+        "properties": {
+          "confidence": {
+            "title": "Confidence",
+            "type": "number"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "inferred_decision_summary": {
+            "title": "Inferred Decision Summary",
+            "type": "string"
+          },
+          "member_user_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Member User Ids",
+            "type": "array"
+          },
+          "members": {
+            "items": {
+              "$ref": "#/components/schemas/SilentConsensusMember"
+            },
+            "title": "Members",
+            "type": "array"
+          },
+          "project_id": {
+            "title": "Project Id",
+            "type": "string"
+          },
+          "ratified_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ratified At"
+          },
+          "ratified_decision_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ratified Decision Id"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "supporting_action_ids": {
+            "items": {
+              "$ref": "#/components/schemas/SilentConsensusSupportingAction"
+            },
+            "title": "Supporting Action Ids",
+            "type": "array"
+          },
+          "topic_text": {
+            "title": "Topic Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "project_id",
+          "topic_text",
+          "inferred_decision_summary",
+          "confidence",
+          "status"
+        ],
+        "title": "SilentConsensusProposal",
+        "type": "object"
+      },
+      "SilentConsensusSupportingAction": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "id"
+        ],
+        "title": "SilentConsensusSupportingAction",
+        "type": "object"
+      },
       "SimulateRequest": {
         "additionalProperties": false,
         "properties": {
@@ -14400,7 +14549,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/SilentConsensusListResponse"
+                }
               }
             },
             "description": "Successful Response"

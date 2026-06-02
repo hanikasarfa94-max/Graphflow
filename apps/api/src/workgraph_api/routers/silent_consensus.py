@@ -13,6 +13,7 @@ Endpoints:
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Request
+from pydantic import BaseModel, Field
 
 from workgraph_api.deps import require_user
 from workgraph_api.services import (
@@ -22,6 +23,46 @@ from workgraph_api.services import (
 )
 
 router = APIRouter(tags=["silent-consensus"])
+
+
+# ---- response shapes (C1-C) -----------------------------------------------
+# Mirror SilentConsensusService._serialize. NOTE: supporting_action_ids is
+# genuinely list[dict] {kind,id} at runtime (the sole writer builds dicts), and
+# the FE SilentConsensusProposal already declares it as objects — so this is NOT
+# a mismatch; modeling it truthfully aligns both. *_at + ratified_decision_id
+# nullable; the {ok:false} variant is raised as HTTP by _handle.
+
+
+class SilentConsensusSupportingAction(BaseModel):
+    kind: str
+    id: str
+
+
+class SilentConsensusMember(BaseModel):
+    user_id: str
+    display_name: str
+
+
+class SilentConsensusProposal(BaseModel):
+    id: str
+    project_id: str
+    topic_text: str
+    supporting_action_ids: list[SilentConsensusSupportingAction] = Field(
+        default_factory=list
+    )
+    inferred_decision_summary: str
+    members: list[SilentConsensusMember] = Field(default_factory=list)
+    member_user_ids: list[str] = Field(default_factory=list)
+    confidence: float
+    status: str
+    created_at: str | None = None
+    ratified_decision_id: str | None = None
+    ratified_at: str | None = None
+
+
+class SilentConsensusListResponse(BaseModel):
+    ok: bool
+    proposals: list[SilentConsensusProposal]
 
 
 _ERROR_STATUS: dict[str, int] = {
@@ -41,7 +82,10 @@ def _handle(result: dict) -> dict:
     return result
 
 
-@router.get("/api/projects/{project_id}/silent-consensus")
+@router.get(
+    "/api/projects/{project_id}/silent-consensus",
+    response_model=SilentConsensusListResponse,
+)
 async def list_silent_consensus(
     project_id: str,
     request: Request,

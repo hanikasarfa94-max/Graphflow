@@ -5558,6 +5558,54 @@ export interface components {
             /** Title */
             title: string;
         };
+        /** SilentConsensusListResponse */
+        SilentConsensusListResponse: {
+            /** Ok */
+            ok: boolean;
+            /** Proposals */
+            proposals: components["schemas"]["SilentConsensusProposal"][];
+        };
+        /** SilentConsensusMember */
+        SilentConsensusMember: {
+            /** Display Name */
+            display_name: string;
+            /** User Id */
+            user_id: string;
+        };
+        /** SilentConsensusProposal */
+        SilentConsensusProposal: {
+            /** Confidence */
+            confidence: number;
+            /** Created At */
+            created_at?: string | null;
+            /** Id */
+            id: string;
+            /** Inferred Decision Summary */
+            inferred_decision_summary: string;
+            /** Member User Ids */
+            member_user_ids?: string[];
+            /** Members */
+            members?: components["schemas"]["SilentConsensusMember"][];
+            /** Project Id */
+            project_id: string;
+            /** Ratified At */
+            ratified_at?: string | null;
+            /** Ratified Decision Id */
+            ratified_decision_id?: string | null;
+            /** Status */
+            status: string;
+            /** Supporting Action Ids */
+            supporting_action_ids?: components["schemas"]["SilentConsensusSupportingAction"][];
+            /** Topic Text */
+            topic_text: string;
+        };
+        /** SilentConsensusSupportingAction */
+        SilentConsensusSupportingAction: {
+            /** Id */
+            id: string;
+            /** Kind */
+            kind: string;
+        };
         /** SimulateRequest */
         SimulateRequest: {
             /** Entity Id */
@@ -11460,7 +11508,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["SilentConsensusListResponse"];
                 };
             };
             /** @description Validation Error */
