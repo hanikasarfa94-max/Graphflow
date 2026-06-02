@@ -34,6 +34,23 @@
     "gatedNoSummary": "(无摘要)",
     "openInTeamRoom": "去团队会议室回应"
   },
+  "routingReply": {
+    "title": "有同事把这个路由给了你",
+    "loading": "加载中…",
+    "loadError": "无法加载该路由信号。",
+    "framingHeading": "问题",
+    "backgroundHeading": "背景",
+    "optionsHeading": "建议回复",
+    "customPlaceholder": "写下回复…",
+    "send": "发送回复",
+    "sending": "发送中…",
+    "replyFailed": "回复失败。",
+    "repliedNote": "你已回复。",
+    "accept": "接受并关闭",
+    "accepting": "关闭中…",
+    "acceptedNote": "该信号已关闭。",
+    "close": "关闭"
+  },
   "brand": {
     "name": "GraphFlow",
     "tagline": "协作是一张图,而不是一份文档。",

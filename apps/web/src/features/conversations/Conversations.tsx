@@ -29,6 +29,7 @@ import { PageHeader } from "@/components/ui";
 
 import { ConversationList } from "./ConversationList";
 import { ConversationShell } from "./ConversationShell";
+import { RoutingReplyPanel } from "./RoutingReplyPanel";
 import type { ConversationIndexResponse } from "./types";
 
 export function Conversations({
@@ -86,6 +87,9 @@ export function Conversations({
           viewerUserId={viewerUserId}
         />
       </div>
+      {/* Slim disappearing-broker reply surface; activates on the
+          `#routing-{id}` hash that /inbox deep-links to. */}
+      <RoutingReplyPanel />
     </main>
   );
 }
