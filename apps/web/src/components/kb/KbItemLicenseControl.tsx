@@ -42,7 +42,10 @@ export function KbItemLicenseControl({
         const tree = await getKbTree(projectId);
         if (cancelled) return;
         const match = tree.items.find((i) => i.id === itemId);
-        const value: Choice = match?.license_tier_override ?? "inherit";
+        // license_tier_override widens to string on the generated type; the
+        // wire value is still a LicenseTier or null.
+        const value: Choice =
+          (match?.license_tier_override as LicenseTier | null) ?? "inherit";
         setCurrent(value);
         setPending(value);
       } catch (err) {

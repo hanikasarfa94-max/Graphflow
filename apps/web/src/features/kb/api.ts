@@ -119,48 +119,14 @@ export async function getKbItem(
 
 export type LicenseTier = "full" | "task_scoped" | "observer";
 
-// C1-C: backend GET /api/projects/{id}/kb/tree is now response_model=
-// KbTreeResponse (contract locked + drift-gated). The FE types stay
-// hand-written for now: openapi-typescript renders the nullable fields as
-// optional (`?:` → `| undefined`) and widens license_tier_override to string,
-// which clashes with ~10 consumer sites that rely on `| null` and the
-// LicenseTier union (KbTreeBrowser / KbItemLicenseControl). Aliasing here is
-// deferred — not worth churning those consumers to switch null→undefined.
-export interface KbFolderNode {
-  id: string;
-  project_id: string;
-  parent_folder_id: string | null;
-  name: string;
-  created_by_user_id: string | null;
-  created_at: string | null;
-  updated_at: string | null;
-}
-
-export interface KbTreeItem {
-  id: string;
-  folder_id: string | null;
-  title: string;
-  summary: string;
-  source_kind: string;
-  source_identifier: string | null;
-  status: KbItemStatus;
-  // KbItemRow.scope wire value — one of "personal" / "group" / "department"
-  // / "enterprise". Used by ScopeTierPills to filter the tree client-side
-  // (the backend access guard still enforces what the user can read at all).
-  scope: string;
-  tags: string[];
-  created_at: string | null;
-  updated_at: string | null;
-  license_tier_override: LicenseTier | null;
-  ingested_by_username: string | null;
-}
-
-export interface KbTreeResponse {
-  ok: true;
-  folders: KbFolderNode[];
-  items: KbTreeItem[];
-  root_id: string | null;
-}
+// C1-C: generated-backed (GET /api/projects/{id}/kb/tree response_model=
+// KbTreeResponse). Generated renders nullable fields as optional (| undefined)
+// and widens status/license_tier_override to string; the 4 consumer sites that
+// relied on | null / the LicenseTier union were updated with mechanical
+// `?? []` / `?? null` / casts.
+export type KbFolderNode = components["schemas"]["KbFolderNode"];
+export type KbTreeItem = components["schemas"]["KbTreeItem"];
+export type KbTreeResponse = components["schemas"]["KbTreeResponse"];
 
 export function getKbTree(
   projectId: string,

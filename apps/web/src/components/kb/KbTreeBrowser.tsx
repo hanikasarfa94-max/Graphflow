@@ -87,7 +87,7 @@ export function KbTreeBrowser({
 
   const [tree, setTree] = useState<KbTreeResponse>(initialTree);
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(
-    initialTree.root_id,
+    initialTree.root_id ?? null,
   );
   const [expanded, setExpanded] = useState<Set<string>>(
     () => new Set(initialTree.root_id ? [initialTree.root_id] : []),
@@ -159,7 +159,7 @@ export function KbTreeBrowser({
   const childrenByParent = useMemo(() => {
     const map = new Map<string | null, KbFolderNode[]>();
     for (const f of tree.folders) {
-      const key = f.parent_folder_id;
+      const key = f.parent_folder_id ?? null;
       const arr = map.get(key) ?? [];
       arr.push(f);
       map.set(key, arr);
@@ -253,7 +253,7 @@ export function KbTreeBrowser({
     try {
       await deleteKbFolder(projectId, folderId);
       if (selectedFolderId === folderId) {
-        setSelectedFolderId(tree.root_id);
+        setSelectedFolderId(tree.root_id ?? null);
       }
       await refresh();
     } catch (err) {
@@ -362,7 +362,7 @@ export function KbTreeBrowser({
       // Wiki items are ingested in both languages; show only the
       // viewer's locale — mirrors the flat-list behavior.
       if (item.source_kind === "wiki") {
-        if (!item.tags.includes(localeTag)) return false;
+        if (!(item.tags ?? []).includes(localeTag)) return false;
       }
       if (
         sourceFilter !== "all" &&
@@ -379,7 +379,7 @@ export function KbTreeBrowser({
       }
       if (q) {
         const hay =
-          `${item.title} ${item.summary} ${item.tags.join(" ")} ${
+          `${item.title} ${item.summary} ${(item.tags ?? []).join(" ")} ${
             item.source_identifier ?? ""
           }`.toLowerCase();
         if (!hay.includes(q)) return false;
@@ -406,7 +406,7 @@ export function KbTreeBrowser({
     >
       <Card title={t("kb.folder.treeTitle")}>
         <FolderTree
-          rootId={tree.root_id}
+          rootId={tree.root_id ?? null}
           childrenByParent={childrenByParent}
           folderById={folderById}
           selectedFolderId={selectedFolderId}
@@ -1085,10 +1085,19 @@ function ItemRow({
           fontSize: 11,
         }}
       >
-        {relativeTime(item.updated_at || item.created_at)}
+        {relativeTime(item.updated_at || item.created_at || null)}
       </div>
       <div role="cell" style={cellStyle}>
-        <LicenseBadge tier={item.license_tier_override} t={t} />
+        <LicenseBadge
+          tier={
+            (item.license_tier_override ?? null) as
+              | "full"
+              | "task_scoped"
+              | "observer"
+              | null
+          }
+          t={t}
+        />
       </div>
     </>
   );
