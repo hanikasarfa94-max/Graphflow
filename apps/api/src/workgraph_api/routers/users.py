@@ -14,6 +14,8 @@ north-star).
 """
 from __future__ import annotations
 
+from typing import Any
+
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -39,6 +41,23 @@ class PatchProfileRequest(BaseModel):
     display_language: str | None = Field(default=None, min_length=2, max_length=8)
 
 
+# ---- response shape (C1-C) ------------------------------------------------
+# Dedicated model for GET/PATCH /api/users/me — deliberately NOT auth's
+# UserResponse ({id,username,display_name}), which would strip display_language
+# and profile that i18n (display_language) and onboarding (profile.
+# declared_abilities) actively consume. profile is a free-form JSON blob ->
+# dict[str, Any]; created_at nullable per the serializer's None-guard.
+
+
+class MeProfileResponse(BaseModel):
+    id: str
+    username: str
+    display_name: str
+    display_language: str
+    profile: dict[str, Any] = Field(default_factory=dict)
+    created_at: str | None = None
+
+
 def _shape_user(row) -> dict:
     return {
         "id": row.id,
@@ -50,7 +69,7 @@ def _shape_user(row) -> dict:
     }
 
 
-@router.get("/users/me")
+@router.get("/users/me", response_model=MeProfileResponse)
 async def get_me(
     request: Request,
     user: AuthenticatedUser = Depends(require_user),
@@ -101,7 +120,7 @@ async def get_my_profile(
     return payload
 
 
-@router.patch("/users/me")
+@router.patch("/users/me", response_model=MeProfileResponse)
 async def patch_me(
     body: PatchProfileRequest,
     request: Request,

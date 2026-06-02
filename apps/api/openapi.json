@@ -3051,6 +3051,50 @@
         "title": "LoginRequest",
         "type": "object"
       },
+      "MeProfileResponse": {
+        "properties": {
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "display_language": {
+            "title": "Display Language",
+            "type": "string"
+          },
+          "display_name": {
+            "title": "Display Name",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "profile": {
+            "additionalProperties": true,
+            "title": "Profile",
+            "type": "object"
+          },
+          "username": {
+            "title": "Username",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "username",
+          "display_name",
+          "display_language"
+        ],
+        "title": "MeProfileResponse",
+        "type": "object"
+      },
       "MemberSkillsUpdate": {
         "additionalProperties": false,
         "properties": {
@@ -16380,7 +16424,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/MeProfileResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -16407,7 +16453,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/MeProfileResponse"
+                }
               }
             },
             "description": "Successful Response"

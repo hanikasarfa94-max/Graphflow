@@ -131,6 +131,11 @@ export type GroundedItem = components["schemas"]["GroundedItem"];
 export type ShareableDraft = components["schemas"]["ShareableDraft"];
 export type MyAILandingResponse = components["schemas"]["MyAILandingResponse"];
 
+// C1-C: GET/PATCH /api/users/me (response_model=MeProfileResponse). Dedicated
+// shape preserving display_language + the free-form profile blob (NOT auth's
+// 3-field UserResponse). profile is `{[k]: unknown}` — read defensively.
+export type MeProfile = components["schemas"]["MeProfileResponse"];
+
 // C1-C: generated-backed (GET /api/projects response_model=list[ProjectSummary]).
 // Surfaces requirement_version (runtime always emitted it; the old hand type
 // silently dropped it).

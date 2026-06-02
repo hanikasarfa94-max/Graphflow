@@ -25,7 +25,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
 
-import { ApiError, api } from "@/lib/api";
+import { ApiError, api, type MeProfile } from "@/lib/api";
 import { Button } from "@/components/ui";
 
 type Props = {
@@ -34,14 +34,7 @@ type Props = {
   userId: string;
 };
 
-type MeResponse = {
-  id: string;
-  username: string;
-  display_name: string;
-  profile?: {
-    declared_abilities?: string[];
-  } | null;
-};
+// C1-C: use the generated MeProfile (profile is free-form {[k]: unknown}).
 
 const LOCAL_STORAGE_PREFIX = "skills-declared-skip-";
 
@@ -96,8 +89,12 @@ export function SkillDeclarationBanner({
     }
 
     try {
-      const me = await api<MeResponse>(`/api/users/me`);
-      const declared = me.profile?.declared_abilities ?? [];
+      const me = await api<MeProfile>(`/api/users/me`);
+      // profile is free-form on the wire; narrow before reading.
+      const raw = (me.profile as Record<string, unknown> | undefined)?.[
+        "declared_abilities"
+      ];
+      const declared = Array.isArray(raw) ? raw : [];
       setVisible(declared.length === 0);
     } catch {
       // Silent: a failed probe should not trap the user under a banner.

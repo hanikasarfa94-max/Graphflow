@@ -4955,6 +4955,23 @@ export interface components {
             /** Username */
             username: string;
         };
+        /** MeProfileResponse */
+        MeProfileResponse: {
+            /** Created At */
+            created_at?: string | null;
+            /** Display Language */
+            display_language: string;
+            /** Display Name */
+            display_name: string;
+            /** Id */
+            id: string;
+            /** Profile */
+            profile?: {
+                [key: string]: unknown;
+            };
+            /** Username */
+            username: string;
+        };
         /** MemberSkillsUpdate */
         MemberSkillsUpdate: {
             /** Skill Tags */
@@ -12841,7 +12858,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["MeProfileResponse"];
                 };
             };
         };
@@ -12865,7 +12882,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["MeProfileResponse"];
                 };
             };
             /** @description Validation Error */

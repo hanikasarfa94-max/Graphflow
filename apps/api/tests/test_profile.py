@@ -354,3 +354,34 @@ async def test_users_me_profile_returns_tallies(api_env):
     assert body["observed"]["projects_active"] == 0
     assert body["role_counts"] == {}
     assert body["last_activity_at"] is None
+
+
+# ---- wire test (C1-C): GET /api/users/me preserves display_language+profile ----
+
+
+@pytest.mark.asyncio
+async def test_users_me_preserves_language_and_profile(api_env):
+    """GET /api/users/me must NOT strip display_language or profile (the exact
+    regression a reused auth.UserResponse would cause). PATCH then GET and assert
+    both round-trip through the dedicated MeProfileResponse model."""
+    client, _, _, _, _, _ = api_env
+    await client.post(
+        "/api/auth/register",
+        json={"username": "me_wire", "password": "hunter22"},
+    )
+
+    r = await client.patch(
+        "/api/users/me",
+        json={"declared_abilities": ["backend", "qa"], "display_language": "zh"},
+    )
+    assert r.status_code == 200, r.text
+
+    r = await client.get("/api/users/me")
+    assert r.status_code == 200, r.text
+    body = r.json()
+    # The fields a reused 3-field UserResponse would have stripped:
+    assert body["display_language"] == "zh"
+    assert body["profile"]["declared_abilities"] == ["backend", "qa"]
+    # created_at key present (string or null).
+    assert "created_at" in body
+    assert body["username"] == "me_wire"
