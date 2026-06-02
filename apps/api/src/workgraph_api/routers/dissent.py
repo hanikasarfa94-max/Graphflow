@@ -45,9 +45,7 @@ _ERROR_STATUS: dict[str, int] = {
 # ---- response shapes (C1-C) -----------------------------------------------
 # Mirror _SerializedDissent.to_dict (services/dissent.py). validated_by_outcome
 # nullable; the {ok:false} variant is raised as HTTP by _handle, never
-# serialized. NOTE: get_user_dissents has no inline router membership gate (the
-# check is enforced service-side in list_for_user_in_project) — a thin-router
-# deviation flagged for a separate cleanup, not changed here.
+# serialized.
 
 
 class Dissent(BaseModel):
@@ -134,6 +132,15 @@ async def get_user_dissents(
     request: Request,
     user: AuthenticatedUser = Depends(require_user),
 ):
+    # Thin-router consistency: gate on membership inline like the sibling
+    # get_decision_dissents / post_record_dissent. Behavior-preserving — the
+    # service already 403s non-members; this keeps the gate visible in the
+    # router. (The service's stricter self-or-owner check still applies.)
+    project_service: ProjectService = request.app.state.project_service
+    if not await project_service.is_member(
+        project_id=project_id, user_id=user.id
+    ):
+        raise HTTPException(status_code=403, detail="not a project member")
     service: DissentService = request.app.state.dissent_service
     return _handle(
         await service.list_for_user_in_project(

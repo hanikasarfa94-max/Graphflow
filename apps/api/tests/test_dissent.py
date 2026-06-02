@@ -474,3 +474,18 @@ async def test_dissent_upsert_overwrites_prior_stance(api_env):
         rows = await DissentRepository(session).list_for_decision(did)
     assert len(rows) == 1
     assert rows[0].stance_text == "rewritten"
+
+
+@pytest.mark.asyncio
+async def test_non_member_cannot_list_user_dissents(api_env):
+    """Thin-router consistency guard — GET user-dissents now gates on membership
+    inline (matching get_decision_dissents). A logged-in stranger gets 403."""
+    client, maker, *_ = api_env
+    pid = await _mk_project(maker)
+    owner_id = await _register(client, "udissent_owner")
+    await _add_member(maker, pid, owner_id, role="owner")
+
+    await _register(client, "udissent_stranger")
+    await _login(client, "udissent_stranger")
+    r = await client.get(f"/api/projects/{pid}/users/{owner_id}/dissents")
+    assert r.status_code == 403
