@@ -14,11 +14,15 @@ Coverage:
 """
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
+
 import pytest
+from sqlalchemy import select
 
 from workgraph_api.services import SkillsService
 from workgraph_persistence import (
     DecisionRepository,
+    DecisionRow,
     KbIngestRepository,
     ProjectMemberRepository,
     ProjectRow,
@@ -347,9 +351,24 @@ async def test_recent_decisions_returns_shape_and_ordering(api_env):
     pid = await _mk_project(maker)
     uid = await _mk_user(maker, "sk_u1")
     await _add_member(maker, pid, uid)
-    await _mk_decision(maker, pid, resolver_id=uid, rationale="first")
-    await _mk_decision(maker, pid, resolver_id=uid, rationale="second")
-    await _mk_decision(maker, pid, resolver_id=uid, rationale="third")
+    d_first = await _mk_decision(maker, pid, resolver_id=uid, rationale="first")
+    d_second = await _mk_decision(maker, pid, resolver_id=uid, rationale="second")
+    d_third = await _mk_decision(maker, pid, resolver_id=uid, rationale="third")
+
+    # Production orders by created_at DESC with no tiebreaker. The three rows
+    # above are created within the same microsecond window, so their timestamps
+    # tie and "desc, limit 2" is non-deterministic. Stamp distinct, increasing
+    # created_at (third newest) so the ordering assertion is deterministic —
+    # a test-data fix, not a production change.
+    base = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    async with session_scope(maker) as session:
+        for offset, did in enumerate((d_first, d_second, d_third)):
+            row = (
+                await session.execute(
+                    select(DecisionRow).where(DecisionRow.id == did)
+                )
+            ).scalar_one()
+            row.created_at = base + timedelta(minutes=offset)
 
     svc = SkillsService(maker)
     out = await svc.execute(
@@ -358,9 +377,9 @@ async def test_recent_decisions_returns_shape_and_ordering(api_env):
     assert out["ok"] is True
     items = out["result"]
     assert len(items) == 2
-    # Most recent first (DecisionRepository orders by created_at desc).
-    rationales = [i["rationale"] for i in items]
-    assert "third" in rationales
+    # Most recent first (DecisionRepository orders by created_at desc): the two
+    # newest are "third" then "second", in that order.
+    assert [i["rationale"] for i in items] == ["third", "second"]
     assert all("id" in i and "created_at" in i for i in items)
 
 
