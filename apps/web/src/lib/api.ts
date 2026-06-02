@@ -2338,15 +2338,8 @@ export type TaskStatusValue =
 
 export type TaskQuality = "good" | "ok" | "needs_work";
 
-export interface TaskStatusUpdateRecord {
-  id: string;
-  actor_user_id: string;
-  actor_display_name: string | null;
-  old_status: string | null;
-  new_status: string;
-  note: string | null;
-  created_at: string | null;
-}
+export type TaskStatusUpdateRecord =
+  components["schemas"]["TaskStatusUpdateRecord"];
 
 export interface TaskScoreRecord {
   quality: TaskQuality;
