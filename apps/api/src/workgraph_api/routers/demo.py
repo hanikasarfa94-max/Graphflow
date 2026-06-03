@@ -19,9 +19,12 @@ from httpx import ASGITransport, AsyncClient
 from pydantic import BaseModel, ConfigDict, Field
 
 from workgraph_api.demo_seed import (
+    BROKER_RECIPIENT,
+    BROKER_SENDER,
     DEFAULT_PASSWORD,
     DEFAULT_SOURCE_EVENT_ID,
     DEFAULT_USERNAME,
+    run_broker_demo,
     run_canonical_demo,
 )
 from workgraph_api.settings import load_settings
@@ -80,4 +83,45 @@ async def seed_canonical_demo(request: Request, body: SeedRequest | None = None)
         "delivery_trace_id": result.delivery_trace_id,
         "completed_scope_items": result.completed_scope_items,
         "elapsed_seconds": round(result.elapsed_seconds, 3),
+    }
+
+
+class BrokerSeedRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    sender: str = Field(default=BROKER_SENDER, max_length=80)
+    recipient: str = Field(default=BROKER_RECIPIENT, max_length=80)
+    password: str = Field(default=DEFAULT_PASSWORD, min_length=6, max_length=200)
+
+
+@router.post("/seed-broker")
+async def seed_broker_demo(
+    request: Request, body: BrokerSeedRequest | None = None
+):
+    """Dev/staging-only: seed a 2-person project for the disappearing-broker
+    routing-loop demo. Returns the sender + recipient credentials and ids so
+    the operator can drive the live loop through the UI. See
+    docs/demo-broker-loop.md."""
+    _dev_only()
+    body = body or BrokerSeedRequest()
+
+    transport = ASGITransport(app=request.app)
+    async with AsyncClient(
+        transport=transport, base_url="http://demo-seed"
+    ) as inner:
+        result = await run_broker_demo(
+            inner,
+            app_state=request.app.state,
+            sender=body.sender,
+            recipient=body.recipient,
+            password=body.password,
+        )
+    return {
+        "project_id": result.project_id,
+        "sender_username": result.sender_username,
+        "sender_id": result.sender_id,
+        "recipient_username": result.recipient_username,
+        "recipient_id": result.recipient_id,
+        "recipient_display_name": result.recipient_display_name,
+        "password": result.password,
     }

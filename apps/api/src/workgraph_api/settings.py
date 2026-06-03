@@ -37,6 +37,16 @@ class Settings(BaseSettings):
             "in under a second and costs nothing."
         ),
     )
+    demo_routing: bool = Field(
+        default=False,
+        description=(
+            "DEMO/DEV ONLY (only meaningful with use_stubs=true). Swaps the "
+            "silent stub EdgeAgent for a deterministic DemoEdgeAgent that "
+            "always proposes a route to a teammate on a question and returns "
+            "canned options/reply, so the disappearing-broker loop demos "
+            "reliably. Never enabled in prod (use_stubs defaults false)."
+        ),
+    )
     membrane_active_interval_minutes: int = Field(
         default=0,
         description=(

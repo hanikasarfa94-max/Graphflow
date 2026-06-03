@@ -149,6 +149,7 @@ from workgraph_api.services import (
     StreamService,
     TutorialSeedService,
 )
+from workgraph_api.demo_edge_agent import DemoEdgeAgent
 from workgraph_api.settings import load_settings
 
 settings = load_settings()
@@ -505,7 +506,12 @@ async def lifespan(app: FastAPI):
     kb_item_service_early.attach_membrane(membrane_service)
 
     if settings.use_stubs:
-        edge_agent = _SilentStubEdgeAgent()
+        # DEMO/DEV: demo_routing swaps the silent stub for a deterministic
+        # broker agent so the routing loop demos reliably. See
+        # demo_edge_agent.py + docs/demo-broker-loop.md.
+        edge_agent = (
+            DemoEdgeAgent() if settings.demo_routing else _SilentStubEdgeAgent()
+        )
     else:
         edge_agent = EdgeAgent()
 
