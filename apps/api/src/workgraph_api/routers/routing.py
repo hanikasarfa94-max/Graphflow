@@ -67,6 +67,17 @@ class ReplyRequest(BaseModel):
     custom_text: str | None = Field(default=None, max_length=4000)
 
 
+class ConfirmProposalRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    target_user_id: str = Field(min_length=1, max_length=64)
+    # Optional refined B-facing framing the user edited in the slim send
+    # surface (the disclosure gate). When present it overrides the
+    # proposal's stored framing so the routed signal carries an A→B-voice
+    # ask. Empty / null = use the original proposal framing.
+    refined_framing: str | None = Field(default=None, max_length=4000)
+
+
 # ---- response shapes (C1-C) -----------------------------------------------
 # Mirror RoutingService._shape. background/options are free-form JSON columns
 # (list of arbitrary snippet/option dicts) → list[dict]; reply is a nullable
@@ -146,6 +157,46 @@ async def post_dispatch(
         raise HTTPException(
             status_code=status_map.get(err, 400), detail=err
         )
+    return result
+
+
+@router.post("/proposals/{proposal_id}/confirm")
+async def post_confirm_proposal(
+    proposal_id: str,
+    body: ConfirmProposalRequest,
+    request: Request,
+    user: AuthenticatedUser = Depends(require_user),
+):
+    """Canonical "Route to X" confirm for a discovery route-proposal.
+
+    Phase B.2: the slim My-AI send surface posts here when the user
+    accepts the edge agent's route proposal. Reuses the existing
+    PersonalStreamService.confirm_route logic unchanged — proposal
+    ownership + target validation, server-generated recipient reply
+    options, dispatch to a RoutingSignal, the refined_framing disclosure
+    gate, and the ambient "✓ asked X" turn. Supersedes the older
+    POST /api/personal/route/{proposal_id}/confirm (kept temporarily).
+    """
+    service = _get_personal_service(request)
+    result = await service.confirm_route(
+        proposal_id=proposal_id,
+        source_user_id=user.id,
+        target_user_id=body.target_user_id,
+        refined_framing=body.refined_framing,
+    )
+    if not result.get("ok"):
+        err = result.get("error", "confirm_failed")
+        status_map = {
+            "proposal_not_found": 404,
+            "proposal_not_ours": 403,
+            "target_not_in_proposal": 400,
+            "cannot_route_to_self": 400,
+            "target_not_found": 404,
+            "source_not_project_member": 403,
+            "target_not_project_member": 400,
+            "option_generation_failed": 502,
+        }
+        raise HTTPException(status_code=status_map.get(err, 400), detail=err)
     return result
 
 
