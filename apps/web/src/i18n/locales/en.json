@@ -34,6 +34,18 @@
     "gatedNoSummary": "(no summary)",
     "openInTeamRoom": "Answer in team room"
   },
+  "routeSuggestion": {
+    "prompt": "Route this to a teammate who'd know?",
+    "ask": "Route to {name}?",
+    "edit": "Edit message",
+    "hideEdit": "Hide",
+    "draftPlaceholder": "What {name} will see…",
+    "send": "Send",
+    "sending": "Sending…",
+    "dismiss": "Dismiss",
+    "sent": "Routed to {name}.",
+    "failed": "Couldn't route — try again."
+  },
   "routingReply": {
     "title": "A teammate routed this to you",
     "loading": "Loading…",

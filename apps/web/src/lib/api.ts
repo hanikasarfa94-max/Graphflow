@@ -1538,8 +1538,11 @@ export function confirmRouteProposal(
   targetUserId: string,
   refinedFraming?: string | null,
 ): Promise<ConfirmRouteResponse> {
+  // B.2: canonical routing-namespace confirm (was
+  // /api/personal/route/{id}/confirm; that endpoint is deprecated and
+  // removed once this is the only caller).
   return api<ConfirmRouteResponse>(
-    `/api/personal/route/${proposalId}/confirm`,
+    `/api/routing/proposals/${proposalId}/confirm`,
     {
       method: "POST",
       body: {

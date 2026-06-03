@@ -34,6 +34,18 @@
     "gatedNoSummary": "(无摘要)",
     "openInTeamRoom": "去团队会议室回应"
   },
+  "routeSuggestion": {
+    "prompt": "把这个路由给可能了解的同事?",
+    "ask": "路由给 {name}?",
+    "edit": "编辑内容",
+    "hideEdit": "收起",
+    "draftPlaceholder": "{name} 将看到的内容…",
+    "send": "发送",
+    "sending": "发送中…",
+    "dismiss": "忽略",
+    "sent": "已路由给 {name}。",
+    "failed": "路由失败,请重试。"
+  },
   "routingReply": {
     "title": "有同事把这个路由给了你",
     "loading": "加载中…",
