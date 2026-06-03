@@ -194,7 +194,7 @@ export function RouteSuggestion({ proposal }: { proposal: RouteProposalView }) {
             <div style={actions}>
               <Button
                 variant="primary"
-                disabled={busy}
+                disabled={busyId !== null}
                 onClick={() => send(target)}
               >
                 {busy ? t("sending") : t("send")}
@@ -242,6 +242,7 @@ function RoutedReplyInline({
   const [signal, setSignal] = useState<RoutingSignal | null>(null);
   const [closing, setClosing] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [exhausted, setExhausted] = useState(false);
   const attemptsRef = useRef(0);
   const doneRef = useRef(false);
 
@@ -265,10 +266,14 @@ function RoutedReplyInline({
           doneRef.current = true;
           stop();
         } else if (attemptsRef.current >= MAX_POLLS) {
+          setExhausted(true);
           stop();
         }
       } catch {
-        if (attemptsRef.current >= MAX_POLLS) stop();
+        if (attemptsRef.current >= MAX_POLLS) {
+          setExhausted(true);
+          stop();
+        }
       }
     };
     void tick(); // immediate
@@ -290,7 +295,7 @@ function RoutedReplyInline({
     return (
       <div style={wrap} data-testid="route-suggestion">
         <Text variant="caption" muted>
-          {t("awaiting", { name })}
+          {exhausted ? t("stillWaiting", { name }) : t("awaiting", { name })}
         </Text>
       </div>
     );
