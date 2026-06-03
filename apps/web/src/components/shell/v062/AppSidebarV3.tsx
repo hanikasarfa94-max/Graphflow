@@ -19,6 +19,7 @@
 import {
   BookOpen,
   CheckSquare,
+  Inbox,
   MessageSquare,
   Sparkles,
   Workflow,
@@ -31,6 +32,7 @@ import { useTranslations } from "next-intl";
 import type { CSSProperties } from "react";
 
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
+import { formatBadgeCount, useInboxCount } from "@/hooks/useInboxCount";
 import type { User } from "@/lib/api";
 
 // 5-surface nav locked. i18n keys at shellV062.nav.*.
@@ -74,6 +76,23 @@ const linkActive: CSSProperties = {
   fontWeight: 600,
 };
 
+const inboxBadge: CSSProperties = {
+  marginLeft: "auto",
+  minWidth: 18,
+  height: 18,
+  padding: "0 5px",
+  borderRadius: 9,
+  background: "var(--wg-accent)",
+  color: "#fff",
+  fontSize: 11,
+  fontWeight: 700,
+  fontFamily: "var(--wg-font-mono)",
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  flexShrink: 0,
+};
+
 export function AppSidebarV3({
   user,
 }: {
@@ -81,6 +100,7 @@ export function AppSidebarV3({
 }) {
   const pathname = usePathname();
   const t = useTranslations("shellV062");
+  const inboxBadgeText = formatBadgeCount(useInboxCount());
 
   return (
     <aside
@@ -193,6 +213,26 @@ export function AppSidebarV3({
           background: "var(--wg-surface-sunk)",
         }}
       >
+        {/* Secondary affordance — NOT a 6th primary nav surface. Routing
+            inbox lives here with a pending-count badge so a routed ask is
+            visibly "arrived" without touching the locked 5-surface nav. */}
+        <Link
+          href="/inbox"
+          data-testid="sidebar-inbox"
+          style={{
+            ...linkBase,
+            ...(isActive(pathname, "/inbox") ? linkActive : null),
+            padding: "8px 10px",
+          }}
+        >
+          <Inbox size={18} strokeWidth={1.5} />
+          <span>{t("inboxAffordance")}</span>
+          {inboxBadgeText ? (
+            <span style={inboxBadge} data-testid="sidebar-inbox-badge">
+              {inboxBadgeText}
+            </span>
+          ) : null}
+        </Link>
         <Link
           href="/settings/profile"
           style={{
