@@ -14,9 +14,11 @@ Used by:
 """
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Query, Request
 from httpx import ASGITransport, AsyncClient
 from pydantic import BaseModel, ConfigDict, Field
+
+from workgraph_persistence import EventRepository, session_scope
 
 from workgraph_api.demo_seed import (
     BROKER_RECIPIENT,
@@ -125,3 +127,41 @@ async def seed_broker_demo(
         "recipient_display_name": result.recipient_display_name,
         "password": result.password,
     }
+
+
+_ROUTING_EVENT_NAMES = (
+    "routing.dispatched",
+    "routing.opened",
+    "routing.replied",
+    "routing.accepted",
+)
+
+
+@router.get("/routing-events")
+async def routing_events(request: Request, limit: int = Query(default=20, ge=1, le=200)):
+    """Dev/staging-only: inspect the routing-loop telemetry the EventBus
+    persisted during a demo. Not a dashboard — a plain JSON dump of the four
+    routing.* events (most recent `limit` each) so an operator can curl it to
+    confirm the loop fired end to end. See docs/demo-broker-loop.md."""
+    _dev_only()
+    out: dict[str, object] = {}
+    async with session_scope(request.app.state.sessionmaker) as session:
+        repo = EventRepository(session)
+        for name in _ROUTING_EVENT_NAMES:
+            rows = await repo.list_by_name(name)
+            recent = rows[-limit:]
+            out[name] = {
+                "count": len(rows),
+                "recent": [
+                    {
+                        "trace_id": r.trace_id,
+                        "project_id": r.project_id,
+                        "payload": r.payload,
+                        "created_at": (
+                            r.created_at.isoformat() if r.created_at else None
+                        ),
+                    }
+                    for r in recent
+                ],
+            }
+    return out

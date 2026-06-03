@@ -56,3 +56,52 @@ async def test_seed_broker_creates_two_user_project(api_env):
         owners = {s.owner_user_id for s in personals}
         assert data["sender_id"] in owners
         assert recipient_id in owners
+
+
+@pytest.mark.asyncio
+async def test_routing_events_inspection_endpoint(api_env):
+    client, maker, *_ = api_env
+
+    # Fresh DB: endpoint returns the four buckets, all empty.
+    r0 = await client.get("/api/demo/routing-events")
+    assert r0.status_code == 200, r0.text
+    assert set(r0.json().keys()) == {
+        "routing.dispatched",
+        "routing.opened",
+        "routing.replied",
+        "routing.accepted",
+    }
+
+    seed = (await client.post("/api/demo/seed-broker")).json()
+    # Log the test client in as the sender, then dispatch a routed signal.
+    await client.post(
+        "/api/auth/login",
+        json={"username": seed["sender_username"], "password": seed["password"]},
+    )
+    disp = await client.post(
+        "/api/routing/dispatch",
+        json={
+            "target_user_id": seed["recipient_id"],
+            "project_id": seed["project_id"],
+            "framing": "demo routing ask",
+            "background": [],
+            "options": [
+                {
+                    "id": "ok",
+                    "label": "Sounds good",
+                    "kind": "action",
+                    "background": "",
+                    "reason": "r",
+                    "tradeoff": "t",
+                    "weight": 0.6,
+                }
+            ],
+        },
+    )
+    assert disp.status_code == 200, disp.text
+
+    events = (await client.get("/api/demo/routing-events")).json()
+    assert events["routing.dispatched"]["count"] >= 1
+    last = events["routing.dispatched"]["recent"][-1]
+    assert last["payload"]["signal_id"]
+    assert last["created_at"]
