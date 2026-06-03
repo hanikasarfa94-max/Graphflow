@@ -45,43 +45,48 @@ import { join, relative, sep } from "node:path";
 const SRC_ROOT = join(import.meta.dir, "..");
 
 // Directories under apps/web/src that the rule applies to.
-const SCOPED_DIRS = [
-  join("components", "rooms"),
-  join("components", "kb"),
-  join("components", "flows"),
-  join("features", "flows"),
-];
+// Re-scoped 2026-06-03: the original scope (components/rooms, components/kb,
+// components/flows, features/flows) was the pre-pivot experimental surface
+// and has been deleted. The guard now polices the live feature surfaces
+// under `features/` so it keeps catching NEW inline-style/hex debt instead
+// of silently passing on nothing.
+const SCOPED_DIRS = ["features"];
 
-// Files known to currently violate the rule on 2026-05-07 — generated
-// by walking the three scoped dirs and recording every file that
+// Files known to currently violate the rule on 2026-06-03 — generated
+// by walking the scoped dir (`features/`) and recording every file that
 // contains either `style={{` or a `#[0-9a-fA-F]{3,8}` literal in
-// non-comment source.
+// non-comment source. Pre-existing debt carried over from the pivot;
+// tracked here so the guard blocks NEW offenders. A future wave should
+// burn this list down (see feedback_flows_inline_styles_debt.md).
 //
 // Paths are POSIX-style (forward slashes), relative to apps/web/src.
 const EXISTING_VIOLATORS: ReadonlySet<string> = new Set([
-  // components/rooms — 9 files, all production rooms shell + flows
-  // panel pieces still on inline-style + raw hex. Documented as
-  // "Slice E experiments; required cleanup before /flows/[id] ships"
-  // (see feedback_flows_inline_styles_debt.md).
-  "components/rooms/RoomShell.tsx",
-  "components/rooms/RoomStreamTimeline.tsx",
-  "components/rooms/RoomWorkbench.tsx",
-  "components/rooms/FlowsPanelBody.tsx",
-  "components/rooms/EvidenceBlock.tsx",
-  "components/rooms/FlowRowActions.tsx",
-  "components/rooms/WorkbenchPanel.tsx",
-  "components/rooms/PanelItem.tsx",
-  "components/rooms/NewRoomModal.tsx",
-
-  // components/kb — 5 files, KB browse/detail surface.
-  "components/kb/KbItemActions.tsx",
-  "components/kb/KbItemDetail.tsx",
-  "components/kb/KbTreeBrowser.tsx",
-  "components/kb/KbList.tsx",
-  "components/kb/KbItemLicenseControl.tsx",
-
-  // components/flows — 1 file, the Active Flows entry button.
-  "components/flows/ActiveFlowsButton.tsx",
+  "features/conversations/ConversationComposer.tsx",
+  "features/conversations/ConversationHeader.tsx",
+  "features/conversations/ConversationList.tsx",
+  "features/conversations/ConversationShell.tsx",
+  "features/conversations/Conversations.tsx",
+  "features/conversations/DMRightRail.tsx",
+  "features/conversations/MessageStream.tsx",
+  "features/conversations/RoomRightRail.tsx",
+  "features/conversations/TopicRightRail.tsx",
+  "features/documents/DocumentCard.tsx",
+  "features/documents/DocumentDetail.tsx",
+  "features/documents/DocumentIndex.tsx",
+  "features/documents/DocumentRightRail.tsx",
+  "features/documents/Documents.tsx",
+  "features/flow-center/AuthorityState.tsx",
+  "features/flow-center/FlowCenter.tsx",
+  "features/flow-center/FlowDrawer.tsx",
+  "features/flow-center/FlowTable.tsx",
+  "features/flow-center/MemoryPromptDrawer.tsx",
+  "features/flow-center/MemoryReviewDrawer.tsx",
+  "features/my-ai/MyAIComposer.tsx",
+  "features/my-ai/MyAILandingClient.tsx",
+  "features/tasks/TaskCard.tsx",
+  "features/tasks/TaskList.tsx",
+  "features/tasks/TaskRightRail.tsx",
+  "features/tasks/Tasks.tsx",
 ]);
 
 // `style={{` — JSX inline style object literal. Misses

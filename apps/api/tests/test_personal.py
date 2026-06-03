@@ -446,7 +446,7 @@ async def test_confirm_route_dispatches_via_routing_service(api_env):
     )
 
     r = await client.post(
-        f"/api/personal/route/{proposal_id}/confirm",
+        f"/api/routing/proposals/{proposal_id}/confirm",
         json={"target_user_id": raj_id},
     )
     assert r.status_code == 200, r.text
@@ -553,10 +553,110 @@ async def test_confirm_route_rejects_wrong_target(api_env):
 
     # Try to confirm for someone the proposal never named.
     r = await client.post(
-        f"/api/personal/route/{proposal_id}/confirm",
+        f"/api/routing/proposals/{proposal_id}/confirm",
         json={"target_user_id": third_id},
     )
     assert r.status_code == 400, r.text
+
+
+# ---------------------------------------------------------------------------
+# Phase B.2 — canonical routing-namespace confirm
+# (POST /api/routing/proposals/{id}/confirm reuses confirm_route).
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_routing_confirm_proposal_rejects_non_owner(api_env):
+    client, maker, *_ = api_env
+    stub = _install_stub(api_env)
+
+    await _register(client, "b2_src_no")
+    project_id = await _intake(client, "B2-nonowner")
+    await _register(client, "b2_raj_no")
+    raj_id = await _me_id(client)
+    await _login(client, "b2_src_no")
+    await _invite(client, project_id, "b2_raj_no")
+    await backfill_streams_from_projects(maker)
+
+    stub.respond_queue.append(
+        EdgeResponse(
+            kind="route_proposal",
+            body="ask Raj?",
+            route_targets=[
+                RouteTarget(
+                    user_id=raj_id,
+                    username="b2_raj_no",
+                    display_name="Raj",
+                    rationale="",
+                )
+            ],
+        )
+    )
+    post_result = await client.post(
+        f"/api/personal/{project_id}/post", json={"body": "design call"}
+    )
+    proposal_id = post_result.json()["edge_response"]["route_proposal_id"]
+
+    # Raj (not the proposal's source) tries to confirm it → 403.
+    await _login(client, "b2_raj_no")
+    r = await client.post(
+        f"/api/routing/proposals/{proposal_id}/confirm",
+        json={"target_user_id": raj_id},
+    )
+    assert r.status_code == 403, r.text
+    assert r.json()["message"] == "proposal_not_ours"
+
+
+@pytest.mark.asyncio
+async def test_routing_confirm_proposal_refined_framing_overrides(api_env):
+    client, maker, *_ = api_env
+    stub = _install_stub(api_env)
+
+    await _register(client, "b2_src_rf")
+    project_id = await _intake(client, "B2-refined")
+    await _register(client, "b2_raj_rf")
+    raj_id = await _me_id(client)
+    await _login(client, "b2_src_rf")
+    await _invite(client, project_id, "b2_raj_rf")
+    await backfill_streams_from_projects(maker)
+
+    stub.respond_queue.append(
+        EdgeResponse(
+            kind="route_proposal",
+            body="A-voice prose written for the source",
+            route_targets=[
+                RouteTarget(
+                    user_id=raj_id,
+                    username="b2_raj_rf",
+                    display_name="Raj",
+                    rationale="",
+                )
+            ],
+        )
+    )
+    post_result = await client.post(
+        f"/api/personal/{project_id}/post", json={"body": "ask raj"}
+    )
+    proposal_id = post_result.json()["edge_response"]["route_proposal_id"]
+
+    stub.options_queue.append([])
+
+    refined = "Raj — do you have bandwidth for the F export this week?"
+    r = await client.post(
+        f"/api/routing/proposals/{proposal_id}/confirm",
+        json={"target_user_id": raj_id, "refined_framing": refined},
+    )
+    assert r.status_code == 200, r.text
+    signal_id = r.json()["signal_id"]
+
+    async with session_scope(maker) as session:
+        signal = (
+            await session.execute(
+                select(RoutedSignalRow).where(RoutedSignalRow.id == signal_id)
+            )
+        ).scalar_one()
+        # The disclosure-gated edit is the framing the recipient sees.
+        assert signal.framing == refined
 
 
 # ---------------------------------------------------------------------------

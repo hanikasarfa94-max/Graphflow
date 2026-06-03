@@ -34,6 +34,35 @@
     "gatedNoSummary": "(no summary)",
     "openInTeamRoom": "Answer in team room"
   },
+  "routeSuggestion": {
+    "prompt": "Route this to a teammate who'd know?",
+    "ask": "Route to {name}?",
+    "edit": "Edit message",
+    "hideEdit": "Hide",
+    "draftPlaceholder": "What {name} will see…",
+    "send": "Send",
+    "sending": "Sending…",
+    "dismiss": "Dismiss",
+    "sent": "Routed to {name}.",
+    "failed": "Couldn't route — try again."
+  },
+  "routingReply": {
+    "title": "A teammate routed this to you",
+    "loading": "Loading…",
+    "loadError": "Couldn't load this routing signal.",
+    "framingHeading": "The ask",
+    "backgroundHeading": "Context",
+    "optionsHeading": "Suggested replies",
+    "customPlaceholder": "Write a reply…",
+    "send": "Send reply",
+    "sending": "Sending…",
+    "replyFailed": "Reply failed.",
+    "repliedNote": "You replied to this.",
+    "accept": "Accept & close",
+    "accepting": "Closing…",
+    "acceptedNote": "This signal is closed.",
+    "close": "Close"
+  },
   "brand": {
     "name": "GraphFlow",
     "tagline": "Coordination as a graph, not a document.",

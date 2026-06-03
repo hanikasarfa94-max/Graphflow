@@ -6,9 +6,13 @@ PersonalStreamService:
 
   * POST /api/personal/{project_id}/post          — user posts; edge
                                                    metabolizes
-  * POST /api/personal/route/{proposal_id}/confirm — "Ask X" click → dispatch
   * GET  /api/personal/{project_id}/messages      — list with parsed
                                                    route-proposal metadata
+
+The "Ask X" route-confirm gesture moved to the canonical routing
+namespace in Phase B.2: POST /api/routing/proposals/{id}/confirm
+(see routing.py). The shared PersonalStreamService.confirm_route service
+method is unchanged.
 
 All routes require a signed-in user.
 """
@@ -52,18 +56,6 @@ class PreviewRequest(BaseModel):
     # leftover (post-side wired in commit 0332031).
     scope: dict[str, bool] | None = None
     scope_tiers: dict[str, bool] | None = None
-
-
-class ConfirmRouteRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    target_user_id: str = Field(min_length=1, max_length=64)
-    # Optional refined B-facing framing the user edited in the route-
-    # proposal card. When present, this overrides the original
-    # proposal.framing so the routed signal carries an A→B-voice ask
-    # (e.g. "do you have bandwidth for the auth rewrite?") instead of
-    # A's sub-agent's prose written for A. Empty / null = use original.
-    refined_framing: str | None = Field(default=None, max_length=4000)
 
 
 def _get_service(request: Request) -> PersonalStreamService:
@@ -130,36 +122,6 @@ async def post_personal_preview(
             "project_not_found": 404,
             "not_a_project_member": 403,
             "preview_failed": 502,
-        }
-        raise HTTPException(status_code=status_map.get(err, 400), detail=err)
-    return result
-
-
-@router.post("/route/{proposal_id}/confirm")
-async def post_confirm_route(
-    proposal_id: str,
-    body: ConfirmRouteRequest,
-    request: Request,
-    user: AuthenticatedUser = Depends(require_user),
-):
-    service = _get_service(request)
-    result = await service.confirm_route(
-        proposal_id=proposal_id,
-        source_user_id=user.id,
-        target_user_id=body.target_user_id,
-        refined_framing=body.refined_framing,
-    )
-    if not result.get("ok"):
-        err = result.get("error", "confirm_failed")
-        status_map = {
-            "proposal_not_found": 404,
-            "proposal_not_ours": 403,
-            "target_not_in_proposal": 400,
-            "cannot_route_to_self": 400,
-            "target_not_found": 404,
-            "source_not_project_member": 403,
-            "target_not_project_member": 400,
-            "option_generation_failed": 502,
         }
         raise HTTPException(status_code=status_map.get(err, 400), detail=err)
     return result

@@ -21,7 +21,9 @@ import { useCallback, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 
 import { Button, Card, Tag, Text } from "@/components/ui";
-import { ApiError, api } from "@/lib/api";
+import { ApiError, api, type PersonalRouteTarget } from "@/lib/api";
+
+import { RouteSuggestion, type RouteProposalView } from "./RouteSuggestion";
 
 type Role = "user" | "assistant" | "system";
 
@@ -33,6 +35,9 @@ interface ThreadEntry {
   // a richer renderer per ProposalType lands when the wire normalizes
   // in Phase B.2).
   proposals?: unknown[];
+  // B.2: a discovery route_proposal the agent surfaced on this turn,
+  // rendered as the slim RouteSuggestion send affordance.
+  routeProposal?: RouteProposalView;
 }
 
 // PersonalStreamService.post returns this envelope. The assistant
@@ -46,6 +51,11 @@ interface MyAIMessageResponse {
     kind?: string;
     body?: string;
     reply_message_id?: string;
+    // B.2 — route_proposal fields (already emitted by the backend;
+    // previously untyped/dropped on the FE).
+    route_proposal_id?: string;
+    route_kind?: string;
+    targets?: PersonalRouteTarget[];
     claims?: Array<{
       text?: string;
       citations?: Array<{ node_id?: string; kind?: string }>;
@@ -132,6 +142,21 @@ export function MyAIComposer({
       const edge = result.edge_response;
       const assistantBody = edge?.body || null;
       const proposals = result.tool_messages;
+      // B.2 — slim send surface: only *discovery* route proposals get the
+      // inline RouteSuggestion. Gated proposals are intentionally ignored
+      // (no scrimmage/gated/pre-answer UI).
+      const routeProposal: RouteProposalView | undefined =
+        edge?.kind === "route_proposal" &&
+        edge.route_kind === "discovery" &&
+        edge.route_proposal_id &&
+        edge.targets &&
+        edge.targets.length > 0
+          ? {
+              routeProposalId: edge.route_proposal_id,
+              framing: edge.body || "",
+              targets: edge.targets,
+            }
+          : undefined;
       if (assistantBody) {
         setThread((prev) => [
           ...prev,
@@ -140,6 +165,7 @@ export function MyAIComposer({
             role: "assistant",
             body: assistantBody,
             proposals,
+            routeProposal,
           },
         ]);
       } else if (proposals && Array.isArray(proposals) && proposals.length > 0) {
@@ -299,6 +325,9 @@ function Entry({ entry }: { entry: ThreadEntry }) {
           {entry.body}
         </pre>
       </Card>
+      {entry.routeProposal ? (
+        <RouteSuggestion proposal={entry.routeProposal} />
+      ) : null}
       {entry.proposals && entry.proposals.length > 0 ? (
         <Card variant="sunk">
           <Text variant="caption" muted>
