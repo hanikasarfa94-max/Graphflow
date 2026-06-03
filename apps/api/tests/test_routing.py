@@ -23,6 +23,7 @@ from sqlalchemy import select
 
 from workgraph_persistence import (
     EDGE_AGENT_SYSTEM_USER_ID,
+    EventRepository,
     MessageRow,
     RoutedSignalRow,
     StreamMemberRow,
@@ -1231,3 +1232,94 @@ async def test_edge_agent_legacy_display_name_migrated(api_env):
             )
         ).scalar_one()
     assert migrated.display_name == "项目助手"
+
+
+# ---------------------------------------------------------------------------
+# C-min telemetry — routing.opened on GET, routing.accepted on accept.
+# ---------------------------------------------------------------------------
+
+
+async def _dispatch_signal(client, project_id, target_id, framing="ask"):
+    r = await client.post(
+        "/api/routing/dispatch",
+        json={
+            "target_user_id": target_id,
+            "project_id": project_id,
+            "framing": framing,
+            "background": [],
+            "options": [
+                {
+                    "id": "ok",
+                    "label": "Sounds good",
+                    "kind": "action",
+                    "background": "",
+                    "reason": "r",
+                    "tradeoff": "t",
+                    "weight": 0.6,
+                }
+            ],
+        },
+    )
+    assert r.status_code == 200, r.text
+    return r.json()["signal"]["id"]
+
+
+@pytest.mark.asyncio
+async def test_get_signal_emits_routing_opened(api_env):
+    client, maker, _, _, _, _ = api_env
+    await _register(client, "tel_src")
+    project_id = await _intake(client, "TEL-opened")
+    await _register(client, "tel_tgt")
+    tgt_id = await _me_id(client)
+    await _login(client, "tel_src")
+    await _invite(client, project_id, "tel_tgt")
+    await backfill_streams_from_projects(maker)
+
+    signal_id = await _dispatch_signal(client, project_id, tgt_id)
+
+    # Target opens the routed ask.
+    await _login(client, "tel_tgt")
+    r = await client.get(f"/api/routing/{signal_id}")
+    assert r.status_code == 200, r.text
+
+    async with session_scope(maker) as session:
+        opened = await EventRepository(session).list_by_name("routing.opened")
+    mine = [e for e in opened if e.payload["signal_id"] == signal_id]
+    assert mine, "routing.opened was not emitted"
+    assert mine[-1].payload["is_target"] is True
+
+
+@pytest.mark.asyncio
+async def test_accept_emits_routing_accepted_once(api_env):
+    client, maker, _, _, _, _ = api_env
+    await _register(client, "tel_src2")
+    project_id = await _intake(client, "TEL-accepted")
+    src_id = await _me_id(client)
+    await _register(client, "tel_tgt2")
+    tgt_id = await _me_id(client)
+    await _login(client, "tel_src2")
+    await _invite(client, project_id, "tel_tgt2")
+    await backfill_streams_from_projects(maker)
+
+    signal_id = await _dispatch_signal(client, project_id, tgt_id)
+
+    # Target replies → status becomes 'replied'.
+    await _login(client, "tel_tgt2")
+    rep = await client.post(
+        f"/api/routing/{signal_id}/reply", json={"option_id": "ok"}
+    )
+    assert rep.status_code == 200, rep.text
+
+    # Source accepts → routing.accepted emitted exactly once.
+    await _login(client, "tel_src2")
+    acc = await client.post(f"/api/routing/{signal_id}/accept")
+    assert acc.status_code == 200, acc.text
+    # Idempotent re-accept must NOT emit a second event.
+    acc2 = await client.post(f"/api/routing/{signal_id}/accept")
+    assert acc2.status_code == 200, acc2.text
+
+    async with session_scope(maker) as session:
+        accepted = await EventRepository(session).list_by_name("routing.accepted")
+    mine = [e for e in accepted if e.payload["signal_id"] == signal_id]
+    assert len(mine) == 1, f"expected exactly one routing.accepted, got {len(mine)}"
+    assert mine[0].payload["source_user_id"] == src_id

@@ -690,7 +690,24 @@ class RoutingService:
                 return {"ok": False, "error": "signal_not_found"}
             if viewer_id not in (row.source_user_id, row.target_user_id):
                 return {"ok": False, "error": "not_a_participant"}
-            return {"ok": True, "signal": _shape(row)}
+            shaped = _shape(row)
+            source_id = row.source_user_id
+            target_id = row.target_user_id
+            project_id = row.project_id
+        # C-min telemetry: the routed ask was opened for viewing. Emitted on
+        # the user-facing view path only (internal reads use repo.get).
+        await self._event_bus.emit(
+            "routing.opened",
+            {
+                "signal_id": signal_id,
+                "viewer_id": viewer_id,
+                "is_target": viewer_id == target_id,
+                "source_user_id": source_id,
+                "target_user_id": target_id,
+                "project_id": project_id,
+            },
+        )
+        return {"ok": True, "signal": shaped}
 
     async def accept(
         self, *, signal_id: str, accepter_user_id: str
@@ -709,8 +726,24 @@ class RoutingService:
                 return {"ok": False, "error": "not_the_source"}
             if row.status not in ("replied", "accepted"):
                 return {"ok": False, "error": "not_accepted_state"}
+            was_replied = row.status == "replied"
             updated = await repo.mark_accepted(signal_id)
-            return {"ok": True, "signal": _shape(updated)}
+            shaped = _shape(updated)
+            target_id = updated.target_user_id
+            project_id = updated.project_id
+        # C-min telemetry: source closed the loop. Only on the real
+        # replied -> accepted transition, not idempotent re-accepts.
+        if was_replied:
+            await self._event_bus.emit(
+                "routing.accepted",
+                {
+                    "signal_id": signal_id,
+                    "source_user_id": accepter_user_id,
+                    "target_user_id": target_id,
+                    "project_id": project_id,
+                },
+            )
+        return {"ok": True, "signal": shaped}
 
     # ---- C.1 — source-side reply symmetry --------------------------------
     #
