@@ -43,7 +43,11 @@
     "send": "Send",
     "sending": "Sending…",
     "dismiss": "Dismiss",
-    "sent": "Routed to {name}.",
+    "awaiting": "Routed to {name} · waiting for reply…",
+    "replied": "{name} replied",
+    "closeLoop": "Close the loop",
+    "closing": "Closing…",
+    "closed": "Closed with {name}.",
     "failed": "Couldn't route — try again."
   },
   "routingReply": {

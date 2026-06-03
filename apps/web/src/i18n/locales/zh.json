@@ -43,7 +43,11 @@
     "send": "发送",
     "sending": "发送中…",
     "dismiss": "忽略",
-    "sent": "已路由给 {name}。",
+    "awaiting": "已路由给 {name} · 等待回复…",
+    "replied": "{name} 已回复",
+    "closeLoop": "关闭闭环",
+    "closing": "关闭中…",
+    "closed": "已与 {name} 闭环。",
     "failed": "路由失败,请重试。"
   },
   "routingReply": {
