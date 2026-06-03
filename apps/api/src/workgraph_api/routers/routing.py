@@ -174,8 +174,8 @@ async def post_confirm_proposal(
     PersonalStreamService.confirm_route logic unchanged — proposal
     ownership + target validation, server-generated recipient reply
     options, dispatch to a RoutingSignal, the refined_framing disclosure
-    gate, and the ambient "✓ asked X" turn. Supersedes the older
-    POST /api/personal/route/{proposal_id}/confirm (kept temporarily).
+    gate, and the ambient "✓ asked X" turn. Replaced the older
+    POST /api/personal/route/{proposal_id}/confirm (removed in B.2).
     """
     service = _get_personal_service(request)
     result = await service.confirm_route(

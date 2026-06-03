@@ -446,7 +446,7 @@ async def test_confirm_route_dispatches_via_routing_service(api_env):
     )
 
     r = await client.post(
-        f"/api/personal/route/{proposal_id}/confirm",
+        f"/api/routing/proposals/{proposal_id}/confirm",
         json={"target_user_id": raj_id},
     )
     assert r.status_code == 200, r.text
@@ -553,7 +553,7 @@ async def test_confirm_route_rejects_wrong_target(api_env):
 
     # Try to confirm for someone the proposal never named.
     r = await client.post(
-        f"/api/personal/route/{proposal_id}/confirm",
+        f"/api/routing/proposals/{proposal_id}/confirm",
         json={"target_user_id": third_id},
     )
     assert r.status_code == 400, r.text
@@ -563,127 +563,6 @@ async def test_confirm_route_rejects_wrong_target(api_env):
 # Phase B.2 — canonical routing-namespace confirm
 # (POST /api/routing/proposals/{id}/confirm reuses confirm_route).
 # ---------------------------------------------------------------------------
-
-
-@pytest.mark.asyncio
-async def test_routing_confirm_proposal_dispatches(api_env):
-    client, maker, *_ = api_env
-    stub = _install_stub(api_env)
-
-    await _register(client, "b2_src")
-    project_id = await _intake(client, "B2-confirm")
-    src_id = await _me_id(client)
-    await _register(client, "b2_raj")
-    raj_id = await _me_id(client)
-    await _login(client, "b2_src")
-    await _invite(client, project_id, "b2_raj")
-    await backfill_streams_from_projects(maker)
-
-    stub.respond_queue.append(
-        EdgeResponse(
-            kind="route_proposal",
-            body="Ask Raj about the export?",
-            route_targets=[
-                RouteTarget(
-                    user_id=raj_id,
-                    username="b2_raj",
-                    display_name="Raj",
-                    rationale="owns CRM export",
-                )
-            ],
-        )
-    )
-    post_result = await client.post(
-        f"/api/personal/{project_id}/post",
-        json={"body": "Who knows the F export quirk?"},
-    )
-    proposal_id = post_result.json()["edge_response"]["route_proposal_id"]
-
-    stub.options_queue.append(
-        [
-            RoutedOption(
-                id="a",
-                label="Accept",
-                kind="accept",
-                background="",
-                reason="r",
-                tradeoff="t",
-                weight=0.6,
-            ),
-            RoutedOption(
-                id="c",
-                label="Counter",
-                kind="counter",
-                background="",
-                reason="r",
-                tradeoff="t",
-                weight=0.4,
-            ),
-        ]
-    )
-
-    r = await client.post(
-        f"/api/routing/proposals/{proposal_id}/confirm",
-        json={"target_user_id": raj_id},
-    )
-    assert r.status_code == 200, r.text
-    signal_id = r.json()["signal_id"]
-
-    async with session_scope(maker) as session:
-        signal = (
-            await session.execute(
-                select(RoutedSignalRow).where(RoutedSignalRow.id == signal_id)
-            )
-        ).scalar_one()
-        assert signal.source_user_id == src_id
-        assert signal.target_user_id == raj_id
-        assert signal.status == "pending"
-        # Server-generated recipient reply options preserved.
-        assert len(signal.options_json) == 2
-
-
-@pytest.mark.asyncio
-async def test_routing_confirm_proposal_rejects_wrong_target(api_env):
-    client, maker, *_ = api_env
-    stub = _install_stub(api_env)
-
-    await _register(client, "b2_src_wt")
-    project_id = await _intake(client, "B2-wrong")
-    await _register(client, "b2_raj_wt")
-    raj_id = await _me_id(client)
-    await _register(client, "b2_third_wt")
-    third_id = await _me_id(client)
-    await _login(client, "b2_src_wt")
-    await _invite(client, project_id, "b2_raj_wt")
-    await _invite(client, project_id, "b2_third_wt")
-    await backfill_streams_from_projects(maker)
-
-    stub.respond_queue.append(
-        EdgeResponse(
-            kind="route_proposal",
-            body="ask Raj?",
-            route_targets=[
-                RouteTarget(
-                    user_id=raj_id,
-                    username="b2_raj_wt",
-                    display_name="Raj",
-                    rationale="",
-                )
-            ],
-        )
-    )
-    post_result = await client.post(
-        f"/api/personal/{project_id}/post", json={"body": "design call"}
-    )
-    proposal_id = post_result.json()["edge_response"]["route_proposal_id"]
-
-    # Confirm for someone the proposal never named → 400.
-    r = await client.post(
-        f"/api/routing/proposals/{proposal_id}/confirm",
-        json={"target_user_id": third_id},
-    )
-    assert r.status_code == 400, r.text
-    assert r.json()["message"] == "target_not_in_proposal"
 
 
 @pytest.mark.asyncio
