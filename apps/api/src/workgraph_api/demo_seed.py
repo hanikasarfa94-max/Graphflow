@@ -168,3 +168,90 @@ async def run_canonical_demo(
         completed_scope_items=completed,
         elapsed_seconds=elapsed,
     )
+
+
+# ---------------------------------------------------------------------------
+# Disappearing-broker alpha-slice seed.
+# ---------------------------------------------------------------------------
+
+BROKER_SENDER = "demo_sender"
+BROKER_RECIPIENT = "demo_recipient"
+BROKER_SKILLS = ["backend", "data-export", "crm"]
+
+
+@dataclass(frozen=True)
+class BrokerSeedResult:
+    """A 2-person project ready for the disappearing-broker loop demo."""
+
+    project_id: str
+    sender_username: str
+    sender_id: str
+    recipient_username: str
+    recipient_id: str
+    recipient_display_name: str
+    password: str
+
+
+async def run_broker_demo(
+    client: AsyncClient,
+    *,
+    app_state,
+    sender: str = BROKER_SENDER,
+    recipient: str = BROKER_RECIPIENT,
+    password: str = DEFAULT_PASSWORD,
+    recipient_skills: list[str] | None = None,
+    source_event_id: str = "demo-broker-seed",
+) -> BrokerSeedResult:
+    """Seed exactly two users in one project for the routing-loop demo.
+
+    Produces: a sender (project owner) and a recipient who is the only
+    skilled teammate — so the grounding gate either grounds on them or
+    degrades gracefully, never 422. Backfills personal streams for both so
+    My-AI posting works immediately. Does NOT send a route itself; the
+    operator drives that live through the UI.
+    """
+    from workgraph_persistence import backfill_streams_from_projects
+
+    recipient_skills = recipient_skills or list(BROKER_SKILLS)
+
+    # Recipient first so we can capture their id + display name.
+    await _register_or_login(client, username=recipient, password=password)
+    me_r = (await client.get("/api/auth/me")).json()
+    recipient_id = me_r["id"]
+    recipient_display = me_r.get("display_name") or recipient
+
+    # Sender registers (becomes the active cookie) and creates the project.
+    await _register_or_login(client, username=sender, password=password)
+    sender_id = (await client.get("/api/auth/me")).json()["id"]
+
+    r = await client.post(
+        "/api/intake/message",
+        json={"text": CANONICAL_TEXT, "source_event_id": source_event_id},
+    )
+    r.raise_for_status()
+    project_id = r.json()["project"]["id"]
+
+    r = await client.post(
+        f"/api/projects/{project_id}/invite", json={"username": recipient}
+    )
+    r.raise_for_status()
+
+    # Owner-edit the recipient's skill tags so they are a grounded target.
+    r = await client.patch(
+        f"/api/projects/{project_id}/members/{recipient_id}/skills",
+        json={"skill_tags": recipient_skills},
+    )
+    r.raise_for_status()
+
+    # Personal streams for both users (My-AI + routing inbound need them).
+    await backfill_streams_from_projects(app_state.sessionmaker)
+
+    return BrokerSeedResult(
+        project_id=project_id,
+        sender_username=sender,
+        sender_id=sender_id,
+        recipient_username=recipient,
+        recipient_id=recipient_id,
+        recipient_display_name=recipient_display,
+        password=password,
+    )

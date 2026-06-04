@@ -15,20 +15,66 @@
 // anonymous style={{}} literals, no hex) so the design guard stays green
 // without an allowlist entry.
 
-import { useState, type CSSProperties } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { useTranslations } from "next-intl";
 
 import { Button, Text } from "@/components/ui";
 import {
   ApiError,
+  acceptRoutingSignal,
   confirmRouteProposal,
+  getRoutingSignal,
   type PersonalRouteTarget,
+  type RoutingSignal,
 } from "@/lib/api";
 
 export interface RouteProposalView {
   routeProposalId: string;
   framing: string;
   targets: PersonalRouteTarget[];
+}
+
+// Bounded poll: every 5s, up to ~5 min, plus an immediate fire on
+// window focus. Keeps the loop watchable in the demo without a WS
+// dependency, and can never run away (capped + stops on terminal state).
+const POLL_MS = 5000;
+const MAX_POLLS = 60;
+
+// --- pure, testable helpers ------------------------------------------------
+
+// UI phase for the sender-side routed-reply card from a signal status.
+export type RoutedPhase = "waiting" | "replied" | "accepted" | "closed";
+export function routedPhase(status: string | undefined): RoutedPhase {
+  switch (status) {
+    case undefined:
+    case "pending":
+      return "waiting";
+    case "replied":
+      return "replied";
+    case "accepted":
+      return "accepted";
+    default:
+      return "closed"; // declined / expired / unknown
+  }
+}
+
+// The recipient's reply, as the sender should read it: a picked option
+// label wins, else free text, else null (nothing to show yet).
+export function replyText(reply: RoutingSignal["reply"]): string | null {
+  if (!reply) return null;
+  const label = reply.picked_label?.trim();
+  if (label) return label;
+  const custom = reply.custom_text?.trim();
+  if (custom) return custom;
+  return null;
+}
+
+export function shouldKeepPolling(
+  status: string | undefined,
+  attempts: number,
+  max: number = MAX_POLLS,
+): boolean {
+  return routedPhase(status) === "waiting" && attempts < max;
 }
 
 // Which draft text gets sent for a target: the user's edit wins, else the
@@ -84,31 +130,27 @@ export function RouteSuggestion({ proposal }: { proposal: RouteProposalView }) {
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [editing, setEditing] = useState<Record<string, boolean>>({});
   const [busyId, setBusyId] = useState<string | null>(null);
-  const [sentTo, setSentTo] = useState<string | null>(null);
+  const [sent, setSent] = useState<{ signalId: string; name: string } | null>(
+    null,
+  );
   const [error, setError] = useState<string | null>(null);
 
   if (dismissed || proposal.targets.length === 0) return null;
 
-  if (sentTo) {
-    return (
-      <div style={wrap} data-testid="route-suggestion">
-        <Text variant="caption" muted>
-          {t("sent", { name: sentTo })}
-        </Text>
-      </div>
-    );
+  if (sent) {
+    return <RoutedReplyInline signalId={sent.signalId} name={sent.name} />;
   }
 
   async function send(target: PersonalRouteTarget) {
     setBusyId(target.user_id);
     setError(null);
     try {
-      await confirmRouteProposal(
+      const res = await confirmRouteProposal(
         proposal.routeProposalId,
         target.user_id,
         resolveDraft(drafts[target.user_id], target, proposal.framing),
       );
-      setSentTo(target.display_name);
+      setSent({ signalId: res.signal_id, name: target.display_name });
     } catch (e) {
       setError(e instanceof ApiError ? t("failed") : t("failed"));
     } finally {
@@ -152,7 +194,7 @@ export function RouteSuggestion({ proposal }: { proposal: RouteProposalView }) {
             <div style={actions}>
               <Button
                 variant="primary"
-                disabled={busy}
+                disabled={busyId !== null}
                 onClick={() => send(target)}
               >
                 {busy ? t("sending") : t("send")}
@@ -182,6 +224,125 @@ export function RouteSuggestion({ proposal }: { proposal: RouteProposalView }) {
           {error}
         </Text>
       ) : null}
+    </div>
+  );
+}
+
+// Sender-side close of the loop: after dispatch we hold the signal_id and
+// poll for the recipient's reply, then offer "Close the loop" (accept).
+// Bounded + stops on terminal status / unmount so it can't run away.
+function RoutedReplyInline({
+  signalId,
+  name,
+}: {
+  signalId: string;
+  name: string;
+}) {
+  const t = useTranslations("routeSuggestion");
+  const [signal, setSignal] = useState<RoutingSignal | null>(null);
+  const [closing, setClosing] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [exhausted, setExhausted] = useState(false);
+  const attemptsRef = useRef(0);
+  const doneRef = useRef(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    let timer: ReturnType<typeof setInterval> | null = null;
+    const stop = () => {
+      if (timer) {
+        clearInterval(timer);
+        timer = null;
+      }
+    };
+    const tick = async () => {
+      if (cancelled || doneRef.current) return;
+      attemptsRef.current += 1;
+      try {
+        const r = await getRoutingSignal(signalId);
+        if (cancelled) return;
+        setSignal(r.signal);
+        if (routedPhase(r.signal.status) !== "waiting") {
+          doneRef.current = true;
+          stop();
+        } else if (attemptsRef.current >= MAX_POLLS) {
+          setExhausted(true);
+          stop();
+        }
+      } catch {
+        if (attemptsRef.current >= MAX_POLLS) {
+          setExhausted(true);
+          stop();
+        }
+      }
+    };
+    void tick(); // immediate
+    timer = setInterval(() => void tick(), POLL_MS);
+    const onFocus = () => {
+      if (!doneRef.current) void tick();
+    };
+    window.addEventListener("focus", onFocus);
+    return () => {
+      cancelled = true;
+      stop();
+      window.removeEventListener("focus", onFocus);
+    };
+  }, [signalId]);
+
+  const phase = routedPhase(signal?.status);
+
+  if (phase === "waiting") {
+    return (
+      <div style={wrap} data-testid="route-suggestion">
+        <Text variant="caption" muted>
+          {exhausted ? t("stillWaiting", { name }) : t("awaiting", { name })}
+        </Text>
+      </div>
+    );
+  }
+
+  if (phase === "replied") {
+    const body = replyText(signal?.reply ?? null);
+    async function close() {
+      setClosing(true);
+      setErr(null);
+      try {
+        const r = await acceptRoutingSignal(signalId);
+        setSignal(r.signal);
+      } catch {
+        setErr(t("failed"));
+      } finally {
+        setClosing(false);
+      }
+    }
+    return (
+      <div style={wrap} data-testid="route-suggestion">
+        <Text>{t("replied", { name })}</Text>
+        {body ? (
+          <Text variant="caption" muted>
+            {body}
+          </Text>
+        ) : null}
+        <div style={actions}>
+          <Button variant="primary" disabled={closing} onClick={close}>
+            {closing ? t("closing") : t("closeLoop")}
+          </Button>
+        </div>
+        {err ? (
+          <Text variant="caption" muted>
+            {err}
+          </Text>
+        ) : null}
+      </div>
+    );
+  }
+
+  // accepted / closed
+  return (
+    <div style={wrap} data-testid="route-suggestion">
+      <Text variant="caption" muted>
+        {t("closed", { name })}
+      </Text>
     </div>
   );
 }

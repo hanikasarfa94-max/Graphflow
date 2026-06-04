@@ -43,13 +43,19 @@
     "send": "Send",
     "sending": "Sending…",
     "dismiss": "Dismiss",
-    "sent": "Routed to {name}.",
+    "awaiting": "Routed to {name} · waiting for reply…",
+    "stillWaiting": "Routed to {name} — they haven't replied yet. It'll appear in your inbox.",
+    "replied": "{name} replied",
+    "closeLoop": "Close the loop",
+    "closing": "Closing…",
+    "closed": "Closed with {name}.",
     "failed": "Couldn't route — try again."
   },
   "routingReply": {
     "title": "A teammate routed this to you",
     "loading": "Loading…",
     "loadError": "Couldn't load this routing signal.",
+    "retry": "Retry",
     "framingHeading": "The ask",
     "backgroundHeading": "Context",
     "optionsHeading": "Suggested replies",
@@ -2008,6 +2014,7 @@
       "docs": "Documents · KB",
       "flowCenter": "Flow Center"
     },
+    "inboxAffordance": "Inbox",
     "scopeBand": {
       "label": "Project focus",
       "allAccessible": "All accessible",

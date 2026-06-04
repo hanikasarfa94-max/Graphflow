@@ -176,9 +176,19 @@ export function RoutingReplyPanel() {
           </Text>
         )}
         {state.status === "error" && (
-          <Text variant="caption" muted>
-            {t("loadError")}
-          </Text>
+          <>
+            <Text variant="caption" muted>
+              {t("loadError")}
+            </Text>
+            <div style={row}>
+              <Button variant="primary" onClick={() => load(signalId)}>
+                {t("retry")}
+              </Button>
+              <Button variant="link" onClick={close}>
+                {t("close")}
+              </Button>
+            </div>
+          </>
         )}
         {state.status === "ready" && (
           <RoutingReplyBody
